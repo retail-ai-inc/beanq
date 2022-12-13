@@ -1,13 +1,13 @@
 package beanq
 
 import (
+	"beanq/json"
+	"beanq/stringx"
+	"beanq/timex"
 	"context"
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
-	"github.com/retail-ai-inc/bean/helpers/beanq/json"
-	"github.com/retail-ai-inc/bean/helpers/beanq/stringx"
-	"github.com/retail-ai-inc/bean/helpers/beanq/timex"
 	"github.com/spf13/cast"
 	"runtime/debug"
 	"sync"

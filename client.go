@@ -5,11 +5,12 @@ import "time"
 type OptionType int
 
 const (
-	MaxRetryOpt OptionType = iota
+	MaxRetryOpt OptionType = iota + 1
 	QueueOpt
 	GroupOpt
 	MaxLenOpt
 	ExecuteTimeOpt
+	IdleTime
 )
 
 type option struct {

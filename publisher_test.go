@@ -1,10 +1,10 @@
 package beanq
 
 import (
+	"beanq/json"
 	"context"
 	"fmt"
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/bean/helpers/beanq/json"
 	"github.com/spf13/cast"
 	"log"
 	"testing"

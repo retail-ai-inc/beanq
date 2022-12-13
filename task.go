@@ -1,7 +1,7 @@
 package beanq
 
 import (
-	"github.com/retail-ai-inc/bean/helpers/beanq/stringx"
+	"beanq/stringx"
 	"time"
 )
 
