@@ -31,6 +31,21 @@ var (
 func init() {
 	clt = NewBeanq("redis", options)
 }
+func TestPublishOne(t *testing.T) {
+
+	m := make(map[int]string)
+	m[0] = "k----" + cast.ToString(0)
+
+	d, _ := json.Marshal(m)
+	task := NewTask("", d)
+	cmd, err := clt.Publish(task, Queue("ch2"))
+	if err != nil {
+		log.Fatalln(err)
+	}
+	fmt.Printf("%+v \n", cmd)
+
+	defer clt.Close()
+}
 
 /*
   - TestPublish

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 	"github.com/retail-ai-inc/bean/helpers/beanq/json"
 	"github.com/retail-ai-inc/bean/helpers/beanq/stringx"
 	"github.com/retail-ai-inc/bean/helpers/beanq/timex"
@@ -117,10 +118,6 @@ func (t *BeanqRedis) Publish(task *Task, option ...Option) (*Result, error) {
 	if err := strcmd.Err(); err != nil {
 		return nil, err
 	}
-	if err := t.createGroup(opt.queue, opt.group); err != nil {
-		fmt.Printf("CreateGroupErr:%+v \n", err)
-		return nil, err
-	}
 	return &Result{Args: strcmd.Args(), Id: strcmd.Val()}, nil
 }
 func (t *BeanqRedis) Start(server *Server) {
@@ -168,7 +165,7 @@ func (t *BeanqRedis) work(handler *consumerHandler, server *Server, workers chan
 		return
 	}
 	t.consumerMsgs(handler.consumerFun, handler.group)
-	<-workers
+	//<-workers
 }
 
 /*
@@ -279,9 +276,9 @@ func (t *BeanqRedis) claim(consumers []*consumerHandler) {
 					if v.Idle.Seconds() > 10 {
 
 						claims, err := t.client.XClaim(t.ctx, &redis.XClaimArgs{
-							Stream:   consumer.queue,
-							Group:    consumer.group,
-							Consumer: consumer.queue,
+							Stream: consumer.queue,
+							Group:  consumer.group,
+							//Consumer: consumer.queue,
 							MinIdle:  10 * time.Second,
 							Messages: []string{v.ID},
 						}).Result()
@@ -307,7 +304,7 @@ func (t *BeanqRedis) claim(consumers []*consumerHandler) {
 	}
 }
 func (t *BeanqRedis) readGroups(queue, group string, count int64) error {
-
+	consumer := uuid.New().String()
 	go func() {
 
 		for {
@@ -318,7 +315,7 @@ func (t *BeanqRedis) readGroups(queue, group string, count int64) error {
 				streams, err := t.client.XReadGroup(t.ctx, &redis.XReadGroupArgs{
 					Group:    group,
 					Streams:  []string{queue, ">"},
-					Consumer: queue,
+					Consumer: consumer,
 					Count:    count,
 					Block:    0,
 				}).Result()
@@ -353,6 +350,7 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
 		case <-t.stop:
 			return
 		case msg := <-t.ch:
+
 			task := &Task{
 				name: msg.Stream,
 			}
@@ -422,7 +420,15 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
 */
 func (t *BeanqRedis) createGroup(queue, group string) error {
 
-	cmd := t.client.XGroupCreateMkStream(t.ctx, queue, group, "$")
+	result, err := t.client.XInfoGroups(t.ctx, queue).Result()
+	if err != nil && err.Error() != "ERR no such key" {
+		return err
+	}
+	if len(result) > 0 {
+		return nil
+	}
+
+	cmd := t.client.XGroupCreateMkStream(t.ctx, queue, group, "0")
 	if cmd.Err() != nil && cmd.Err().Error() != "BUSYGROUP Consumer Group name already exists" {
 		return cmd.Err()
 	}
