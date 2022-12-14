@@ -127,8 +127,15 @@ func (t *BeanqRedis) Start(server *Server) {
 
 	for _, v := range consumers {
 
-		err := t.createGroup(v.queue, v.group)
-		if err != nil {
+		//if has bound a group,then continue
+		result, err := t.client.XInfoGroups(t.ctx, v.queue).Result()
+		if err != nil && err.Error() != "ERR no such key" {
+			fmt.Printf("InfoGroupErr:%+v \n", err)
+		}
+		if len(result) > 0 {
+			continue
+		}
+		if err := t.createGroup(v.queue, v.group); err != nil {
 			fmt.Printf("CreateGroupErr:%+v \n", err)
 			continue
 		}
@@ -211,23 +218,18 @@ func (t *BeanqRedis) delayConsumer() {
 					executeTime: taskV.ExecuteTime,
 				}
 
+				if err := t.client.LRem(t.ctx, "delay-ch", 1, s).Err(); err != nil {
+					fmt.Printf("LRemErr:%s \n", err.Error())
+					t.err <- fmt.Errorf("LRemErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+					continue
+				}
+
 				if taskV.ExecuteTime.Before(time.Now()) {
 					_, err := t.Publish(&task, Queue(defaultOptions.defaultDelayQueueName))
 					if err != nil {
 						fmt.Printf("PublishError:%s \n", err.Error())
 						t.err <- fmt.Errorf("PublishErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-						continue
 					}
-					if err := t.client.LRem(t.ctx, "delay-ch", 1, s).Err(); err != nil {
-						fmt.Printf("LRemErr:%s \n", err.Error())
-						t.err <- fmt.Errorf("LRemErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-					}
-					continue
-				}
-
-				if err := t.client.LRem(t.ctx, "delay-ch", 1, s).Err(); err != nil {
-					fmt.Printf("LRemErr:%s \n", err.Error())
-					t.err <- fmt.Errorf("LRemErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
 				if err := t.client.RPush(t.ctx, "delay-ch", s).Err(); err != nil {
@@ -419,15 +421,6 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
   - @return error
 */
 func (t *BeanqRedis) createGroup(queue, group string) error {
-
-	result, err := t.client.XInfoGroups(t.ctx, queue).Result()
-	if err != nil && err.Error() != "ERR no such key" {
-		return err
-	}
-	fmt.Printf("CreateGroup:%+v \n", result)
-	if len(result) > 0 {
-		return nil
-	}
 
 	cmd := t.client.XGroupCreateMkStream(t.ctx, queue, group, "0")
 	if cmd.Err() != nil && cmd.Err().Error() != "BUSYGROUP Consumer Group name already exists" {
