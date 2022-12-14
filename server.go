@@ -27,6 +27,7 @@ func (t *Server) Register(group, queue string, consumerFun DoConsumer) {
 	if queue == "" {
 		queue = defaultOptions.defaultQueueName
 	}
+
 	t.m = append(t.m, &consumerHandler{
 		group:       group,
 		queue:       queue,

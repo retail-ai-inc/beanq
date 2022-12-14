@@ -424,6 +424,7 @@ func (t *BeanqRedis) createGroup(queue, group string) error {
 	if err != nil && err.Error() != "ERR no such key" {
 		return err
 	}
+	fmt.Printf("CreateGroup:%+v \n", result)
 	if len(result) > 0 {
 		return nil
 	}
