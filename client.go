@@ -18,7 +18,7 @@ type option struct {
 	queue       string
 	group       string
 	maxLen      int64
-	executeTime int64
+	executeTime time.Time
 }
 
 type Option interface {
@@ -163,7 +163,7 @@ func composeOptions(options ...Option) (option, error) {
 				res.maxLen = v
 			}
 		case ExecuteTimeOpt:
-			if v, ok := f.Value().(int64); ok {
+			if v, ok := f.Value().(time.Time); ok {
 				res.executeTime = v
 			}
 		}

@@ -33,11 +33,11 @@ func TestConsumerSingle(t *testing.T) {
 	rdb := NewBeanq("redis", options)
 	server := NewServer(3)
 	server.Register("g1", "ch2", func(task *Task, r *redis.Client) error {
-		fmt.Printf(cast.ToString(1)+"PayLoad:%+v \n", task.Payload())
+		fmt.Printf("1PayLoad:%+v \n", task.Payload())
 		return nil
 	})
 	server.Register("g2", "ch2", func(task *Task, r *redis.Client) error {
-		fmt.Printf(cast.ToString(2)+"PayLoad:%+v \n", task.Payload())
+		fmt.Printf("2PayLoad:%+v \n", task.Payload())
 		return nil
 	})
 	rdb.Start(server)
@@ -67,4 +67,5 @@ func TestConsumerMultiple(t *testing.T) {
 func TestDelayConsumer(t *testing.T) {
 	rdb := NewRedis(options)
 	rdb.delayConsumer()
+
 }

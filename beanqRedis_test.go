@@ -3,6 +3,7 @@ package beanq
 import (
 	"beanq/json"
 	"context"
+	"errors"
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
@@ -27,6 +28,11 @@ var (
 	consumer = "cs1"
 	clt      Beanq
 )
+
+func TestEnvJson(t *testing.T) {
+	InitJson()
+	fmt.Printf("%+v \n", Env)
+}
 
 func init() {
 	clt = NewBeanq("redis", options)
@@ -184,35 +190,59 @@ func TestClaim(t *testing.T) {
 	})
 }
 func TestRetry(t *testing.T) {
-	retry(func() bool {
-		fmt.Println("aa")
-		return false
-	}, 3*time.Second)
+
+	err := retry(func() error {
+		fmt.Println("function body")
+		return errors.New("错误")
+		//return nil
+	}, 500*time.Millisecond)
+
+	fmt.Println(err)
+
 }
 
-var retryFlag chan bool = make(chan bool)
+func retry(f func() error, delayTime time.Duration) error {
+	retryFlag := make(chan error)
+	stopRetry := make(chan bool, 1)
 
-func retry(f func() bool, delayTime time.Duration) {
-	index := 1
+	go func(duration time.Duration, errChan chan error, stop chan bool) {
+		index := 1
+		count := 3
 
-	//ticker := time.NewTicker(delayTime)
-	//defer ticker.Stop()
-	//for{
-	//	select {
-	//	case <-ticker.C:
-	//
-	//	}
-	//}
-	for {
-		go time.AfterFunc(delayTime, func() {
-			retryFlag <- f()
-		})
-		if <-retryFlag {
-			return
+		for {
+			go time.AfterFunc(duration, func() {
+				errChan <- f()
+			})
+			err := <-errChan
+			if err == nil {
+				stop <- true
+				close(errChan)
+				break
+			}
+			if index == count {
+				stop <- true
+				errChan <- err
+				break
+			}
+			index++
 		}
-		if index == 3 {
-			return
+	}(delayTime, retryFlag, stopRetry)
+
+	var err error
+	select {
+	case <-stopRetry:
+		for v := range retryFlag {
+			err = v
+			if v != nil {
+				err = v
+				break
+			}
 		}
-		index++
 	}
+	close(stopRetry)
+	if err != nil {
+		close(retryFlag)
+		return err
+	}
+	return nil
 }

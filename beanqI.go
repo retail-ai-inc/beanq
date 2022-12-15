@@ -60,6 +60,9 @@ type Options struct {
 	defaultMaxLen                  int64
 
 	defaultDelayQueueName, defaultDelayGroup string
+
+	retryTime time.Duration
+	workCount chan struct{}
 }
 
 var defaultOptions = &Options{
@@ -76,6 +79,9 @@ var defaultOptions = &Options{
 
 	defaultDelayQueueName: "default-delay-queue",
 	defaultDelayGroup:     "default-delay-group",
+
+	retryTime: 800 * time.Millisecond,
+	workCount: make(chan struct{}, 20),
 }
 
 // only use to test

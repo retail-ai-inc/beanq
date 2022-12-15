@@ -71,11 +71,8 @@ func (t *BeanqRedis) DelayPublish(task *Task, delayTime time.Time, option ...Opt
 	task.addTime = time.Now().Format(timex.DateTime)
 
 	//format data
-	msg := make(map[string]any)
-	msg["payload"] = stringx.ByteToString(task.payload)
+	msg := t.args(task.payload, opt.retry, opt.maxLen, delayTime)
 	msg["name"] = task.Name()
-	msg["executeTime"] = delayTime
-	msg["addTime"] = task.addTime
 	data, err := json.Json.MarshalToString(msg)
 
 	if err != nil {
@@ -87,6 +84,7 @@ func (t *BeanqRedis) DelayPublish(task *Task, delayTime time.Time, option ...Opt
 	}
 	return nil, nil
 }
+
 func (t *BeanqRedis) Publish(task *Task, option ...Option) (*Result, error) {
 
 	opt, err := composeOptions(option...)
@@ -97,13 +95,7 @@ func (t *BeanqRedis) Publish(task *Task, option ...Option) (*Result, error) {
 	if id == "" {
 		id = "*"
 	}
-	values := make(map[string]any)
-	values["payload"] = task.payload
-	values["addtime"] = time.Now().Format(timex.DateTime)
-
-	if opt.executeTime != 0 {
-		values["executeTime"] = opt.executeTime
-	}
+	values := t.args(task.payload, opt.retry, opt.maxLen, opt.executeTime)
 
 	strcmd := t.client.XAdd(t.ctx, &redis.XAddArgs{
 		Stream:     opt.queue,
@@ -132,12 +124,12 @@ func (t *BeanqRedis) Start(server *Server) {
 		if err != nil && err.Error() != "ERR no such key" {
 			fmt.Printf("InfoGroupErr:%+v \n", err)
 		}
-		if len(result) > 0 {
-			continue
-		}
-		if err := t.createGroup(v.queue, v.group); err != nil {
-			fmt.Printf("CreateGroupErr:%+v \n", err)
-			continue
+
+		if len(result) < 1 {
+			if err := t.createGroup(v.queue, v.group); err != nil {
+				fmt.Printf("CreateGroupErr:%+v \n", err)
+				continue
+			}
 		}
 
 		workers <- struct{}{}
@@ -148,9 +140,6 @@ func (t *BeanqRedis) Start(server *Server) {
 	go t.claim(consumers)
 	go t.delayConsumer()
 	//catch errors
-	err := t.getErrors()
-	fmt.Printf("Err:%s \n", err.Error())
-
 	<-t.done
 }
 func (t *BeanqRedis) StartUI() error {
@@ -172,7 +161,7 @@ func (t *BeanqRedis) work(handler *consumerHandler, server *Server, workers chan
 		return
 	}
 	t.consumerMsgs(handler.consumerFun, handler.group)
-	//<-workers
+	<-workers
 }
 
 /*
@@ -352,7 +341,6 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
 		case <-t.stop:
 			return
 		case msg := <-t.ch:
-
 			task := &Task{
 				name: msg.Stream,
 			}
@@ -360,20 +348,29 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
 
 				task.id = vm.ID
 				if payload, ok := vm.Values["payload"]; ok {
-					task.payload = stringx.StringToByte(payload.(string))
-				}
-				if addtime, ok := vm.Values["addtime"]; ok {
-					task.addTime = addtime.(string)
-				}
-				//fmt.Printf("task1:%+v \n", msg)
-				now = time.Now()
-				if executeT, ok := vm.Values["executeTime"]; ok {
-					if cast.ToInt64(executeT) > now.Unix() {
-						continue
+					if payloadV, okp := payload.(string); okp {
+						task.payload = stringx.StringToByte(payloadV)
 					}
 				}
-				//fmt.Printf("task2:%+v \n", msg)
-				err := f(task, t.client)
+				if addtime, ok := vm.Values["addtime"]; ok {
+					if addtimeV, okt := addtime.(string); okt {
+						task.addTime = addtimeV
+					}
+				}
+
+				now = time.Now()
+				if executeT, ok := vm.Values["executeTime"]; ok {
+					if executeTm, okt := executeT.(time.Time); okt {
+						if cast.ToInt64(executeTm.Second()) > now.Unix() {
+							continue
+						}
+					}
+				}
+				//
+				err := t.retry(func() error {
+					return f(task, t.client)
+				}, defaultOptions.retryTime)
+
 				if err != nil {
 					info = FailedInfo
 					result.Level = ErrLevel
@@ -396,12 +393,13 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
 
 				//ack
 				if err := t.client.XAck(t.ctx, msg.Stream, group, vm.ID).Err(); err != nil {
+					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					fmt.Printf("ACK Error:%s \n", err.Error())
 					continue
 				}
-				//if err := t.client.XDel(t.ctx, msg.Stream, vm.ID).Err(); err != nil {
-				//	continue
-				//}
+				if err := t.client.XDel(t.ctx, msg.Stream, vm.ID).Err(); err != nil {
+					continue
+				}
 				if err := t.client.LPush(t.ctx, string(info), b).Err(); err != nil {
 					t.err <- fmt.Errorf("LPushErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
@@ -409,6 +407,52 @@ func (t *BeanqRedis) consumerMsgs(f DoConsumer, group string) {
 			}
 		}
 	}
+}
+func (t *BeanqRedis) retry(f func() error, delayTime time.Duration) error {
+	retryFlag := make(chan error)
+	stopRetry := make(chan bool, 1)
+
+	go func(duration time.Duration, errChan chan error, stop chan bool) {
+		index := 1
+		count := 3
+
+		for {
+			go time.AfterFunc(duration, func() {
+				errChan <- f()
+			})
+
+			err := <-errChan
+			if err == nil {
+				stop <- true
+				close(errChan)
+				break
+			}
+			if index == count {
+				stop <- true
+				errChan <- err
+				break
+			}
+			index++
+		}
+	}(delayTime, retryFlag, stopRetry)
+
+	var err error
+	select {
+	case <-stopRetry:
+		for v := range retryFlag {
+			err = v
+			if v != nil {
+				err = v
+				break
+			}
+		}
+	}
+	close(stopRetry)
+	if err != nil {
+		close(retryFlag)
+		return err
+	}
+	return nil
 }
 
 /*
@@ -429,15 +473,33 @@ func (t *BeanqRedis) createGroup(queue, group string) error {
 	return nil
 
 }
-func (t *BeanqRedis) getErrors() (err error) {
+func (t *BeanqRedis) args(payload []byte, retry int, maxLen int64, executeTime time.Time) map[string]any {
+	values := make(map[string]any)
+	values["payload"] = payload
+	values["addtime"] = time.Now().Format(timex.DateTime)
+	values["retry"] = retry
+	values["maxLen"] = maxLen
+	if !executeTime.IsZero() {
+		values["executeTime"] = executeTime
+	}
+	return values
+}
+
+/*
+  - GetErrors
+  - @Description:
+    can't get error msg,need to optimize
+  - @receiver t
+  - @return err
+*/
+func (t *BeanqRedis) GetErrors() (err error) {
 	for {
 		select {
 		case errc := <-t.err:
 			err = errc
-			break
+			return
 		}
 	}
-	return
 }
 
 /*
