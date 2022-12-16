@@ -29,8 +29,13 @@ var (
 	clt      Beanq
 )
 
+/*
+  - TestEnvJson
+  - @Description:
+    get env.json to struct
+  - @param t
+*/
 func TestEnvJson(t *testing.T) {
-	InitJson()
 	fmt.Printf("%+v \n", Env)
 }
 

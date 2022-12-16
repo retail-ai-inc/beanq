@@ -8,14 +8,38 @@ import (
 	"time"
 )
 
-type EnvJson struct {
+type envJson struct {
 	Version     string `json:"version"`
 	ProjectName string `json:"projectName"`
 	Environment string `json:"environment"`
 	Queue       queues `json:"queue"`
 }
+
+var Env = new(envJson)
+
+func init() {
+	var envPath string
+	if _, file, _, ok := runtime.Caller(0); ok {
+		envPath = filepath.Dir(file)
+	}
+
+	if envPath == "" {
+		log.Fatal("config directory is empty")
+	}
+	vp := viper.New()
+	vp.SetConfigName("env")
+	vp.SetConfigType("json")
+	vp.AddConfigPath(envPath)
+	if err := vp.ReadInConfig(); err != nil {
+		log.Fatalf("ConfigError:%s \n", err.Error())
+	}
+	if err := vp.Unmarshal(Env); err != nil {
+		log.Fatalf("DataError:%s \n", err.Error())
+	}
+}
+
 type queues struct {
-	Broker                   string        `json:"broker"`
+	Driver                   string        `json:"driver"`
 	JobMaxRetries            uint64        `json:"jobMaxRetries"`
 	KeepJobsInQueue          time.Duration `json:"keepJobsInQueue"`
 	KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
@@ -37,26 +61,4 @@ type redisq struct {
 	ReadTimeout        time.Duration `json:"readTimeout"`
 	WriteTimeout       time.Duration `json:"writeTimeout"`
 	PoolTimeout        time.Duration `json:"poolTimeout"`
-}
-
-var Env = EnvJson{}
-
-func InitJson() {
-	var envPath string
-	if _, file, _, ok := runtime.Caller(1); ok {
-		envPath = filepath.Dir(file)
-	}
-	if envPath == "" {
-		log.Fatal("config directory is empty")
-	}
-	vp := viper.New()
-	vp.SetConfigName("env")
-	vp.SetConfigType("json")
-	vp.AddConfigPath(envPath)
-	if err := vp.ReadInConfig(); err != nil {
-		log.Fatalf("ConfigError:%s \n", err.Error())
-	}
-	if err := vp.Unmarshal(&Env); err != nil {
-		log.Fatalf("DataError:%s \n", err.Error())
-	}
 }
