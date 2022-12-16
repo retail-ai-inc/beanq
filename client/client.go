@@ -1,6 +1,9 @@
-package beanq
+package client
 
-import "time"
+import (
+	"beanq/task"
+	"time"
+)
 
 type OptionType int
 
@@ -14,11 +17,11 @@ const (
 )
 
 type option struct {
-	retry       int
-	queue       string
-	group       string
-	maxLen      int64
-	executeTime time.Time
+	Retry       int
+	Queue       string
+	Group       string
+	MaxLen      int64
+	ExecuteTime time.Time
 }
 
 type Option interface {
@@ -137,34 +140,34 @@ func (et executeTime) Value() any {
 * @return option
 * @return error
  */
-func composeOptions(options ...Option) (option, error) {
+func ComposeOptions(options ...Option) (option, error) {
 	res := option{
-		retry:  defaultOptions.JobMaxRetry,
-		queue:  defaultOptions.defaultQueueName,
-		group:  defaultOptions.defaultGroup,
-		maxLen: defaultOptions.defaultMaxLen,
+		Retry:  task.DefaultOptions.JobMaxRetry,
+		Queue:  task.DefaultOptions.DefaultQueueName,
+		Group:  task.DefaultOptions.DefaultGroup,
+		MaxLen: task.DefaultOptions.DefaultMaxLen,
 	}
 	for _, f := range options {
 		switch f.OptType() {
 		case QueueOpt:
 			if v, ok := f.Value().(string); ok {
-				res.queue = v
+				res.Queue = v
 			}
 		case GroupOpt:
 			if v, ok := f.Value().(string); ok {
-				res.group = v
+				res.Group = v
 			}
 		case MaxRetryOpt:
 			if v, ok := f.Value().(int); ok {
-				res.retry = v
+				res.Retry = v
 			}
 		case MaxLenOpt:
 			if v, ok := f.Value().(int64); ok {
-				res.maxLen = v
+				res.MaxLen = v
 			}
 		case ExecuteTimeOpt:
 			if v, ok := f.Value().(time.Time); ok {
-				res.executeTime = v
+				res.ExecuteTime = v
 			}
 		}
 	}

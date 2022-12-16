@@ -40,11 +40,11 @@ func init() {
 
 type queues struct {
 	Driver                   string        `json:"driver"`
-	JobMaxRetries            uint64        `json:"jobMaxRetries"`
+	JobMaxRetries            int           `json:"jobMaxRetries"`
 	KeepJobsInQueue          time.Duration `json:"keepJobsInQueue"`
 	KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
 	KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
-	MinWorkers               uint64        `json:"minWorkers"`
+	MinWorkers               int           `json:"minWorkers"`
 	Redis                    redisq        `json:"redis"`
 }
 type redisq struct {
@@ -52,7 +52,7 @@ type redisq struct {
 	Port               uint64        `json:"port"`
 	Password           string        `json:"password"`
 	Name               string        `json:"name"`
-	Db                 int64         `json:"db"`
+	Db                 int           `json:"db"`
 	Prefix             string        `json:"prefix"`
 	MaxRetries         int64         `json:"maxRetries"`
 	PoolSize           uint64        `json:"poolSize"`
