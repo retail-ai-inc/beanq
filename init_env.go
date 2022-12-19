@@ -1,11 +1,12 @@
 package beanq
 
 import (
-	"github.com/spf13/viper"
 	"log"
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/spf13/viper"
 )
 
 type envJson struct {

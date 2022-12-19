@@ -1,12 +1,13 @@
 package beanq
 
 import (
+	"fmt"
+	"testing"
+
 	server2 "beanq/server"
 	"beanq/task"
-	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
-	"testing"
 )
 
 /*
@@ -68,7 +69,7 @@ func TestConsumerMultiple(t *testing.T) {
 	rdb.Start(server)
 }
 func TestDelayConsumer(t *testing.T) {
-	//rdb := NewRedis(options)
-	//rdb.delayConsumer()
+	// rdb := NewRedis(options)
+	// rdb.delayConsumer()
 
 }

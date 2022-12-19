@@ -1,16 +1,17 @@
 package beanq
 
 import (
-	"beanq/client"
-	"beanq/helper/json"
-	"beanq/task"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/spf13/cast"
 	"log"
 	"testing"
 	"time"
+
+	"beanq/client"
+	"beanq/helper/json"
+	"beanq/task"
+	"github.com/go-redis/redis/v8"
+	"github.com/spf13/cast"
 )
 
 var (
@@ -96,7 +97,7 @@ func TestRetry(t *testing.T) {
 	err := retry(func() error {
 		fmt.Println("function body")
 		return errors.New("错误")
-		//return nil
+		// return nil
 	}, 500*time.Millisecond)
 
 	fmt.Println(err)

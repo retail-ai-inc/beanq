@@ -1,9 +1,10 @@
 package task
 
 import (
+	"time"
+
 	"beanq/helper/stringx"
 	"github.com/go-redis/redis/v8"
-	"time"
 )
 
 type Message struct {

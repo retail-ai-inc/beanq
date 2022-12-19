@@ -1,12 +1,13 @@
 package beanq
 
 import (
+	"log"
+	"time"
+
 	"beanq/client"
 	"beanq/driver"
 	"beanq/server"
 	"beanq/task"
-	"log"
-	"time"
 )
 
 type Beanq interface {

@@ -1,8 +1,9 @@
 package server
 
 import (
-	"beanq/task"
 	"sync"
+
+	"beanq/task"
 )
 
 type ConsumerHandler struct {

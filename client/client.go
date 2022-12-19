@@ -1,8 +1,9 @@
 package client
 
 import (
-	"beanq/task"
 	"time"
+
+	"beanq/task"
 )
 
 type OptionType int
