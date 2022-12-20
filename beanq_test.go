@@ -1,6 +1,7 @@
 package beanq
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -48,7 +49,7 @@ func TestPublishOne(t *testing.T) {
 
 	d, _ := json.Marshal(m)
 	task := task.NewTask("", d)
-	cmd, err := clt.Publish(task, client.Queue("ch2"))
+	cmd, err := clt.Publish(context.TODO(), task, client.Queue("ch2"))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -71,7 +72,7 @@ func TestPublish1(t *testing.T) {
 
 		d, _ := json.Marshal(m)
 		task := task.NewTask("", d)
-		cmd, err := clt.Publish(task, client.Queue("ch2"))
+		cmd, err := clt.Publish(context.TODO(), task, client.Queue("ch2"))
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -86,7 +87,7 @@ func TestDelayPublish(t *testing.T) {
 	task := task.NewTask("update", b)
 
 	delayT := time.Now().Add(60 * time.Second)
-	_, err := clt.DelayPublish(task, delayT, client.Queue("delay-ch"))
+	_, err := clt.DelayPublish(context.TODO(), task, delayT, client.Queue("delay-ch"))
 	if err != nil {
 		t.Fatal(err.Error())
 	}

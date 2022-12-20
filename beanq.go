@@ -1,6 +1,7 @@
 package beanq
 
 import (
+	"context"
 	"log"
 	"time"
 
@@ -11,8 +12,8 @@ import (
 )
 
 type Beanq interface {
-	Publish(task *task.Task, option ...client.Option) (*task.Result, error)
-	DelayPublish(task *task.Task, delayTime time.Time, option ...client.Option) (*task.Result, error)
+	Publish(ctx context.Context, task *task.Task, option ...client.Option) (*task.Result, error)
+	DelayPublish(ctx context.Context, task *task.Task, delayTime time.Time, option ...client.Option) (*task.Result, error)
 	Start(server *server.Server)
 	StartUI() error
 	Close() error
