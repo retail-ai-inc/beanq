@@ -1,25 +1,14 @@
 package beanq
 
 import (
-	"context"
 	"log"
-	"time"
 
 	"beanq/client"
 	"beanq/driver"
-	"beanq/server"
 	"beanq/task"
 )
 
-type Beanq interface {
-	Publish(ctx context.Context, task *task.Task, option ...client.Option) (*task.Result, error)
-	DelayPublish(ctx context.Context, task *task.Task, delayTime time.Time, option ...client.Option) (*task.Result, error)
-	Start(server *server.Server)
-	StartUI() error
-	Close() error
-}
-
-func NewBeanq(broker string, options task.Options) Beanq {
+func NewBeanq(broker string, options task.Options) driver.Beanq {
 
 	if options.KeepJobInQueue == 0 {
 		options.KeepJobInQueue = task.DefaultOptions.KeepJobInQueue
@@ -43,7 +32,7 @@ func NewBeanq(broker string, options task.Options) Beanq {
 		if options.RedisOptions == nil {
 			log.Fatalln("Missing Redis configuration")
 		}
-		return driver.NewRedis(options)
+		return client.NewRedis(options)
 	}
 	return nil
 }

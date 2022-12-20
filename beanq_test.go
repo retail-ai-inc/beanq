@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"beanq/client"
-	"beanq/helper/json"
+	"beanq/driver"
+	"beanq/internal/json"
 	"beanq/task"
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
@@ -20,7 +20,7 @@ var (
 	group    = "g2"
 	consumer = "cs1"
 	options  task.Options
-	clt      Beanq
+	clt      driver.Beanq
 )
 
 func init() {
@@ -49,7 +49,7 @@ func TestPublishOne(t *testing.T) {
 
 	d, _ := json.Marshal(m)
 	task := task.NewTask("", d)
-	cmd, err := clt.Publish(context.TODO(), task, client.Queue("ch2"))
+	cmd, err := clt.Publish(context.TODO(), task, driver.Queue("ch2"))
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -72,7 +72,7 @@ func TestPublish1(t *testing.T) {
 
 		d, _ := json.Marshal(m)
 		task := task.NewTask("", d)
-		cmd, err := clt.Publish(context.TODO(), task, client.Queue("ch2"))
+		cmd, err := clt.Publish(context.TODO(), task, driver.Queue("ch2"))
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -87,7 +87,7 @@ func TestDelayPublish(t *testing.T) {
 	task := task.NewTask("update", b)
 
 	delayT := time.Now().Add(60 * time.Second)
-	_, err := clt.DelayPublish(context.TODO(), task, delayT, client.Queue("delay-ch"))
+	_, err := clt.DelayPublish(context.TODO(), task, delayT, driver.Queue("delay-ch"))
 	if err != nil {
 		t.Fatal(err.Error())
 	}

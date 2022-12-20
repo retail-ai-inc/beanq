@@ -3,7 +3,7 @@ package task
 import (
 	"time"
 
-	"beanq/helper/stringx"
+	"beanq/internal/stringx"
 	"github.com/go-redis/redis/v8"
 )
 

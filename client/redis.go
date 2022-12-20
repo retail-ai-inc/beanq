@@ -1,4 +1,4 @@
-package driver
+package client
 
 import (
 	"context"
@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	client2 "beanq/client"
-	"beanq/helper/json"
-	"beanq/helper/stringx"
-	"beanq/helper/timex"
+	"beanq/driver"
+	"beanq/internal/json"
+	"beanq/internal/stringx"
+	"beanq/internal/timex"
 	"beanq/server"
 	"beanq/task"
 	"github.com/go-redis/redis/v8"
@@ -65,14 +65,14 @@ func NewRedis(options task.Options) *BeanqRedis {
 		keepSuccessJobsInHistory: options.KeepSuccessJobsInHistory,
 	}
 }
-func (t *BeanqRedis) DelayPublish(ctx context.Context, taskp *task.Task, delayTime time.Time, option ...client2.Option) (*task.Result, error) {
-	option = append(option, client2.ExecuteTime(delayTime))
+func (t *BeanqRedis) DelayPublish(ctx context.Context, taskp *task.Task, delayTime time.Time, option ...driver.Option) (*task.Result, error) {
+	option = append(option, driver.ExecuteTime(delayTime))
 	return t.Publish(ctx, taskp, option...)
 }
 
-func (t *BeanqRedis) Publish(ctx context.Context, taskp *task.Task, option ...client2.Option) (*task.Result, error) {
+func (t *BeanqRedis) Publish(ctx context.Context, taskp *task.Task, option ...driver.Option) (*task.Result, error) {
 
-	opt, err := client2.ComposeOptions(option...)
+	opt, err := driver.ComposeOptions(option...)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +199,7 @@ func (t *BeanqRedis) delayConsumer(ctx context.Context, consumers []*server.Cons
 
 					if taskV.ExecuteTime.Before(time.Now()) {
 
-						_, err := t.Publish(ctx, &taskV, client2.Queue(consumer.Queue))
+						_, err := t.Publish(ctx, &taskV, driver.Queue(consumer.Queue))
 						if err != nil {
 							fmt.Printf("PublishError:%s \n", err.Error())
 							t.err <- fmt.Errorf("PublishErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
