@@ -12,6 +12,7 @@ import (
 	"beanq/internal/base"
 	"beanq/internal/driver"
 	opt "beanq/internal/options"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/spf13/cast"
@@ -37,6 +38,7 @@ func NewRedisBroker(options2 *redis.Options) *RedisBroker {
 		err:        make(chan error),
 	}
 }
+
 func (t *RedisBroker) Enqueue(ctx context.Context, values map[string]any, opts opt.Option) (*opt.Result, error) {
 	id := "*"
 	strcmd := t.client.XAdd(ctx, &redis.XAddArgs{
@@ -45,7 +47,7 @@ func (t *RedisBroker) Enqueue(ctx context.Context, values map[string]any, opts o
 		MaxLen:     opts.MaxLen,
 		MinID:      "",
 		Approx:     false,
-		//Limit:      0,
+		// Limit:      0,
 		ID:     id,
 		Values: values,
 	})
@@ -61,7 +63,7 @@ func (t *RedisBroker) Start(ctx context.Context, server *Server) {
 
 	for _, v := range consumers {
 
-		//if has bound a group,then continue
+		// if has bound a group,then continue
 		result, err := t.client.XInfoGroups(t.ctx, v.Queue).Result()
 		if err != nil && err.Error() != "ERR no such key" {
 			fmt.Printf("InfoGroupErr:%+v \n", err)
@@ -80,8 +82,9 @@ func (t *RedisBroker) Start(ctx context.Context, server *Server) {
 	//monitor other stream pending
 	go t.claim(consumers)
 	//consumer schedule jobs
+
 	go t.delayConsumer(consumers)
-	//catch errors
+	// catch errors
 	<-t.done
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
@@ -153,7 +156,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 					Group:  consumer.Group,
 					Start:  start,
 					End:    end,
-					//Count:  10,
+					// Count:  10,
 				}).Result()
 				if err != nil && err != redis.Nil {
 					t.err <- fmt.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
@@ -164,10 +167,12 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 					if v.Idle.Seconds() > 60 {
 						uuid := uuid.New().String()
 						claims, err := t.client.XClaim(t.ctx, &redis.XClaimArgs{
+
 							Stream:   consumer.Queue,
 							Group:    consumer.Group,
 							Consumer: uuid,
 							MinIdle:  60 * time.Second,
+
 							Messages: []string{v.ID},
 						}).Result()
 						if err != nil && err != redis.Nil {
@@ -212,6 +217,7 @@ func (t *RedisBroker) consumerMsgs(f DoConsumer, group string, ch <-chan *redis.
 				if taskp.ExecuteTime().After(now) {
 					//format data
 					maps := base.ParseArgs(msg.Stream, taskp.Name(), taskp.Payload(), taskp.Retry(), taskp.MaxLen(), taskp.ExecuteTime())
+
 					data, err := json.Json.MarshalToString(maps)
 					if err != nil {
 
@@ -249,7 +255,7 @@ func (t *RedisBroker) consumerMsgs(f DoConsumer, group string, ch <-chan *redis.
 						continue
 					}
 				}
-				//ack
+				// ack
 				if err := t.client.XAck(t.ctx, msg.Stream, group, vm.ID).Err(); err != nil {
 					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					fmt.Printf("ACK Error:%s \n", err.Error())

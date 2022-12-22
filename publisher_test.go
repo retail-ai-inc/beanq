@@ -9,6 +9,7 @@ import (
 
 	"beanq/helper/json"
 	options2 "beanq/internal/options"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
 )
@@ -40,10 +41,10 @@ func init() {
 }
 
 /*
-* TestPublishOne
-*  @Description:
-			publish one msg
-* @param t
+  - TestPublishOne
+  - @Description:
+    publish one msg
+  - @param t
 */
 func TestPublishOne(t *testing.T) {
 
@@ -91,10 +92,10 @@ func TestPublish1(t *testing.T) {
 }
 
 /*
-* TestDelayPublish
-*  @Description:
-		publish multiple schedule msgs
-* @param t
+  - TestDelayPublish
+  - @Description:
+    publish multiple schedule msgs
+  - @param t
 */
 func TestDelayPublish(t *testing.T) {
 	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
@@ -108,7 +109,6 @@ func TestDelayPublish(t *testing.T) {
 		task := NewTask(SetName("update"), SetPayLoad(b))
 		delayT := time.Now().Add(10 * time.Second)
 
-		err := Publish(task, options2.Queue("ch2"))
 		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"))
 		if err != nil {
 			log.Fatalln(err)
@@ -123,7 +123,7 @@ func TestRetry(t *testing.T) {
 	err := retry(func() error {
 		fmt.Println("function body")
 		return errors.New("错误")
-		//return nil
+		// return nil
 	}, 500*time.Millisecond)
 
 	fmt.Println(err)
