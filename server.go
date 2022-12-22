@@ -1,13 +1,14 @@
-package server
+package beanq
 
 import (
-	"beanq/task"
 	"sync"
+
+	"beanq/internal/options"
 )
 
 type ConsumerHandler struct {
 	Group, Queue string
-	ConsumerFun  task.DoConsumer
+	ConsumerFun  DoConsumer
 }
 type Server struct {
 	mu    sync.RWMutex
@@ -21,14 +22,14 @@ func NewServer(count int64) *Server {
 	}
 	return &Server{Count: count}
 }
-func (t *Server) Register(group, queue string, consumerFun task.DoConsumer) {
+func (t *Server) Register(group, queue string, consumerFun DoConsumer) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if group == "" {
-		group = task.DefaultOptions.DefaultGroup
+		group = options.DefaultOptions.DefaultGroup
 	}
 	if queue == "" {
-		queue = task.DefaultOptions.DefaultQueueName
+		queue = options.DefaultOptions.DefaultQueueName
 	}
 
 	t.m = append(t.m, &ConsumerHandler{

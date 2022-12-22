@@ -1,28 +1,27 @@
 package beanq
 
 import (
-	"beanq/client"
-	"beanq/helper/json"
-	"beanq/task"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/spf13/cast"
 	"log"
 	"testing"
 	"time"
+
+	"beanq/helper/json"
+	options2 "beanq/internal/options"
+	"github.com/go-redis/redis/v8"
+	"github.com/spf13/cast"
 )
 
 var (
-	queue    = "ch2"
-	group    = "g2"
-	consumer = "cs1"
-	options  task.Options
-	clt      Beanq
+	queue           = "ch2"
+	group           = "g2"
+	consumer        = "cs1"
+	optionParameter options2.Options
 )
 
 func init() {
-	options = task.Options{
+	optionParameter = options2.Options{
 		RedisOptions: &redis.Options{
 			Addr:      Env.Queue.Redis.Host + ":" + cast.ToString(Env.Queue.Redis.Port),
 			Dialer:    nil,
@@ -38,22 +37,32 @@ func init() {
 		JobMaxRetry:              Env.Queue.JobMaxRetries,
 		Prefix:                   Env.Queue.Redis.Prefix,
 	}
-	clt = NewBeanq("redis", options)
 }
+
+/*
+* TestPublishOne
+*  @Description:
+			publish one msg
+* @param t
+*/
 func TestPublishOne(t *testing.T) {
 
-	m := make(map[int]string)
-	m[0] = "k----" + cast.ToString(0)
-
-	d, _ := json.Marshal(m)
-	task := task.NewTask("", d)
-	cmd, err := clt.Publish(task, client.Queue("ch2"))
-	if err != nil {
-		log.Fatalln(err)
+	msg := struct {
+		Id   int
+		Info string
+	}{
+		1,
+		"msg------1",
 	}
-	fmt.Printf("%+v \n", cmd)
 
-	defer clt.Close()
+	d, _ := json.Marshal(msg)
+	task := NewTask(SetPayLoad(d))
+
+	err := Publish(task, options2.Queue("ch2"))
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+	fmt.Printf("发布成功，消息：%+v \n", task)
 }
 
 /*
@@ -69,27 +78,45 @@ func TestPublish1(t *testing.T) {
 		m[i] = "k----" + cast.ToString(i)
 
 		d, _ := json.Marshal(m)
-		task := task.NewTask("", d)
-		cmd, err := clt.Publish(task, client.Queue("ch2"))
+		task := NewTask(SetPayLoad(d))
+
+		err := Publish(task, options2.Queue("ch2"))
+
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", cmd)
+		fmt.Printf("%+v \n", task)
 	}
-	defer clt.Close()
-}
-func TestDelayPublish(t *testing.T) {
-	m := make(map[string]string)
-	m["delayMsg"] = "new msg11111"
-	b, _ := json.Marshal(&m)
-	task := task.NewTask("update", b)
 
-	delayT := time.Now().Add(60 * time.Second)
-	_, err := clt.DelayPublish(task, delayT, client.Queue("delay-ch"))
-	if err != nil {
-		t.Fatal(err.Error())
+}
+
+/*
+* TestDelayPublish
+*  @Description:
+		publish multiple schedule msgs
+* @param t
+*/
+func TestDelayPublish(t *testing.T) {
+	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
+
+	m := make(map[string]string)
+
+	for i := 0; i < 5; i++ {
+		m["delayMsg"] = "new msg" + cast.ToString(i)
+		b, _ := json.Marshal(m)
+
+		task := NewTask(SetName("update"), SetPayLoad(b))
+		delayT := time.Now().Add(10 * time.Second)
+
+		err := Publish(task, options2.Queue("ch2"))
+		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"))
+		if err != nil {
+			log.Fatalln(err)
+		}
+		fmt.Printf("%+v \n", res)
 	}
-	defer clt.Close()
+
+	defer pub.Close()
 }
 func TestRetry(t *testing.T) {
 

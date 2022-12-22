@@ -1,8 +1,9 @@
-package client
+package options
 
 import (
-	"beanq/task"
 	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
 type OptionType int
@@ -16,7 +17,7 @@ const (
 	IdleTime
 )
 
-type option struct {
+type Option struct {
 	Retry       int
 	Queue       string
 	Group       string
@@ -24,7 +25,7 @@ type option struct {
 	ExecuteTime time.Time
 }
 
-type Option interface {
+type OptionI interface {
 	String() string
 	OptType() OptionType
 	Value() any
@@ -44,7 +45,7 @@ type (
 * @param name
 * @return Option
  */
-func Queue(name string) Option {
+func Queue(name string) OptionI {
 	return queueOption(name)
 }
 func (queue queueOption) String() string {
@@ -63,7 +64,7 @@ func (queue queueOption) Value() any {
 * @param retries
 * @return Option
  */
-func Retry(retries int) Option {
+func Retry(retries int) OptionI {
 	return retryOption(retries)
 }
 func (retry retryOption) String() string {
@@ -82,7 +83,7 @@ func (retry retryOption) Value() any {
 * @param name
 * @return Option
  */
-func Group(name string) Option {
+func Group(name string) OptionI {
 	return groupOption(name)
 }
 func (group groupOption) String() string {
@@ -101,7 +102,7 @@ func (group groupOption) Value() any {
 * @param maxlen
 * @return Option
  */
-func MaxLen(maxlen int) Option {
+func MaxLen(maxlen int) OptionI {
 	return maxLenOption(maxlen)
 }
 func (ml maxLenOption) String() string {
@@ -120,7 +121,7 @@ func (ml maxLenOption) Value() any {
 * @param tm
 * @return Option
  */
-func ExecuteTime(unixTime time.Time) Option {
+func ExecuteTime(unixTime time.Time) OptionI {
 	return executeTime(unixTime)
 }
 func (et executeTime) String() string {
@@ -140,12 +141,12 @@ func (et executeTime) Value() any {
 * @return option
 * @return error
  */
-func ComposeOptions(options ...Option) (option, error) {
-	res := option{
-		Retry:  task.DefaultOptions.JobMaxRetry,
-		Queue:  task.DefaultOptions.DefaultQueueName,
-		Group:  task.DefaultOptions.DefaultGroup,
-		MaxLen: task.DefaultOptions.DefaultMaxLen,
+func ComposeOptions(options ...OptionI) (Option, error) {
+	res := Option{
+		Retry:  DefaultOptions.JobMaxRetry,
+		Queue:  DefaultOptions.DefaultQueueName,
+		Group:  DefaultOptions.DefaultGroup,
+		MaxLen: DefaultOptions.DefaultMaxLen,
 	}
 	for _, f := range options {
 		switch f.OptType() {
@@ -172,4 +173,74 @@ func ComposeOptions(options ...Option) (option, error) {
 		}
 	}
 	return res, nil
+}
+
+//
+//  ConsumerResult
+//  @Description:
+
+type FlagInfo string
+type LevelMsg string
+
+const (
+	SuccessInfo FlagInfo = "success"
+	FailedInfo  FlagInfo = "failed"
+
+	ErrLevel  LevelMsg = "error"
+	InfoLevel LevelMsg = "info"
+)
+
+type ConsumerResult struct {
+	Level   LevelMsg
+	Info    FlagInfo
+	Payload any
+
+	AddTime string
+	RunTime string
+
+	Queue, Group, Consumer string
+}
+
+// need more parameters
+type Result struct {
+	Id   string
+	Args []any
+}
+type Options struct {
+	RedisOptions *redis.Options
+
+	KeepJobInQueue           time.Duration
+	KeepFailedJobsInHistory  time.Duration
+	KeepSuccessJobsInHistory time.Duration
+
+	MinWorkers  int
+	JobMaxRetry int
+	Prefix      string
+
+	DefaultQueueName, DefaultGroup string
+	DefaultMaxLen                  int64
+
+	DefaultDelayQueueName, DefaultDelayGroup string
+
+	RetryTime time.Duration
+	WorkCount chan struct{}
+}
+
+var DefaultOptions = &Options{
+	KeepJobInQueue:           7 * 1440 * time.Minute,
+	KeepFailedJobsInHistory:  7 * 1440 * time.Minute,
+	KeepSuccessJobsInHistory: 7 * 1440 * time.Minute,
+	MinWorkers:               10,
+	JobMaxRetry:              3,
+	Prefix:                   "beanq",
+
+	DefaultQueueName: "default-queue",
+	DefaultGroup:     "default-group",
+	DefaultMaxLen:    1000,
+
+	DefaultDelayQueueName: "default-delay-queue",
+	DefaultDelayGroup:     "default-delay-group",
+
+	RetryTime: 800 * time.Millisecond,
+	WorkCount: make(chan struct{}, 20),
 }
