@@ -128,7 +128,14 @@ func (t *BeanqRedis) Start(server *server.Server) {
 	// consumer schedule jobs
 	go t.delayConsumer(ctx, consumers)
 	// catch errors
-	<-t.done
+	select {
+	case <-t.stop:
+		fmt.Println("stop")
+		return
+	case <-t.done:
+		fmt.Println("done")
+		return
+	}
 }
 func (t *BeanqRedis) StartUI() error {
 	return nil
@@ -167,7 +174,7 @@ func (t *BeanqRedis) delayConsumer(ctx context.Context, consumers []*server.Cons
 
 	for {
 		select {
-		case <-t.stop:
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 
@@ -229,7 +236,7 @@ func (t *BeanqRedis) claim(ctx context.Context, consumers []*server.ConsumerHand
 	defer ticker.Stop()
 	for {
 		select {
-		case <-t.stop:
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			start := "-"
@@ -286,7 +293,7 @@ func (t *BeanqRedis) readGroups(ctx context.Context, queue, group string, count 
 
 		for {
 			select {
-			case <-t.stop:
+			case <-ctx.Done():
 				return
 			default:
 				streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
@@ -325,7 +332,7 @@ func (t *BeanqRedis) consumerMsgs(ctx context.Context, f task.DoConsumer, group 
 
 	for {
 		select {
-		case <-t.stop:
+		case <-ctx.Done():
 			return
 		case msg := <-ch:
 			taskp := &task.Task{
@@ -528,6 +535,6 @@ func (t *BeanqRedis) GetErrors() (err error) {
   - @return error
 */
 func (t *BeanqRedis) Close() error {
-	close(t.stop)
+	t.stop <- struct{}{}
 	return t.client.Close()
 }
