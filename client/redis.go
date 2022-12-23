@@ -535,6 +535,11 @@ func (t *BeanqRedis) GetErrors() (err error) {
   - @return error
 */
 func (t *BeanqRedis) Close() error {
-	t.stop <- struct{}{}
+	select {
+	case <-t.stop:
+		// Already closed. Don't close again.
+	default:
+		close(t.stop)
+	}
 	return t.client.Close()
 }
