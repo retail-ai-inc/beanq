@@ -14,18 +14,17 @@ type Message struct {
 }
 
 type Task struct {
-	id          string    `json:"id"`
-	name        string    `json:"name"`
-	queue       string    `json:"queue"`
-	maxLen      int64     `json:"maxLen"`
-	retry       int       `json:"retry"`
-	payload     []byte    `json:"payload"`
-	addTime     string    `json:"addTime"`
-	executeTime time.Time `json:"executeTime"`
+	id          string
+	name        string
+	queue       string
+	maxLen      int64
+	retry       int
+	payload     []byte
+	addTime     string
+	executeTime time.Time
 }
 
 // get val functions
-
 func (t Task) Id() string {
 	return t.id
 }

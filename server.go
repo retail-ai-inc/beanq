@@ -10,6 +10,7 @@ type ConsumerHandler struct {
 	Group, Queue string
 	ConsumerFun  DoConsumer
 }
+
 type Server struct {
 	mu    sync.RWMutex
 	m     []*ConsumerHandler
@@ -22,6 +23,7 @@ func NewServer(count int64) *Server {
 	}
 	return &Server{Count: count}
 }
+
 func (t *Server) Register(group, queue string, consumerFun DoConsumer) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
@@ -38,6 +40,7 @@ func (t *Server) Register(group, queue string, consumerFun DoConsumer) {
 		ConsumerFun: consumerFun,
 	})
 }
+
 func (t *Server) Consumers() []*ConsumerHandler {
 	return t.m
 }

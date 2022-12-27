@@ -11,7 +11,6 @@ import (
 /*
 * ParseArgs
 *  @Description:
-
 * @param queue
 * @param name
 * @param payload
@@ -55,7 +54,6 @@ type BqMessage struct {
 }
 
 func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue string, executeTime time.Time, retry int, maxLen int64) {
-
 	id = msg.ID
 	stream = streamStr
 
@@ -89,5 +87,6 @@ func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, 
 			executeTime = cast.ToTime(executeTm)
 		}
 	}
+
 	return
 }

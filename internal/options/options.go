@@ -202,10 +202,6 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	return res, nil
 }
 
-//
-//  ConsumerResult
-//  @Description:
-
 type FlagInfo string
 type LevelMsg string
 
@@ -233,6 +229,7 @@ type Result struct {
 	Id   string
 	Args []any
 }
+
 type Options struct {
 	RedisOptions *redis.Options
 

@@ -19,8 +19,8 @@ type healthCheck struct {
 func newHealthCheck(client *redis.Client) *healthCheck {
 	return &healthCheck{client: client}
 }
-func (t *healthCheck) start(ctx context.Context) (err error) {
 
+func (t *healthCheck) start(ctx context.Context) (err error) {
 	device := devicex.Device
 	key := "health_checker"
 	var str string
@@ -38,6 +38,6 @@ func (t *healthCheck) start(ctx context.Context) (err error) {
 	if err = t.client.HMSet(ctx, key, device.Net.Ip, str).Err(); err != nil {
 		return
 	}
-	//fmt.Printf("DeviceValue:%+v \n", device)
+
 	return nil
 }
