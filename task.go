@@ -79,11 +79,6 @@ func SetRetry(retry int) TaskOpt {
 		task.retry = retry
 	}
 }
-func SetPayLoad(payload []byte) TaskOpt {
-	return func(task *Task) {
-		task.payload = payload
-	}
-}
 func SetAddTime(addtime string) TaskOpt {
 	return func(task *Task) {
 		task.addTime = addtime
@@ -95,8 +90,10 @@ func SetExecuteTime(executeTime time.Time) TaskOpt {
 	}
 }
 
-func NewTask(opt ...TaskOpt) *Task {
-	task := Task{}
+func NewTask(payload []byte, opt ...TaskOpt) *Task {
+	task := Task{
+		payload: payload,
+	}
 	for _, o := range opt {
 		o(&task)
 	}

@@ -19,27 +19,37 @@ import (
 )
 
 type RedisBroker struct {
-	client     *redis.Client
-	ctx        context.Context
-	done, stop chan struct{}
-	minWorkers int
-	err        chan error
+	client      *redis.Client
+	ctx         context.Context
+	done, stop  chan struct{}
+	minWorkers  int
+	err         chan error
+	healthCheck healthCheckI
+	scheduleJob scheduleJobI
 }
 
 var _ Broker = new(RedisBroker)
 
 func NewRedisBroker(options2 *redis.Options) *RedisBroker {
+	client := driver.NewRdb(options2)
 	return &RedisBroker{
-		client:     driver.NewRdb(options2),
-		ctx:        context.Background(),
-		done:       make(chan struct{}),
-		stop:       make(chan struct{}),
-		minWorkers: 10,
-		err:        make(chan error),
+		client:      client,
+		ctx:         nil,
+		done:        make(chan struct{}),
+		stop:        make(chan struct{}),
+		minWorkers:  10,
+		err:         make(chan error, 1),
+		healthCheck: newHealthCheck(client),
+		scheduleJob: newScheduleJob(client),
 	}
 }
 
 func (t *RedisBroker) Enqueue(ctx context.Context, values map[string]any, opts opt.Option) (*opt.Result, error) {
+
+	if err := t.scheduleJob.enqueue(ctx, values, opts); err != nil {
+		return nil, err
+	}
+	return nil, nil
 	id := "*"
 	strcmd := t.client.XAdd(ctx, &redis.XAddArgs{
 		Stream:     opts.Queue,
@@ -59,18 +69,23 @@ func (t *RedisBroker) Enqueue(ctx context.Context, values map[string]any, opts o
 func (t *RedisBroker) Start(ctx context.Context, server *Server) {
 	consumers := server.Consumers()
 	workers := make(chan struct{}, t.minWorkers)
-	t.ctx = ctx
 
+	go t.scheduleJob.start(ctx, consumers)
+	select {}
+	return
+	t.ctx = ctx
 	for _, v := range consumers {
 
 		// if has bound a group,then continue
 		result, err := t.client.XInfoGroups(t.ctx, v.Queue).Result()
 		if err != nil && err.Error() != "ERR no such key" {
+			t.err <- err
 			fmt.Printf("InfoGroupErr:%+v \n", err)
 		}
 		if len(result) < 1 {
 			if err := t.createGroup(v.Queue, v.Group); err != nil {
 				fmt.Printf("CreateGroupErr:%+v \n", err)
+				t.err <- err
 				continue
 			}
 		}
@@ -82,10 +97,44 @@ func (t *RedisBroker) Start(ctx context.Context, server *Server) {
 	//monitor other stream pending
 	go t.claim(consumers)
 	//consumer schedule jobs
-
 	go t.delayConsumer(consumers)
+
+	//check client health
+	go t.healthCheckerStart()
+
 	// catch errors
-	<-t.done
+	select {
+	case <-t.stop:
+		fmt.Println("stop")
+		return
+	case <-t.done:
+		fmt.Println("done")
+		return
+	}
+}
+
+/*
+* healthCheckerStart
+*  @Description:
+*  @receiver t
+ */
+func (t *RedisBroker) healthCheckerStart() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-t.ctx.Done():
+			t.err <- t.ctx.Err()
+			return
+		case <-ticker.C:
+			if err := t.healthCheck.start(t.ctx); err != nil {
+				t.err <- err
+				return
+			}
+		case <-t.stop:
+			return
+		}
+	}
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
 	defer close(t.done)
@@ -112,6 +161,9 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 		for {
 			select {
 			case <-t.stop:
+				return
+			case <-t.ctx.Done():
+				t.err <- t.ctx.Err()
 				return
 			default:
 				streams, err := t.client.XReadGroup(t.ctx, &redis.XReadGroupArgs{
@@ -145,6 +197,9 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 		select {
 		case <-t.stop:
 			return
+		case <-t.ctx.Done():
+			t.err <- t.ctx.Err()
+			return
 		case <-ticker.C:
 			start := "-"
 			end := "+"
@@ -165,12 +220,12 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 				for _, v := range res {
 
 					if v.Idle.Seconds() > 60 {
-						uuid := uuid.New().String()
+
 						claims, err := t.client.XClaim(t.ctx, &redis.XClaimArgs{
 
 							Stream:   consumer.Queue,
 							Group:    consumer.Group,
-							Consumer: uuid,
+							Consumer: consumer.Queue,
 							MinIdle:  60 * time.Second,
 
 							Messages: []string{v.ID},
@@ -206,6 +261,9 @@ func (t *RedisBroker) consumerMsgs(f DoConsumer, group string, ch <-chan *redis.
 		select {
 		case <-t.stop:
 			return
+		case <-t.ctx.Done():
+			t.err <- t.ctx.Err()
+			return
 		case msg := <-ch:
 
 			stream := msg.Stream
@@ -214,47 +272,34 @@ func (t *RedisBroker) consumerMsgs(f DoConsumer, group string, ch <-chan *redis.
 				taskp := t.parseMapToTask(vm, stream)
 				now = time.Now()
 
-				if taskp.ExecuteTime().After(now) {
-					//format data
-					maps := base.ParseArgs(msg.Stream, taskp.Name(), taskp.Payload(), taskp.Retry(), taskp.MaxLen(), taskp.ExecuteTime())
+				err := t.retry(func() error {
+					return f(taskp, t.client)
+				}, opt.DefaultOptions.RetryTime)
 
-					data, err := json.Json.MarshalToString(maps)
-					if err != nil {
-
-					}
-					if err := t.client.LPush(t.ctx, msg.Stream+"-list", data).Err(); err != nil {
-
-					}
-					continue
-				} else {
-					err := t.retry(func() error {
-						return f(taskp, t.client)
-					}, opt.DefaultOptions.RetryTime)
-
-					if err != nil {
-						info = opt.FailedInfo
-						result.Level = opt.ErrLevel
-						result.Info = opt.FlagInfo(err.Error())
-					}
-
-					sub := time.Now().Sub(now)
-
-					result.Payload = taskp.Payload()
-					result.AddTime = time.Now().Format(timex.DateTime)
-					result.RunTime = sub.String()
-					result.Queue = msg.Stream
-					result.Group = group
-
-					b, err := json.Marshal(result)
-					if err != nil {
-						t.err <- fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-						continue
-					}
-					if err := t.client.LPush(t.ctx, string(info), b).Err(); err != nil {
-						t.err <- fmt.Errorf("LPushErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-						continue
-					}
+				if err != nil {
+					info = opt.FailedInfo
+					result.Level = opt.ErrLevel
+					result.Info = opt.FlagInfo(err.Error())
 				}
+
+				sub := time.Now().Sub(now)
+
+				result.Payload = taskp.Payload()
+				result.AddTime = time.Now().Format(timex.DateTime)
+				result.RunTime = sub.String()
+				result.Queue = msg.Stream
+				result.Group = group
+
+				b, err := json.Marshal(result)
+				if err != nil {
+					t.err <- fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+					continue
+				}
+				if err := t.client.LPush(t.ctx, string(info), b).Err(); err != nil {
+					t.err <- fmt.Errorf("LPushErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+					continue
+				}
+
 				// ack
 				if err := t.client.XAck(t.ctx, msg.Stream, group, vm.ID).Err(); err != nil {
 					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
@@ -277,6 +322,9 @@ func (t *RedisBroker) delayConsumer(consumers []*ConsumerHandler) {
 	for {
 		select {
 		case <-t.stop:
+			return
+		case <-t.ctx.Done():
+			t.err <- t.ctx.Err()
 			return
 		case <-ticker.C:
 
@@ -380,55 +428,39 @@ func (t *RedisBroker) retry(f func() error, delayTime time.Duration) error {
 	return nil
 }
 func (t *RedisBroker) Close() error {
+	select {
+	case <-t.stop:
+	default:
+		close(t.stop)
+	}
 	return t.client.Close()
+}
+
+/*
+  - Error
+  - @Description:
+    this function can't get errors always,need improve
+  - @receiver t
+  - @return error
+*/
+func (t *RedisBroker) Error() error {
+	select {
+	case err := <-t.err:
+		return err
+	default:
+		return nil
+	}
 }
 func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
 
-	id := msg.ID
-	var queueStr string
-	var maxLenV int64
-	var retryV int
-	var payloadB []byte
-	var addTimeStr string
-	var executeTime time.Time
-
-	if queue, ok := msg.Values["queue"]; ok {
-		if v, okv := queue.(string); okv {
-			queueStr = v
-		}
-	}
-	if maxLen, ok := msg.Values["maxLen"]; ok {
-		if v, okv := maxLen.(string); okv {
-			maxLenV = cast.ToInt64(v)
-		}
-	}
-	if retry, ok := msg.Values["retry"]; ok {
-		if v, okv := retry.(string); okv {
-			retryV = cast.ToInt(v)
-		}
-	}
-	if payload, ok := msg.Values["payload"]; ok {
-		if payloadV, okp := payload.(string); okp {
-			payloadB = stringx.StringToByte(payloadV)
-		}
-	}
-	if addtime, ok := msg.Values["addtime"]; ok {
-		if addtimeV, okt := addtime.(string); okt {
-			addTimeStr = addtimeV
-		}
-	}
-	if executeT, ok := msg.Values["executeTime"]; ok {
-		if executeTm, okt := executeT.(string); okt {
-			executeTime = cast.ToTime(executeTm)
-		}
-	}
+	payload, id, streamStr, addTime, queue, executeTime, retry, maxLen := base.ParseMapTask(base.BqMessage(msg), stream)
 	return NewTask(
+		payload,
 		SetId(id),
-		SetName(stream),
-		SetAddTime(addTimeStr),
+		SetName(streamStr),
+		SetAddTime(addTime),
 		SetExecuteTime(executeTime),
-		SetMaxLen(maxLenV),
-		SetPayLoad(payloadB),
-		SetQueue(queueStr),
-		SetRetry(retryV))
+		SetMaxLen(maxLen),
+		SetQueue(queue),
+		SetRetry(retry))
 }

@@ -10,6 +10,7 @@ type OptionType int
 
 const (
 	MaxRetryOpt OptionType = iota + 1
+	PriorityOpt
 	QueueOpt
 	GroupOpt
 	MaxLenOpt
@@ -18,6 +19,7 @@ const (
 )
 
 type Option struct {
+	Priority    float64
 	Retry       int
 	Queue       string
 	Group       string
@@ -32,11 +34,12 @@ type OptionI interface {
 }
 
 type (
-	retryOption  int
-	queueOption  string
-	groupOption  string
-	maxLenOption int64
-	executeTime  time.Time
+	priorityOption float64
+	retryOption    int
+	queueOption    string
+	groupOption    string
+	maxLenOption   int64
+	executeTime    time.Time
 )
 
 /*
@@ -135,6 +138,25 @@ func (et executeTime) Value() any {
 }
 
 /*
+* Priority
+*  @Description:
+* @param priority
+* @return OptionI
+ */
+func Priority(priority int) OptionI {
+	return priorityOption(priority)
+}
+func (pri priorityOption) String() string {
+	return "priorityOption"
+}
+func (pri priorityOption) OptType() OptionType {
+	return PriorityOpt
+}
+func (pri priorityOption) Value() any {
+	return float64(pri)
+}
+
+/*
 * composeOptions
 *  @Description:
 * @param options
@@ -143,13 +165,18 @@ func (et executeTime) Value() any {
  */
 func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
-		Retry:  DefaultOptions.JobMaxRetry,
-		Queue:  DefaultOptions.DefaultQueueName,
-		Group:  DefaultOptions.DefaultGroup,
-		MaxLen: DefaultOptions.DefaultMaxLen,
+		Priority: DefaultOptions.Priority,
+		Retry:    DefaultOptions.JobMaxRetry,
+		Queue:    DefaultOptions.DefaultQueueName,
+		Group:    DefaultOptions.DefaultGroup,
+		MaxLen:   DefaultOptions.DefaultMaxLen,
 	}
 	for _, f := range options {
 		switch f.OptType() {
+		case PriorityOpt:
+			if v, ok := f.Value().(float64); ok {
+				res.Priority = v
+			}
 		case QueueOpt:
 			if v, ok := f.Value().(string); ok {
 				res.Queue = v
@@ -216,6 +243,7 @@ type Options struct {
 	MinWorkers  int
 	JobMaxRetry int
 	Prefix      string
+	Priority    float64
 
 	DefaultQueueName, DefaultGroup string
 	DefaultMaxLen                  int64
@@ -234,6 +262,7 @@ var DefaultOptions = &Options{
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
 
+	Priority:         0,
 	DefaultQueueName: "default-queue",
 	DefaultGroup:     "default-group",
 	DefaultMaxLen:    1000,

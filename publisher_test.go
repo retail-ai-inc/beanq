@@ -57,13 +57,13 @@ func TestPublishOne(t *testing.T) {
 	}
 
 	d, _ := json.Marshal(msg)
-	task := NewTask(SetPayLoad(d))
+	task := NewTask(d)
 
 	err := Publish(task, options2.Queue("ch2"))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	fmt.Printf("发布成功，消息：%+v \n", task)
+	fmt.Printf("SendMsgs：%+v \n", task)
 }
 
 /*
@@ -73,22 +73,21 @@ func TestPublishOne(t *testing.T) {
   - @param t
 */
 func TestPublish1(t *testing.T) {
-
+	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
 	for i := 0; i < 5; i++ {
 		m := make(map[int]string)
 		m[i] = "k----" + cast.ToString(i)
 
 		d, _ := json.Marshal(m)
-		task := NewTask(SetPayLoad(d))
+		task := NewTask(d)
 
-		err := Publish(task, options2.Queue("ch2"))
-
+		res, err := pub.Publish(task, options2.Queue("ch2"))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", task)
+		fmt.Printf("%+v \n", res)
 	}
-
+	pub.Close()
 }
 
 /*
@@ -103,13 +102,17 @@ func TestDelayPublish(t *testing.T) {
 	m := make(map[string]string)
 
 	for i := 0; i < 5; i++ {
+		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
-		task := NewTask(SetName("update"), SetPayLoad(b))
+		task := NewTask(b, SetName("update"))
 		delayT := time.Now().Add(10 * time.Second)
-
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"))
+		y = i
+		if i == 3 {
+			y = 30
+		}
+		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(y))
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -122,7 +125,7 @@ func TestRetry(t *testing.T) {
 
 	err := retry(func() error {
 		fmt.Println("function body")
-		return errors.New("错误")
+		return errors.New("error")
 		// return nil
 	}, 500*time.Millisecond)
 

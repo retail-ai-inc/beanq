@@ -8,7 +8,6 @@ import (
 
 type Consumer struct {
 	broker Broker
-	ctx    context.Context
 	opts   *opt.Options
 }
 
@@ -54,11 +53,12 @@ func NewConsumer(broker Broker, options *opt.Options) *Consumer {
 		}
 	}
 
-	return &Consumer{broker: broker, ctx: context.Background(), opts: opts}
+	return &Consumer{broker: broker, opts: opts}
 }
 func (t *Consumer) StartContext(ctx context.Context, srv *Server) {
 	t.broker.Start(ctx, srv)
 }
 func (t *Consumer) Start(srv *Server) {
-	t.StartContext(t.ctx, srv)
+	ctx := context.Background()
+	t.StartContext(ctx, srv)
 }
