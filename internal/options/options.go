@@ -68,6 +68,9 @@ func (queue queueOption) Value() any {
 * @return Option
  */
 func Retry(retries int) OptionI {
+	if retries < 0 {
+		retries = 0
+	}
 	return retryOption(retries)
 }
 func (retry retryOption) String() string {
@@ -106,6 +109,9 @@ func (group groupOption) Value() any {
 * @return Option
  */
 func MaxLen(maxLen int) OptionI {
+	if maxLen < 0 {
+		maxLen = 1000
+	}
 	return maxLenOption(maxLen)
 }
 func (ml maxLenOption) String() string {
@@ -125,6 +131,9 @@ func (ml maxLenOption) Value() any {
 * @return Option
  */
 func ExecuteTime(unixTime time.Time) OptionI {
+	if unixTime.IsZero() {
+		unixTime = time.Now()
+	}
 	return executeTime(unixTime)
 }
 func (et executeTime) String() string {

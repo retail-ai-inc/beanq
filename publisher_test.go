@@ -1,7 +1,6 @@
 package beanq
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"testing"
@@ -125,12 +124,11 @@ func TestRetry(t *testing.T) {
 
 	err := retry(func() error {
 		fmt.Println("function body")
-		return errors.New("error")
-		// return nil
+		// return errors.New("error")
+		return nil
 	}, 500*time.Millisecond)
 
 	fmt.Println(err)
-
 }
 
 func retry(f func() error, delayTime time.Duration) error {
@@ -167,14 +165,11 @@ func retry(f func() error, delayTime time.Duration) error {
 			err = v
 			if v != nil {
 				err = v
+				close(retryFlag)
 				break
 			}
 		}
 	}
 	close(stopRetry)
-	if err != nil {
-		close(retryFlag)
-		return err
-	}
-	return nil
+	return err
 }

@@ -13,7 +13,7 @@ import (
 
 type scheduleJobI interface {
 	start(ctx context.Context, consumers []*ConsumerHandler)
-	enqueue(ctx context.Context, stream string, values map[string]any, option options.Option) error
+	enqueue(ctx context.Context, zsetStr string, values map[string]any, option options.Option) error
 }
 type scheduleJob struct {
 	client *redis.Client
@@ -28,7 +28,7 @@ func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
 	go t.delayJobs(ctx, consumers)
 	go t.consumSet(ctx, consumers)
 }
-func (t *scheduleJob) enqueue(ctx context.Context, stream string, values map[string]any, opt options.Option) error {
+func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, values map[string]any, opt options.Option) error {
 
 	if values == nil {
 		return fmt.Errorf("values can't empty")
@@ -38,7 +38,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, stream string, values map[str
 	if err != nil {
 		return err
 	}
-	if err := t.client.ZAdd(ctx, stream+":zset", &redis.Z{
+	if err := t.client.ZAdd(ctx, zsetStr, &redis.Z{
 		Score:  opt.Priority,
 		Member: bt,
 	}).Err(); err != nil {
@@ -54,7 +54,7 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 		select {
 		case <-ticker.C:
 			for _, v := range consumers {
-				key := v.Group + ":" + v.Queue + ":list"
+				key := base.MakeListKey(v.Group, v.Queue)
 				cmd := t.client.LPop(ctx, key)
 				if cmd.Err() != nil {
 					if cmd.Err() != redis.Nil {
@@ -79,9 +79,11 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 				}
 				maps := base.ParseArgs(task.Id(), task.Queue(), task.Name(), task.Payload(), task.Group(), task.Retry(), task.priority, task.MaxLen(), task.ExecuteTime())
 
-				t.enqueue(ctx, task.Group()+":"+task.Queue(), maps, options.Option{
+				if err := t.enqueue(ctx, base.MakeZSetKey(task.Group(), task.Queue()), maps, options.Option{
 					Priority: task.priority,
-				})
+				}); err != nil {
+
+				}
 			}
 		}
 	}
@@ -96,7 +98,7 @@ func (t *scheduleJob) consumSet(ctx context.Context, consumers []*ConsumerHandle
 		case <-ticker.C:
 
 			for _, v := range consumers {
-				cmd := t.client.ZRevRangeByScore(ctx, v.Group+":"+v.Queue+":zset", &redis.ZRangeBy{
+				cmd := t.client.ZRevRangeByScore(ctx, base.MakeZSetKey(v.Group, v.Queue), &redis.ZRangeBy{
 					Min:    "0",
 					Max:    "10",
 					Offset: 0,
@@ -123,7 +125,7 @@ func (t *scheduleJob) consumSet(ctx context.Context, consumers []*ConsumerHandle
 
 					if executeTime.Before(time.Now()) {
 						cmd := t.client.XAdd(ctx, &redis.XAddArgs{
-							Stream:     task.Group() + ":" + queue + ":stream",
+							Stream:     base.MakeStreamKey(task.Group(), queue),
 							NoMkStream: false,
 							MaxLen:     maxLen,
 							MinID:      "",
@@ -136,14 +138,14 @@ func (t *scheduleJob) consumSet(ctx context.Context, consumers []*ConsumerHandle
 							fmt.Println(cmd.Err())
 						}
 					} else {
-						//if executeTime after now
-						if err := t.client.LPush(ctx, v.Group+":"+v.Queue+":list", vv).Err(); err != nil {
+						// if executeTime after now
+						if err := t.client.LPush(ctx, base.MakeListKey(v.Group, v.Queue), vv).Err(); err != nil {
 							fmt.Println(err)
 							continue
 						}
 					}
 
-					if err := t.client.ZRem(ctx, v.Group+":"+v.Queue+":zset", vv).Err(); err != nil {
+					if err := t.client.ZRem(ctx, base.MakeZSetKey(v.Group, v.Queue), vv).Err(); err != nil {
 						fmt.Println(err)
 						continue
 					}

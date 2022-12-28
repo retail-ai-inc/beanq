@@ -1,6 +1,7 @@
 package base
 
 import (
+	"strings"
 	"time"
 
 	"beanq/helper/stringx"
@@ -99,4 +100,25 @@ func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, 
 		}
 	}
 	return
+}
+
+func makeKey(group, queue, name string) string {
+	var sb strings.Builder
+
+	sb.WriteString(group)
+	sb.WriteString(":")
+	sb.WriteString(queue)
+	sb.WriteString(":")
+	sb.WriteString(name)
+
+	return sb.String()
+}
+func MakeListKey(group, queue string) string {
+	return makeKey(group, queue, "list")
+}
+func MakeZSetKey(group, queue string) string {
+	return makeKey(group, queue, "zset")
+}
+func MakeStreamKey(group, queue string) string {
+	return makeKey(group, queue, "stream")
 }

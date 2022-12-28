@@ -1,16 +1,13 @@
 package devicex
 
 import (
-	"errors"
 	lnet "net"
 	"strings"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/net"
-	"golang.org/x/sync/errgroup"
 )
 
 // DeviceI
@@ -24,31 +21,24 @@ var _ DeviceI = new(device)
 type device struct {
 	Memory devMemory `json:"memory"`
 	Cpu    devCpu    `json:"cpu"`
-	Disk   devDisk   `json:"disk"`
-	Net    devNet    `json:"net"`
+	// Disk   devDisk   `json:"disk"`
+	Net devNet `json:"net"`
 }
 
 var Device = new(device)
 
-func (t *device) Info() error {
+func (t *device) Info() (err error) {
 
-	eg := new(errgroup.Group)
-	//memory information
-	eg.Go(func() error {
-		return t.memory()
-	})
-	//disk information
-	eg.Go(func() error {
-		return t.disk()
-	})
-	//cpu information
-	eg.Go(func() error {
-		return t.cpu()
-	})
-	eg.Go(func() error {
-		return t.net()
-	})
-	return eg.Wait()
+	if err = t.memory(); err != nil {
+		return
+	}
+	if err = t.cpu(); err != nil {
+		return
+	}
+	if err = t.net(); err != nil {
+		return
+	}
+	return
 }
 func (t *device) cpu() error {
 
@@ -82,35 +72,40 @@ func (t *device) memory() error {
 	}
 	return nil
 }
-func (t *device) disk() error {
-	dk, err := disk.Partitions(false)
-	if err != nil {
-		return err
-	}
-	if len(dk) <= 0 {
-		return errors.New("1111")
-	}
 
-	for _, stat := range dk {
-		if stat.Mountpoint != "/" {
-			continue
-		}
-		s, err := disk.Usage(stat.Mountpoint)
+/*
+//backup
+
+	func (t *device) disk() error {
+		dk, err := disk.Partitions(false)
 		if err != nil {
 			return err
 		}
-		if s != nil {
-			t.Disk = devDisk{
-				Name:           stat.Device,
-				AvailableBytes: s.Free,
-				UsageBytes:     s.Used,
-				UsageRatio:     s.UsedPercent,
-			}
+		if len(dk) <= 0 {
+			return errors.New("no disk")
 		}
-		break
+
+		for _, stat := range dk {
+			if stat.Mountpoint != "/" {
+				continue
+			}
+			s, err := disk.Usage(stat.Mountpoint)
+			if err != nil {
+				return err
+			}
+			if s != nil {
+				t.Disk = devDisk{
+					Name:           stat.Device,
+					AvailableBytes: s.Free,
+					UsageBytes:     s.Used,
+					UsageRatio:     s.UsedPercent,
+				}
+			}
+			break
+		}
+		return nil
 	}
-	return nil
-}
+*/
 func (t *device) net() error {
 	localIp, err := IpV4Addr()
 	if err != nil {
