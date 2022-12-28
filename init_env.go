@@ -48,6 +48,7 @@ type queues struct {
 	MinWorkers               int           `json:"minWorkers"`
 	Redis                    redisq        `json:"redis"`
 }
+
 type redisq struct {
 	Host               string        `json:"host"`
 	Port               uint64        `json:"port"`

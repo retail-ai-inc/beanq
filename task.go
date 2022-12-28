@@ -19,20 +19,21 @@ type Message struct {
 }
 
 type Task struct {
-	id          string
-	name        string
-	queue       string
-	group       string
-	maxLen      int64
-	retry       int
-	priority    float64
+	id    string
+	name  string
+	queue string
+
+	group    string
+	maxLen   int64
+	retry    int
+	priority float64
+
 	payload     []byte
 	addTime     string
 	executeTime time.Time
 }
 
 // get val functions
-
 func (t Task) Id() string {
 	return t.id
 }

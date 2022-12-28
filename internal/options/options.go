@@ -51,12 +51,15 @@ type (
 func Queue(name string) OptionI {
 	return queueOption(name)
 }
+
 func (queue queueOption) String() string {
 	return "queueOption"
 }
+
 func (queue queueOption) OptType() OptionType {
 	return QueueOpt
 }
+
 func (queue queueOption) Value() any {
 	return string(queue)
 }
@@ -73,12 +76,15 @@ func Retry(retries int) OptionI {
 	}
 	return retryOption(retries)
 }
+
 func (retry retryOption) String() string {
 	return "retryOption"
 }
+
 func (retry retryOption) OptType() OptionType {
 	return MaxRetryOpt
 }
+
 func (retry retryOption) Value() any {
 	return int(retry)
 }
@@ -92,12 +98,15 @@ func (retry retryOption) Value() any {
 func Group(name string) OptionI {
 	return groupOption(name)
 }
+
 func (group groupOption) String() string {
 	return "groupOption"
 }
+
 func (group groupOption) OptType() OptionType {
 	return GroupOpt
 }
+
 func (group groupOption) Value() any {
 	return string(group)
 }
@@ -114,12 +123,15 @@ func MaxLen(maxLen int) OptionI {
 	}
 	return maxLenOption(maxLen)
 }
+
 func (ml maxLenOption) String() string {
 	return "maxLenOption"
 }
+
 func (ml maxLenOption) OptType() OptionType {
 	return MaxLenOpt
 }
+
 func (ml maxLenOption) Value() any {
 	return int(ml)
 }
@@ -136,12 +148,15 @@ func ExecuteTime(unixTime time.Time) OptionI {
 	}
 	return executeTime(unixTime)
 }
+
 func (et executeTime) String() string {
 	return "executeTime"
 }
+
 func (et executeTime) OptType() OptionType {
 	return ExecuteTimeOpt
 }
+
 func (et executeTime) Value() any {
 	return time.Time(et)
 }
@@ -161,12 +176,15 @@ func Priority(priority float64) OptionI {
 	}
 	return priorityOption(priority)
 }
+
 func (pri priorityOption) String() string {
 	return "priorityOption"
 }
+
 func (pri priorityOption) OptType() OptionType {
 	return PriorityOpt
 }
+
 func (pri priorityOption) Value() any {
 	return float64(pri)
 }
@@ -217,10 +235,6 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	return res, nil
 }
 
-//
-//  ConsumerResult
-//  @Description:
-
 type FlagInfo string
 type LevelMsg string
 
@@ -248,6 +262,7 @@ type Result struct {
 	Id   string
 	Args []any
 }
+
 type Options struct {
 	RedisOptions *redis.Options
 

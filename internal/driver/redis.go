@@ -15,5 +15,6 @@ func NewRdb(options *redis.Options) *redis.Client {
 	once.Do(func() {
 		redisClient = redis.NewClient(options)
 	})
+
 	return redisClient
 }

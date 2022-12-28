@@ -51,7 +51,6 @@ func (t *RedisBroker) Enqueue(ctx context.Context, stream string, values map[str
 	if err := t.scheduleJob.enqueue(ctx, stream, values, opts); err != nil {
 		return nil, err
 	}
-
 	return nil, nil
 }
 func (t *RedisBroker) Start(ctx context.Context, server *Server) {
@@ -124,6 +123,7 @@ func (t *RedisBroker) healthCheckerStart() {
 		}
 	}
 }
+
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
 	defer close(t.done)
 	ch, err := t.readGroups(handler.Queue, handler.Group, server.Count)
@@ -134,6 +134,7 @@ func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers cha
 	t.consumerMsgs(handler.ConsumerFun, handler.Group, ch)
 	<-workers
 }
+
 func (t *RedisBroker) createGroup(queue, group string) error {
 	cmd := t.client.XGroupCreateMkStream(t.ctx, base.MakeStreamKey(group, queue), group, "0")
 	if cmd.Err() != nil && cmd.Err().Error() != "BUSYGROUP Consumer Group name already exists" {
@@ -141,6 +142,7 @@ func (t *RedisBroker) createGroup(queue, group string) error {
 	}
 	return nil
 }
+
 func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redis.XStream, error) {
 	consumer := uuid.New().String()
 	ch := make(chan *redis.XStream)
@@ -178,6 +180,7 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 	}()
 	return ch, nil
 }
+
 func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -193,7 +196,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 			end := "+"
 
 			for _, consumer := range consumers {
-
 				res, err := t.client.XPendingExt(t.ctx, &redis.XPendingExtArgs{
 					Stream: base.MakeStreamKey(consumer.Group, consumer.Queue),
 					Group:  consumer.Group,
@@ -236,6 +238,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 		}
 	}
 }
+
 func (t *RedisBroker) consumerMsgs(f DoConsumer, group string, ch <-chan *redis.XStream) {
 	info := opt.SuccessInfo
 	result := &opt.ConsumerResult{
@@ -302,6 +305,7 @@ func (t *RedisBroker) consumerMsgs(f DoConsumer, group string, ch <-chan *redis.
 		}
 	}
 }
+
 func (t *RedisBroker) retry(f func() error, delayTime time.Duration) error {
 	retryFlag := make(chan error)
 	stopRetry := make(chan bool, 1)
@@ -345,6 +349,7 @@ func (t *RedisBroker) retry(f func() error, delayTime time.Duration) error {
 	close(stopRetry)
 	return err
 }
+
 func (t *RedisBroker) Close() error {
 	select {
 	case <-t.stop:
@@ -369,8 +374,8 @@ func (t *RedisBroker) Error() error {
 		return nil
 	}
 }
-func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
 
+func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
 	payload, id, streamStr, addTime, queue, group, executeTime, retry, maxLen := base.ParseMapTask(base.BqMessage(msg), stream)
 	return &Task{
 		id:          id,

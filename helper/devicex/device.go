@@ -40,8 +40,8 @@ func (t *device) Info() (err error) {
 	}
 	return
 }
-func (t *device) cpu() error {
 
+func (t *device) cpu() error {
 	coreCount, err := cpu.Counts(true)
 	if err != nil {
 		return err
@@ -57,8 +57,8 @@ func (t *device) cpu() error {
 	}
 	return nil
 }
-func (t *device) memory() error {
 
+func (t *device) memory() error {
 	stat, err := mem.VirtualMemory()
 	if err != nil {
 		return err
@@ -134,8 +134,8 @@ func (t *device) net() error {
 	t.Net = intf
 	return nil
 }
-func IpV4Addr() (string, error) {
 
+func IpV4Addr() (string, error) {
 	addrs, err := lnet.InterfaceAddrs()
 
 	if err != nil {

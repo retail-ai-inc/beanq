@@ -15,6 +15,7 @@ type scheduleJobI interface {
 	start(ctx context.Context, consumers []*ConsumerHandler)
 	enqueue(ctx context.Context, zsetStr string, values map[string]any, option options.Option) error
 }
+
 type scheduleJob struct {
 	client *redis.Client
 }
@@ -24,9 +25,10 @@ var _ scheduleJobI = new(scheduleJob)
 func newScheduleJob(client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client}
 }
+
 func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
 	go t.delayJobs(ctx, consumers)
-	go t.consumSet(ctx, consumers)
+	go t.consume(ctx, consumers)
 }
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, values map[string]any, opt options.Option) error {
 
@@ -48,7 +50,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, values map[st
 	return nil
 }
 func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
-	ticker := time.NewTicker(300 * time.Millisecond)
+	ticker := time.NewTicker(200 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		select {
@@ -89,15 +91,15 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 	}
 
 }
-func (t *scheduleJob) consumSet(ctx context.Context, consumers []*ConsumerHandler) {
+func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-
 			for _, v := range consumers {
+
 				cmd := t.client.ZRevRangeByScore(ctx, base.MakeZSetKey(v.Group, v.Queue), &redis.ZRangeBy{
 					Min:    "0",
 					Max:    "10",
