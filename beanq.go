@@ -30,11 +30,13 @@ func Publish(task *Task, opts ...opt.OptionI) error {
 		Password: Env.Queue.Redis.Password,
 		DB:       Env.Queue.Redis.Db,
 	}
+
 	pub := NewClient(NewRedisBroker(redisOpts))
 	_, err := pub.Publish(task, opts...)
 	if err != nil {
 		return err
 	}
+
 	defer pub.Close()
 	return nil
 }
