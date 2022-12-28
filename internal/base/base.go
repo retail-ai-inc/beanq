@@ -5,6 +5,7 @@ import (
 
 	"beanq/helper/stringx"
 	"beanq/helper/timex"
+
 	"github.com/spf13/cast"
 )
 
@@ -62,26 +63,31 @@ func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, 
 			queue = v
 		}
 	}
+
 	if maxLenV, ok := msg.Values["maxLen"]; ok {
 		if v, ok := maxLenV.(string); ok {
 			maxLen = cast.ToInt64(v)
 		}
 	}
+
 	if retryVal, ok := msg.Values["retry"]; ok {
 		if v, ok := retryVal.(string); ok {
 			retry = cast.ToInt(v)
 		}
 	}
+
 	if payloadVal, ok := msg.Values["payload"]; ok {
 		if payloadV, ok := payloadVal.(string); ok {
 			payload = stringx.StringToByte(payloadV)
 		}
 	}
+
 	if addtimeV, ok := msg.Values["addtime"]; ok {
 		if addtimeStr, ok := addtimeV.(string); ok {
 			addTime = addtimeStr
 		}
 	}
+
 	if executeTVal, ok := msg.Values["executeTime"]; ok {
 		if executeTm, ok := executeTVal.(string); ok {
 			executeTime = cast.ToTime(executeTm)

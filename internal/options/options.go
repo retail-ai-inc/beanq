@@ -51,12 +51,15 @@ type (
 func Queue(name string) OptionI {
 	return queueOption(name)
 }
+
 func (queue queueOption) String() string {
 	return "queueOption"
 }
+
 func (queue queueOption) OptType() OptionType {
 	return QueueOpt
 }
+
 func (queue queueOption) Value() any {
 	return string(queue)
 }
@@ -70,12 +73,15 @@ func (queue queueOption) Value() any {
 func Retry(retries int) OptionI {
 	return retryOption(retries)
 }
+
 func (retry retryOption) String() string {
 	return "retryOption"
 }
+
 func (retry retryOption) OptType() OptionType {
 	return MaxRetryOpt
 }
+
 func (retry retryOption) Value() any {
 	return int(retry)
 }
@@ -89,12 +95,15 @@ func (retry retryOption) Value() any {
 func Group(name string) OptionI {
 	return groupOption(name)
 }
+
 func (group groupOption) String() string {
 	return "groupOption"
 }
+
 func (group groupOption) OptType() OptionType {
 	return GroupOpt
 }
+
 func (group groupOption) Value() any {
 	return string(group)
 }
@@ -108,12 +117,15 @@ func (group groupOption) Value() any {
 func MaxLen(maxlen int) OptionI {
 	return maxLenOption(maxlen)
 }
+
 func (ml maxLenOption) String() string {
 	return "maxLenOption"
 }
+
 func (ml maxLenOption) OptType() OptionType {
 	return MaxLenOpt
 }
+
 func (ml maxLenOption) Value() any {
 	return int(ml)
 }
@@ -127,12 +139,15 @@ func (ml maxLenOption) Value() any {
 func ExecuteTime(unixTime time.Time) OptionI {
 	return executeTime(unixTime)
 }
+
 func (et executeTime) String() string {
 	return "executeTime"
 }
+
 func (et executeTime) OptType() OptionType {
 	return ExecuteTimeOpt
 }
+
 func (et executeTime) Value() any {
 	return time.Time(et)
 }
@@ -146,12 +161,15 @@ func (et executeTime) Value() any {
 func Priority(priority int) OptionI {
 	return priorityOption(priority)
 }
+
 func (pri priorityOption) String() string {
 	return "priorityOption"
 }
+
 func (pri priorityOption) OptType() OptionType {
 	return PriorityOpt
 }
+
 func (pri priorityOption) Value() any {
 	return float64(pri)
 }
