@@ -36,8 +36,8 @@ func (t *Client) Publish(task *Task, option ...opt.OptionI) (*opt.Result, error)
 	if err != nil {
 		return nil, err
 	}
-	values := base.ParseArgs(opts.Queue, task.Name(), task.Payload(), opts.Retry, opts.MaxLen, opts.ExecuteTime)
-	return t.broker.Enqueue(t.ctx, values, opts)
+	values := base.ParseArgs(task.Id(), opts.Queue, task.Name(), task.Payload(), opts.Group, opts.Retry, opts.Priority, opts.MaxLen, opts.ExecuteTime)
+	return t.broker.Enqueue(t.ctx, opts.Group+":"+opts.Queue, values, opts)
 
 }
 func (t *Client) Close() error {

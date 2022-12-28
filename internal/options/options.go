@@ -102,11 +102,11 @@ func (group groupOption) Value() any {
 /*
 * MaxLen
 *  @Description:
-* @param maxlen
+* @param maxLen
 * @return Option
  */
-func MaxLen(maxlen int) OptionI {
-	return maxLenOption(maxlen)
+func MaxLen(maxLen int) OptionI {
+	return maxLenOption(maxLen)
 }
 func (ml maxLenOption) String() string {
 	return "maxLenOption"
@@ -143,7 +143,13 @@ func (et executeTime) Value() any {
 * @param priority
 * @return OptionI
  */
-func Priority(priority int) OptionI {
+func Priority(priority float64) OptionI {
+	if priority > 10 {
+		priority = 10
+	}
+	if priority < 0 {
+		priority = 0
+	}
 	return priorityOption(priority)
 }
 func (pri priorityOption) String() string {

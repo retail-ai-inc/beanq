@@ -17,11 +17,11 @@ import (
 func TestConsumer(t *testing.T) {
 
 	server := NewServer(3)
-	server.Register(group, queue, func(task *Task, r *redis.Client) error {
+	server.Register("", queue, func(task *Task, r *redis.Client) error {
 		fmt.Printf("PayLoad：%+v \n", task.Payload())
 		return nil
 	})
-	server.Register("delay-group", "delay-ch", func(task *Task, r *redis.Client) error {
+	server.Register("", "delay-ch", func(task *Task, r *redis.Client) error {
 		fmt.Printf("Delay:%+v \n", task.Payload())
 		return nil
 	})

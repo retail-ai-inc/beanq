@@ -17,7 +17,7 @@ type Beanq interface {
 	Close() error
 }
 type Broker interface {
-	Enqueue(ctx context.Context, values map[string]any, options opt.Option) (*opt.Result, error)
+	Enqueue(ctx context.Context, stream string, values map[string]any, options opt.Option) (*opt.Result, error)
 	Close() error
 	Start(ctx context.Context, server *Server)
 }

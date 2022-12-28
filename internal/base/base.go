@@ -20,18 +20,22 @@ import (
 * @param executeTime
 * @return map[string]any
  */
-func ParseArgs(queue, name, payload string, retry int, maxLen int64, executeTime time.Time) map[string]any {
+func ParseArgs(id, queue, name, payload, group string, retry int, priority float64, maxLen int64, executeTime time.Time) map[string]any {
 	values := make(map[string]any)
+	values["id"] = id
 	values["queue"] = queue
 	values["name"] = name
 	values["payload"] = payload
 	values["addtime"] = time.Now().Format(timex.DateTime)
 	values["retry"] = retry
 	values["maxLen"] = maxLen
+	values["group"] = group
+	values["priority"] = priority
 
-	if !executeTime.IsZero() {
-		values["executeTime"] = executeTime
+	if executeTime.IsZero() {
+		executeTime = time.Now()
 	}
+	values["executeTime"] = executeTime
 	return values
 }
 
@@ -54,7 +58,7 @@ type BqMessage struct {
 	Values map[string]interface{}
 }
 
-func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue string, executeTime time.Time, retry int, maxLen int64) {
+func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64) {
 
 	id = msg.ID
 	stream = streamStr
@@ -62,6 +66,11 @@ func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, 
 	if queueVal, ok := msg.Values["queue"]; ok {
 		if v, ok := queueVal.(string); ok {
 			queue = v
+		}
+	}
+	if groupVal, ok := msg.Values["group"]; ok {
+		if v, ok := groupVal.(string); ok {
+			group = v
 		}
 	}
 	if maxLenV, ok := msg.Values["maxLen"]; ok {

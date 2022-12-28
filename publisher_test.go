@@ -112,7 +112,7 @@ func TestDelayPublish(t *testing.T) {
 		if i == 3 {
 			y = 30
 		}
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(y))
+		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}
