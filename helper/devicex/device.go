@@ -31,17 +31,16 @@ type device struct {
 var Device = new(device)
 
 func (t *device) Info() error {
-
 	eg := new(errgroup.Group)
-	//memory information
+	// memory information
 	eg.Go(func() error {
 		return t.memory()
 	})
-	//disk information
+	// disk information
 	eg.Go(func() error {
 		return t.disk()
 	})
-	//cpu information
+	// cpu information
 	eg.Go(func() error {
 		return t.cpu()
 	})
@@ -50,8 +49,8 @@ func (t *device) Info() error {
 	})
 	return eg.Wait()
 }
-func (t *device) cpu() error {
 
+func (t *device) cpu() error {
 	coreCount, err := cpu.Counts(true)
 	if err != nil {
 		return err
@@ -67,8 +66,8 @@ func (t *device) cpu() error {
 	}
 	return nil
 }
-func (t *device) memory() error {
 
+func (t *device) memory() error {
 	stat, err := mem.VirtualMemory()
 	if err != nil {
 		return err
@@ -82,6 +81,7 @@ func (t *device) memory() error {
 	}
 	return nil
 }
+
 func (t *device) disk() error {
 	dk, err := disk.Partitions(false)
 	if err != nil {
@@ -111,6 +111,7 @@ func (t *device) disk() error {
 	}
 	return nil
 }
+
 func (t *device) net() error {
 	localIp, err := IpV4Addr()
 	if err != nil {
@@ -139,8 +140,8 @@ func (t *device) net() error {
 	t.Net = intf
 	return nil
 }
-func IpV4Addr() (string, error) {
 
+func IpV4Addr() (string, error) {
 	addrs, err := lnet.InterfaceAddrs()
 
 	if err != nil {
