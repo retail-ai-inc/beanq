@@ -11,6 +11,8 @@ type Consumer struct {
 	opts   *opt.Options
 }
 
+var _ BeanqSub = new(Consumer)
+
 func NewConsumer(broker Broker, options *opt.Options) *Consumer {
 	opts := opt.DefaultOptions
 	if options != nil {
@@ -67,10 +69,13 @@ func NewConsumer(broker Broker, options *opt.Options) *Consumer {
 }
 
 func (t *Consumer) StartContext(ctx context.Context, srv *Server) {
-	t.broker.Start(ctx, srv)
+	t.broker.start(ctx, srv)
 }
 
 func (t *Consumer) Start(srv *Server) {
 	ctx := context.Background()
 	t.StartContext(ctx, srv)
+}
+func (t *Consumer) StartUI() error {
+	return nil
 }

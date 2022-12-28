@@ -10,18 +10,22 @@ import (
 	"github.com/spf13/cast"
 )
 
-type Beanq interface {
-	Publish(task *Task, option ...opt.Option) (*opt.Result, error)
-	DelayPublish(task *Task, delayTime time.Time, option ...opt.Option) (*opt.Result, error)
-	Start(server *Server)
-	StartUI() error
+type BeanqPub interface {
+	Publish(task *Task, option ...opt.OptionI) (*opt.Result, error)
+	PublishContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error)
+	DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) (*opt.Result, error)
 	Close() error
+}
+type BeanqSub interface {
+	Start(server *Server)
+	StartContext(ctx context.Context, srv *Server)
+	StartUI() error
 }
 
 type Broker interface {
-	Enqueue(ctx context.Context, stream string, values map[string]any, options opt.Option) (*opt.Result, error)
-	Close() error
-	Start(ctx context.Context, server *Server)
+	enqueue(ctx context.Context, stream string, values map[string]any, options opt.Option) (*opt.Result, error)
+	close() error
+	start(ctx context.Context, server *Server)
 }
 
 func Publish(task *Task, opts ...opt.OptionI) error {

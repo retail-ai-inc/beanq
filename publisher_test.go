@@ -107,9 +107,9 @@ func TestDelayPublish(t *testing.T) {
 
 		task := NewTask(b, SetName("update"))
 		delayT := time.Now().Add(10 * time.Second)
-		y = i
+
 		if i == 3 {
-			y = 30
+			y = 10
 		}
 		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(float64(y)))
 		if err != nil {

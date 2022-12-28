@@ -43,7 +43,7 @@ func NewRedisBroker(options2 *redis.Options) *RedisBroker {
 	}
 }
 
-func (t *RedisBroker) Enqueue(ctx context.Context, stream string, values map[string]any, opts opt.Option) (*opt.Result, error) {
+func (t *RedisBroker) enqueue(ctx context.Context, stream string, values map[string]any, opts opt.Option) (*opt.Result, error) {
 
 	if stream == "" || values == nil {
 		return nil, fmt.Errorf("stream or values can't empty")
@@ -53,14 +53,13 @@ func (t *RedisBroker) Enqueue(ctx context.Context, stream string, values map[str
 	}
 	return nil, nil
 }
-func (t *RedisBroker) Start(ctx context.Context, server *Server) {
+func (t *RedisBroker) start(ctx context.Context, server *Server) {
 	consumers := server.Consumers()
 	workers := make(chan struct{}, t.minWorkers)
 
 	t.ctx = ctx
 	// consume worker
 	for _, v := range consumers {
-
 		// if has bound a group,then continue
 		result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
 		if err != nil && err.Error() != "ERR no such key" {
@@ -350,7 +349,7 @@ func (t *RedisBroker) retry(f func() error, delayTime time.Duration) error {
 	return err
 }
 
-func (t *RedisBroker) Close() error {
+func (t *RedisBroker) close() error {
 	select {
 	case <-t.stop:
 	default:
