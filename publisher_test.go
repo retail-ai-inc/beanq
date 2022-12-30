@@ -1,6 +1,7 @@
 package beanq
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"testing"
@@ -58,7 +59,7 @@ func TestPublishOne(t *testing.T) {
 	d, _ := json.Marshal(msg)
 	task := NewTask(d)
 
-	err := Publish(task, options2.Queue("ch2"))
+	err := Publish(task, options2.Queue("ch2"), options2.Group("aa"))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -80,7 +81,7 @@ func TestPublish1(t *testing.T) {
 		d, _ := json.Marshal(m)
 		task := NewTask(d)
 
-		res, err := pub.Publish(task, options2.Queue("ch2"))
+		res, err := pub.Publish(task, options2.Queue("delay-ch"))
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -124,8 +125,8 @@ func TestRetry(t *testing.T) {
 
 	err := retry(func() error {
 		fmt.Println("function body")
-		// return errors.New("error")
-		return nil
+		return errors.New("error")
+		// return nil
 	}, 500*time.Millisecond)
 
 	fmt.Println(err)
@@ -136,11 +137,12 @@ func retry(f func() error, delayTime time.Duration) error {
 	stopRetry := make(chan bool, 1)
 
 	go func(duration time.Duration, errChan chan error, stop chan bool) {
-		index := 1
-		count := 3
+
+		var index time.Duration = 0
+		var retryCount time.Duration = 2
 
 		for {
-			go time.AfterFunc(duration, func() {
+			go time.AfterFunc(index*duration, func() {
 				errChan <- f()
 			})
 			err := <-errChan
@@ -149,7 +151,7 @@ func retry(f func() error, delayTime time.Duration) error {
 				close(errChan)
 				break
 			}
-			if index == count {
+			if index == retryCount {
 				stop <- true
 				errChan <- err
 				break

@@ -7,7 +7,6 @@ import (
 	"beanq/helper/stringx"
 	"beanq/helper/timex"
 	"beanq/internal/options"
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/spf13/cast"
 )
@@ -34,31 +33,34 @@ type Task struct {
 }
 
 // get val functions
-func (t Task) Id() string {
+func (t *Task) Id() string {
 	return t.id
 }
-func (t Task) Name() string {
+func (t *Task) Name() string {
 	return t.name
 }
-func (t Task) Queue() string {
+func (t *Task) Queue() string {
 	return t.queue
 }
-func (t Task) Group() string {
+func (t *Task) Group() string {
 	return t.group
 }
-func (t Task) MaxLen() int64 {
+func (t *Task) MaxLen() int64 {
 	return t.maxLen
 }
-func (t Task) Retry() int {
+func (t *Task) Retry() int {
 	return t.retry
 }
-func (t Task) Payload() string {
+func (t *Task) Priority() float64 {
+	return t.priority
+}
+func (t *Task) Payload() string {
 	return stringx.ByteToString(t.payload)
 }
-func (t Task) AddTime() string {
+func (t *Task) AddTime() string {
 	return t.addTime
 }
-func (t Task) ExecuteTime() time.Time {
+func (t *Task) ExecuteTime() time.Time {
 	return t.executeTime
 }
 
@@ -100,24 +102,134 @@ func NewTask(payload []byte, opt ...TaskOpt) *Task {
 	return &task
 }
 
-type DoConsumer func(*Task, *redis.Client) error
+type DoConsumer func(*Task) error
 
-func ParseTask(data []byte) Task {
-	task := Task{}
+/*
+* jsonToTask
+*  @Description:
+* @param data
+* @return Task
+ */
+func jsonToTask(data []byte) Task {
+
 	jn := json.Json
-
-	task.id = jn.Get(data, "id").ToString()
-	task.name = jn.Get(data, "name").ToString()
-	task.queue = jn.Get(data, "queue").ToString()
-	task.group = jn.Get(data, "group").ToString()
-	task.maxLen = jn.Get(data, "maxLen").ToInt64()
-	task.payload = stringx.StringToByte(jn.Get(data, "payload").ToString())
-	task.retry = jn.Get(data, "retry").ToInt()
-	task.priority = jn.Get(data, "priority").ToFloat64()
-	task.addTime = jn.Get(data, "addtime").ToString()
-
 	executeTimeStr := jn.Get(data, "executeTime").ToString()
-	task.executeTime = cast.ToTime(executeTimeStr)
 
+	task := Task{
+		id:          jn.Get(data, "id").ToString(),
+		name:        jn.Get(data, "name").ToString(),
+		queue:       jn.Get(data, "queue").ToString(),
+		group:       jn.Get(data, "group").ToString(),
+		maxLen:      jn.Get(data, "maxLen").ToInt64(),
+		retry:       jn.Get(data, "retry").ToInt(),
+		priority:    jn.Get(data, "priority").ToFloat64(),
+		payload:     stringx.StringToByte(jn.Get(data, "payload").ToString()),
+		addTime:     jn.Get(data, "addtime").ToString(),
+		executeTime: cast.ToTime(executeTimeStr),
+	}
 	return task
+}
+
+/*
+* makeTaskMap
+*  @Description:
+* @param id
+* @param queue
+* @param name
+* @param payload
+* @param group
+* @param retry
+* @param priority
+* @param maxLen
+* @param executeTime
+* @return map[string]any
+ */
+func makeTaskMap(id, queue, name, payload, group string, retry int, priority float64, maxLen int64, executeTime time.Time) map[string]any {
+	now := time.Now()
+	values := make(map[string]any)
+	values["id"] = id
+	values["queue"] = queue
+	values["name"] = name
+	values["payload"] = payload
+	values["addtime"] = now.Format(timex.DateTime)
+	values["retry"] = retry
+	values["maxLen"] = maxLen
+	values["group"] = group
+	values["priority"] = priority
+
+	if executeTime.IsZero() {
+		executeTime = now
+	}
+	values["executeTime"] = executeTime
+	return values
+}
+
+type BqMessage struct {
+	ID     string
+	Values map[string]interface{}
+}
+
+/*
+* openTaskMap
+*  @Description:
+* @param msg
+* @param streamStr
+* @return payload
+* @return id
+* @return stream
+* @return addTime
+* @return queue
+* @return group
+* @return executeTime
+* @return retry
+* @return maxLen
+ */
+func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64) {
+
+	id = msg.ID
+	stream = streamStr
+
+	if queueVal, ok := msg.Values["queue"]; ok {
+		if v, ok := queueVal.(string); ok {
+			queue = v
+		}
+	}
+
+	if groupVal, ok := msg.Values["group"]; ok {
+		if v, ok := groupVal.(string); ok {
+			group = v
+		}
+	}
+
+	if maxLenV, ok := msg.Values["maxLen"]; ok {
+		if v, ok := maxLenV.(string); ok {
+			maxLen = cast.ToInt64(v)
+		}
+	}
+
+	if retryVal, ok := msg.Values["retry"]; ok {
+		if v, ok := retryVal.(string); ok {
+			retry = cast.ToInt(v)
+		}
+	}
+
+	if payloadVal, ok := msg.Values["payload"]; ok {
+		if payloadV, ok := payloadVal.(string); ok {
+			payload = stringx.StringToByte(payloadV)
+		}
+	}
+
+	if addtimeV, ok := msg.Values["addtime"]; ok {
+		if addtimeStr, ok := addtimeV.(string); ok {
+			addTime = addtimeStr
+		}
+	}
+
+	if executeTVal, ok := msg.Values["executeTime"]; ok {
+		if executeTm, ok := executeTVal.(string); ok {
+			executeTime = cast.ToTime(executeTm)
+		}
+	}
+
+	return
 }
