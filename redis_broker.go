@@ -30,6 +30,12 @@ type RedisBroker struct {
 
 var _ Broker = new(RedisBroker)
 
+type Broker interface {
+	Enqueue(ctx context.Context, values map[string]any, options opt.Option) (*opt.Result, error)
+	Close() error
+	Start(ctx context.Context, server *Server)
+}
+
 func NewRedisBroker(config BeanqConfig) *RedisBroker {
 	client := driver.NewRdb(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,

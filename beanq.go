@@ -1,12 +1,17 @@
 package beanq
 
 import (
-	"context"
 	"time"
 
 	"beanq/helper/logger"
 	opt "beanq/internal/options"
 )
+
+// This is a global variable to hold the debug logger so that we can log data from anywhere.
+var Logger logger.Logger
+
+// Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
+var Config BeanqConfig
 
 type Beanq interface {
 	Publish(task *Task, option ...opt.Option) (*opt.Result, error)
@@ -15,18 +20,6 @@ type Beanq interface {
 	StartUI() error
 	Close() error
 }
-
-type Broker interface {
-	Enqueue(ctx context.Context, values map[string]any, options opt.Option) (*opt.Result, error)
-	Close() error
-	Start(ctx context.Context, server *Server)
-}
-
-// This is a global variable to hold the debug logger so that we can log data from anywhere.
-var Logger logger.Logger
-
-// Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
-var Config BeanqConfig
 
 func Publish(task *Task, opts ...opt.OptionI) error {
 	pub := NewClient()
@@ -39,7 +32,7 @@ func Publish(task *Task, opts ...opt.OptionI) error {
 	return nil
 }
 
-// TODO
+// TODO:
 func Consume(server *Server, opts *opt.Options) error {
 	return nil
 }
