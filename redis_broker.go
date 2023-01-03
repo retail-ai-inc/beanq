@@ -30,8 +30,20 @@ type RedisBroker struct {
 
 var _ Broker = new(RedisBroker)
 
-func NewRedisBroker(options2 *redis.Options) *RedisBroker {
-	client := driver.NewRdb(options2)
+func NewRedisBroker(config BeanqConfig) *RedisBroker {
+	client := driver.NewRdb(&redis.Options{
+		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
+		Password:     config.Queue.Redis.Password,
+		DB:           config.Queue.Redis.Database,
+		MaxRetries:   config.Queue.Redis.Maxretries,
+		PoolSize:     config.Queue.Redis.PoolSize,
+		MinIdleConns: config.Queue.Redis.MinIdleConnections,
+		DialTimeout:  config.Queue.Redis.DialTimeout,
+		ReadTimeout:  config.Queue.Redis.ReadTimeout,
+		WriteTimeout: config.Queue.Redis.WriteTimeout,
+		PoolTimeout:  config.Queue.Redis.PoolTimeout,
+	})
+
 	return &RedisBroker{
 		client:      client,
 		ctx:         nil,
@@ -48,7 +60,10 @@ func (t *RedisBroker) Enqueue(ctx context.Context, values map[string]any, opts o
 	if err := t.scheduleJob.enqueue(ctx, values, opts); err != nil {
 		return nil, err
 	}
+
+	// TODO: HOW THIS CODE GOING TO WORK
 	return nil, nil
+
 	id := "*"
 	strcmd := t.client.XAdd(ctx, &redis.XAddArgs{
 		Stream:     opts.Queue,
@@ -60,9 +75,11 @@ func (t *RedisBroker) Enqueue(ctx context.Context, values map[string]any, opts o
 		ID:     id,
 		Values: values,
 	})
+
 	if err := strcmd.Err(); err != nil {
 		return nil, err
 	}
+
 	return &opt.Result{Args: strcmd.Args(), Id: strcmd.Val()}, nil
 }
 func (t *RedisBroker) Start(ctx context.Context, server *Server) {
@@ -74,13 +91,14 @@ func (t *RedisBroker) Start(ctx context.Context, server *Server) {
 	return
 	t.ctx = ctx
 	for _, v := range consumers {
-
 		// if has bound a group,then continue
 		result, err := t.client.XInfoGroups(t.ctx, v.Queue).Result()
+
 		if err != nil && err.Error() != "ERR no such key" {
 			t.err <- err
 			fmt.Printf("InfoGroupErr:%+v \n", err)
 		}
+
 		if len(result) < 1 {
 			if err := t.createGroup(v.Queue, v.Group); err != nil {
 				fmt.Printf("CreateGroupErr:%+v \n", err)
@@ -137,7 +155,7 @@ func (t *RedisBroker) healthCheckerStart() {
 
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
 	defer close(t.done)
-	ch, err := t.readGroups(handler.Queue, handler.Group, server.Count)
+	ch, err := t.readGroups(handler.Queue, handler.Group, int64(server.Count))
 	if err != nil {
 		t.err <- err
 		return

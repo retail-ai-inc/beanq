@@ -5,8 +5,12 @@ import (
 	"sync"
 	"time"
 
+	"beanq/helper/file"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
+
+	"github.com/labstack/gommon/log"
+	"github.com/spf13/viper"
 )
 
 type Client struct {
@@ -15,14 +19,57 @@ type Client struct {
 	wg     *sync.WaitGroup
 }
 
-func NewClient(broker Broker) *Client {
-	return &Client{
-		broker: broker,
-		ctx:    context.Background(),
-		wg:     nil,
-	}
+var (
+	beanqClientOnce sync.Once
+	beanqClient     *Client
+)
+
+func NewClient() *Client {
+
+	beanqClientOnce.Do(func() {
+		viper.AddConfigPath(".")
+		viper.SetConfigType("json")
+		viper.SetConfigName("env")
+
+		// Initialize the beanq consumer log
+		Logger = log.New("beanq")
+
+		if err := viper.ReadInConfig(); err != nil {
+			Logger.Errorf("Unable to open beanq env.json file: %v", err)
+		}
+
+		// IMPORTANT: Unmarshal the env.json into global Config object.
+		if err := viper.Unmarshal(&Config); err != nil {
+			Logger.Errorf("Unable to unmarshal the beanq env.json file: %v", err)
+		}
+
+		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
+		if Config.Queue.DebugLog.Path != "" {
+			if file, err := file.OpenFile(Config.Queue.DebugLog.Path); err != nil {
+				Logger.Errorf("Unable to open log file: %v", err)
+			} else {
+				Logger.SetOutput(file)
+			}
+		}
+
+		// Set the default log level as DEBUG.
+		Logger.SetLevel(log.DEBUG)
+
+		if Config.Queue.Driver == "redis" {
+			beanqClient = &Client{
+				broker: NewRedisBroker(Config),
+				ctx:    context.Background(),
+				wg:     nil,
+			}
+		} else {
+			beanqClient = nil
+		}
+	})
+
+	return beanqClient
 }
 
+// TODO: Make this function name as `PublishWithContext`
 func (t *Client) PublishContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error) {
 	t.ctx = ctx
 	return t.Publish(task, option...)

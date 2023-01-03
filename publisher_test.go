@@ -73,7 +73,7 @@ func TestPublishOne(t *testing.T) {
   - @param t
 */
 func TestPublish1(t *testing.T) {
-	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
+	pub := NewClient()
 	for i := 0; i < 5; i++ {
 		m := make(map[int]string)
 		m[i] = "k----" + cast.ToString(i)
@@ -97,7 +97,7 @@ func TestPublish1(t *testing.T) {
   - @param t
 */
 func TestDelayPublish(t *testing.T) {
-	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
+	pub := NewClient()
 
 	m := make(map[string]string)
 
