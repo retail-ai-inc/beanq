@@ -36,17 +36,23 @@ func NewClient() *Client {
 
 		if err := viper.ReadInConfig(); err != nil {
 			Logger.Errorf("Unable to open beanq env.json file: %v", err)
+			beanqClient = nil
+			return
 		}
 
 		// IMPORTANT: Unmarshal the env.json into global Config object.
 		if err := viper.Unmarshal(&Config); err != nil {
 			Logger.Errorf("Unable to unmarshal the beanq env.json file: %v", err)
+			beanqClient = nil
+			return
 		}
 
 		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
 		if Config.Queue.DebugLog.Path != "" {
 			if file, err := file.OpenFile(Config.Queue.DebugLog.Path); err != nil {
 				Logger.Errorf("Unable to open log file: %v", err)
+				beanqClient = nil
+				return
 			} else {
 				Logger.SetOutput(file)
 			}
@@ -62,6 +68,7 @@ func NewClient() *Client {
 				wg:     nil,
 			}
 		} else {
+			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
 			beanqClient = nil
 		}
 	})
