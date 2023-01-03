@@ -26,7 +26,7 @@ func TestConsumer(t *testing.T) {
 	})
 
 	csm := NewConsumer(NewRedisBroker(Config), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 
 }
 func TestConsumerSingle(t *testing.T) {
@@ -42,7 +42,7 @@ func TestConsumerSingle(t *testing.T) {
 	})
 
 	csm := NewConsumer(NewRedisBroker(Config), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }
 func TestConsumerSingle2(t *testing.T) {
 
@@ -52,7 +52,7 @@ func TestConsumerSingle2(t *testing.T) {
 		return nil
 	})
 	csm := NewConsumer(NewRedisBroker(Config), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }
 func TestConsumerMultiple(t *testing.T) {
 
@@ -65,5 +65,5 @@ func TestConsumerMultiple(t *testing.T) {
 	}
 
 	csm := NewConsumer(NewRedisBroker(Config), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }

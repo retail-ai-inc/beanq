@@ -19,5 +19,5 @@ func main() {
 	})
 
 	csm := beanq.NewConsumer(beanq.NewRedisBroker(beanq.Config), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }

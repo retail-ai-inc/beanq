@@ -1,6 +1,7 @@
 package beanq
 
 import (
+	"context"
 	"time"
 
 	"beanq/helper/logger"
@@ -15,8 +16,9 @@ var Config BeanqConfig
 
 type Beanq interface {
 	Publish(task *Task, option ...opt.Option) (*opt.Result, error)
+	PublishWithContext(ctx context.Context, task *Task, option ...opt.Option) (*opt.Result, error)
 	DelayPublish(task *Task, delayTime time.Time, option ...opt.Option) (*opt.Result, error)
-	Start(server *Server)
+	StartConsumer(server *Server)
 	StartUI() error
 	Close() error
 }
