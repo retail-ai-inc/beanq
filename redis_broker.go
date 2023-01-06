@@ -52,7 +52,6 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 	if err := t.scheduleJob.enqueue(ctx, stream, task, opts); err != nil {
 		return nil, err
 	}
-	// TODO: HOW THIS CODE GOING TO WORK
 	return nil, nil
 }
 func (t *RedisBroker) start(ctx context.Context, server *Server) {

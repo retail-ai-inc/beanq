@@ -4,9 +4,8 @@ import (
 	"fmt"
 
 	"beanq"
-	"github.com/spf13/cast"
-
 	"github.com/go-redis/redis/v8"
+	"github.com/spf13/cast"
 )
 
 func main() {

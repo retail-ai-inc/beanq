@@ -6,6 +6,7 @@ import (
 
 	"beanq/helper/logger"
 	opt "beanq/internal/options"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
 )
@@ -54,7 +55,7 @@ func Publish(task *Task, opts ...opt.OptionI) error {
 }
 
 // easy consume
-// hard to implement
+// heavily  to implement
 func Consume(server *Server, opts *opt.Options) error {
 	return nil
 }

@@ -14,6 +14,7 @@ import (
   - @param t
 */
 func TestConsumer(t *testing.T) {
+
 	server := NewServer(3)
 	server.Register("aa", queue, func(task *Task) error {
 		fmt.Printf("PayLoad:%+v,Id:%s \n", task.Payload(), task.Id())
@@ -29,7 +30,6 @@ func TestConsumer(t *testing.T) {
 }
 
 func TestConsumerMultiple(t *testing.T) {
-
 	server := NewServer(3)
 	for i := 0; i < 5; i++ {
 

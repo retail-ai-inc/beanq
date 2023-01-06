@@ -31,7 +31,6 @@ func NewClient(broker Broker) *Client {
 }
 
 func (t *Client) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error) {
-
 	t.ctx = ctx
 	return t.Publish(task, option...)
 }
