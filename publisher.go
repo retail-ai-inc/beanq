@@ -17,6 +17,11 @@ type Client struct {
 
 var _ BeanqPub = new(Client)
 
+var (
+	beanqClientOnce sync.Once
+	beanqClient     *Client
+)
+
 func NewClient(broker Broker) *Client {
 	return &Client{
 		broker: broker,
@@ -24,7 +29,9 @@ func NewClient(broker Broker) *Client {
 		wg:     nil,
 	}
 }
-func (t *Client) PublishContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error) {
+
+func (t *Client) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error) {
+
 	t.ctx = ctx
 	return t.Publish(task, option...)
 }

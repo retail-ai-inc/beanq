@@ -52,6 +52,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 	if err := t.scheduleJob.enqueue(ctx, stream, task, opts); err != nil {
 		return nil, err
 	}
+	// TODO: HOW THIS CODE GOING TO WORK
 	return nil, nil
 }
 func (t *RedisBroker) start(ctx context.Context, server *Server) {
@@ -129,7 +130,8 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
 	defer close(t.done)
 
-	ch, err := t.readGroups(handler.Queue, handler.Group, server.Count)
+	ch, err := t.readGroups(handler.Queue, handler.Group, int64(server.Count))
+
 	if err != nil {
 		t.err <- err
 		return

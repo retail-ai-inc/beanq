@@ -47,7 +47,7 @@ func pubMoreInfo() {
 	m := make(map[string]string)
 
 	for i := 0; i < 5; i++ {
-		y := 0
+		var y float64 = 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
@@ -57,7 +57,7 @@ func pubMoreInfo() {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(float64(y)))
+		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(y))
 		if err != nil {
 			log.Fatalln(err)
 		}

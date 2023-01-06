@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"beanq"
-	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
+
+	"github.com/go-redis/redis/v8"
 )
 
 func main() {
@@ -30,5 +31,5 @@ func main() {
 	})
 
 	csm := beanq.NewConsumer(beanq.NewRedisBroker(redisOpts), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }

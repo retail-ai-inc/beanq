@@ -4,21 +4,27 @@ import (
 	"context"
 	"time"
 
+	"beanq/helper/logger"
 	opt "beanq/internal/options"
-
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
 )
 
 type BeanqPub interface {
 	Publish(task *Task, option ...opt.OptionI) (*opt.Result, error)
-	PublishContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error)
+	PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error)
 	DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) (*opt.Result, error)
-	Close() error
 }
+
+// This is a global variable to hold the debug logger so that we can log data from anywhere.
+var Logger logger.Logger
+
+// Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
+var Config BeanqConfig
+
 type BeanqSub interface {
-	Start(server *Server)
-	StartContext(ctx context.Context, srv *Server)
+	StartConsumer(server *Server)
+	StartConsumerWithContext(ctx context.Context, srv *Server)
 	StartUI() error
 }
 
@@ -28,6 +34,8 @@ type Broker interface {
 	start(ctx context.Context, server *Server)
 }
 
+// easy publish
+// only input Task and set options
 func Publish(task *Task, opts ...opt.OptionI) error {
 	redisOpts := &redis.Options{
 		Addr:     Env.Queue.Redis.Host + ":" + cast.ToString(Env.Queue.Redis.Port),
@@ -45,7 +53,8 @@ func Publish(task *Task, opts ...opt.OptionI) error {
 	return nil
 }
 
-// TODO
+// easy consume
+// hard to implement
 func Consume(server *Server, opts *opt.Options) error {
 	return nil
 }

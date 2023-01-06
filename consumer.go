@@ -68,13 +68,13 @@ func NewConsumer(broker Broker, options *opt.Options) *Consumer {
 	return &Consumer{broker: broker, opts: opts}
 }
 
-func (t *Consumer) StartContext(ctx context.Context, srv *Server) {
+func (t *Consumer) StartConsumerWithContext(ctx context.Context, srv *Server) {
 	t.broker.start(ctx, srv)
 }
 
-func (t *Consumer) Start(srv *Server) {
+func (t *Consumer) StartConsumer(srv *Server) {
 	ctx := context.Background()
-	t.StartContext(ctx, srv)
+	t.StartConsumerWithContext(ctx, srv)
 }
 func (t *Consumer) StartUI() error {
 	return nil
