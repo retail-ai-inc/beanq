@@ -87,7 +87,7 @@ func TestPublish1(t *testing.T) {
 		}
 		fmt.Printf("%+v \n", res)
 	}
-	pub.Close()
+	t.Fatal(pub.Close())
 }
 
 /*
@@ -119,7 +119,7 @@ func TestDelayPublish(t *testing.T) {
 		fmt.Printf("%+v \n", res)
 	}
 
-	defer pub.Close()
+	t.Fatal(pub.Close())
 }
 func TestRetry(t *testing.T) {
 

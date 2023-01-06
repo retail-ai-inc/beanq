@@ -198,11 +198,12 @@ func (pri priorityOption) Value() any {
  */
 func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
-		Priority: DefaultOptions.Priority,
-		Retry:    DefaultOptions.JobMaxRetry,
-		Queue:    DefaultOptions.DefaultQueueName,
-		Group:    DefaultOptions.DefaultGroup,
-		MaxLen:   DefaultOptions.DefaultMaxLen,
+		Priority:    DefaultOptions.Priority,
+		Retry:       DefaultOptions.JobMaxRetry,
+		Queue:       DefaultOptions.DefaultQueueName,
+		Group:       DefaultOptions.DefaultGroup,
+		MaxLen:      DefaultOptions.DefaultMaxLen,
+		ExecuteTime: time.Now(),
 	}
 	for _, f := range options {
 		switch f.OptType() {

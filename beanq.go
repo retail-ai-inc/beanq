@@ -23,7 +23,7 @@ type BeanqSub interface {
 }
 
 type Broker interface {
-	enqueue(ctx context.Context, stream string, values map[string]any, options opt.Option) (*opt.Result, error)
+	enqueue(ctx context.Context, stream string, task *Task, options opt.Option) (*opt.Result, error)
 	close() error
 	start(ctx context.Context, server *Server)
 }

@@ -39,8 +39,14 @@ func (t *Client) Publish(task *Task, option ...opt.OptionI) (*opt.Result, error)
 	if err != nil {
 		return nil, err
 	}
-	values := makeTaskMap(task.id, opts.Queue, task.name, task.Payload(), opts.Group, opts.Retry, opts.Priority, opts.MaxLen, opts.ExecuteTime)
-	return t.broker.enqueue(t.ctx, base.MakeZSetKey(opts.Group, opts.Queue), values, opts)
+
+	task.Values["queue"] = opts.Queue
+	task.Values["group"] = opts.Group
+	task.Values["retry"] = opts.Retry
+	task.Values["priority"] = opts.Priority
+	task.Values["maxLen"] = opts.MaxLen
+	task.Values["executeTime"] = opts.ExecuteTime
+	return t.broker.enqueue(t.ctx, base.MakeZSetKey(opts.Group, opts.Queue), task, opts)
 
 }
 

@@ -14,7 +14,7 @@ import (
 
 type scheduleJobI interface {
 	start(ctx context.Context, consumers []*ConsumerHandler)
-	enqueue(ctx context.Context, zsetStr string, values map[string]any, option options.Option) error
+	enqueue(ctx context.Context, zsetStr string, task *Task, option options.Option) error
 }
 
 type scheduleJob struct {
@@ -38,13 +38,13 @@ func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
 	go t.consume(ctx, consumers)
 
 }
-func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, values map[string]any, opt options.Option) error {
+func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
 
-	if values == nil {
+	if task == nil {
 		return fmt.Errorf("values can't empty")
 	}
 
-	bt, err := json.Marshal(values)
+	bt, err := json.Marshal(task.Values)
 	if err != nil {
 		return err
 	}
@@ -71,11 +71,11 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 					fmt.Println(cmd.Err().Error())
 					continue
 				}
-				values := cmd.Val()
-				if len(values) <= 0 {
+				vals := cmd.Val()
+				if len(vals) <= 0 {
 					continue
 				}
-				for _, val := range values {
+				for _, val := range vals {
 
 					task := jsonToTask([]byte(val))
 
@@ -93,10 +93,8 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 					}
 					// if not delay job
 					if !flag {
-						maps := makeTaskMap(task.id, task.queue, task.name, task.Payload(), task.group, task.retry, task.priority, task.maxLen, task.executeTime)
-
-						if err := t.enqueue(ctx, base.MakeZSetKey(task.group, task.queue), maps, options.Option{
-							Priority: task.priority,
+						if err := t.enqueue(ctx, base.MakeZSetKey(task.Group(), task.Queue()), task, options.Option{
+							Priority: task.Priority(),
 						}); err != nil {
 
 						}
@@ -144,8 +142,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 
 			byteV := []byte(vv)
 			task := jsonToTask(byteV)
-
-			executeTime := task.executeTime
+			executeTime := task.ExecuteTime()
 
 			flag := false
 			if executeTime.Before(time.Now()) {
@@ -154,6 +151,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 
 			if flag {
 				if err := t.sendToStream(ctx, task); err != nil {
+					fmt.Println(err)
 					// handle err
 				}
 			}
@@ -171,21 +169,20 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 		}
 	}
 }
-func (t *scheduleJob) sendToStream(ctx context.Context, task Task) error {
+func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 
-	queue := task.queue
-	maxLen := task.maxLen
-	values := makeTaskMap(task.id, task.queue, task.name, task.Payload(), task.group, task.retry, task.priority, task.maxLen, task.executeTime)
+	queue := task.Queue()
+	maxLen := task.MaxLen()
 
 	xaddArgs := &redis.XAddArgs{
-		Stream:     base.MakeStreamKey(task.group, queue),
+		Stream:     base.MakeStreamKey(task.Group(), queue),
 		NoMkStream: false,
 		MaxLen:     maxLen,
 		MinID:      "",
 		Approx:     false,
 		// Limit:      0,
 		ID:     "*",
-		Values: values,
+		Values: map[string]any(task.Values),
 	}
 	cmd := t.client.XAdd(ctx, xaddArgs)
 	return cmd.Err()

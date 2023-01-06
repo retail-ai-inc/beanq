@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"beanq/helper/json"
@@ -43,12 +44,12 @@ func NewRedisBroker(options2 *redis.Options) *RedisBroker {
 	}
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, stream string, values map[string]any, opts opt.Option) (*opt.Result, error) {
+func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) (*opt.Result, error) {
 
-	if stream == "" || values == nil {
+	if stream == "" || task == nil {
 		return nil, fmt.Errorf("stream or values can't empty")
 	}
-	if err := t.scheduleJob.enqueue(ctx, stream, values, opts); err != nil {
+	if err := t.scheduleJob.enqueue(ctx, stream, task, opts); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -127,11 +128,13 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
 	defer close(t.done)
+
 	ch, err := t.readGroups(handler.Queue, handler.Group, server.Count)
 	if err != nil {
 		t.err <- err
 		return
 	}
+
 	t.consumer(handler.ConsumerFun, handler.Group, ch)
 	<-workers
 }
@@ -260,11 +263,10 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 			stream := msg.Stream
 			for _, vm := range msg.Messages {
 
-				taskp := t.parseMapToTask(vm, stream)
+				task := t.parseMapToTask(vm, stream)
 				now = time.Now()
-
 				err := t.retry(func() error {
-					return f(taskp)
+					return f(task)
 				}, opt.DefaultOptions.RetryTime)
 
 				if err != nil {
@@ -275,7 +277,7 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 
 				sub := time.Now().Sub(now)
 
-				result.Payload = taskp.Payload()
+				result.Payload = task.Payload()
 				result.AddTime = time.Now().Format(timex.DateTime)
 				result.RunTime = sub.String()
 				result.Queue = msg.Stream
@@ -394,14 +396,17 @@ func (t *RedisBroker) Error() error {
 func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
 	payload, id, streamStr, addTime, queue, group, executeTime, retry, maxLen := openTaskMap(BqMessage(msg), stream)
 	return &Task{
-		id:          id,
-		name:        streamStr,
-		queue:       queue,
-		group:       group,
-		maxLen:      maxLen,
-		retry:       retry,
-		payload:     payload,
-		addTime:     addTime,
-		executeTime: executeTime,
+		Values: values{
+			"id":          id,
+			"name":        streamStr,
+			"queue":       queue,
+			"group":       group,
+			"maxLen":      maxLen,
+			"retry":       retry,
+			"payload":     payload,
+			"addTime":     addTime,
+			"executeTime": executeTime,
+		},
+		rw: new(sync.RWMutex),
 	}
 }
