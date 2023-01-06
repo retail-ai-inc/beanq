@@ -71,6 +71,9 @@ func (queue queueOption) Value() any {
 * @return Option
  */
 func Retry(retries int) OptionI {
+	if retries < 0 {
+		retries = 0
+	}
 	return retryOption(retries)
 }
 
@@ -111,11 +114,14 @@ func (group groupOption) Value() any {
 /*
 * MaxLen
 *  @Description:
-* @param maxlen
+* @param maxLen
 * @return Option
  */
-func MaxLen(maxlen int) OptionI {
-	return maxLenOption(maxlen)
+func MaxLen(maxLen int) OptionI {
+	if maxLen < 0 {
+		maxLen = 1000
+	}
+	return maxLenOption(maxLen)
 }
 
 func (ml maxLenOption) String() string {
@@ -137,6 +143,9 @@ func (ml maxLenOption) Value() any {
 * @return Option
  */
 func ExecuteTime(unixTime time.Time) OptionI {
+	if unixTime.IsZero() {
+		unixTime = time.Now()
+	}
 	return executeTime(unixTime)
 }
 
@@ -158,7 +167,13 @@ func (et executeTime) Value() any {
 * @param priority
 * @return OptionI
  */
-func Priority(priority int) OptionI {
+func Priority(priority float64) OptionI {
+	if priority > 10 {
+		priority = 10
+	}
+	if priority < 0 {
+		priority = 0
+	}
 	return priorityOption(priority)
 }
 
@@ -183,11 +198,12 @@ func (pri priorityOption) Value() any {
  */
 func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
-		Priority: DefaultOptions.Priority,
-		Retry:    DefaultOptions.JobMaxRetry,
-		Queue:    DefaultOptions.DefaultQueueName,
-		Group:    DefaultOptions.DefaultGroup,
-		MaxLen:   DefaultOptions.DefaultMaxLen,
+		Priority:    DefaultOptions.Priority,
+		Retry:       DefaultOptions.JobMaxRetry,
+		Queue:       DefaultOptions.DefaultQueueName,
+		Group:       DefaultOptions.DefaultGroup,
+		MaxLen:      DefaultOptions.DefaultMaxLen,
+		ExecuteTime: time.Now(),
 	}
 	for _, f := range options {
 		switch f.OptType() {

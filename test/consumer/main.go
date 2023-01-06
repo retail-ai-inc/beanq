@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"beanq"
-	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
+
+	"github.com/go-redis/redis/v8"
 )
 
 func main() {
@@ -20,15 +21,15 @@ func main() {
 	}
 
 	server := beanq.NewServer(3)
-	server.Register("g2", "ch2", func(task *beanq.Task, r *redis.Client) error {
+	server.Register("g2", "ch2", func(task *beanq.Task) error {
 		fmt.Printf("PayLoad：%+v \n", task.Payload())
 		return nil
 	})
-	server.Register("delay-group", "delay-ch", func(task *beanq.Task, r *redis.Client) error {
+	server.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
 		fmt.Printf("Delay:%+v \n", task.Payload())
 		return nil
 	})
 
 	csm := beanq.NewConsumer(beanq.NewRedisBroker(redisOpts), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }
