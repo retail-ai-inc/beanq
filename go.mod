@@ -10,7 +10,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.22.11
 	github.com/spf13/cast v1.5.0
 	github.com/spf13/viper v1.14.0
-	golang.org/x/sync v0.1.0
 )
 
 require (

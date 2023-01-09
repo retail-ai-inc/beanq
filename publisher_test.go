@@ -1,14 +1,12 @@
 package beanq
 
 import (
-	"errors"
-	"fmt"
 	"log"
 	"testing"
 	"time"
 
 	"beanq/helper/json"
-	options2 "beanq/internal/options"
+	opt "beanq/internal/options"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
@@ -18,11 +16,11 @@ var (
 	queue           = "ch2"
 	group           = "g2"
 	consumer        = "cs1"
-	optionParameter options2.Options
+	optionParameter opt.Options
 )
 
 func init() {
-	optionParameter = options2.Options{
+	optionParameter = opt.Options{
 		RedisOptions: &redis.Options{
 			Addr:      Env.Queue.Redis.Host + ":" + cast.ToString(Env.Queue.Redis.Port),
 			Dialer:    nil,
@@ -59,11 +57,11 @@ func TestPublishOne(t *testing.T) {
 	d, _ := json.Marshal(msg)
 	task := NewTask(d)
 
-	err := Publish(task, options2.Queue("ch2"))
+	err := Publish(task, opt.Queue("ch2"), opt.Group("aa"))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	fmt.Printf("SendMsgs：%+v \n", task)
+	Logger.Info(task)
 }
 
 /*
@@ -72,7 +70,7 @@ func TestPublishOne(t *testing.T) {
     publisher
   - @param t
 */
-func TestPublish1(t *testing.T) {
+func TestPublishMore(t *testing.T) {
 	pub := NewClient()
 	for i := 0; i < 5; i++ {
 		m := make(map[int]string)
@@ -81,13 +79,13 @@ func TestPublish1(t *testing.T) {
 		d, _ := json.Marshal(m)
 		task := NewTask(d)
 
-		res, err := pub.Publish(task, options2.Queue("ch2"))
+		res, err := pub.Publish(task, opt.Queue("delay-ch"))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", res)
+		Logger.Info(res)
 	}
-	pub.Close()
+	t.Fatal(pub.Close())
 }
 
 /*
@@ -108,73 +106,16 @@ func TestDelayPublish(t *testing.T) {
 
 		task := NewTask(b, SetName("update"))
 		delayT := time.Now().Add(10 * time.Second)
-		y = i
+
 		if i == 3 {
-			y = 30
+			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(y))
+		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", res)
+		Logger.Info(res)
 	}
 
-	defer pub.Close()
-}
-func TestRetry(t *testing.T) {
-
-	err := retry(func() error {
-		fmt.Println("function body")
-		return errors.New("error")
-		// return nil
-	}, 500*time.Millisecond)
-
-	fmt.Println(err)
-
-}
-
-func retry(f func() error, delayTime time.Duration) error {
-	retryFlag := make(chan error)
-	stopRetry := make(chan bool, 1)
-
-	go func(duration time.Duration, errChan chan error, stop chan bool) {
-		index := 1
-		count := 3
-
-		for {
-			go time.AfterFunc(duration, func() {
-				errChan <- f()
-			})
-			err := <-errChan
-			if err == nil {
-				stop <- true
-				close(errChan)
-				break
-			}
-			if index == count {
-				stop <- true
-				errChan <- err
-				break
-			}
-			index++
-		}
-	}(delayTime, retryFlag, stopRetry)
-
-	var err error
-	select {
-	case <-stopRetry:
-		for v := range retryFlag {
-			err = v
-			if v != nil {
-				err = v
-				break
-			}
-		}
-	}
-	close(stopRetry)
-	if err != nil {
-		close(retryFlag)
-		return err
-	}
-	return nil
+	t.Fatal(pub.Close())
 }

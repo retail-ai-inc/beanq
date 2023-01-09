@@ -2,18 +2,16 @@ package main
 
 import (
 	"beanq"
-
-	"github.com/go-redis/redis/v8"
 )
 
 func main() {
 
 	server := beanq.NewServer()
-	server.Register("g2", "ch2", func(task *beanq.Task, r *redis.Client) error {
+	server.Register("g2", "ch2", func(task *beanq.Task) error {
 		beanq.Logger.Info("PayLoad：%+v", task.Payload())
 		return nil
 	})
-	server.Register("delay-group", "delay-ch", func(task *beanq.Task, r *redis.Client) error {
+	server.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
 		beanq.Logger.Info("Delay:%+v", task.Payload())
 		return nil
 	})

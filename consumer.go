@@ -11,10 +11,11 @@ type Consumer struct {
 	opts   *opt.Options
 }
 
+var _ BeanqSub = new(Consumer)
+
 func NewConsumer(broker Broker, options *opt.Options) *Consumer {
 	opts := opt.DefaultOptions
 	if options != nil {
-
 		if options.KeepJobInQueue != 0 {
 			opts.KeepJobInQueue = options.KeepJobInQueue
 		}
@@ -68,10 +69,16 @@ func NewConsumer(broker Broker, options *opt.Options) *Consumer {
 }
 
 func (t *Consumer) StartConsumerWithContext(ctx context.Context, srv *Server) {
-	t.broker.Start(ctx, srv)
+
+	t.broker.start(ctx, srv)
+
 }
 
 func (t *Consumer) StartConsumer(srv *Server) {
 	ctx := context.Background()
 	t.StartConsumerWithContext(ctx, srv)
+
+}
+func (t *Consumer) StartUI() error {
+	return nil
 }

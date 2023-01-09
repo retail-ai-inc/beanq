@@ -81,7 +81,7 @@ func NewServer() *Server {
 	Logger.SetLevel(log.DEBUG)
 
 	if Config.Queue.MinWorkers == 0 {
-		Config.Queue.MinWorkers = 10
+		Config.Queue.MinWorkers = options.DefaultOptions.MinWorkers
 	}
 
 	return &Server{Count: Config.Queue.MinWorkers}
