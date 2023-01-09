@@ -35,6 +35,7 @@ type Broker interface {
 // easy publish
 // only input Task and set options
 func Publish(task *Task, opts ...opt.OptionI) error {
+
 	pub := NewClient()
 	_, err := pub.Publish(task, opts...)
 	if err != nil {
@@ -45,9 +46,9 @@ func Publish(task *Task, opts ...opt.OptionI) error {
 	return nil
 }
 
-// TODO:
 // easy consume
-// hard to implement
+// heavily  to implement
+
 func Consume(server *Server, opts *opt.Options) error {
 	return nil
 }

@@ -122,13 +122,13 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandler) {
 
 	for _, consumer := range consumers {
+
 		cmd := t.client.ZRevRangeByScore(ctx, base.MakeZSetKey(consumer.Group, consumer.Queue), &redis.ZRangeBy{
 			Min:    "0",
 			Max:    "10",
 			Offset: offset,
 			Count:  count,
 		})
-
 		if cmd.Err() != nil {
 			continue
 		}

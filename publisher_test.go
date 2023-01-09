@@ -72,6 +72,7 @@ func TestPublishOne(t *testing.T) {
 */
 func TestPublishMore(t *testing.T) {
 	pub := NewClient()
+
 	for i := 0; i < 5; i++ {
 		m := make(map[int]string)
 		m[i] = "k----" + cast.ToString(i)
@@ -110,7 +111,7 @@ func TestDelayPublish(t *testing.T) {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y)))
+		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}

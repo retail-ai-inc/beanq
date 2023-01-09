@@ -54,7 +54,7 @@ type redisq struct {
 	Port               uint64        `json:"port"`
 	Password           string        `json:"password"`
 	Name               string        `json:"name"`
-	Db                 int           `json:"db"`
+	Db                 int           `json:"database"`
 	Prefix             string        `json:"prefix"`
 	MaxRetries         int64         `json:"maxRetries"`
 	PoolSize           uint64        `json:"poolSize"`

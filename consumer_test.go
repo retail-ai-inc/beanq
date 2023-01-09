@@ -15,6 +15,7 @@ import (
 func TestConsumer(t *testing.T) {
 
 	server := NewServer()
+
 	server.Register("aa", queue, func(task *Task) error {
 		Logger.Info(task.Payload())
 		return nil
@@ -36,11 +37,11 @@ func TestConsumerSingle(t *testing.T) {
 		return nil
 	})
 	csm := NewConsumer(NewRedisBroker(Config), nil)
+
 	csm.StartConsumer(server)
 }
 
 func TestConsumerMultiple(t *testing.T) {
-
 	server := NewServer()
 	for i := 0; i < 5; i++ {
 
@@ -55,6 +56,8 @@ func TestConsumerMultiple(t *testing.T) {
 			return nil
 		})
 	}
+
 	csm := NewConsumer(NewRedisBroker(Config), nil)
+
 	csm.StartConsumer(server)
 }

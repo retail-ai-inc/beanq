@@ -7,7 +7,7 @@ import (
 
 	"beanq"
 	"beanq/helper/json"
-	options2 "beanq/internal/options"
+	opt "beanq/internal/options"
 	"github.com/spf13/cast"
 )
 
@@ -28,7 +28,7 @@ func pubOneInfo() {
 	d, _ := json.Marshal(msg)
 	task := beanq.NewTask(d)
 
-	err := beanq.Publish(task, options2.Queue("ch2"), options2.Group("g2"))
+	err := beanq.Publish(task, opt.Queue("ch2"), opt.Group("g2"))
 	if err != nil {
 		log.Fatal(err.Error())
 	}
@@ -49,7 +49,7 @@ func pubMoreInfo() {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(y))
+		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(y))
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -73,7 +73,7 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(float64(y)))
+		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}

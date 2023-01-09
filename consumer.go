@@ -77,7 +77,6 @@ func (t *Consumer) StartConsumerWithContext(ctx context.Context, srv *Server) {
 func (t *Consumer) StartConsumer(srv *Server) {
 	ctx := context.Background()
 	t.StartConsumerWithContext(ctx, srv)
-
 }
 func (t *Consumer) StartUI() error {
 	return nil
