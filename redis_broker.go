@@ -19,6 +19,12 @@ import (
 	"github.com/google/uuid"
 )
 
+type Broker interface {
+	enqueue(ctx context.Context, stream string, task *Task, options opt.Option) error
+	close() error
+	start(ctx context.Context, server *Server)
+}
+
 type RedisBroker struct {
 	client      *redis.Client
 	ctx         context.Context

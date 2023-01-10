@@ -19,12 +19,6 @@ type BeanqSub interface {
 	StartUI() error
 }
 
-type Broker interface {
-	enqueue(ctx context.Context, stream string, task *Task, options opt.Option) error
-	close() error
-	start(ctx context.Context, server *Server)
-}
-
 // easy publish
 // only input Task and set options
 func Publish(task *Task, opts ...opt.OptionI) error {
