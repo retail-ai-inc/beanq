@@ -6,61 +6,63 @@ import (
 	"runtime"
 	"time"
 
+	"beanq/helper/logger"
 	"github.com/spf13/viper"
 )
 
-type envJson struct {
-	Version     string `json:"version"`
-	ProjectName string `json:"projectName"`
-	Environment string `json:"environment"`
-	Queue       queues `json:"queue"`
+type BeanqConfig struct {
+	Queue struct {
+		DebugLog struct {
+			On   bool
+			Path string
+		}
+		Redis struct {
+			Host               string
+			Port               string
+			Password           string
+			Database           int
+			Prefix             string
+			Maxretries         int
+			PoolSize           int
+			MinIdleConnections int
+			DialTimeout        time.Duration
+			ReadTimeout        time.Duration
+			WriteTimeout       time.Duration
+			PoolTimeout        time.Duration
+		}
+		Driver                   string
+		JobMaxRetries            int
+		KeepJobsInQueue          time.Duration
+		KeepFailedJobsInHistory  time.Duration
+		KeepSuccessJobsInHistory time.Duration
+		MinWorkers               int
+	}
 }
 
-var Env = new(envJson)
+// This is a global variable to hold the debug logger so that we can log data from anywhere.
+var Logger logger.Logger
 
-func init() {
-	var envPath string
-	if _, file, _, ok := runtime.Caller(0); ok {
+// Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
+var Config BeanqConfig
+
+func initEnv() {
+	var envPath string = "./"
+	if _, file, _, ok := runtime.Caller(5); ok {
 		envPath = filepath.Dir(file)
 	}
 
-	if envPath == "" {
-		log.Fatal("config directory is empty")
-	}
 	vp := viper.New()
-	vp.SetConfigName("env")
-	vp.SetConfigType("json")
 	vp.AddConfigPath(envPath)
+	vp.SetConfigType("json")
+	vp.SetConfigName("env")
+
 	if err := vp.ReadInConfig(); err != nil {
-		log.Fatalf("ConfigError:%s \n", err.Error())
+		log.Fatalf("Unable to open beanq env.json file: %v", err)
 	}
-	if err := vp.Unmarshal(Env); err != nil {
-		log.Fatalf("DataError:%s \n", err.Error())
+
+	// IMPORTANT: Unmarshal the env.json into global Config object.
+	if err := vp.Unmarshal(&Config); err != nil {
+		log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 	}
-}
 
-type queues struct {
-	Driver                   string        `json:"driver"`
-	JobMaxRetries            int           `json:"jobMaxRetries"`
-	KeepJobsInQueue          time.Duration `json:"keepJobsInQueue"`
-	KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
-	KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
-	MinWorkers               int           `json:"minWorkers"`
-	Redis                    redisq        `json:"redis"`
-}
-
-type redisq struct {
-	Host               string        `json:"host"`
-	Port               uint64        `json:"port"`
-	Password           string        `json:"password"`
-	Name               string        `json:"name"`
-	Db                 int           `json:"db"`
-	Prefix             string        `json:"prefix"`
-	MaxRetries         int64         `json:"maxRetries"`
-	PoolSize           uint64        `json:"poolSize"`
-	MinIdleConnections uint64        `json:"minIdleConnections"`
-	DialTimeout        time.Duration `json:"dialTimeout"`
-	ReadTimeout        time.Duration `json:"readTimeout"`
-	WriteTimeout       time.Duration `json:"writeTimeout"`
-	PoolTimeout        time.Duration `json:"poolTimeout"`
 }

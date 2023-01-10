@@ -1,11 +1,13 @@
 package beanq
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
+)
+
+var (
+	queue = "ch"
 )
 
 /*
@@ -16,55 +18,50 @@ import (
 */
 func TestConsumer(t *testing.T) {
 
-	server := NewServer(3)
-	server.Register(group, queue, func(task *Task, r *redis.Client) error {
-		fmt.Printf("PayLoad：%+v \n", task.Payload())
+	server := NewServer()
+
+	server.Register("group-one", queue, func(task *Task) error {
+		Logger.Info(task.Payload())
 		return nil
 	})
-	server.Register("delay-group", "delay-ch", func(task *Task, r *redis.Client) error {
-		fmt.Printf("Delay:%+v \n", task.Payload())
+	server.Register("delay-group", "delay-ch", func(task *Task) error {
+		Logger.Info(task.Payload())
 		return nil
 	})
 
-	csm := NewConsumer(NewRedisBroker(optionParameter.RedisOptions), nil)
-	csm.Start(server)
+	csm := NewConsumer()
+	csm.StartConsumer(server)
 
 }
 func TestConsumerSingle(t *testing.T) {
 
-	server := NewServer(3)
-	server.Register("g1", "ch2", func(task *Task, r *redis.Client) error {
-		fmt.Printf("1PayLoad:%+v \n", task.Payload())
+	server := NewServer()
+	server.Register("g"+cast.ToString(1), "ch2", func(task *Task) error {
+		Logger.Info(task.Payload())
 		return nil
 	})
-	server.Register("g2", "ch2", func(task *Task, r *redis.Client) error {
-		fmt.Printf("2PayLoad:%+v \n", task.Payload())
-		return nil
-	})
+	csm := NewConsumer()
 
-	csm := NewConsumer(NewRedisBroker(optionParameter.RedisOptions), nil)
-	csm.Start(server)
+	csm.StartConsumer(server)
 }
-func TestConsumerSingle2(t *testing.T) {
 
-	server := NewServer(3)
-	server.Register("g"+cast.ToString(1), "ch2", func(task *Task, r *redis.Client) error {
-		fmt.Printf(cast.ToString(1)+"PayLoad:%+v \n", task.Payload())
-		return nil
-	})
-	csm := NewConsumer(NewRedisBroker(optionParameter.RedisOptions), nil)
-	csm.Start(server)
-}
 func TestConsumerMultiple(t *testing.T) {
-
-	server := NewServer(3)
+	server := NewServer()
 	for i := 0; i < 5; i++ {
-		server.Register("g"+cast.ToString(i), "ch2", func(task *Task, r *redis.Client) error {
-			fmt.Printf(cast.ToString(i)+"PayLoad:%+v \n", task.Payload())
+
+		server.Register("g"+cast.ToString(i), "ch2", func(task *Task) error {
+			Logger.Info(task.Payload())
+
+			return nil
+		})
+		server.Register("g"+cast.ToString(i), "ch2", func(task *Task) error {
+			Logger.Info(task.Payload())
+
 			return nil
 		})
 	}
 
-	csm := NewConsumer(NewRedisBroker(optionParameter.RedisOptions), nil)
-	csm.Start(server)
+	csm := NewConsumer()
+
+	csm.StartConsumer(server)
 }
