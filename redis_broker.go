@@ -81,7 +81,7 @@ func (t *RedisBroker) start(ctx context.Context, server *Server) {
 
 	go t.worker(consumers, server)
 	// consumer schedule jobs
-	go t.scheduleJob.start(ctx, consumers)
+	go t.scheduleJob.start(t.ctx, consumers)
 
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
