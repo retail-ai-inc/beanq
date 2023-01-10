@@ -10,50 +10,32 @@ import (
 	opt "beanq/internal/options"
 
 	"github.com/labstack/gommon/log"
-	"github.com/spf13/viper"
 )
 
 type Client struct {
 	broker Broker
-	ctx    context.Context
 	wg     *sync.WaitGroup
 }
 
 var _ BeanqPub = new(Client)
 
 var (
-	beanqClientOnce sync.Once
-	beanqClient     *Client
+	beanqPublisherOnce sync.Once
+	beanqPublisher     *Client
 )
 
-func NewClient() *Client {
+func NewPublisher() *Client {
 
-	beanqClientOnce.Do(func() {
-		viper.AddConfigPath(".")
-		viper.SetConfigType("json")
-		viper.SetConfigName("env")
-
+	beanqPublisherOnce.Do(func() {
+		initEnv()
 		// Initialize the beanq consumer log
-		Logger = log.New("beanq")
-
-		if err := viper.ReadInConfig(); err != nil {
-			Logger.Errorf("Unable to open beanq env.json file: %v", err)
-			beanqClient = nil
-			return
-		}
-
-		// IMPORTANT: Unmarshal the env.json into global Config object.
-		if err := viper.Unmarshal(&Config); err != nil {
-			Logger.Errorf("Unable to unmarshal the beanq env.json file: %v", err)
-			beanqClient = nil
-			return
-		}
+		Logger = log.New(Config.Queue.Redis.Prefix)
 
 		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
 		if Config.Queue.DebugLog.Path != "" {
 			if file, err := file.OpenFile(Config.Queue.DebugLog.Path); err != nil {
 				Logger.Errorf("Unable to open log file: %v", err)
-				beanqClient = nil
+				beanqPublisher = nil
 				return
 			} else {
 				Logger.SetOutput(file)
@@ -64,34 +46,24 @@ func NewClient() *Client {
 		Logger.SetLevel(log.DEBUG)
 
 		if Config.Queue.Driver == "redis" {
-			beanqClient = &Client{
+			beanqPublisher = &Client{
 				broker: NewRedisBroker(Config),
-				ctx:    context.Background(),
 				wg:     nil,
 			}
 		} else {
 			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
-			beanqClient = nil
+			beanqPublisher = nil
 		}
 	})
 
-	return beanqClient
+	return beanqPublisher
 }
 
-func (t *Client) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) (*opt.Result, error) {
-	t.ctx = ctx
-	return t.Publish(task, option...)
-}
+func (t *Client) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) error {
 
-func (t *Client) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) (*opt.Result, error) {
-	option = append(option, opt.ExecuteTime(delayTime))
-	return t.Publish(task, option...)
-}
-
-func (t *Client) Publish(task *Task, option ...opt.OptionI) (*opt.Result, error) {
 	opts, err := opt.ComposeOptions(option...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	task.Values["queue"] = opts.Queue
@@ -100,7 +72,19 @@ func (t *Client) Publish(task *Task, option ...opt.OptionI) (*opt.Result, error)
 	task.Values["priority"] = opts.Priority
 	task.Values["maxLen"] = opts.MaxLen
 	task.Values["executeTime"] = opts.ExecuteTime
-	return t.broker.enqueue(t.ctx, base.MakeZSetKey(opts.Group, opts.Queue), task, opts)
+
+	return t.broker.enqueue(ctx, base.MakeZSetKey(opts.Group, opts.Queue), task, opts)
+
+}
+
+func (t *Client) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {
+	option = append(option, opt.ExecuteTime(delayTime))
+	return t.Publish(task, option...)
+}
+
+func (t *Client) Publish(task *Task, option ...opt.OptionI) error {
+
+	return t.PublishWithContext(context.Background(), task, option...)
 
 }
 

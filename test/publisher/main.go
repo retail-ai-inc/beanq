@@ -35,7 +35,7 @@ func pubOneInfo() {
 	fmt.Printf("SendMsgs：%+v \n", task)
 }
 func pubMoreInfo() {
-	pub := beanq.NewClient()
+	pub := beanq.NewPublisher()
 	m := make(map[string]string)
 
 	for i := 0; i < 5; i++ {
@@ -49,16 +49,15 @@ func pubMoreInfo() {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(y))
+		err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(y))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", res)
 	}
 	defer pub.Close()
 }
 func pubDelayInfo() {
-	pub := beanq.NewClient()
+	pub := beanq.NewPublisher()
 
 	m := make(map[string]string)
 
@@ -73,11 +72,10 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y)))
+		err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", res)
 	}
 
 	defer pub.Close()

@@ -8,35 +8,8 @@ import (
 	"beanq/helper/json"
 	opt "beanq/internal/options"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
 )
-
-var (
-	queue           = "ch2"
-	group           = "g2"
-	consumer        = "cs1"
-	optionParameter opt.Options
-)
-
-func init() {
-	optionParameter = opt.Options{
-		RedisOptions: &redis.Options{
-			Addr:      Env.Queue.Redis.Host + ":" + cast.ToString(Env.Queue.Redis.Port),
-			Dialer:    nil,
-			OnConnect: nil,
-			Username:  "",
-			Password:  Env.Queue.Redis.Password,
-			DB:        Env.Queue.Redis.Db,
-		},
-		KeepJobInQueue:           Env.Queue.KeepJobsInQueue,
-		KeepFailedJobsInHistory:  Env.Queue.KeepFailedJobsInHistory,
-		KeepSuccessJobsInHistory: Env.Queue.KeepSuccessJobsInHistory,
-		MinWorkers:               Env.Queue.MinWorkers,
-		JobMaxRetry:              Env.Queue.JobMaxRetries,
-		Prefix:                   Env.Queue.Redis.Prefix,
-	}
-}
 
 /*
   - TestPublishOne
@@ -51,13 +24,15 @@ func TestPublishOne(t *testing.T) {
 		Info string
 	}{
 		1,
-		"msg------1",
+		"test: publish information",
 	}
 
 	d, _ := json.Marshal(msg)
 	task := NewTask(d)
 
-	err := Publish(task, opt.Queue("ch2"), opt.Group("aa"))
+	pub := NewPublisher()
+	err := pub.Publish(task, opt.Queue("ch"), opt.Group("group-one"))
+
 	if err != nil {
 		t.Fatal(err.Error())
 	}
@@ -71,20 +46,19 @@ func TestPublishOne(t *testing.T) {
   - @param t
 */
 func TestPublishMore(t *testing.T) {
-	pub := NewClient()
+	pub := NewPublisher()
 
 	for i := 0; i < 5; i++ {
 		m := make(map[int]string)
-		m[i] = "k----" + cast.ToString(i)
+		m[i] = "publisher:" + cast.ToString(i)
 
 		d, _ := json.Marshal(m)
 		task := NewTask(d)
 
-		res, err := pub.Publish(task, opt.Queue("delay-ch"))
+		err := pub.Publish(task, opt.Queue("delay-ch"))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		Logger.Info(res)
 	}
 	t.Fatal(pub.Close())
 }
@@ -96,7 +70,7 @@ func TestPublishMore(t *testing.T) {
   - @param t
 */
 func TestDelayPublish(t *testing.T) {
-	pub := NewClient()
+	pub := NewPublisher()
 
 	m := make(map[string]string)
 
@@ -111,12 +85,11 @@ func TestDelayPublish(t *testing.T) {
 		if i == 3 {
 			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y)))
+		err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		Logger.Info(res)
 	}
 
-	t.Fatal(pub.Close())
+	defer pub.Close()
 }

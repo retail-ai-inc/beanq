@@ -8,15 +8,15 @@ func main() {
 
 	server := beanq.NewServer()
 	server.Register("g2", "ch2", func(task *beanq.Task) error {
-		beanq.Logger.Info("PayLoad：%+v", task.Payload())
+		beanq.Logger.Info(task.Payload())
 		return nil
 	})
 	server.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
-		beanq.Logger.Info("Delay:%+v", task.Payload())
+		beanq.Logger.Info(task.Payload())
 		return nil
 	})
 
-	csm := beanq.NewConsumer(beanq.NewRedisBroker(beanq.Config), nil)
+	csm := beanq.NewConsumer()
 
 	csm.StartConsumer(server)
 }

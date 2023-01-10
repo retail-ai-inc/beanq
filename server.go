@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"sync"
-	"time"
 
 	"beanq/helper/file"
 	"beanq/internal/options"
@@ -20,35 +19,6 @@ type Server struct {
 	mu    sync.RWMutex
 	m     []*ConsumerHandler
 	Count int
-}
-
-type BeanqConfig struct {
-	Queue struct {
-		DebugLog struct {
-			On   bool
-			Path string
-		}
-		Redis struct {
-			Host               string
-			Port               string
-			Password           string
-			Database           int
-			Prefix             string
-			Maxretries         int
-			PoolSize           int
-			MinIdleConnections int
-			DialTimeout        time.Duration
-			ReadTimeout        time.Duration
-			WriteTimeout       time.Duration
-			PoolTimeout        time.Duration
-		}
-		Driver                   string
-		JobMaxRetries            int
-		KeepJobsInQueue          time.Duration
-		KeepFailedJobsInHistory  time.Duration
-		KeepSuccessJobsInHistory time.Duration
-		MinWorkers               int
-	}
 }
 
 func NewServer() *Server {

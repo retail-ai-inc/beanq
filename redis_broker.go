@@ -22,10 +22,10 @@ type RedisBroker struct {
 	client      *redis.Client
 	ctx         context.Context
 	done, stop  chan struct{}
-	minWorkers  int
 	err         chan error
 	healthCheck healthCheckI
 	scheduleJob scheduleJobI
+	opts        *opt.Options
 }
 
 var _ Broker = new(RedisBroker)
@@ -49,26 +49,30 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		ctx:         nil,
 		done:        make(chan struct{}),
 		stop:        make(chan struct{}),
-		minWorkers:  10,
 		err:         make(chan error, 1),
 		healthCheck: newHealthCheck(client),
 		scheduleJob: newScheduleJob(client),
+		opts:        nil,
 	}
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) (*opt.Result, error) {
+func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) error {
 
 	if stream == "" || task == nil {
-		return nil, fmt.Errorf("stream or values can't empty")
+		return fmt.Errorf("stream or values can't empty")
 	}
 	if err := t.scheduleJob.enqueue(ctx, stream, task, opts); err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 func (t *RedisBroker) start(ctx context.Context, server *Server) {
+
 	consumers := server.Consumers()
 
+	if opts, ok := ctx.Value("options").(*opt.Options); ok {
+		t.opts = opts
+	}
 	t.ctx = ctx
 
 	go t.worker(consumers, server)
@@ -117,7 +121,7 @@ func (t *RedisBroker) healthCheckerStart() {
 	}
 }
 func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
-	workers := make(chan struct{}, t.minWorkers)
+	workers := make(chan struct{}, t.opts.MinWorkers)
 
 	for _, v := range consumers {
 		// if has bound a group,then continue
@@ -282,7 +286,7 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 
 				err := base.Retry(func() error {
 					return f(task)
-				}, opt.DefaultOptions.RetryTime)
+				}, t.opts.RetryTime)
 				if err != nil {
 					info = opt.FailedInfo
 					result.Level = opt.ErrLevel

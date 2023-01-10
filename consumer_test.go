@@ -6,6 +6,10 @@ import (
 	"github.com/spf13/cast"
 )
 
+var (
+	queue = "ch"
+)
+
 /*
   - TestConsumer
   - @Description:
@@ -16,7 +20,7 @@ func TestConsumer(t *testing.T) {
 
 	server := NewServer()
 
-	server.Register("aa", queue, func(task *Task) error {
+	server.Register("group-one", queue, func(task *Task) error {
 		Logger.Info(task.Payload())
 		return nil
 	})
@@ -25,7 +29,7 @@ func TestConsumer(t *testing.T) {
 		return nil
 	})
 
-	csm := NewConsumer(NewRedisBroker(Config), nil)
+	csm := NewConsumer()
 	csm.StartConsumer(server)
 
 }
@@ -36,7 +40,7 @@ func TestConsumerSingle(t *testing.T) {
 		Logger.Info(task.Payload())
 		return nil
 	})
-	csm := NewConsumer(NewRedisBroker(Config), nil)
+	csm := NewConsumer()
 
 	csm.StartConsumer(server)
 }
@@ -57,7 +61,7 @@ func TestConsumerMultiple(t *testing.T) {
 		})
 	}
 
-	csm := NewConsumer(NewRedisBroker(Config), nil)
+	csm := NewConsumer()
 
 	csm.StartConsumer(server)
 }
