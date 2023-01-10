@@ -37,12 +37,12 @@ type Broker interface {
 func Publish(task *Task, opts ...opt.OptionI) error {
 
 	pub := NewClient()
+	defer pub.Close()
 	_, err := pub.Publish(task, opts...)
 	if err != nil {
 		return err
 	}
 
-	defer pub.Close()
 	return nil
 }
 

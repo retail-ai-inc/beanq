@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -68,8 +69,9 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 }
 func (t *RedisBroker) start(ctx context.Context, server *Server) {
 	consumers := server.Consumers()
-
-	t.ctx = ctx
+	var cancel context.CancelFunc
+	t.ctx, cancel = context.WithCancel(ctx)
+	defer cancel()
 
 	go t.worker(consumers, server)
 	// consumer schedule jobs
@@ -104,15 +106,15 @@ func (t *RedisBroker) healthCheckerStart() {
 	for {
 		select {
 		case <-t.ctx.Done():
-			t.err <- t.ctx.Err()
+			if !errors.Is(t.ctx.Err(), context.Canceled) {
+				t.err <- t.ctx.Err()
+			}
 			return
 		case <-ticker.C:
 			if err := t.healthCheck.start(t.ctx); err != nil {
 				t.err <- err
 				return
 			}
-		case <-t.stop:
-			return
 		}
 	}
 }
@@ -168,10 +170,10 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 
 		for {
 			select {
-			case <-t.stop:
-				return
 			case <-t.ctx.Done():
-				t.err <- t.ctx.Err()
+				if !errors.Is(t.ctx.Err(), context.Canceled) {
+					t.err <- t.ctx.Err()
+				}
 				return
 			default:
 				streams, err := t.client.XReadGroup(t.ctx, &redis.XReadGroupArgs{
@@ -204,10 +206,10 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	defer ticker.Stop()
 	for {
 		select {
-		case <-t.stop:
-			return
 		case <-t.ctx.Done():
-			t.err <- t.ctx.Err()
+			if !errors.Is(t.ctx.Err(), context.Canceled) {
+				t.err <- t.ctx.Err()
+			}
 			return
 		case <-ticker.C:
 			start := "-"
@@ -267,10 +269,10 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 
 	for {
 		select {
-		case <-t.stop:
-			return
 		case <-t.ctx.Done():
-			t.err <- t.ctx.Err()
+			if !errors.Is(t.ctx.Err(), context.Canceled) {
+				t.err <- t.ctx.Err()
+			}
 			return
 		case msg := <-ch:
 
@@ -341,6 +343,7 @@ func (t *RedisBroker) logInToList(result *opt.ConsumerResult) error {
 func (t *RedisBroker) close() error {
 	select {
 	case <-t.stop:
+		return errors.New("redis broker already closed")
 	default:
 		close(t.stop)
 	}
