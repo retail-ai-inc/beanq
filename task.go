@@ -38,62 +38,48 @@ type Task struct {
 }
 
 // get val functions
+
+type iTaskValue interface {
+	string | int64 | time.Time | float64 | int
+}
+
+func taskGetValue[T iTaskValue](taskValues values, key string, defaultValue T) T {
+	if v, ok := taskValues[key]; ok {
+		if value, ok := v.(T); ok {
+			return value
+		}
+	}
+	return defaultValue
+}
+
 func (t *Task) Id() string {
-	if v, ok := t.Values["id"]; ok {
-		if id, ok := v.(string); ok {
-			return id
-		}
-	}
-	return ""
+	return taskGetValue(t.Values, "id", "")
 }
+
 func (t *Task) Name() string {
-	if v, ok := t.Values["name"]; ok {
-		if name, ok := v.(string); ok {
-			return name
-		}
-	}
-	return ""
+	return taskGetValue(t.Values, "name", "")
 }
+
 func (t *Task) Queue() string {
-	if v, ok := t.Values["queue"]; ok {
-		if queue, ok := v.(string); ok {
-			return queue
-		}
-	}
-	return ""
+	return taskGetValue(t.Values, "queue", "")
 }
+
 func (t *Task) Group() string {
-	if v, ok := t.Values["group"]; ok {
-		if group, ok := v.(string); ok {
-			return group
-		}
-	}
-	return ""
+	return taskGetValue(t.Values, "group", "")
 }
+
 func (t *Task) MaxLen() int64 {
-	if v, ok := t.Values["maxLen"]; ok {
-		if maxLen, ok := v.(int64); ok {
-			return maxLen
-		}
-	}
-	return 0
+	return taskGetValue(t.Values, "maxLen", int64(0))
 }
+
 func (t *Task) Retry() int {
-	if v, ok := t.Values["retry"]; ok {
-		if retry, ok := v.(int); ok {
-			return retry
-		}
-	}
-	return 0
+	return taskGetValue(t.Values, "retry", 0)
 }
+
 func (t *Task) Priority() float64 {
-	if v, ok := t.Values["priority"]; ok {
-		if priority, ok := v.(float64); ok {
-			return priority
-		}
-	}
-	return 0
+	return taskGetValue(t.Values, "priority", float64(0))
 }
+
 func (t *Task) Payload() string {
 	if v, ok := t.Values["payload"]; ok {
 		if payload, ok := v.([]byte); ok {
@@ -102,21 +88,13 @@ func (t *Task) Payload() string {
 	}
 	return ""
 }
+
 func (t *Task) AddTime() string {
-	if v, ok := t.Values["addTime"]; ok {
-		if addTime, ok := v.(string); ok {
-			return addTime
-		}
-	}
-	return ""
+	return taskGetValue(t.Values, "addTime", "")
 }
+
 func (t *Task) ExecuteTime() time.Time {
-	if v, ok := t.Values["executeTime"]; ok {
-		if executeTime, ok := v.(time.Time); ok {
-			return executeTime
-		}
-	}
-	return time.Now()
+	return taskGetValue(t.Values, "executeTime", time.Now())
 }
 
 type TaskOpt func(task *Task)
@@ -128,6 +106,7 @@ func SetId(id string) TaskOpt {
 		}
 	}
 }
+
 func SetName(name string) TaskOpt {
 	return func(task *Task) {
 		if name != "" {
