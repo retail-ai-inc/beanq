@@ -245,7 +245,7 @@ func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, a
 		}
 	}
 
-	if addtimeV, ok := msg.Values["addtime"]; ok {
+	if addtimeV, ok := msg.Values["addTime"]; ok {
 		if addtimeStr, ok := addtimeV.(string); ok {
 			addTime = addtimeStr
 		}
