@@ -14,7 +14,6 @@ import (
 	"beanq/internal/base"
 	"beanq/internal/driver"
 	opt "beanq/internal/options"
-
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 )
@@ -33,6 +32,7 @@ type RedisBroker struct {
 	healthCheck healthCheckI
 	scheduleJob scheduleJobI
 	opts        *opt.Options
+	wg          *sync.WaitGroup
 }
 
 var _ Broker = new(RedisBroker)
@@ -60,6 +60,7 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		healthCheck: newHealthCheck(client),
 		scheduleJob: newScheduleJob(client),
 		opts:        nil,
+		wg:          &sync.WaitGroup{},
 	}
 }
 
@@ -85,24 +86,25 @@ func (t *RedisBroker) start(ctx context.Context, server *Server) {
 	t.ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
-	go t.worker(consumers, server)
+	t.worker(consumers, server, t.wg)
 	// consumer schedule jobs
-	go t.scheduleJob.start(t.ctx, consumers)
+	t.scheduleJob.start(t.ctx, consumers, t.wg)
 
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
 	// go t.claim(consumers)
 
 	// check client health
-	go t.healthCheckerStart()
+	t.healthCheckerStart(t.wg)
 
+	t.wg.Wait()
 	// catch errors
 	select {
 	case <-t.stop:
-		fmt.Println("stop")
+		Logger.Info("stop")
 		return
 	case <-t.done:
-		fmt.Println("done")
+		Logger.Info("done")
 		return
 	}
 }
@@ -112,46 +114,63 @@ func (t *RedisBroker) start(ctx context.Context, server *Server) {
 *  @Description:
 *  @receiver t
  */
-func (t *RedisBroker) healthCheckerStart() {
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-t.ctx.Done():
-			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
-			}
-			return
-		case <-ticker.C:
-			if err := t.healthCheck.start(t.ctx); err != nil {
-				t.err <- err
+func (t *RedisBroker) healthCheckerStart(group *sync.WaitGroup) {
+
+	group.Add(1)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer func() {
+			ticker.Stop()
+			group.Done()
+		}()
+
+		for {
+			select {
+			case <-t.ctx.Done():
+				if !errors.Is(t.ctx.Err(), context.Canceled) {
+					t.err <- t.ctx.Err()
+					Logger.Error(t.ctx.Err())
+				}
 				return
+			case <-ticker.C:
+				if err := t.healthCheck.start(t.ctx); err != nil {
+					t.err <- err
+					Logger.Error(err)
+					return
+				}
 			}
 		}
-	}
+	}()
+
 }
-func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
-	workers := make(chan struct{}, t.opts.MinWorkers)
+func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server, group *sync.WaitGroup) {
+	group.Add(1)
+	go func() {
+		defer group.Done()
+		workers := make(chan struct{}, t.opts.MinWorkers)
 
-	for _, v := range consumers {
-		// if has bound a group,then continue
-		result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
-		if err != nil && err.Error() != "ERR no such key" {
-			t.err <- err
-			fmt.Printf("InfoGroupErr:%+v \n", err)
-		}
-
-		if len(result) < 1 {
-			if err := t.createGroup(v.Queue, v.Group); err != nil {
-				fmt.Printf("CreateGroupErr:%+v \n", err)
+		for _, v := range consumers {
+			// if has bound a group,then continue
+			result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
+			if err != nil && err.Error() != "ERR no such key" {
+				Logger.Errorf("InfoGroupErr:%s", err.Error())
 				t.err <- err
 				continue
 			}
-		}
 
-		workers <- struct{}{}
-		go t.work(v, server, workers)
-	}
+			if len(result) < 1 {
+				if err := t.createGroup(v.Queue, v.Group); err != nil {
+					Logger.Errorf("CreateGroupErr:%+s", err.Error())
+					t.err <- err
+					continue
+				}
+			}
+
+			workers <- struct{}{}
+			go t.work(v, server, workers)
+		}
+	}()
+
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
 	defer close(t.done)
@@ -160,6 +179,7 @@ func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers cha
 
 	if err != nil {
 		t.err <- err
+		Logger.Error(err)
 		return
 	}
 
@@ -185,6 +205,7 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 			case <-t.ctx.Done():
 				if !errors.Is(t.ctx.Err(), context.Canceled) {
 					t.err <- t.ctx.Err()
+					Logger.Error(t.ctx.Done())
 				}
 				return
 			default:
@@ -198,6 +219,7 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 
 				if err != nil {
 					t.err <- fmt.Errorf("XReadGroupErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+					Logger.Errorf("XReadGroupErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
 				if len(streams) <= 0 {
@@ -221,6 +243,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
 				t.err <- t.ctx.Err()
+				Logger.Error(t.ctx.Err())
 			}
 			return
 		case <-ticker.C:
@@ -237,6 +260,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 				}).Result()
 				if err != nil && err != redis.Nil {
 					t.err <- fmt.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+					Logger.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					break
 				}
 				for _, v := range res {
@@ -254,6 +278,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 						}).Result()
 						if err != nil && err != redis.Nil {
 							t.err <- fmt.Errorf("XClaimErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+							Logger.Errorf("XClaimErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 							continue
 						}
 						ch := make(chan *redis.XStream, 1)
@@ -284,6 +309,7 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
 				t.err <- t.ctx.Err()
+				Logger.Error(t.ctx.Err())
 			}
 			return
 		case msg := <-ch:
@@ -313,17 +339,19 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 
 				if err := t.logInToList(result); err != nil {
 					t.err <- err
+					Logger.Error(err)
 					continue
 				}
 
 				// ack
 				if err := t.client.XAck(t.ctx, base.MakeStreamKey(group, msg.Stream), group, vm.ID).Err(); err != nil {
 					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-					fmt.Printf("ACK Error:%s \n", err.Error())
+					Logger.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
 				if err := t.client.XDel(t.ctx, base.MakeStreamKey(group, msg.Stream), vm.ID).Err(); err != nil {
 					t.err <- fmt.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+					Logger.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
 			}

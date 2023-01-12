@@ -13,7 +13,7 @@ import (
 )
 
 type scheduleJobI interface {
-	start(ctx context.Context, consumers []*ConsumerHandler)
+	start(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup)
 	enqueue(ctx context.Context, zsetStr string, task *Task, option options.Option) error
 }
 
@@ -32,10 +32,10 @@ func newScheduleJob(client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
-
-	go t.delayJobs(ctx, consumers)
-	go t.consume(ctx, consumers)
+func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup) {
+	group.Add(2)
+	go t.delayJobs(ctx, consumers, group)
+	go t.consume(ctx, consumers, group)
 
 }
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
@@ -58,17 +58,22 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, o
 
 	return nil
 }
-func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
+func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup) {
 	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		group.Done()
+	}()
+
 	for {
 		select {
 		case <-ticker.C:
 			for _, consumer := range consumers {
 				key := base.MakeListKey(consumer.Group, consumer.Queue)
+
 				cmd := t.client.LRange(ctx, key, offset, count)
 				if cmd.Err() != nil && cmd.Err() != redis.Nil {
-					fmt.Println(cmd.Err().Error())
+					Logger.Error(cmd.Err())
 					continue
 				}
 				vals := cmd.Val()
@@ -86,9 +91,10 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 					// if delay job
 					if flag {
 						if err := t.client.RPush(ctx, key, val).Err(); err != nil {
-							if err != redis.Nil {
-								fmt.Println(err.Error())
-							}
+
+							Logger.Error(err)
+							continue
+
 						}
 					}
 					// if not delay job
@@ -96,20 +102,25 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 						if err := t.enqueue(ctx, base.MakeZSetKey(task.Group(), task.Queue()), task, options.Option{
 							Priority: task.Priority(),
 						}); err != nil {
-
+							Logger.Error(err)
+							continue
 						}
 					}
 					if err := t.client.LRem(ctx, key, 1, val).Err(); err != nil {
-						fmt.Println(err.Error())
+						Logger.Error(err)
+						continue
 					}
 				}
 			}
 		}
 	}
 }
-func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
+func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup) {
 	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
+	defer func() {
+		ticker.Stop()
+		group.Done()
+	}()
 
 	for {
 		select {
@@ -130,6 +141,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 			Count:  count,
 		})
 		if cmd.Err() != nil {
+			Logger.Error(cmd.Err())
 			continue
 		}
 		val := cmd.Val()
@@ -151,19 +163,19 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 
 			if flag {
 				if err := t.sendToStream(ctx, task); err != nil {
-					fmt.Println(err)
-					// handle err
+					Logger.Error(err)
+					continue
 				}
 			}
 			if !flag {
 				// if executeTime after now
 				if err := t.client.LPush(ctx, base.MakeListKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
-					fmt.Println(err)
+					Logger.Error(err)
 					continue
 				}
 			}
 			if err := t.client.ZRem(ctx, base.MakeZSetKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
-				fmt.Println(err)
+				Logger.Error(err)
 				continue
 			}
 		}

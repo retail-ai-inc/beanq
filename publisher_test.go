@@ -1,13 +1,16 @@
 package beanq
 
 import (
+	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 	"time"
 
 	"beanq/helper/json"
 	opt "beanq/internal/options"
-
 	"github.com/spf13/cast"
 )
 
@@ -74,7 +77,7 @@ func TestDelayPublish(t *testing.T) {
 
 	m := make(map[string]string)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
@@ -92,4 +95,17 @@ func TestDelayPublish(t *testing.T) {
 	}
 
 	defer pub.Close()
+}
+func TestSig(t *testing.T) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
+	go func() {
+		for {
+			sig := <-sigs
+			if sig.String() != "" {
+				fmt.Println("aa")
+			}
+		}
+	}()
+	select {}
 }

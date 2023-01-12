@@ -16,7 +16,14 @@ func main() {
 	// pubMoreInfo()
 	// pubDelayInfo()
 }
+
+/*
+  - pubOneInfo
+  - @Description:
+    publish one information
+*/
 func pubOneInfo() {
+	// msg can struct or map
 	msg := struct {
 		Id   int
 		Info string
@@ -26,14 +33,23 @@ func pubOneInfo() {
 	}
 
 	d, _ := json.Marshal(msg)
+	// get task
 	task := beanq.NewTask(d)
 
-	err := beanq.Publish(task, opt.Queue("ch2"), opt.Group("g2"))
-	if err != nil {
+	// publish information
+	pub := beanq.NewPublisher()
+	if err := pub.Publish(task, opt.Queue("ch2"), opt.Group("g2")); err != nil {
 		log.Fatal(err.Error())
 	}
 	fmt.Printf("SendMsgs：%+v \n", task)
+	pub.Close()
 }
+
+/*
+  - pubMoreInfo
+  - @Description:
+    publish more informations
+*/
 func pubMoreInfo() {
 	pub := beanq.NewPublisher()
 	m := make(map[string]string)
@@ -49,13 +65,18 @@ func pubMoreInfo() {
 		if i == 3 {
 			y = 10
 		}
-		err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(y))
-		if err != nil {
+		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(y)); err != nil {
 			log.Fatalln(err)
 		}
 	}
 	defer pub.Close()
 }
+
+/*
+  - pubDelayInfo
+  - @Description:
+    publish delay informations
+*/
 func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 
@@ -72,8 +93,7 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
-		err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y)))
-		if err != nil {
+		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
 	}
