@@ -1,44 +1,18 @@
 package beanq
 
 import (
-	"errors"
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 	"time"
 
 	"beanq/helper/json"
-	options2 "beanq/internal/options"
-
-	"github.com/go-redis/redis/v8"
+	opt "beanq/internal/options"
 	"github.com/spf13/cast"
 )
-
-var (
-	queue           = "ch2"
-	group           = "g2"
-	consumer        = "cs1"
-	optionParameter options2.Options
-)
-
-func init() {
-	optionParameter = options2.Options{
-		RedisOptions: &redis.Options{
-			Addr:      Env.Queue.Redis.Host + ":" + cast.ToString(Env.Queue.Redis.Port),
-			Dialer:    nil,
-			OnConnect: nil,
-			Username:  "",
-			Password:  Env.Queue.Redis.Password,
-			DB:        Env.Queue.Redis.Db,
-		},
-		KeepJobInQueue:           Env.Queue.KeepJobsInQueue,
-		KeepFailedJobsInHistory:  Env.Queue.KeepFailedJobsInHistory,
-		KeepSuccessJobsInHistory: Env.Queue.KeepSuccessJobsInHistory,
-		MinWorkers:               Env.Queue.MinWorkers,
-		JobMaxRetry:              Env.Queue.JobMaxRetries,
-		Prefix:                   Env.Queue.Redis.Prefix,
-	}
-}
 
 /*
   - TestPublishOne
@@ -53,17 +27,19 @@ func TestPublishOne(t *testing.T) {
 		Info string
 	}{
 		1,
-		"msg------1",
+		"test: publish information",
 	}
 
 	d, _ := json.Marshal(msg)
 	task := NewTask(d)
 
-	err := Publish(task, options2.Queue("ch2"))
+	pub := NewPublisher()
+	err := pub.Publish(task, opt.Queue("ch"), opt.Group("group-one"))
+
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	fmt.Printf("SendMsgs：%+v \n", task)
+	Logger.Info(task)
 }
 
 /*
@@ -72,22 +48,22 @@ func TestPublishOne(t *testing.T) {
     publisher
   - @param t
 */
-func TestPublish1(t *testing.T) {
-	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
+func TestPublishMore(t *testing.T) {
+	pub := NewPublisher()
+
 	for i := 0; i < 5; i++ {
 		m := make(map[int]string)
-		m[i] = "k----" + cast.ToString(i)
+		m[i] = "publisher:" + cast.ToString(i)
 
 		d, _ := json.Marshal(m)
 		task := NewTask(d)
 
-		res, err := pub.Publish(task, options2.Queue("ch2"))
+		err := pub.Publish(task, opt.Queue("delay-ch"))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", res)
 	}
-	pub.Close()
+	t.Fatal(pub.Close())
 }
 
 /*
@@ -97,84 +73,39 @@ func TestPublish1(t *testing.T) {
   - @param t
 */
 func TestDelayPublish(t *testing.T) {
-	pub := NewClient(NewRedisBroker(optionParameter.RedisOptions))
+	pub := NewPublisher()
 
 	m := make(map[string]string)
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
 		task := NewTask(b, SetName("update"))
 		delayT := time.Now().Add(10 * time.Second)
-		y = i
+
 		if i == 3 {
-			y = 30
+			y = 10
 		}
-		res, err := pub.DelayPublish(task, delayT, options2.Queue("delay-ch"), options2.Priority(y))
+		err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y)))
 		if err != nil {
 			log.Fatalln(err)
 		}
-		fmt.Printf("%+v \n", res)
 	}
 
 	defer pub.Close()
 }
-func TestRetry(t *testing.T) {
-
-	err := retry(func() error {
-		fmt.Println("function body")
-		return errors.New("error")
-		// return nil
-	}, 500*time.Millisecond)
-
-	fmt.Println(err)
-
-}
-
-func retry(f func() error, delayTime time.Duration) error {
-	retryFlag := make(chan error)
-	stopRetry := make(chan bool, 1)
-
-	go func(duration time.Duration, errChan chan error, stop chan bool) {
-		index := 1
-		count := 3
-
+func TestSig(t *testing.T) {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
+	go func() {
 		for {
-			go time.AfterFunc(duration, func() {
-				errChan <- f()
-			})
-			err := <-errChan
-			if err == nil {
-				stop <- true
-				close(errChan)
-				break
-			}
-			if index == count {
-				stop <- true
-				errChan <- err
-				break
-			}
-			index++
-		}
-	}(delayTime, retryFlag, stopRetry)
-
-	var err error
-	select {
-	case <-stopRetry:
-		for v := range retryFlag {
-			err = v
-			if v != nil {
-				err = v
-				break
+			sig := <-sigs
+			if sig.String() != "" {
+				fmt.Println("aa")
 			}
 		}
-	}
-	close(stopRetry)
-	if err != nil {
-		close(retryFlag)
-		return err
-	}
-	return nil
+	}()
+	select {}
 }

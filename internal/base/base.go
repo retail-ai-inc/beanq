@@ -1,98 +1,89 @@
 package base
 
 import (
+	"strings"
 	"time"
 
-	"beanq/helper/stringx"
-	"beanq/helper/timex"
-
-	"github.com/spf13/cast"
+	"beanq/internal/options"
 )
 
-/*
-* ParseArgs
-*  @Description:
-* @param queue
-* @param name
-* @param payload
-* @param retry
-* @param maxLen
-* @param executeTime
-* @return map[string]any
- */
-func ParseArgs(queue, name, payload string, retry int, maxLen int64, executeTime time.Time) map[string]any {
-	values := make(map[string]any)
-	values["queue"] = queue
-	values["name"] = name
-	values["payload"] = payload
-	values["addtime"] = time.Now().Format(timex.DateTime)
-	values["retry"] = retry
-	values["maxLen"] = maxLen
+func makeKey(group, queue, name string) string {
 
-	if !executeTime.IsZero() {
-		values["executeTime"] = executeTime
+	if group == "" {
+		group = options.DefaultOptions.DefaultGroup
 	}
-	return values
+	if queue == "" {
+		queue = options.DefaultOptions.DefaultQueueName
+	}
+	var builder strings.Builder
+
+	builder.WriteString(group)
+	builder.WriteString(":")
+	builder.WriteString(queue)
+	builder.WriteString(":")
+	builder.WriteString(name)
+
+	return builder.String()
+}
+func MakeListKey(group, queue string) string {
+	return makeKey(group, queue, "list")
+}
+func MakeZSetKey(group, queue string) string {
+	return makeKey(group, queue, "zset")
+}
+func MakeStreamKey(group, queue string) string {
+	return makeKey(group, queue, "stream")
 }
 
 /*
-* ParseMapToTask
+* Retry
 *  @Description:
-* @param msg
-* @param streamStr
-* @return payload
-* @return id
-* @return stream
-* @return addTime
-* @return queue
-* @return executeTime
-* @return retry
-* @return maxLen
+
+* @param f
+* @param delayTime
+* @return error
  */
-type BqMessage struct {
-	ID     string
-	Values map[string]interface{}
-}
+func Retry(f func() error, delayTime time.Duration) error {
+	retryFlag := make(chan error)
+	stopRetry := make(chan bool, 1)
 
-func ParseMapTask(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue string, executeTime time.Time, retry int, maxLen int64) {
-	id = msg.ID
-	stream = streamStr
+	go func(duration time.Duration, errChan chan error, stop chan bool) {
 
-	if queueVal, ok := msg.Values["queue"]; ok {
-		if v, ok := queueVal.(string); ok {
-			queue = v
+		var index time.Duration = 0
+		var retryCount time.Duration = 2
+
+		for {
+			go time.AfterFunc(index*duration, func() {
+				errChan <- f()
+			})
+
+			err := <-errChan
+			if err == nil {
+				stop <- true
+				close(errChan)
+				break
+			}
+			if index == retryCount {
+				stop <- true
+				errChan <- err
+				break
+			}
+			index++
+		}
+	}(delayTime, retryFlag, stopRetry)
+
+	var err error
+	select {
+	case <-stopRetry:
+		for v := range retryFlag {
+			err = v
+			if v != nil {
+				err = v
+				close(retryFlag)
+				break
+			}
 		}
 	}
-
-	if maxLenV, ok := msg.Values["maxLen"]; ok {
-		if v, ok := maxLenV.(string); ok {
-			maxLen = cast.ToInt64(v)
-		}
-	}
-
-	if retryVal, ok := msg.Values["retry"]; ok {
-		if v, ok := retryVal.(string); ok {
-			retry = cast.ToInt(v)
-		}
-	}
-
-	if payloadVal, ok := msg.Values["payload"]; ok {
-		if payloadV, ok := payloadVal.(string); ok {
-			payload = stringx.StringToByte(payloadV)
-		}
-	}
-
-	if addtimeV, ok := msg.Values["addtime"]; ok {
-		if addtimeStr, ok := addtimeV.(string); ok {
-			addTime = addtimeStr
-		}
-	}
-
-	if executeTVal, ok := msg.Values["executeTime"]; ok {
-		if executeTm, ok := executeTVal.(string); ok {
-			executeTime = cast.ToTime(executeTm)
-		}
-	}
-
-	return
+	close(stopRetry)
+	return err
 }

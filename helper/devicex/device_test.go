@@ -1,15 +1,13 @@
 package devicex
 
 import (
-	"fmt"
 	"testing"
 )
 
 func TestInfo(t *testing.T) {
-	d := Device
-	if err := d.Info(); err != nil {
+
+	if err := Device.Info(); err != nil {
 		t.Fatal(err)
 	}
-
-	fmt.Printf("%+v \n", d)
+	t.Fatalf("%+v \n", Device)
 }
