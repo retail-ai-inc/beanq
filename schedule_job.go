@@ -59,6 +59,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, o
 
 	return nil
 }
+
 func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer func() {

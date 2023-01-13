@@ -18,50 +18,44 @@ var (
 */
 func TestConsumer(t *testing.T) {
 
-	server := NewServer()
-
-	server.Register("group-one", queue, func(task *Task) error {
-		Logger.Info(task.Payload())
-		return nil
-	})
-	server.Register("delay-group", "delay-ch", func(task *Task) error {
-		Logger.Info(task.Payload())
-		return nil
-	})
-
 	csm := NewConsumer()
-	csm.StartConsumer(server)
+	csm.Register("group-one", queue, func(task *Task) error {
+		Logger.Info(task.Payload())
+		return nil
+	})
+	csm.Register("delay-group", "delay-ch", func(task *Task) error {
+		Logger.Info(task.Payload())
+		return nil
+	})
+	csm.StartConsumer()
 
 }
 func TestConsumerSingle(t *testing.T) {
 
-	server := NewServer()
-	server.Register("g"+cast.ToString(1), "ch2", func(task *Task) error {
+	csm := NewConsumer()
+	csm.Register("g"+cast.ToString(1), "ch2", func(task *Task) error {
 		Logger.Info(task.Payload())
 		return nil
 	})
-	csm := NewConsumer()
 
-	csm.StartConsumer(server)
+	csm.StartConsumer()
 }
 
 func TestConsumerMultiple(t *testing.T) {
-	server := NewServer()
+	csm := NewConsumer()
 	for i := 0; i < 5; i++ {
 
-		server.Register("g"+cast.ToString(i), "ch2", func(task *Task) error {
+		csm.Register("g"+cast.ToString(i), "ch2", func(task *Task) error {
 			Logger.Info(task.Payload())
 
 			return nil
 		})
-		server.Register("g"+cast.ToString(i), "ch2", func(task *Task) error {
+		csm.Register("g"+cast.ToString(i), "ch2", func(task *Task) error {
 			Logger.Info(task.Payload())
 
 			return nil
 		})
 	}
 
-	csm := NewConsumer()
-
-	csm.StartConsumer(server)
+	csm.StartConsumer()
 }

@@ -14,29 +14,8 @@ type BeanqPub interface {
 }
 
 type BeanqSub interface {
-	StartConsumer(server *Server)
-	StartConsumerWithContext(ctx context.Context, srv *Server)
+	Register(group, queue string, consumerFun DoConsumer)
+	StartConsumer()
+	StartConsumerWithContext(ctx context.Context)
 	StartUI() error
-}
-
-// easy publish
-// only input Task and set options
-func Publish(task *Task, opts ...opt.OptionI) error {
-
-	pub := NewPublisher()
-	defer pub.Close()
-	err := pub.Publish(task, opts...)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// easy consume
-// heavily  to implement
-
-func Consume(server *Server, opts *opt.Options) error {
-	return nil
 }

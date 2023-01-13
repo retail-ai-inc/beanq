@@ -12,9 +12,9 @@ import (
 )
 
 func main() {
-	pubOneInfo()
+	// pubOneInfo()
 	// pubMoreInfo()
-	// pubDelayInfo()
+	pubDelayInfo()
 }
 
 /*
@@ -35,14 +35,16 @@ func pubOneInfo() {
 	d, _ := json.Marshal(msg)
 	// get task
 	task := beanq.NewTask(d)
+	pub := beanq.NewPublisher()
+	err := pub.Publish(task, opt.Queue("ch2"), opt.Group("g2"))
+	if err != nil {
+
+	}
+	defer pub.Close()
 
 	// publish information
-	pub := beanq.NewPublisher()
-	if err := pub.Publish(task, opt.Queue("ch2"), opt.Group("g2")); err != nil {
-		log.Fatal(err.Error())
-	}
 	fmt.Printf("SendMsgs：%+v \n", task)
-	pub.Close()
+
 }
 
 /*
@@ -65,7 +67,7 @@ func pubMoreInfo() {
 		if i == 3 {
 			y = 10
 		}
-		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(y)); err != nil {
+		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(y)); err != nil {
 			log.Fatalln(err)
 		}
 	}
@@ -93,7 +95,7 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
-		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Priority(float64(y))); err != nil {
+		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
 	}

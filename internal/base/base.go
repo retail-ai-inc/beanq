@@ -45,46 +45,37 @@ func MakeStreamKey(group, queue string) string {
  */
 func Retry(f func() error, delayTime time.Duration) error {
 
-	retryFlag := make(chan error)
-	stopRetry := make(chan bool, 1)
+	index := 0
+	errChan := make(chan error, 1)
+	stop := make(chan struct{}, 1)
 
-	go func(duration time.Duration, errChan chan error, stop chan bool) {
-
-		var index time.Duration = 0
-		var retryCount time.Duration = 2
-
+	go func(timer *time.Timer, err chan error, stop chan struct{}) {
+	Loop:
 		for {
-			go time.AfterFunc(index*duration, func() {
-				errChan <- f()
-			})
-
-			err := <-errChan
-			if err == nil {
-				stop <- true
-				close(errChan)
-				break
+			select {
+			case <-timer.C:
+				e := f()
+				if e == nil || index >= 2 {
+					timer.Stop()
+					stop <- struct{}{}
+					err <- e
+					break Loop
+				}
+				index++
+				timer.Reset(time.Duration(index) * delayTime)
 			}
-			if index == retryCount {
-				stop <- true
-				errChan <- err
-				break
-			}
-			index++
 		}
-	}(delayTime, retryFlag, stopRetry)
+	}(time.NewTimer(time.Duration(index)*delayTime), errChan, stop)
 
-	var err error
+	var e error
+
 	select {
-	case <-stopRetry:
-		for v := range retryFlag {
-			err = v
-			if v != nil {
-				err = v
-				close(retryFlag)
-				break
-			}
+	case <-stop:
+		for e = range errChan {
+			close(errChan)
+			break
 		}
 	}
-	close(stopRetry)
-	return err
+	close(stop)
+	return e
 }

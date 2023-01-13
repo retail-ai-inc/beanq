@@ -25,7 +25,7 @@ import (
 type Broker interface {
 	enqueue(ctx context.Context, stream string, task *Task, options opt.Option) error
 	close() error
-	start(ctx context.Context, server *Server)
+	start(ctx context.Context, consumers []*ConsumerHandler)
 }
 
 type RedisBroker struct {
@@ -81,10 +81,9 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 	}
 	return nil
 }
-func (t *RedisBroker) start(ctx context.Context, server *Server) {
+func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 	defer ants.Release()
-	consumers := server.Consumers()
 
 	if opts, ok := ctx.Value("options").(*opt.Options); ok {
 		t.opts = opts
@@ -97,7 +96,7 @@ func (t *RedisBroker) start(ctx context.Context, server *Server) {
 	t.wg.Add(4)
 	if err := ants.Submit(func() {
 		t.wg.Done()
-		t.worker(consumers, server)
+		t.worker(consumers)
 	}); err != nil {
 		Logger.Error(err)
 	}
@@ -168,7 +167,7 @@ func (t *RedisBroker) healthCheckerStart() {
 		}
 	}
 }
-func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
+func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 
 	workers := make(chan struct{}, t.opts.MinWorkers)
 
@@ -190,7 +189,7 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
 		}
 
 		workers <- struct{}{}
-		go t.work(v, server, workers)
+		go t.work(v, workers)
 	}
 }
 func (t *RedisBroker) waitSignal() {
@@ -198,18 +197,17 @@ func (t *RedisBroker) waitSignal() {
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
 	for {
 		sig := <-sigs
-		// if sig == syscall.SIGTSTP {
-		fmt.Println(sig.String())
-		t.once.Do(func() {
-			close(t.stop)
-			t.done <- struct{}{}
-		})
-		// }
+		if sig == syscall.SIGTSTP {
+			t.once.Do(func() {
+				close(t.stop)
+				t.done <- struct{}{}
+			})
+		}
 	}
 }
-func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
+func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
 
-	ch, err := t.readGroups(handler.Queue, handler.Group, int64(server.Count))
+	ch, err := t.readGroups(handler.Queue, handler.Group, int64(t.opts.MinWorkers))
 
 	if err != nil {
 		t.err <- err
