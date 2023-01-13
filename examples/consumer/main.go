@@ -1,6 +1,8 @@
 package main
 
-import "beanq"
+import (
+	"beanq"
+)
 
 func main() {
 	// registe consumer

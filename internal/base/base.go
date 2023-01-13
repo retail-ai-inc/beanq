@@ -44,6 +44,7 @@ func MakeStreamKey(group, queue string) string {
 * @return error
  */
 func Retry(f func() error, delayTime time.Duration) error {
+
 	retryFlag := make(chan error)
 	stopRetry := make(chan bool, 1)
 

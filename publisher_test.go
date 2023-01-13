@@ -27,7 +27,7 @@ func TestPublishOne(t *testing.T) {
 		Info string
 	}{
 		1,
-		"test: publish information",
+		"example: publish information",
 	}
 
 	d, _ := json.Marshal(msg)

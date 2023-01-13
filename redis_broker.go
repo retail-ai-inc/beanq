@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"runtime/debug"
 	"sync"
+	"syscall"
 	"time"
 
 	"beanq/helper/json"
@@ -16,6 +19,7 @@ import (
 	opt "beanq/internal/options"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/panjf2000/ants/v2"
 )
 
 type Broker interface {
@@ -33,11 +37,13 @@ type RedisBroker struct {
 	scheduleJob scheduleJobI
 	opts        *opt.Options
 	wg          *sync.WaitGroup
+	once        *sync.Once
 }
 
 var _ Broker = new(RedisBroker)
 
 func NewRedisBroker(config BeanqConfig) *RedisBroker {
+
 	client := driver.NewRdb(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
@@ -61,6 +67,7 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		scheduleJob: newScheduleJob(client),
 		opts:        nil,
 		wg:          &sync.WaitGroup{},
+		once:        &sync.Once{},
 	}
 }
 
@@ -76,6 +83,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 }
 func (t *RedisBroker) start(ctx context.Context, server *Server) {
 
+	defer ants.Release()
 	consumers := server.Consumers()
 
 	if opts, ok := ctx.Value("options").(*opt.Options); ok {
@@ -86,18 +94,40 @@ func (t *RedisBroker) start(ctx context.Context, server *Server) {
 	t.ctx, cancel = context.WithCancel(ctx)
 	defer cancel()
 
-	t.worker(consumers, server, t.wg)
+	t.wg.Add(4)
+	if err := ants.Submit(func() {
+		t.wg.Done()
+		t.worker(consumers, server)
+	}); err != nil {
+		Logger.Error(err)
+	}
 	// consumer schedule jobs
-	t.scheduleJob.start(t.ctx, consumers, t.wg)
+	if err := ants.Submit(func() {
+		t.wg.Done()
+		t.scheduleJob.start(t.ctx, consumers)
+	}); err != nil {
+		Logger.Error(err)
+	}
+	// check client health
+	if err := ants.Submit(func() {
+		t.wg.Done()
+		t.healthCheckerStart()
+	}); err != nil {
+		Logger.Error(err)
+	}
+	if err := ants.Submit(func() {
+		t.wg.Done()
+		t.waitSignal()
+	}); err != nil {
+		Logger.Error(err)
+	}
 
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
 	// go t.claim(consumers)
 
-	// check client health
-	t.healthCheckerStart(t.wg)
-
 	t.wg.Wait()
+
 	// catch errors
 	select {
 	case <-t.stop:
@@ -114,66 +144,70 @@ func (t *RedisBroker) start(ctx context.Context, server *Server) {
 *  @Description:
 *  @receiver t
  */
-func (t *RedisBroker) healthCheckerStart(group *sync.WaitGroup) {
+func (t *RedisBroker) healthCheckerStart() {
 
-	group.Add(1)
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer func() {
-			ticker.Stop()
-			group.Done()
-		}()
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
-		for {
-			select {
-			case <-t.ctx.Done():
-				if !errors.Is(t.ctx.Err(), context.Canceled) {
-					t.err <- t.ctx.Err()
-					Logger.Error(t.ctx.Err())
-				}
+	for {
+		select {
+		case <-t.done:
+			return
+		case <-t.ctx.Done():
+			if !errors.Is(t.ctx.Err(), context.Canceled) {
+				t.err <- t.ctx.Err()
+				Logger.Error(t.ctx.Err())
+			}
+			return
+		case <-ticker.C:
+			if err := t.healthCheck.start(t.ctx); err != nil {
+				t.err <- err
+				Logger.Error(err)
 				return
-			case <-ticker.C:
-				if err := t.healthCheck.start(t.ctx); err != nil {
-					t.err <- err
-					Logger.Error(err)
-					return
-				}
 			}
 		}
-	}()
-
+	}
 }
-func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server, group *sync.WaitGroup) {
-	group.Add(1)
-	go func() {
-		defer group.Done()
-		workers := make(chan struct{}, t.opts.MinWorkers)
+func (t *RedisBroker) worker(consumers []*ConsumerHandler, server *Server) {
 
-		for _, v := range consumers {
-			// if has bound a group,then continue
-			result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
-			if err != nil && err.Error() != "ERR no such key" {
-				Logger.Errorf("InfoGroupErr:%s", err.Error())
+	workers := make(chan struct{}, t.opts.MinWorkers)
+
+	for _, v := range consumers {
+		// if has bound a group,then continue
+		result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
+		if err != nil && err.Error() != "ERR no such key" {
+			Logger.Errorf("InfoGroupErr:%s", err.Error())
+			t.err <- err
+			continue
+		}
+
+		if len(result) < 1 {
+			if err := t.createGroup(v.Queue, v.Group); err != nil {
+				Logger.Errorf("CreateGroupErr:%+s", err.Error())
 				t.err <- err
 				continue
 			}
-
-			if len(result) < 1 {
-				if err := t.createGroup(v.Queue, v.Group); err != nil {
-					Logger.Errorf("CreateGroupErr:%+s", err.Error())
-					t.err <- err
-					continue
-				}
-			}
-
-			workers <- struct{}{}
-			go t.work(v, server, workers)
 		}
-	}()
 
+		workers <- struct{}{}
+		go t.work(v, server, workers)
+	}
+}
+func (t *RedisBroker) waitSignal() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
+	for {
+		sig := <-sigs
+		// if sig == syscall.SIGTSTP {
+		fmt.Println(sig.String())
+		t.once.Do(func() {
+			close(t.stop)
+			t.done <- struct{}{}
+		})
+		// }
+	}
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, server *Server, workers chan struct{}) {
-	defer close(t.done)
 
 	ch, err := t.readGroups(handler.Queue, handler.Group, int64(server.Count))
 
@@ -202,10 +236,12 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 
 		for {
 			select {
+			case <-t.done:
+				return
 			case <-t.ctx.Done():
 				if !errors.Is(t.ctx.Err(), context.Canceled) {
 					t.err <- t.ctx.Err()
-					Logger.Error(t.ctx.Done())
+					Logger.Error(t.ctx.Err())
 				}
 				return
 			default:
@@ -240,6 +276,8 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	defer ticker.Stop()
 	for {
 		select {
+		case <-t.done:
+			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
 				t.err <- t.ctx.Err()
@@ -306,6 +344,8 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 
 	for {
 		select {
+		case <-t.done:
+			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
 				t.err <- t.ctx.Err()
