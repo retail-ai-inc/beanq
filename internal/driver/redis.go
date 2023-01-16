@@ -13,6 +13,7 @@ var (
 
 func NewRdb(options *redis.Options) *redis.Client {
 	once.Do(func() {
+		options.PoolFIFO = false
 		redisClient = redis.NewClient(options)
 	})
 

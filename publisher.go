@@ -12,19 +12,19 @@ import (
 	"github.com/labstack/gommon/log"
 )
 
-type Client struct {
+type client struct {
 	broker Broker
 	wg     *sync.WaitGroup
 }
 
-var _ BeanqPub = new(Client)
+var _ BeanqPub = new(client)
 
 var (
 	beanqPublisherOnce sync.Once
-	beanqPublisher     *Client
+	beanqPublisher     *client
 )
 
-func NewPublisher() *Client {
+func NewPublisher() *client {
 
 	beanqPublisherOnce.Do(func() {
 		initEnv()
@@ -46,7 +46,7 @@ func NewPublisher() *Client {
 		Logger.SetLevel(log.DEBUG)
 
 		if Config.Queue.Driver == "redis" {
-			beanqPublisher = &Client{
+			beanqPublisher = &client{
 				broker: NewRedisBroker(Config),
 				wg:     nil,
 			}
@@ -59,7 +59,7 @@ func NewPublisher() *Client {
 	return beanqPublisher
 }
 
-func (t *Client) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) error {
+func (t *client) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) error {
 
 	opts, err := opt.ComposeOptions(option...)
 	if err != nil {
@@ -77,17 +77,17 @@ func (t *Client) PublishWithContext(ctx context.Context, task *Task, option ...o
 
 }
 
-func (t *Client) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {
+func (t *client) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {
 	option = append(option, opt.ExecuteTime(delayTime))
 	return t.Publish(task, option...)
 }
 
-func (t *Client) Publish(task *Task, option ...opt.OptionI) error {
+func (t *client) Publish(task *Task, option ...opt.OptionI) error {
 
 	return t.PublishWithContext(context.Background(), task, option...)
 
 }
 
-func (t *Client) Close() error {
+func (t *client) Close() error {
 	return t.broker.close()
 }

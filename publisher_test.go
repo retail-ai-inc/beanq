@@ -27,7 +27,7 @@ func TestPublishOne(t *testing.T) {
 		Info string
 	}{
 		1,
-		"test: publish information",
+		"example: publish information",
 	}
 
 	d, _ := json.Marshal(msg)
@@ -35,7 +35,7 @@ func TestPublishOne(t *testing.T) {
 
 	pub := NewPublisher()
 	err := pub.Publish(task, opt.Queue("ch"), opt.Group("group-one"))
-
+	defer pub.Close()
 	if err != nil {
 		t.Fatal(err.Error())
 	}

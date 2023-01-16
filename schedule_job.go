@@ -13,7 +13,7 @@ import (
 )
 
 type scheduleJobI interface {
-	start(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup)
+	start(ctx context.Context, consumers []*ConsumerHandler)
 	enqueue(ctx context.Context, zsetStr string, task *Task, option options.Option) error
 }
 
@@ -32,10 +32,11 @@ func newScheduleJob(client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup) {
-	group.Add(2)
-	go t.delayJobs(ctx, consumers, group)
-	go t.consume(ctx, consumers, group)
+func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
+
+	t.wg.Add(2)
+	go t.delayJobs(ctx, consumers)
+	go t.consume(ctx, consumers)
 
 }
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
@@ -58,11 +59,12 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, o
 
 	return nil
 }
-func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup) {
+
+func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer func() {
 		ticker.Stop()
-		group.Done()
+		t.wg.Done()
 	}()
 
 	for {
@@ -115,11 +117,11 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 		}
 	}
 }
-func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler, group *sync.WaitGroup) {
+func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer func() {
 		ticker.Stop()
-		group.Done()
+		t.wg.Done()
 	}()
 
 	for {

@@ -9,9 +9,16 @@ import (
 	"github.com/labstack/gommon/log"
 )
 
+type ConsumerHandler struct {
+	Group, Queue string
+	ConsumerFun  DoConsumer
+}
+
 type Consumer struct {
 	broker Broker
 	opts   *opt.Options
+	mu     sync.RWMutex
+	m      []*ConsumerHandler
 }
 
 var _ BeanqSub = new(Consumer)
@@ -66,6 +73,7 @@ func NewConsumer() *Consumer {
 			beanqConsumer = &Consumer{
 				broker: NewRedisBroker(Config),
 				opts:   opts,
+				mu:     sync.RWMutex{},
 			}
 		} else {
 			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
@@ -74,18 +82,33 @@ func NewConsumer() *Consumer {
 	})
 	return beanqConsumer
 }
+func (t *Consumer) Register(group, queue string, consumerFun DoConsumer) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	if group == "" {
+		group = opt.DefaultOptions.DefaultGroup
+	}
+	if queue == "" {
+		queue = opt.DefaultOptions.DefaultQueueName
+	}
 
-func (t *Consumer) StartConsumerWithContext(ctx context.Context, srv *Server) {
+	t.m = append(t.m, &ConsumerHandler{
+		Group:       group,
+		Queue:       queue,
+		ConsumerFun: consumerFun,
+	})
+}
+func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
 	ctx = context.WithValue(ctx, "options", t.opts)
-	t.broker.start(ctx, srv)
+	t.broker.start(ctx, t.m)
 
 }
 
-func (t *Consumer) StartConsumer(srv *Server) {
+func (t *Consumer) StartConsumer() {
 
 	ctx := context.Background()
-	t.StartConsumerWithContext(ctx, srv)
+	t.StartConsumerWithContext(ctx)
 
 }
 func (t *Consumer) StartUI() error {
