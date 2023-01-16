@@ -50,7 +50,6 @@ func Retry(f func() error, delayTime time.Duration) error {
 	stop := make(chan struct{}, 1)
 
 	go func(timer *time.Timer, err chan error, stop chan struct{}) {
-	Loop:
 		for {
 			select {
 			case <-timer.C:
@@ -59,7 +58,7 @@ func Retry(f func() error, delayTime time.Duration) error {
 					timer.Stop()
 					stop <- struct{}{}
 					err <- e
-					break Loop
+					return
 				}
 				index++
 				timer.Reset(time.Duration(index) * delayTime)
