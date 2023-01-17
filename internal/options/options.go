@@ -236,28 +236,6 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	return res, nil
 }
 
-type FlagInfo string
-type LevelMsg string
-
-const (
-	SuccessInfo FlagInfo = "success"
-	FailedInfo  FlagInfo = "failed"
-
-	ErrLevel  LevelMsg = "error"
-	InfoLevel LevelMsg = "info"
-)
-
-type ConsumerResult struct {
-	Level   LevelMsg
-	Info    FlagInfo
-	Payload any
-
-	AddTime string
-	RunTime string
-
-	Queue, Group, Consumer string
-}
-
 // need more parameters
 type Result struct {
 	Id   string
@@ -286,9 +264,9 @@ type Options struct {
 }
 
 var DefaultOptions = &Options{
-	KeepJobInQueue:           7 * 1440 * time.Minute,
-	KeepFailedJobsInHistory:  7 * 1440 * time.Minute,
-	KeepSuccessJobsInHistory: 7 * 1440 * time.Minute,
+	KeepJobInQueue:           7 * 1440 * 60 * time.Minute,
+	KeepFailedJobsInHistory:  7 * 1440 * 60 * time.Minute,
+	KeepSuccessJobsInHistory: 7 * 1440 * 60 * time.Minute,
 	MinWorkers:               10,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",

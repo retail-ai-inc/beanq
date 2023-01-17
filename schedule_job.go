@@ -10,6 +10,7 @@ import (
 	"beanq/internal/base"
 	"beanq/internal/options"
 	"github.com/go-redis/redis/v8"
+	"github.com/panjf2000/ants/v2"
 )
 
 type scheduleJobI interface {
@@ -20,6 +21,7 @@ type scheduleJobI interface {
 type scheduleJob struct {
 	client *redis.Client
 	wg     *sync.WaitGroup
+	pool   *ants.Pool
 }
 
 var _ scheduleJobI = new(scheduleJob)
@@ -29,15 +31,14 @@ const (
 )
 
 func newScheduleJob(client *redis.Client) *scheduleJob {
-	return &scheduleJob{client: client, wg: &sync.WaitGroup{}}
+	pool, _ := ants.NewPool(10, ants.WithPreAlloc(true))
+	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool}
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
 
-	t.wg.Add(2)
 	go t.delayJobs(ctx, consumers)
 	go t.consume(ctx, consumers)
-
 }
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
 
@@ -64,8 +65,9 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer func() {
 		ticker.Stop()
-		t.wg.Done()
 	}()
+
+	defer t.pool.Release()
 
 	for {
 		select {
@@ -82,46 +84,57 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 				if len(vals) <= 0 {
 					continue
 				}
-				for _, val := range vals {
-
-					task := jsonToTask([]byte(val))
-
-					flag := false
-					if task.ExecuteTime().After(time.Now()) {
-						flag = true
-					}
-					// if delay job
-					if flag {
-						if err := t.client.RPush(ctx, key, val).Err(); err != nil {
-
-							Logger.Error(err)
-							continue
-
-						}
-					}
-					// if not delay job
-					if !flag {
-						if err := t.enqueue(ctx, base.MakeZSetKey(task.Group(), task.Queue()), task, options.Option{
-							Priority: task.Priority(),
-						}); err != nil {
-							Logger.Error(err)
-							continue
-						}
-					}
-					if err := t.client.LRem(ctx, key, 1, val).Err(); err != nil {
-						Logger.Error(err)
-						continue
-					}
-				}
+				t.doDelayJobs(ctx, key, vals)
 			}
 		}
 	}
+}
+func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals []string) {
+
+	for _, val := range vals {
+		t.wg.Add(1)
+		err := t.pool.Submit(func() {
+			defer t.wg.Done()
+			task := jsonToTask([]byte(val))
+
+			flag := false
+			if task.ExecuteTime().After(time.Now()) {
+				flag = true
+			}
+			// if delay job
+			if flag {
+				if err := t.client.RPush(ctx, key, val).Err(); err != nil {
+
+					Logger.Error(err)
+					return
+
+				}
+			}
+			// if not delay job
+			if !flag {
+				if err := t.enqueue(ctx, base.MakeZSetKey(task.Group(), task.Queue()), task, options.Option{
+					Priority: task.Priority(),
+				}); err != nil {
+					Logger.Error(err)
+					return
+				}
+			}
+			if err := t.client.LRem(ctx, key, 1, val).Err(); err != nil {
+				Logger.Error(err)
+				return
+			}
+		})
+		if err != nil {
+			Logger.Error(err)
+			continue
+		}
+	}
+	t.wg.Wait()
 }
 func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(200 * time.Millisecond)
 	defer func() {
 		ticker.Stop()
-		t.wg.Done()
 	}()
 
 	for {

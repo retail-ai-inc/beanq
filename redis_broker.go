@@ -11,11 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"beanq/helper/json"
 	"beanq/helper/stringx"
-	"beanq/helper/timex"
 	"beanq/internal/base"
-	"beanq/internal/driver"
 	opt "beanq/internal/options"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
@@ -35,6 +32,7 @@ type RedisBroker struct {
 	err         chan error
 	healthCheck healthCheckI
 	scheduleJob scheduleJobI
+	logJob      logJobI
 	opts        *opt.Options
 	wg          *sync.WaitGroup
 	once        *sync.Once
@@ -44,19 +42,18 @@ var _ Broker = new(RedisBroker)
 
 func NewRedisBroker(config BeanqConfig) *RedisBroker {
 
-	client := driver.NewRdb(&redis.Options{
+	client := redis.NewClient(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
 		DB:           config.Queue.Redis.Database,
 		MaxRetries:   config.Queue.Redis.Maxretries,
-		PoolSize:     config.Queue.Redis.PoolSize,
-		MinIdleConns: config.Queue.Redis.MinIdleConnections,
 		DialTimeout:  config.Queue.Redis.DialTimeout,
 		ReadTimeout:  config.Queue.Redis.ReadTimeout,
 		WriteTimeout: config.Queue.Redis.WriteTimeout,
+		PoolSize:     config.Queue.Redis.PoolSize,
+		MinIdleConns: config.Queue.Redis.MinIdleConnections,
 		PoolTimeout:  config.Queue.Redis.PoolTimeout,
 	})
-
 	return &RedisBroker{
 		client:      client,
 		ctx:         nil,
@@ -65,6 +62,7 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		err:         make(chan error, 1),
 		healthCheck: newHealthCheck(client),
 		scheduleJob: newScheduleJob(client),
+		logJob:      newLogJob(client),
 		opts:        nil,
 		wg:          &sync.WaitGroup{},
 		once:        &sync.Once{},
@@ -83,7 +81,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 }
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
-	defer ants.Release()
+	p, _ := ants.NewPool(10)
+	defer p.Release()
 
 	if opts, ok := ctx.Value("options").(*opt.Options); ok {
 		t.opts = opts
@@ -94,27 +93,27 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	defer cancel()
 
 	t.wg.Add(4)
-	if err := ants.Submit(func() {
+	if err := p.Submit(func() {
 		t.wg.Done()
 		t.worker(consumers)
 	}); err != nil {
 		Logger.Error(err)
 	}
 	// consumer schedule jobs
-	if err := ants.Submit(func() {
+	if err := p.Submit(func() {
 		t.wg.Done()
 		t.scheduleJob.start(t.ctx, consumers)
 	}); err != nil {
 		Logger.Error(err)
 	}
 	// check client health
-	if err := ants.Submit(func() {
+	if err := p.Submit(func() {
 		t.wg.Done()
 		t.healthCheckerStart()
 	}); err != nil {
 		Logger.Error(err)
 	}
-	if err := ants.Submit(func() {
+	if err := p.Submit(func() {
 		t.wg.Done()
 		t.waitSignal()
 	}); err != nil {
@@ -126,14 +125,11 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// go t.claim(consumers)
 
 	t.wg.Wait()
-
+	Logger.Info("----START----")
 	// catch errors
 	select {
-	case <-t.stop:
-		Logger.Info("stop")
-		return
 	case <-t.done:
-		Logger.Info("done")
+		Logger.Info("----DONE----")
 		return
 	}
 }
@@ -195,14 +191,13 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
-	for {
-		sig := <-sigs
-		if sig == syscall.SIGTSTP {
-			t.once.Do(func() {
-				close(t.stop)
-				t.done <- struct{}{}
-			})
-		}
+	select {
+	case <-sigs:
+		t.once.Do(func() {
+			close(t.stop)
+			t.done <- struct{}{}
+		})
+		return
 	}
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
@@ -332,9 +327,9 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 }
 
 func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStream) {
-	info := opt.SuccessInfo
-	result := &opt.ConsumerResult{
-		Level:   opt.InfoLevel,
+	info := SuccessInfo
+	result := &ConsumerResult{
+		Level:   InfoLevel,
 		Info:    info,
 		RunTime: "",
 	}
@@ -343,6 +338,7 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 	for {
 		select {
 		case <-t.done:
+			
 			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
@@ -362,20 +358,19 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 					return f(task)
 				}, t.opts.RetryTime)
 				if err != nil {
-					info = opt.FailedInfo
-					result.Level = opt.ErrLevel
-					result.Info = opt.FlagInfo(err.Error())
+					info = FailedInfo
+					result.Level = ErrLevel
+					result.Info = FlagInfo(err.Error())
 				}
 
 				sub := time.Now().Sub(now)
 
 				result.Payload = task.Payload()
-				result.AddTime = time.Now().Format(timex.DateTime)
 				result.RunTime = sub.String()
 				result.Queue = msg.Stream
 				result.Group = group
 
-				if err := t.logInToList(result); err != nil {
+				if err := t.logJob.success(t.ctx, result); err != nil {
 					t.err <- err
 					Logger.Error(err)
 					continue
@@ -395,27 +390,6 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 			}
 		}
 	}
-}
-
-/*
-  - logToList
-  - @Description:
-    push logs to redis list
-  - @receiver t
-  - @param result
-  - @return error
-*/
-func (t *RedisBroker) logInToList(result *opt.ConsumerResult) error {
-
-	b, err := json.Marshal(result)
-	if err != nil {
-		return fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-	}
-	if err := t.client.LPush(t.ctx, string(result.Info), b).Err(); err != nil {
-		return fmt.Errorf("LPushErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
-	}
-	return nil
-
 }
 
 func (t *RedisBroker) close() error {
