@@ -1,3 +1,27 @@
+// MIT License
+
+// Copyright The RAI Inc.
+// The RAI Authors
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// Package beanq
+// @Description:
 package beanq
 
 import (
@@ -46,7 +70,7 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
 		DB:           config.Queue.Redis.Database,
-		MaxRetries:   config.Queue.Redis.Maxretries,
+		MaxRetries:   config.Queue.Redis.MaxRetries,
 		DialTimeout:  config.Queue.Redis.DialTimeout,
 		ReadTimeout:  config.Queue.Redis.ReadTimeout,
 		WriteTimeout: config.Queue.Redis.WriteTimeout,
@@ -69,6 +93,18 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 	}
 }
 
+// enqueue
+//
+//	@Description:
+//
+// Publisher
+//
+//	@receiver t
+//	@param ctx
+//	@param stream
+//	@param task
+//	@param opts
+//	@return error
 func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) error {
 
 	if stream == "" || task == nil {
@@ -79,9 +115,19 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 	}
 	return nil
 }
+
+// start
+//
+//	@Description:
+//
+// Consumer
+//
+//	@receiver t
+//	@param ctx
+//	@param consumers
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
-	p, _ := ants.NewPool(10)
+	p, _ := ants.NewPool(4)
 	defer p.Release()
 
 	if opts, ok := ctx.Value("options").(*opt.Options); ok {
@@ -134,11 +180,11 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	}
 }
 
-/*
-* healthCheckerStart
-*  @Description:
-*  @receiver t
- */
+// healthCheckerStart
+// Get the current node information every 10 seconds
+//
+//	@Description:
+//	@receiver t
 func (t *RedisBroker) healthCheckerStart() {
 
 	ticker := time.NewTicker(10 * time.Second)
@@ -163,6 +209,15 @@ func (t *RedisBroker) healthCheckerStart() {
 		}
 	}
 }
+
+// worker
+//
+//	@Description:
+//
+// Consume data in stream
+//
+//	@receiver t
+//	@param consumers
 func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 
 	workers := make(chan struct{}, t.opts.MinWorkers)
@@ -188,6 +243,14 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 		go t.work(v, workers)
 	}
 }
+
+// waitSignal
+//
+//	@Description:
+//
+// handle signals
+//
+//	@receiver t
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
@@ -264,6 +327,12 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 	return ch, nil
 }
 
+// claim
+// Please refer to http://www.redis.cn/commands/xclaim.html
+//
+//	@Description:
+//	@receiver t
+//	@param consumers
 func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -326,6 +395,14 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	}
 }
 
+// consumer
+//
+//	@Description:
+//
+//	@receiver t
+//	@param f
+//	@param group
+//	@param ch
 func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStream) {
 	info := SuccessInfo
 	result := &ConsumerResult{
@@ -338,7 +415,7 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 	for {
 		select {
 		case <-t.done:
-			
+
 			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
@@ -354,6 +431,7 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 				task := t.parseMapToTask(vm, stream)
 				now = time.Now()
 
+				// if error,then retry to consume
 				err := base.Retry(func() error {
 					return f(task)
 				}, t.opts.RetryTime)
@@ -369,19 +447,20 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 				result.RunTime = sub.String()
 				result.Queue = msg.Stream
 				result.Group = group
-
-				if err := t.logJob.success(t.ctx, result); err != nil {
+				// Successfully consumed data, stored in `string`
+				if err := t.logJob.saveLog(t.ctx, result); err != nil {
 					t.err <- err
 					Logger.Error(err)
 					continue
 				}
 
-				// ack
+				// `stream` confirmation message
 				if err := t.client.XAck(t.ctx, base.MakeStreamKey(group, msg.Stream), group, vm.ID).Err(); err != nil {
 					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
+				// delete data from `stream`
 				if err := t.client.XDel(t.ctx, base.MakeStreamKey(group, msg.Stream), vm.ID).Err(); err != nil {
 					t.err <- fmt.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
@@ -402,13 +481,14 @@ func (t *RedisBroker) close() error {
 	return t.client.Close()
 }
 
-/*
-  - Error
-  - @Description:
-    this function can't get errors always,need improve
-  - @receiver t
-  - @return error
-*/
+// Error
+//
+//	@Description:
+//
+// this function can't get errors always,need improve
+//
+//	@receiver t
+//	@return error
 func (t *RedisBroker) Error() error {
 	select {
 	case err := <-t.err:

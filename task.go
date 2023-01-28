@@ -1,3 +1,27 @@
+// MIT License
+
+// Copyright The RAI Inc.
+// The RAI Authors
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+// Package beanq
+// @Description:
 package beanq
 
 import (
@@ -13,23 +37,17 @@ import (
 )
 
 // task values APPOINTMENT:
+// task["id"] =>   job's id
+// task["name"] => job's name
+// task["queue"] => job's queue name
+// task["group"] => job's group name
+// task["maxLen"] =>  upper limit `stream`
+// task["retry"] => retry count
+// task["priority"] => attribute priority;0-10;The larger the value, the earlier the execution
+// task["payload"] => data payload
+// task["addTime"] => The time when the task was added, the default is the current time
+// task["executeTime"] => task execute time
 
-/*
-	{
-		id    string
-		name  string
-		queue string
-
-		group    string
-		maxLen   int64
-		retry    int
-		priority float64
-
-		payload     string
-		addTime     string
-		executeTime time.Time
-	}
-*/
 type values map[string]any
 
 type Task struct {
@@ -140,12 +158,11 @@ func NewTask(payload []byte, opt ...TaskOpt) *Task {
 
 type DoConsumer func(*Task) error
 
-/*
-* jsonToTask
-*  @Description:
-* @param data
-* @return Task
- */
+// jsonToTask
+//
+//	@Description:
+//	@param data
+//	@return *Task
 func jsonToTask(data []byte) *Task {
 
 	jn := json.Json
@@ -174,21 +191,20 @@ type BqMessage struct {
 	Values map[string]interface{}
 }
 
-/*
-* openTaskMap
-*  @Description:
-* @param msg
-* @param streamStr
-* @return payload
-* @return id
-* @return stream
-* @return addTime
-* @return queue
-* @return group
-* @return executeTime
-* @return retry
-* @return maxLen
- */
+// openTaskMap
+//
+//	@Description:
+//	@param msg
+//	@param streamStr
+//	@return payload
+//	@return id
+//	@return stream
+//	@return addTime
+//	@return queue
+//	@return group
+//	@return executeTime
+//	@return retry
+//	@return maxLen
 func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64) {
 
 	id = msg.ID

@@ -17,12 +17,11 @@ func main() {
 	pubDelayInfo()
 }
 
-/*
-  - pubOneInfo
-  - @Description:
-    publish one information
-*/
+// pubOneInfo
+//
+//	@Description:
 func pubOneInfo() {
+
 	// msg can struct or map
 	msg := struct {
 		Id   int
@@ -47,11 +46,9 @@ func pubOneInfo() {
 
 }
 
-/*
-  - pubMoreInfo
-  - @Description:
-    publish more informations
-*/
+// pubMoreInfo
+//
+//	@Description:
 func pubMoreInfo() {
 	pub := beanq.NewPublisher()
 	m := make(map[string]string)
@@ -74,11 +71,9 @@ func pubMoreInfo() {
 	defer pub.Close()
 }
 
-/*
-  - pubDelayInfo
-  - @Description:
-    publish delay informations
-*/
+// pubDelayInfo
+//
+//	@Description:
 func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 
