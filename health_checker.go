@@ -26,8 +26,8 @@ package beanq
 
 import (
 	"context"
+	"strings"
 
-	"beanq/helper/devicex"
 	"beanq/helper/json"
 	"github.com/go-redis/redis/v8"
 )
@@ -45,23 +45,199 @@ func newHealthCheck(client *redis.Client) *healthCheck {
 }
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
-	device := devicex.Device
+
 	key := "health_checker"
 	var str string
 
-	if err = device.Info(); err != nil {
-		return
-	}
-	if err = t.client.HDel(ctx, key, device.Net.Ip).Err(); err != nil {
-		return
+	info, err := t.info(ctx)
+	if err != nil {
+		return err
 	}
 
-	if str, err = json.Json.MarshalToString(device); err != nil {
-		return
-	}
-	if err = t.client.HMSet(ctx, key, device.Net.Ip, str).Err(); err != nil {
-		return
-	}
+	data := info.toHealthData()
+	if id, ok := data["server"]["redis_build_id"].(string); ok {
+		if err = t.client.HDel(ctx, key, id).Err(); err != nil {
+			return
+		}
 
+		if str, err = json.Json.MarshalToString(data); err != nil {
+			return
+		}
+		if err = t.client.HMSet(ctx, key, id, str).Err(); err != nil {
+			return
+		}
+	}
 	return nil
+}
+
+// REFERENCE:
+// https://redis.io/commands/info/
+type redisServerInfo map[string]map[string]any
+
+// info
+//
+//	@Description:
+//
+// redis server info
+//
+//	@receiver t
+//	@param ctx
+//	@return redisServerInfo
+//	@return error
+func (t *healthCheck) info(ctx context.Context) (redisServerInfo, error) {
+
+	cmd := t.client.Info(ctx)
+	if cmd.Err() != nil {
+		return nil, cmd.Err()
+	}
+	val := cmd.Val()
+	val = strings.ReplaceAll(val, "\r", "")
+	lines := strings.Split(val, "\n")
+
+	info := redisServerInfo{}
+	cate := ""
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "# ") {
+			cate = strings.ToLower(line[2:])
+			info[cate] = map[string]any{}
+			continue
+		}
+		newLine := strings.Split(line, ":")
+		if len(newLine) >= 2 {
+			info[cate][newLine[0]] = newLine[1]
+		}
+	}
+	return info, nil
+}
+
+type RedisServerInfoStruct struct {
+	Server struct {
+		RedisVersion string `json:"redis_version"`
+		RedisBuildId string `json:"redis_build_id"`
+	} `json:"server"`
+	Clients struct {
+		ConnectedClients string `json:"connected_clients"`
+	} `json:"clients"`
+	Memory struct {
+		UsedMemory            string `json:"used_memory"`
+		UsedMemoryHuman       string `json:"used_memory_human"`
+		UsedMemoryRss         string `json:"used_memory_rss"`
+		UsedMemoryPeak        string `json:"used_memory_peak"`
+		UsedMemoryPeakHuman   string `json:"used_memory_peak_human"`
+		MemFragmentationRatio string `json:"mem_fragmentation_ratio"`
+		UsedMemoryDatasetPerc string `json:"used_memory_dataset_perc"`
+	} `json:"memory"`
+	Cpu struct {
+		UsedCpuSys          string `json:"used_cpu_sys"`
+		UsedCpuUser         string `json:"used_cpu_user"`
+		UsedCpuSysChildren  string `json:"used_cpu_sys_children"`
+		UsedCpuUserChildren string `json:"used_cpu_user_children"`
+	} `json:"cpu"`
+}
+
+// toStruct
+//
+//	@Description:
+//
+// map to struct
+//
+//	@receiver info
+//	@return *RedisServerInfoStruct
+//	@return error
+func (info redisServerInfo) toStruct() (*RedisServerInfoStruct, error) {
+	b, err := json.Marshal(&info)
+	if err != nil {
+		return nil, err
+	}
+	var data RedisServerInfoStruct
+	if err := json.Unmarshal(b, &data); err != nil {
+		return nil, err
+	}
+	return &data, nil
+}
+
+// toHealthData
+//
+//	@Description:
+//
+// health checker data
+//
+//	@receiver info
+//	@return map[string]map[string]any
+func (info redisServerInfo) toHealthData() map[string]map[string]any {
+
+	data := make(map[string]map[string]any, 0)
+
+	data["server"] = map[string]any{}
+	if server, ok := info["server"]; ok {
+		// The build id
+		if redisBuildId, ok := server["redis_build_id"]; ok {
+			data["server"]["redis_build_id"] = redisBuildId
+		}
+	}
+
+	data["cpu"] = map[string]any{}
+	if cpu, ok := info["cpu"]; ok {
+		// System CPU consumed by the Redis server, which is the sum of system CPU consumed by all threads of the server process (main thread and background threads)
+		if usedCpuSys, ok := cpu["used_cpu_sys"]; ok {
+			data["cpu"]["used_cpu_sys"] = usedCpuSys
+		}
+		// System CPU consumed by the background processes
+		if usedCpuSysChildren, ok := cpu["used_cpu_sys_children"]; ok {
+			data["cpu"]["used_cpu_sys_children"] = usedCpuSysChildren
+		}
+		// User CPU consumed by the Redis server, which is the sum of user CPU consumed by all threads of the server process (main thread and background threads)
+		if usedCpuUser, ok := cpu["used_cpu_user"]; ok {
+			data["cpu"]["used_cpu_user"] = usedCpuUser
+		}
+		// User CPU consumed by the background processes
+		if usedCpuUserChildren, ok := cpu["used_cpu_user_children"]; ok {
+			data["cpu"]["used_cpu_user_children"] = usedCpuUserChildren
+		}
+	}
+
+	data["memory"] = map[string]any{}
+	if memory, ok := info["memory"]; ok {
+		// Total number of bytes allocated by Redis using its allocator (either standard libc, jemalloc, or an alternative allocator such as tcmalloc)
+		if usedMemory, ok := memory["used_memory"]; ok {
+			data["memory"]["used_memory"] = usedMemory
+		}
+		// The percentage of used_memory_dataset out of the net memory usage (used_memory minus used_memory_startup)
+		if usedMemoryDatasetPerc, ok := memory["used_memory_dataset_perc"]; ok {
+			data["memory"]["used_memory_dataset_perc"] = usedMemoryDatasetPerc
+		}
+		// Human readable representation of previous value
+		if usedMemoryHuman, ok := memory["used_memory_human"]; ok {
+			data["memory"]["used_memory_human"] = usedMemoryHuman
+		}
+		// Number of bytes that Redis allocated as seen by the operating system (a.k.a resident set size). This is the number reported by tools such as top(1) and ps(1)
+		if usedMemoryRss, ok := memory["used_memory_rss"]; ok {
+			data["memory"]["used_memory_rss"] = usedMemoryRss
+		}
+		// Human readable representation of previous value
+		if usedMemoryRssHuman, ok := memory["used_memory_rss_human"]; ok {
+			data["memory"]["used_memory_rss_human"] = usedMemoryRssHuman
+		}
+		// Peak memory consumed by Redis (in bytes)
+		if usedMemoryPeak, ok := memory["used_memory_peak"]; ok {
+			data["memory"]["used_memory_peak"] = usedMemoryPeak
+		}
+		// Human readable representation of previous value
+		if usedMemoryPeakHuman, ok := memory["used_memory_peak_human"]; ok {
+			data["memory"]["used_memory_peak_human"] = usedMemoryPeakHuman
+		}
+		// The percentage of used_memory_peak out of used_memory
+		if usedMemoryPeakPerc, ok := memory["used_memory_peak_perc"]; ok {
+			data["memory"]["used_memory_peak_perc"] = usedMemoryPeakPerc
+		}
+		// Ratio between used_memory_rss and used_memory. Note that this doesn't only includes fragmentation,
+		// but also other process overheads (see the allocator_* metrics), and also overheads like code, shared libraries, stack, etc.
+		if memFragmentationRatio, ok := memory["mem_fragmentation_ratio"]; ok {
+			data["memory"]["mem_fragmentation_ratio"] = memFragmentationRatio
+		}
+	}
+	return data
 }

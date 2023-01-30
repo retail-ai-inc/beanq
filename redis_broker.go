@@ -53,7 +53,6 @@ type RedisBroker struct {
 	client      *redis.Client
 	ctx         context.Context
 	done, stop  chan struct{}
-	err         chan error
 	healthCheck healthCheckI
 	scheduleJob scheduleJobI
 	logJob      logJobI
@@ -83,7 +82,6 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		ctx:         nil,
 		done:        make(chan struct{}),
 		stop:        make(chan struct{}),
-		err:         make(chan error, 1),
 		healthCheck: newHealthCheck(client),
 		scheduleJob: newScheduleJob(client),
 		logJob:      newLogJob(client),
@@ -126,7 +124,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 //	@param ctx
 //	@param consumers
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
-
+	// it is useless
 	p, _ := ants.NewPool(4)
 	defer p.Release()
 
@@ -172,7 +170,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 	t.wg.Wait()
 	Logger.Info("----START----")
-	// catch errors
+
 	select {
 	case <-t.done:
 		Logger.Info("----DONE----")
@@ -196,13 +194,11 @@ func (t *RedisBroker) healthCheckerStart() {
 			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
 				Logger.Error(t.ctx.Err())
 			}
 			return
 		case <-ticker.C:
 			if err := t.healthCheck.start(t.ctx); err != nil {
-				t.err <- err
 				Logger.Error(err)
 				return
 			}
@@ -227,14 +223,12 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 		result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
 		if err != nil && err.Error() != "ERR no such key" {
 			Logger.Errorf("InfoGroupErr:%s", err.Error())
-			t.err <- err
 			continue
 		}
 
 		if len(result) < 1 {
 			if err := t.createGroup(v.Queue, v.Group); err != nil {
 				Logger.Errorf("CreateGroupErr:%+s", err.Error())
-				t.err <- err
 				continue
 			}
 		}
@@ -253,14 +247,16 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 //	@receiver t
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGHUP)
 	select {
-	case <-sigs:
-		t.once.Do(func() {
-			close(t.stop)
-			t.done <- struct{}{}
-		})
-		return
+	case sig := <-sigs:
+		if sig == syscall.SIGTERM || sig == syscall.SIGINT || sig == syscall.SIGSTOP || sig == syscall.SIGHUP {
+			t.once.Do(func() {
+				close(t.stop)
+				t.done <- struct{}{}
+			})
+			return
+		}
 	}
 }
 func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
@@ -268,7 +264,6 @@ func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
 	ch, err := t.readGroups(handler.Queue, handler.Group, int64(t.opts.MinWorkers))
 
 	if err != nil {
-		t.err <- err
 		Logger.Error(err)
 		return
 	}
@@ -296,7 +291,6 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 				return
 			case <-t.ctx.Done():
 				if !errors.Is(t.ctx.Err(), context.Canceled) {
-					t.err <- t.ctx.Err()
 					Logger.Error(t.ctx.Err())
 				}
 				return
@@ -310,7 +304,6 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 				}).Result()
 
 				if err != nil {
-					t.err <- fmt.Errorf("XReadGroupErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XReadGroupErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
@@ -342,7 +335,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
 				Logger.Error(t.ctx.Err())
 			}
 			return
@@ -359,7 +351,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 					// Count:  10,
 				}).Result()
 				if err != nil && err != redis.Nil {
-					t.err <- fmt.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					break
 				}
@@ -377,7 +368,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 							Messages: []string{v.ID},
 						}).Result()
 						if err != nil && err != redis.Nil {
-							t.err <- fmt.Errorf("XClaimErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 							Logger.Errorf("XClaimErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 							continue
 						}
@@ -419,7 +409,6 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 			return
 		case <-t.ctx.Done():
 			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
 				Logger.Error(t.ctx.Err())
 			}
 			return
@@ -449,20 +438,17 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 				result.Group = group
 				// Successfully consumed data, stored in `string`
 				if err := t.logJob.saveLog(t.ctx, result); err != nil {
-					t.err <- err
 					Logger.Error(err)
 					continue
 				}
 
 				// `stream` confirmation message
 				if err := t.client.XAck(t.ctx, base.MakeStreamKey(group, msg.Stream), group, vm.ID).Err(); err != nil {
-					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
 				// delete data from `stream`
 				if err := t.client.XDel(t.ctx, base.MakeStreamKey(group, msg.Stream), vm.ID).Err(); err != nil {
-					t.err <- fmt.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
@@ -479,23 +465,6 @@ func (t *RedisBroker) close() error {
 		close(t.stop)
 	}
 	return t.client.Close()
-}
-
-// Error
-//
-//	@Description:
-//
-// this function can't get errors always,need improve
-//
-//	@receiver t
-//	@return error
-func (t *RedisBroker) Error() error {
-	select {
-	case err := <-t.err:
-		return err
-	default:
-		return nil
-	}
 }
 
 func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
