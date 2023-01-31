@@ -48,11 +48,9 @@ import (
 	"sync"
 	"time"
 
-	"beanq/helper/file"
+	"beanq/helper/logger"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
-
-	"github.com/labstack/gommon/log"
 )
 
 type pubClient struct {
@@ -70,22 +68,14 @@ var (
 func NewPublisher() *pubClient {
 	beanqPublisherOnce.Do(func() {
 		initEnv()
-		// Initialize the beanq consumer log
-		Logger = log.New(Config.Queue.Redis.Prefix)
 
+		param := make([]logger.LoggerInfoFun, 0)
 		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
 		if Config.Queue.DebugLog.Path != "" {
-			if file, err := file.OpenFile(Config.Queue.DebugLog.Path); err != nil {
-				Logger.Errorf("Unable to open log file: %v", err)
-				beanqPublisher = nil
-				return
-			} else {
-				Logger.SetOutput(file)
-			}
+			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
-
-		// Set the default log level as DEBUG.
-		Logger.SetLevel(log.DEBUG)
+		// Initialize the beanq consumer log
+		Logger = logger.InitLogger(param...)
 
 		if Config.Queue.Driver == "redis" {
 			beanqPublisher = &pubClient{

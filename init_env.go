@@ -28,8 +28,8 @@ import (
 	"runtime"
 	"time"
 
-	"beanq/helper/logger"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 type BeanqConfig struct {
@@ -62,7 +62,7 @@ type BeanqConfig struct {
 }
 
 // This is a global variable to hold the debug logger so that we can log data from anywhere.
-var Logger logger.Logger
+var Logger *zap.Logger
 
 // Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config BeanqConfig

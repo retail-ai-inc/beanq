@@ -33,6 +33,7 @@ import (
 	"beanq/internal/options"
 	"github.com/go-redis/redis/v8"
 	"github.com/panjf2000/ants/v2"
+	"go.uber.org/zap"
 )
 
 type scheduleJobI interface {
@@ -71,7 +72,7 @@ var defaultScheduleJobConfig = struct {
 func newScheduleJob(client *redis.Client) *scheduleJob {
 	pool, err := ants.NewPool(defaultScheduleJobConfig.poolSize, ants.WithPreAlloc(true))
 	if err != nil {
-		Logger.Error(err)
+		Logger.Error("ants pool err", zap.Error(err))
 		return nil
 	}
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool}
@@ -111,7 +112,7 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 		}
 
 		if err := t.pool.Submit(fun); err != nil {
-			Logger.Error(err)
+			Logger.Error("poll list err ", zap.Error(err))
 			continue
 		}
 	}
@@ -126,7 +127,7 @@ func (t *scheduleJob) pollList(ctx context.Context, client *redis.Client, key st
 			// get a data from `list` header
 			cmd := client.BLPop(ctx, defaultScheduleJobConfig.delayJobTicker, key)
 			if cmd.Err() != nil && cmd.Err() != redis.Nil {
-				Logger.Error(cmd.Err())
+				Logger.Error("blpop err", zap.Error(cmd.Err()))
 				continue
 			}
 			vals := cmd.Val()
@@ -166,7 +167,7 @@ func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals string) 
 	}
 	// begin to execute the task
 	if err := doTask(ctx, t.client, key, vals); err != nil {
-		Logger.Error(err)
+		Logger.Error("delay job err", zap.Error(err))
 		return
 	}
 }
@@ -204,7 +205,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 		key := base.MakeZSetKey(consumer.Group, consumer.Queue)
 		cmd := t.client.ZRevRangeByScore(ctx, key, zRangeBy)
 		if cmd.Err() != nil {
-			Logger.Error(cmd.Err())
+			Logger.Error("ZRevRangeByScore err", zap.Error(cmd.Err()))
 			continue
 		}
 		val := cmd.Val()
@@ -219,7 +220,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 			t.doConsumeZset(ctx, val, newConsumer)
 		}
 		if err := t.pool.Submit(fun); err != nil {
-			Logger.Error(err)
+			Logger.Error("consume zset err", zap.Error(err))
 			continue
 		}
 	}
@@ -259,7 +260,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 	// begin to execute consumer's datas
 	for _, vv := range vals {
 		if err := doTask(ctx, vv, consumer); err != nil {
-			Logger.Error(err)
+			Logger.Error("consumer err", zap.Error(err))
 			continue
 		}
 	}
