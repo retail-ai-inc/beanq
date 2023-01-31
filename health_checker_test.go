@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"beanq/internal/driver"
 	opt "beanq/internal/options"
 	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cast"
@@ -36,7 +35,7 @@ func init() {
 }
 func TestStart(t *testing.T) {
 	ctx := context.Background()
-	check := newHealthCheck(driver.NewRdb(optionParameter.RedisOptions))
+	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
 	err := check.start(ctx)
 	if err != nil {
 		t.Fatal(err.Error())
