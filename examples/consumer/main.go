@@ -5,19 +5,19 @@ import (
 )
 
 func main() {
-	// registe consumer
+	// register consumer
 	csm := beanq.NewConsumer()
-	// registe normal consumer
+	// register normal consumer
 	csm.Register("g2", "ch2", func(task *beanq.Task) error {
-		//todo:logic
+		// TODO:logic
 		beanq.Logger.Info(task.Payload())
 		return nil
 	})
-	// registe delay consumer
+	// register delay consumer
 	csm.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
 		beanq.Logger.Info(task.Payload())
 		return nil
 	})
-	// begin to consume informations
+	// begin to consume information
 	csm.StartConsumer()
 }

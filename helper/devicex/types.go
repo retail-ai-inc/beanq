@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package devicex
-// @Description:
 package devicex
 
 type devMemory struct {
@@ -31,16 +29,19 @@ type devMemory struct {
 	UsedPercent float64 `json:"usedPercent"`
 	Free        uint64  `json:"free"`
 }
+
 type devCpu struct {
 	Percent   float64 `json:"percent"`
 	CoreCount int     `json:"coreCount"`
 }
+
 type devDisk struct {
 	Name           string  `json:"name"`
 	AvailableBytes uint64  `json:"availableBytes"`
 	UsageBytes     uint64  `json:"usageBytes"`
 	UsageRatio     float64 `json:"usageRatio"`
 }
+
 type devNet struct {
 	InterfacesName string `json:"interfacesName"`
 	Mac            string `json:"mac"`

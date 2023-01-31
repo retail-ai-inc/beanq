@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -80,25 +78,11 @@ func newScheduleJob(client *redis.Client) *scheduleJob {
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
-
 	go t.delayJobs(ctx, consumers)
 	go t.consume(ctx, consumers)
 }
 
-// enqueue
-//
-//	@Description:
-//
-// publish []byte data to zset
-//
-//	@receiver t
-//	@param ctx
-//	@param zsetStr
-//	@param task
-//	@param opt
-//	@return error
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
-
 	if task == nil {
 		return fmt.Errorf("values can't empty")
 	}
@@ -118,18 +102,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, o
 	return nil
 }
 
-// delayJobs
-//
-//	@Description:
-//
-// Poll `list`
-//
-//	@receiver t
-//	@param ctx
-//	@param consumers
-
 func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
-
 	for _, consumer := range consumers {
 		key := base.MakeListKey(consumer.Group, consumer.Queue)
 
@@ -144,7 +117,6 @@ func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandle
 	}
 }
 func (t *scheduleJob) pollList(ctx context.Context, client *redis.Client, key string) {
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -165,6 +137,7 @@ func (t *scheduleJob) pollList(ctx context.Context, client *redis.Client, key st
 		}
 	}
 }
+
 func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals string) {
 	// declare delayTask function
 	doTask := func(ctx context.Context, client *redis.Client, key, val string) error {
@@ -196,18 +169,8 @@ func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals string) 
 		Logger.Error(err)
 		return
 	}
-
 }
 
-// consume
-//
-//	@Description:
-//
-// consume data
-//
-//	@receiver t
-//	@param ctx
-//	@param consumers
 func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(defaultScheduleJobConfig.consumeTicker)
 	defer func() {
@@ -225,15 +188,6 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 	}
 }
 
-// doConsume
-//
-//	@Description:
-//
-// Get data from `zset`, through score attribute
-//
-//	@receiver t
-//	@param ctx
-//	@param consumers
 func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandler) {
 
 	var wg sync.WaitGroup
@@ -272,14 +226,6 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 	wg.Wait()
 }
 
-// doConsumeZset
-//
-//	@Description:
-//	Consumption `zset` data
-//	@receiver t
-//	@param ctx
-//	@param vals
-//	@param consumer
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
@@ -291,7 +237,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		if executeTime.Before(time.Now()) {
 			flag = true
 		}
-		// if need to consume now,then send data to `stream`
+		// if you need to consume now,then send data to `stream`
 		if flag {
 			if err := t.sendToStream(ctx, task); err != nil {
 				return err
@@ -317,21 +263,9 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 			continue
 		}
 	}
-
 }
 
-// sendToStream
-//
-//	@Description:
-//
-// send datas to stream
-//
-//	@receiver t
-//	@param ctx
-//	@param task
-//	@return error
 func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
-
 	queue := task.Queue()
 	maxLen := task.MaxLen()
 
@@ -347,5 +281,4 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 	}
 	cmd := t.client.XAdd(ctx, xAddArgs)
 	return cmd.Err()
-
 }

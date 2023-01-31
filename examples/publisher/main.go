@@ -17,11 +17,7 @@ func main() {
 	pubDelayInfo()
 }
 
-// pubOneInfo
-//
-//	@Description:
 func pubOneInfo() {
-
 	// msg can struct or map
 	msg := struct {
 		Id   int
@@ -43,12 +39,8 @@ func pubOneInfo() {
 
 	// publish information
 	fmt.Printf("SendMsgs：%+v \n", task)
-
 }
 
-// pubMoreInfo
-//
-//	@Description:
 func pubMoreInfo() {
 	pub := beanq.NewPublisher()
 	m := make(map[string]string)
@@ -71,9 +63,6 @@ func pubMoreInfo() {
 	defer pub.Close()
 }
 
-// pubDelayInfo
-//
-//	@Description:
 func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 

@@ -19,6 +19,7 @@
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 // EXAMPLE:
 /*
 	msg := struct {
@@ -40,8 +41,6 @@
 	defer pub.Close()
 */
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -69,7 +68,6 @@ var (
 )
 
 func NewPublisher() *pubClient {
-
 	beanqPublisherOnce.Do(func() {
 		initEnv()
 		// Initialize the beanq consumer log
@@ -103,19 +101,7 @@ func NewPublisher() *pubClient {
 	return beanqPublisher
 }
 
-// PublishWithContext
-//
-//	@Description:
-//
-// publish jobs
-//
-//	@receiver t
-//	@param ctx
-//	@param task
-//	@param option
-//	@return error
 func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) error {
-
 	opts, err := opt.ComposeOptions(option...)
 	if err != nil {
 		return err
@@ -129,46 +115,17 @@ func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option .
 	task.Values["executeTime"] = opts.ExecuteTime
 
 	return t.broker.enqueue(ctx, base.MakeZSetKey(opts.Group, opts.Queue), task, opts)
-
 }
 
-// DelayPublish
-//
-//	@Description:
-//
-// publish delay job
-//
-//	@receiver t
-//	@param task
-//	@param delayTime
-//	@param option
-//	@return error
 func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {
 	option = append(option, opt.ExecuteTime(delayTime))
 	return t.Publish(task, option...)
 }
 
-// Publish
-//
-//	@Description:
-//
-// publish job
-//
-//	@receiver t
-//	@param task
-//	@param option
-//	@return error
 func (t *pubClient) Publish(task *Task, option ...opt.OptionI) error {
-
 	return t.PublishWithContext(context.Background(), task, option...)
-
 }
 
-// Close
-//
-//	@Description:
-//	@receiver t
-//	@return error
 func (t *pubClient) Close() error {
 	return t.broker.close()
 }

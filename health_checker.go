@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -45,7 +43,6 @@ func newHealthCheck(client *redis.Client) *healthCheck {
 }
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
-
 	key := "health_checker"
 	var str string
 
@@ -74,18 +71,7 @@ func (t *healthCheck) start(ctx context.Context) (err error) {
 // https://redis.io/commands/info/
 type redisServerInfo map[string]map[string]any
 
-// info
-//
-//	@Description:
-//
-// redis server info
-//
-//	@receiver t
-//	@param ctx
-//	@return redisServerInfo
-//	@return error
 func (t *healthCheck) info(ctx context.Context) (redisServerInfo, error) {
-
 	cmd := t.client.Info(ctx)
 	if cmd.Err() != nil {
 		return nil, cmd.Err()
@@ -138,15 +124,6 @@ type RedisServerInfoStruct struct {
 	} `json:"cpu"`
 }
 
-// toStruct
-//
-//	@Description:
-//
-// map to struct
-//
-//	@receiver info
-//	@return *RedisServerInfoStruct
-//	@return error
 func (info redisServerInfo) toStruct() (*RedisServerInfoStruct, error) {
 	b, err := json.Marshal(&info)
 	if err != nil {
@@ -159,14 +136,6 @@ func (info redisServerInfo) toStruct() (*RedisServerInfoStruct, error) {
 	return &data, nil
 }
 
-// toHealthData
-//
-//	@Description:
-//
-// health checker data
-//
-//	@receiver info
-//	@return map[string]map[string]any
 func (info redisServerInfo) toHealthData() map[string]map[string]any {
 
 	data := make(map[string]map[string]any, 0)

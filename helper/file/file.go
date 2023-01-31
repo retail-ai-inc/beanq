@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package file
-// @Description:
 package file
 
 import (
@@ -29,7 +27,7 @@ import (
 	"path/filepath"
 )
 
-// OpenFile opens and return the file, if doesn't exist, create it, or append to the file with the directory.
+// OpenFile opens and return the file, if it doesn't exist, create it, or append to the file with the directory.
 func OpenFile(path string) (*os.File, error) {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {

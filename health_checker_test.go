@@ -24,6 +24,7 @@ func init() {
 		},
 	}
 }
+
 func TestStart(t *testing.T) {
 	ctx := context.Background()
 	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
@@ -32,6 +33,7 @@ func TestStart(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 }
+
 func TestTest(t *testing.T) {
 	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
 	info, err := check.info(context.Background())

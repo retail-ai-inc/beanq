@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -64,7 +62,6 @@ type RedisBroker struct {
 var _ Broker = new(RedisBroker)
 
 func NewRedisBroker(config BeanqConfig) *RedisBroker {
-
 	client := redis.NewClient(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
@@ -91,20 +88,7 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 	}
 }
 
-// enqueue
-//
-//	@Description:
-//
-// Publisher
-//
-//	@receiver t
-//	@param ctx
-//	@param stream
-//	@param task
-//	@param opts
-//	@return error
 func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) error {
-
 	if stream == "" || task == nil {
 		return fmt.Errorf("stream or values can't empty")
 	}
@@ -114,15 +98,6 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 	return nil
 }
 
-// start
-//
-//	@Description:
-//
-// Consumer
-//
-//	@receiver t
-//	@param ctx
-//	@param consumers
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// it is useless
 	p, _ := ants.NewPool(4)
@@ -178,11 +153,6 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	}
 }
 
-// healthCheckerStart
-// Get the current node information every 10 seconds
-//
-//	@Description:
-//	@receiver t
 func (t *RedisBroker) healthCheckerStart() {
 
 	ticker := time.NewTicker(10 * time.Second)
@@ -206,14 +176,6 @@ func (t *RedisBroker) healthCheckerStart() {
 	}
 }
 
-// worker
-//
-//	@Description:
-//
-// Consume data in stream
-//
-//	@receiver t
-//	@param consumers
 func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 
 	workers := make(chan struct{}, t.opts.MinWorkers)
@@ -238,13 +200,6 @@ func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
 	}
 }
 
-// waitSignal
-//
-//	@Description:
-//
-// handle signals
-//
-//	@receiver t
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGHUP)
@@ -259,8 +214,8 @@ func (t *RedisBroker) waitSignal() {
 		}
 	}
 }
-func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
 
+func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
 	ch, err := t.readGroups(handler.Queue, handler.Group, int64(t.opts.MinWorkers))
 
 	if err != nil {
@@ -284,7 +239,6 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 	consumer := uuid.New().String()
 	ch := make(chan *redis.XStream)
 	go func() {
-
 		for {
 			select {
 			case <-t.done:
@@ -320,12 +274,7 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 	return ch, nil
 }
 
-// claim
 // Please refer to http://www.redis.cn/commands/xclaim.html
-//
-//	@Description:
-//	@receiver t
-//	@param consumers
 func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
@@ -385,14 +334,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	}
 }
 
-// consumer
-//
-//	@Description:
-//
-//	@receiver t
-//	@param f
-//	@param group
-//	@param ch
 func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStream) {
 	info := SuccessInfo
 	result := &ConsumerResult{

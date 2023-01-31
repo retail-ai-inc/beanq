@@ -14,14 +14,7 @@ import (
 	"github.com/spf13/cast"
 )
 
-/*
-  - TestPublishOne
-  - @Description:
-    publish one msg
-  - @param t
-*/
 func TestPublishOne(t *testing.T) {
-
 	msg := struct {
 		Id   int
 		Info string
@@ -42,12 +35,6 @@ func TestPublishOne(t *testing.T) {
 	Logger.Info(task)
 }
 
-/*
-  - TestPublish
-  - @Description:
-    publisher
-  - @param t
-*/
 func TestPublishMore(t *testing.T) {
 	pub := NewPublisher()
 
@@ -66,12 +53,6 @@ func TestPublishMore(t *testing.T) {
 	t.Fatal(pub.Close())
 }
 
-/*
-  - TestDelayPublish
-  - @Description:
-    publish multiple schedule msgs
-  - @param t
-*/
 func TestDelayPublish(t *testing.T) {
 	pub := NewPublisher()
 

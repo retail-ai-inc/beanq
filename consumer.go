@@ -19,21 +19,19 @@
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-// registe consumer
+// register consumer
 
 // EXAMPLE:
 /*
 	csm := beanq.NewConsumer()
 	csm.Register("group_name", "queue_name", func(task *beanq.Task) error {
-		//todo:logic
+		// TODO:logic
 		beanq.Logger.Info(task.Payload())
 		return nil
 	})
 	csm.StartConsumer()
 */
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
