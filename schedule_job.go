@@ -24,7 +24,7 @@ package beanq
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync"
 	"time"
 
@@ -85,7 +85,7 @@ func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
 	if task == nil {
-		return fmt.Errorf("values can't empty")
+		return errors.New("values can't empty")
 	}
 
 	bt, err := json.Marshal(task.Values)
@@ -104,8 +104,9 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, o
 }
 
 func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
+	key := ""
 	for _, consumer := range consumers {
-		key := base.MakeListKey(consumer.Group, consumer.Queue)
+		key = base.MakeListKey(consumer.Group, consumer.Queue)
 
 		fun := func() {
 			t.pollList(ctx, t.client, key)
