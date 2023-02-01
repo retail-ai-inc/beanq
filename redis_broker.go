@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -39,7 +38,6 @@ import (
 	opt "beanq/internal/options"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
-	"github.com/panjf2000/ants/v2"
 )
 
 type Broker interface {
@@ -51,14 +49,12 @@ type Broker interface {
 type RedisBroker struct {
 	client      *redis.Client
 	done, stop  chan struct{}
-	done1       chan string
 	healthCheck healthCheckI
 	scheduleJob scheduleJobI
 	logJob      logJobI
 	opts        *opt.Options
 	wg          *sync.WaitGroup
 	once        *sync.Once
-	pool        *ants.Pool
 }
 
 var _ Broker = new(RedisBroker)
@@ -76,14 +72,9 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		MinIdleConns: config.Queue.Redis.MinIdleConnections,
 		PoolTimeout:  config.Queue.Redis.PoolTimeout,
 	})
-	pool, err := ants.NewPool(10)
-	if err != nil {
-		log.Fatalln(err)
-	}
 	return &RedisBroker{
 		client:      client,
 		done:        make(chan struct{}),
-		done1:       make(chan string),
 		stop:        make(chan struct{}),
 		healthCheck: newHealthCheck(client),
 		scheduleJob: newScheduleJob(client),
@@ -91,7 +82,6 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		opts:        nil,
 		wg:          &sync.WaitGroup{},
 		once:        &sync.Once{},
-		pool:        pool,
 	}
 }
 
@@ -113,12 +103,14 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-
+	defer cancel()
+	// consume data
 	t.worker(ctx, consumers)
-	// consumer schedule jobs
+	// check information
 	t.scheduleJob.start(ctx, consumers)
 	// check client health
 	t.healthCheckerStart(ctx)
+	// monitor signal
 	t.waitSignal()
 
 	// REFERENCE: https://redis.io/commands/xclaim/
@@ -130,7 +122,6 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	case <-ctx.Done():
 		return
 	case <-t.done:
-		cancel()
 		Logger.Info("----DONE----")
 		return
 	}

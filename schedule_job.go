@@ -191,7 +191,6 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 
 func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandler) {
 
-	var wg sync.WaitGroup
 	var newConsumer *ConsumerHandler
 
 	zRangeBy := &redis.ZRangeBy{
@@ -213,18 +212,9 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 			continue
 		}
 
-		wg.Add(1)
 		newConsumer = consumer
-		fun := func() {
-			defer wg.Done()
-			t.doConsumeZset(ctx, val, newConsumer)
-		}
-		if err := t.pool.Submit(fun); err != nil {
-			Logger.Error(err)
-			continue
-		}
+		t.doConsumeZset(ctx, val, newConsumer)
 	}
-	wg.Wait()
 }
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
@@ -247,7 +237,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		// If the message is delayed, it will be pushed to the `list` header
 		if !flag {
 			// if executeTime after now
-			if err := t.client.LPush(ctx, base.MakeListKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
+			if err := t.client.RPush(ctx, base.MakeListKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
 				return err
 			}
 		}
