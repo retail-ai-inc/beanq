@@ -42,3 +42,12 @@ func TestTest(t *testing.T) {
 	}
 	t.Fatalf("info data:%+v \n", info)
 }
+func TestHealthData(t *testing.T) {
+	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
+	info, err := check.info(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := info.toHealthData()
+	t.Fatalf("info data:%+v \n", data)
+}
