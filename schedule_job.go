@@ -191,8 +191,6 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 
 func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandler) {
 
-	var newConsumer *ConsumerHandler
-
 	zRangeBy := &redis.ZRangeBy{
 		Min:    defaultScheduleJobConfig.scoreMin,
 		Max:    defaultScheduleJobConfig.scoreMax,
@@ -211,9 +209,8 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 		if len(val) <= 0 {
 			continue
 		}
-
-		newConsumer = consumer
-		t.doConsumeZset(ctx, val, newConsumer)
+		
+		t.doConsumeZset(ctx, val, consumer)
 	}
 }
 
