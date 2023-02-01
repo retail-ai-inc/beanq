@@ -35,11 +35,13 @@ package beanq
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"beanq/helper/file"
 	opt "beanq/internal/options"
 	"github.com/labstack/gommon/log"
+	"github.com/panjf2000/ants/v2"
 )
 
 type ConsumerHandler struct {
@@ -101,10 +103,18 @@ func NewConsumer() *Consumer {
 		if Config.Queue.JobMaxRetries != 0 {
 			opts.JobMaxRetry = Config.Queue.JobMaxRetries
 		}
+		if Config.Queue.PoolSize != 0 {
+			opts.PoolSize = Config.Queue.PoolSize
+		}
 
+		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+		if err != nil {
+			Logger.Error(err)
+			os.Exit(1)
+		}
 		if Config.Queue.Driver == "redis" {
 			beanqConsumer = &Consumer{
-				broker: NewRedisBroker(Config),
+				broker: NewRedisBroker(pool, Config),
 				opts:   opts,
 				mu:     sync.RWMutex{},
 			}

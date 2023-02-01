@@ -45,12 +45,14 @@ package beanq
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
 	"beanq/helper/file"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
+	"github.com/panjf2000/ants/v2"
 
 	"github.com/labstack/gommon/log"
 )
@@ -68,6 +70,8 @@ var (
 )
 
 func NewPublisher() *pubClient {
+	opts := opt.DefaultOptions
+
 	beanqPublisherOnce.Do(func() {
 		initEnv()
 		// Initialize the beanq consumer log
@@ -83,13 +87,21 @@ func NewPublisher() *pubClient {
 				Logger.SetOutput(file)
 			}
 		}
+		if Config.Queue.PoolSize != 0 {
+			opts.PoolSize = Config.Queue.PoolSize
+		}
 
+		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+		if err != nil {
+			Logger.Error(err)
+			os.Exit(1)
+		}
 		// Set the default log level as DEBUG.
 		Logger.SetLevel(log.DEBUG)
 
 		if Config.Queue.Driver == "redis" {
 			beanqPublisher = &pubClient{
-				broker: NewRedisBroker(Config),
+				broker: NewRedisBroker(pool, Config),
 				wg:     nil,
 			}
 		} else {

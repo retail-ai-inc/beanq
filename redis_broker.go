@@ -38,6 +38,7 @@ import (
 	opt "beanq/internal/options"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/panjf2000/ants/v2"
 )
 
 type Broker interface {
@@ -55,11 +56,12 @@ type RedisBroker struct {
 	opts        *opt.Options
 	wg          *sync.WaitGroup
 	once        *sync.Once
+	pool        *ants.Pool
 }
 
 var _ Broker = new(RedisBroker)
 
-func NewRedisBroker(config BeanqConfig) *RedisBroker {
+func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 	client := redis.NewClient(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
@@ -77,11 +79,12 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		done:        make(chan struct{}),
 		stop:        make(chan struct{}),
 		healthCheck: newHealthCheck(client),
-		scheduleJob: newScheduleJob(client),
+		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client),
 		opts:        nil,
 		wg:          &sync.WaitGroup{},
 		once:        &sync.Once{},
+		pool:        pool,
 	}
 }
 
@@ -170,7 +173,12 @@ func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) 
 		}
 
 		workers <- struct{}{}
-		go t.work(ctx, v, workers)
+		if err := t.pool.Submit(func() {
+			t.work(ctx, v, workers)
+		}); err != nil {
+			Logger.Error(err)
+			continue
+		}
 	}
 }
 

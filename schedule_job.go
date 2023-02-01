@@ -50,8 +50,6 @@ var _ scheduleJobI = (*scheduleJob)(nil)
 
 // schedule job config
 var defaultScheduleJobConfig = struct {
-	// ants pool size
-	poolSize int
 	// zset attribute score,default 0-10
 	scoreMin, scoreMax string
 	// zset data limit
@@ -59,7 +57,6 @@ var defaultScheduleJobConfig = struct {
 	// delayJob and consumer executeTime
 	delayJobTicker, consumeTicker time.Duration
 }{
-	poolSize:       10,
 	scoreMin:       "0",
 	scoreMax:       "10",
 	offset:         0,
@@ -68,12 +65,7 @@ var defaultScheduleJobConfig = struct {
 	consumeTicker:  80 * time.Millisecond,
 }
 
-func newScheduleJob(client *redis.Client) *scheduleJob {
-	pool, err := ants.NewPool(defaultScheduleJobConfig.poolSize, ants.WithPreAlloc(true))
-	if err != nil {
-		Logger.Error(err)
-		return nil
-	}
+func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool}
 }
 
@@ -209,7 +201,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 		if len(val) <= 0 {
 			continue
 		}
-		
+
 		t.doConsumeZset(ctx, val, consumer)
 	}
 }
