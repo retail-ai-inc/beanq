@@ -106,7 +106,11 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
-	defer cancel()
+	defer func() {
+		defer t.pool.Release()
+		defer cancel()
+	}()
+
 	// consume data
 	t.worker(ctx, consumers)
 	// check information
