@@ -112,9 +112,13 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// check information
 	t.scheduleJob.start(ctx, consumers)
 	// check client health
-	t.healthCheckerStart(ctx)
+	if err := t.healthCheckerStart(ctx); err != nil {
+		Logger.Error(err)
+	}
 	// monitor signal
-	t.waitSignal()
+	if err := t.waitSignal(); err != nil {
+		Logger.Error(err)
+	}
 
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
@@ -130,10 +134,9 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	}
 }
 
-func (t *RedisBroker) healthCheckerStart(ctx context.Context) {
+func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 	ticker := time.NewTicker(10 * time.Second)
-
-	go func(ctx context.Context, ticker *time.Ticker) {
+	if err := t.pool.Submit(func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -149,8 +152,10 @@ func (t *RedisBroker) healthCheckerStart(ctx context.Context) {
 				}
 			}
 		}
-	}(ctx, ticker)
-
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) {
@@ -182,8 +187,8 @@ func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) 
 	}
 }
 
-func (t *RedisBroker) waitSignal() {
-	go func() {
+func (t *RedisBroker) waitSignal() error {
+	return t.pool.Submit(func() {
 		sigs := make(chan os.Signal)
 		signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGHUP)
 		select {
@@ -193,12 +198,13 @@ func (t *RedisBroker) waitSignal() {
 				t.once.Do(func() {
 					close(t.stop)
 					t.done <- struct{}{}
+					t.pool.Release()
 				})
 				return
 			}
 		}
-	}()
 
+	})
 }
 
 func (t *RedisBroker) work(ctx context.Context, handler *ConsumerHandler, workers chan struct{}) {
@@ -224,7 +230,8 @@ func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) erro
 func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count int64) (<-chan *redis.XStream, error) {
 	consumer := uuid.New().String()
 	ch := make(chan *redis.XStream)
-	go func() {
+
+	err := t.pool.Submit(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -254,7 +261,11 @@ func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count
 				}
 			}
 		}
-	}()
+
+	})
+	if err != nil {
+		return nil, err
+	}
 	return ch, nil
 }
 

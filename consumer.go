@@ -112,6 +112,7 @@ func NewConsumer() *Consumer {
 			Logger.Error(err)
 			os.Exit(1)
 		}
+
 		if Config.Queue.Driver == "redis" {
 			beanqConsumer = &Consumer{
 				broker: NewRedisBroker(pool, Config),

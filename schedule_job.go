@@ -70,8 +70,12 @@ func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
-	go t.delayJobs(ctx, consumers)
-	go t.consume(ctx, consumers)
+	t.pool.Submit(func() {
+		t.delayJobs(ctx, consumers)
+	})
+	t.pool.Submit(func() {
+		t.consume(ctx, consumers)
+	})
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
