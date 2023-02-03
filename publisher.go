@@ -75,7 +75,7 @@ func NewPublisher() *pubClient {
 			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
 		// Initialize the beanq consumer log
-		Logger = logger.InitLogger(param...)
+		// Logger = logger.NewZapLog(param...)
 
 		if Config.Queue.Driver == "redis" {
 			beanqPublisher = &pubClient{

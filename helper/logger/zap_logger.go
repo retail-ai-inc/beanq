@@ -93,7 +93,7 @@ func InitLogger(funs ...LoggerInfoFun) *zap.Logger {
 
 	infoFile := zapcore.NewCore(encoder(), zapcore.NewMultiWriteSyncer(arr...), lowerPriority)
 	errFile := zapcore.NewCore(encoder(), zapcore.NewMultiWriteSyncer(highArr...), highPriority)
-	logger := zap.New(zapcore.NewTee(infoFile, errFile), zap.WithCaller(true))
+	logger := zap.New(zapcore.NewTee(infoFile, errFile), zap.AddCaller())
 	defer logger.Sync()
 	return logger
 }

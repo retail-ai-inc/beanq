@@ -121,7 +121,6 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
 	// go t.claim(consumers)
-
 	Logger.Info("----START----")
 	select {
 	case <-ctx.Done():
