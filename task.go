@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -158,13 +156,7 @@ func NewTask(payload []byte, opt ...TaskOpt) *Task {
 
 type DoConsumer func(*Task) error
 
-// jsonToTask
-//
-//	@Description:
-//	@param data
-//	@return *Task
 func jsonToTask(data []byte) *Task {
-
 	jn := json.Json
 	executeTimeStr := jn.Get(data, "executeTime").ToString()
 	task := Task{
@@ -191,22 +183,7 @@ type BqMessage struct {
 	Values map[string]interface{}
 }
 
-// openTaskMap
-//
-//	@Description:
-//	@param msg
-//	@param streamStr
-//	@return payload
-//	@return id
-//	@return stream
-//	@return addTime
-//	@return queue
-//	@return group
-//	@return executeTime
-//	@return retry
-//	@return maxLen
 func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64) {
-
 	id = msg.ID
 	stream = streamStr
 

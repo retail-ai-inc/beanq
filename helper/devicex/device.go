@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package devicex
-// @Description:
 package devicex
 
 import (
@@ -34,8 +32,6 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 )
 
-// DeviceI
-// @Description:
 type DeviceI interface {
 	Info() error
 }
@@ -45,8 +41,8 @@ var _ DeviceI = new(device)
 type device struct {
 	Memory devMemory `json:"memory"`
 	Cpu    devCpu    `json:"cpu"`
+	Net    devNet    `json:"net"`
 	// Disk   devDisk   `json:"disk"`
-	Net devNet `json:"net"`
 }
 
 var Device = new(device)
@@ -98,8 +94,6 @@ func (t *device) memory() error {
 }
 
 /*
-//backup
-
 	func (t *device) disk() error {
 		dk, err := disk.Partitions(false)
 		if err != nil {
@@ -130,6 +124,7 @@ func (t *device) memory() error {
 		return nil
 	}
 */
+
 func (t *device) net() error {
 	localIp, err := IpV4Addr()
 	if err != nil {

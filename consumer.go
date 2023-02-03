@@ -19,30 +19,29 @@
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-// registe consumer
 
 // EXAMPLE:
 /*
 	csm := beanq.NewConsumer()
 	csm.Register("group_name", "queue_name", func(task *beanq.Task) error {
-		//todo:logic
+		// TODO:logic
 		beanq.Logger.Info(task.Payload())
 		return nil
 	})
 	csm.StartConsumer()
 */
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
 	"context"
+	"os"
 	"sync"
 
 	"beanq/helper/file"
 	opt "beanq/internal/options"
 	"github.com/labstack/gommon/log"
+	"github.com/panjf2000/ants/v2"
 )
 
 type ConsumerHandler struct {
@@ -104,10 +103,19 @@ func NewConsumer() *Consumer {
 		if Config.Queue.JobMaxRetries != 0 {
 			opts.JobMaxRetry = Config.Queue.JobMaxRetries
 		}
+		if Config.Queue.PoolSize != 0 {
+			opts.PoolSize = Config.Queue.PoolSize
+		}
+
+		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+		if err != nil {
+			Logger.Error(err)
+			os.Exit(1)
+		}
 
 		if Config.Queue.Driver == "redis" {
 			beanqConsumer = &Consumer{
-				broker: NewRedisBroker(Config),
+				broker: NewRedisBroker(pool, Config),
 				opts:   opts,
 				mu:     sync.RWMutex{},
 			}

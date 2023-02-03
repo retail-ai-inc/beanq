@@ -8,7 +8,6 @@ import (
 )
 
 func TestRetry(t *testing.T) {
-
 	err := Retry(func() error {
 		fmt.Println("retry function body")
 		return errors.New("error")

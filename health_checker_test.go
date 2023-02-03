@@ -6,7 +6,6 @@ import (
 
 	opt "beanq/internal/options"
 	"github.com/go-redis/redis/v8"
-	"github.com/spf13/cast"
 )
 
 var (
@@ -18,21 +17,14 @@ var (
 func init() {
 	optionParameter = opt.Options{
 		RedisOptions: &redis.Options{
-			Addr:      Config.Queue.Redis.Host + ":" + cast.ToString(Config.Queue.Redis.Port),
-			Dialer:    nil,
-			OnConnect: nil,
-			Username:  "",
-			Password:  Config.Queue.Redis.Password,
-			DB:        Config.Queue.Redis.Database,
+			Addr:     "localhost:6381",
+			Username: "",
+			Password: "secret",
+			DB:       0,
 		},
-		KeepJobInQueue:           Config.Queue.KeepJobsInQueue,
-		KeepFailedJobsInHistory:  Config.Queue.KeepFailedJobsInHistory,
-		KeepSuccessJobsInHistory: Config.Queue.KeepSuccessJobsInHistory,
-		MinWorkers:               Config.Queue.MinWorkers,
-		JobMaxRetry:              Config.Queue.JobMaxRetries,
-		Prefix:                   Config.Queue.Redis.Prefix,
 	}
 }
+
 func TestStart(t *testing.T) {
 	ctx := context.Background()
 	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
@@ -40,4 +32,22 @@ func TestStart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
+}
+
+func TestTest(t *testing.T) {
+	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
+	info, err := check.info(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Fatalf("info data:%+v \n", info)
+}
+func TestHealthData(t *testing.T) {
+	check := newHealthCheck(redis.NewClient(optionParameter.RedisOptions))
+	info, err := check.info(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := info.toHealthData()
+	t.Fatalf("info data:%+v \n", data)
 }

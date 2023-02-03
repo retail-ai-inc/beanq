@@ -10,14 +10,7 @@ var (
 	queue = "ch"
 )
 
-/*
-  - TestConsumer
-  - @Description:
-    consumer
-  - @param t
-*/
 func TestConsumer(t *testing.T) {
-
 	csm := NewConsumer()
 	csm.Register("group-one", queue, func(task *Task) error {
 		Logger.Info(task.Payload())
@@ -28,16 +21,14 @@ func TestConsumer(t *testing.T) {
 		return nil
 	})
 	csm.StartConsumer()
-
 }
-func TestConsumerSingle(t *testing.T) {
 
+func TestConsumerSingle(t *testing.T) {
 	csm := NewConsumer()
 	csm.Register("g"+cast.ToString(1), "ch2", func(task *Task) error {
 		Logger.Info(task.Payload())
 		return nil
 	})
-
 	csm.StartConsumer()
 }
 
@@ -56,6 +47,5 @@ func TestConsumerMultiple(t *testing.T) {
 			return nil
 		})
 	}
-
 	csm.StartConsumer()
 }

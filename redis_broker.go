@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -51,21 +49,19 @@ type Broker interface {
 
 type RedisBroker struct {
 	client      *redis.Client
-	ctx         context.Context
 	done, stop  chan struct{}
-	err         chan error
 	healthCheck healthCheckI
 	scheduleJob scheduleJobI
 	logJob      logJobI
 	opts        *opt.Options
 	wg          *sync.WaitGroup
 	once        *sync.Once
+	pool        *ants.Pool
 }
 
 var _ Broker = new(RedisBroker)
 
-func NewRedisBroker(config BeanqConfig) *RedisBroker {
-
+func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 	client := redis.NewClient(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
@@ -80,33 +76,19 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 	})
 	return &RedisBroker{
 		client:      client,
-		ctx:         nil,
 		done:        make(chan struct{}),
 		stop:        make(chan struct{}),
-		err:         make(chan error, 1),
 		healthCheck: newHealthCheck(client),
-		scheduleJob: newScheduleJob(client),
+		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client),
 		opts:        nil,
 		wg:          &sync.WaitGroup{},
 		once:        &sync.Once{},
+		pool:        pool,
 	}
 }
 
-// enqueue
-//
-//	@Description:
-//
-// Publisher
-//
-//	@receiver t
-//	@param ctx
-//	@param stream
-//	@param task
-//	@param opts
-//	@return error
 func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) error {
-
 	if stream == "" || task == nil {
 		return fmt.Errorf("stream or values can't empty")
 	}
@@ -116,53 +98,29 @@ func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, op
 	return nil
 }
 
-// start
-//
-//	@Description:
-//
-// Consumer
-//
-//	@receiver t
-//	@param ctx
-//	@param consumers
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
-
-	p, _ := ants.NewPool(4)
-	defer p.Release()
 
 	if opts, ok := ctx.Value("options").(*opt.Options); ok {
 		t.opts = opts
 	}
 
 	var cancel context.CancelFunc
-	t.ctx, cancel = context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel = context.WithCancel(ctx)
+	defer func() {
+		defer t.pool.Release()
+		defer cancel()
+	}()
 
-	t.wg.Add(4)
-	if err := p.Submit(func() {
-		t.wg.Done()
-		t.worker(consumers)
-	}); err != nil {
-		Logger.Error(err)
-	}
-	// consumer schedule jobs
-	if err := p.Submit(func() {
-		t.wg.Done()
-		t.scheduleJob.start(t.ctx, consumers)
-	}); err != nil {
-		Logger.Error(err)
-	}
+	// consume data
+	t.worker(ctx, consumers)
+	// check information
+	t.scheduleJob.start(ctx, consumers)
 	// check client health
-	if err := p.Submit(func() {
-		t.wg.Done()
-		t.healthCheckerStart()
-	}); err != nil {
+	if err := t.healthCheckerStart(ctx); err != nil {
 		Logger.Error(err)
 	}
-	if err := p.Submit(func() {
-		t.wg.Done()
-		t.waitSignal()
-	}); err != nil {
+	// monitor signal
+	if err := t.waitSignal(); err != nil {
 		Logger.Error(err)
 	}
 
@@ -170,138 +128,123 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// monitor other stream pending
 	// go t.claim(consumers)
 
-	t.wg.Wait()
 	Logger.Info("----START----")
-	// catch errors
 	select {
+	case <-ctx.Done():
+		return
 	case <-t.done:
 		Logger.Info("----DONE----")
 		return
 	}
 }
 
-// healthCheckerStart
-// Get the current node information every 10 seconds
-//
-//	@Description:
-//	@receiver t
-func (t *RedisBroker) healthCheckerStart() {
-
+func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-t.done:
-			return
-		case <-t.ctx.Done():
-			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
-				Logger.Error(t.ctx.Err())
-			}
-			return
-		case <-ticker.C:
-			if err := t.healthCheck.start(t.ctx); err != nil {
-				t.err <- err
-				Logger.Error(err)
+	if err := t.pool.Submit(func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				if !errors.Is(ctx.Err(), context.Canceled) {
+					Logger.Error(ctx.Err())
+				}
 				return
+			case <-ticker.C:
+				if err := t.healthCheck.start(ctx); err != nil {
+					Logger.Error(err)
+					return
+				}
 			}
 		}
+	}); err != nil {
+		return err
 	}
+	return nil
 }
 
-// worker
-//
-//	@Description:
-//
-// Consume data in stream
-//
-//	@receiver t
-//	@param consumers
-func (t *RedisBroker) worker(consumers []*ConsumerHandler) {
+func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) {
 
 	workers := make(chan struct{}, t.opts.MinWorkers)
 
 	for _, v := range consumers {
 		// if has bound a group,then continue
-		result, err := t.client.XInfoGroups(t.ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
+		result, err := t.client.XInfoGroups(ctx, base.MakeStreamKey(v.Group, v.Queue)).Result()
 		if err != nil && err.Error() != "ERR no such key" {
 			Logger.Errorf("InfoGroupErr:%s", err.Error())
-			t.err <- err
 			continue
 		}
 
 		if len(result) < 1 {
-			if err := t.createGroup(v.Queue, v.Group); err != nil {
+			if err := t.createGroup(ctx, v.Queue, v.Group); err != nil {
 				Logger.Errorf("CreateGroupErr:%+s", err.Error())
-				t.err <- err
 				continue
 			}
 		}
 
 		workers <- struct{}{}
-		go t.work(v, workers)
+		if err := t.pool.Submit(func() {
+			t.work(ctx, v, workers)
+		}); err != nil {
+			Logger.Error(err)
+			continue
+		}
 	}
 }
 
-// waitSignal
-//
-//	@Description:
-//
-// handle signals
-//
-//	@receiver t
-func (t *RedisBroker) waitSignal() {
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
-	select {
-	case <-sigs:
-		t.once.Do(func() {
-			close(t.stop)
-			t.done <- struct{}{}
-		})
-		return
-	}
-}
-func (t *RedisBroker) work(handler *ConsumerHandler, workers chan struct{}) {
+func (t *RedisBroker) waitSignal() error {
+	return t.pool.Submit(func() {
+		sigs := make(chan os.Signal)
+		signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGHUP)
+		select {
+		case sig := <-sigs:
 
-	ch, err := t.readGroups(handler.Queue, handler.Group, int64(t.opts.MinWorkers))
+			if sig == syscall.SIGTERM || sig == syscall.SIGINT || sig == syscall.SIGSTOP || sig == syscall.SIGHUP {
+				t.once.Do(func() {
+					close(t.stop)
+					t.done <- struct{}{}
+					t.pool.Release()
+				})
+				return
+			}
+		}
+
+	})
+}
+
+func (t *RedisBroker) work(ctx context.Context, handler *ConsumerHandler, workers chan struct{}) {
+	ch, err := t.readGroups(ctx, handler.Queue, handler.Group, int64(t.opts.MinWorkers))
 
 	if err != nil {
-		t.err <- err
 		Logger.Error(err)
 		return
 	}
 
-	t.consumer(handler.ConsumerFun, handler.Group, ch)
+	t.consumer(ctx, handler.ConsumerFun, handler.Group, ch)
 	<-workers
 }
 
-func (t *RedisBroker) createGroup(queue, group string) error {
-	cmd := t.client.XGroupCreateMkStream(t.ctx, base.MakeStreamKey(group, queue), group, "0")
+func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) error {
+	cmd := t.client.XGroupCreateMkStream(ctx, base.MakeStreamKey(group, queue), group, "0")
 	if cmd.Err() != nil && cmd.Err().Error() != "BUSYGROUP Consumer Group name already exists" {
 		return cmd.Err()
 	}
 	return nil
 }
 
-func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redis.XStream, error) {
+func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count int64) (<-chan *redis.XStream, error) {
 	consumer := uuid.New().String()
 	ch := make(chan *redis.XStream)
-	go func() {
 
+	err := t.pool.Submit(func() {
 		for {
 			select {
-			case <-t.done:
-				return
-			case <-t.ctx.Done():
-				if !errors.Is(t.ctx.Err(), context.Canceled) {
-					t.err <- t.ctx.Err()
-					Logger.Error(t.ctx.Err())
+			case <-ctx.Done():
+				if !errors.Is(ctx.Err(), context.Canceled) {
+					Logger.Error(ctx.Err())
 				}
 				return
 			default:
-				streams, err := t.client.XReadGroup(t.ctx, &redis.XReadGroupArgs{
+				streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 					Group:    group,
 					Streams:  []string{base.MakeStreamKey(group, queue), ">"},
 					Consumer: consumer,
@@ -310,7 +253,6 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 				}).Result()
 
 				if err != nil {
-					t.err <- fmt.Errorf("XReadGroupErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XReadGroupErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
@@ -323,27 +265,23 @@ func (t *RedisBroker) readGroups(queue, group string, count int64) (<-chan *redi
 				}
 			}
 		}
-	}()
+
+	})
+	if err != nil {
+		return nil, err
+	}
 	return ch, nil
 }
 
-// claim
 // Please refer to http://www.redis.cn/commands/xclaim.html
-//
-//	@Description:
-//	@receiver t
-//	@param consumers
-func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
+func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-t.done:
-			return
-		case <-t.ctx.Done():
-			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
-				Logger.Error(t.ctx.Err())
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				Logger.Error(ctx.Err())
 			}
 			return
 		case <-ticker.C:
@@ -351,7 +289,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 			end := "+"
 
 			for _, consumer := range consumers {
-				res, err := t.client.XPendingExt(t.ctx, &redis.XPendingExtArgs{
+				res, err := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
 					Stream: base.MakeStreamKey(consumer.Group, consumer.Queue),
 					Group:  consumer.Group,
 					Start:  start,
@@ -359,7 +297,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 					// Count:  10,
 				}).Result()
 				if err != nil && err != redis.Nil {
-					t.err <- fmt.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					Logger.Errorf("XPendingErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					break
 				}
@@ -367,7 +304,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 
 					if v.Idle.Seconds() > 60 {
 
-						claims, err := t.client.XClaim(t.ctx, &redis.XClaimArgs{
+						claims, err := t.client.XClaim(ctx, &redis.XClaimArgs{
 
 							Stream:   base.MakeStreamKey(consumer.Group, consumer.Queue),
 							Group:    consumer.Group,
@@ -377,7 +314,6 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 							Messages: []string{v.ID},
 						}).Result()
 						if err != nil && err != redis.Nil {
-							t.err <- fmt.Errorf("XClaimErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 							Logger.Errorf("XClaimErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 							continue
 						}
@@ -386,7 +322,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 							Stream:   base.MakeStreamKey(consumer.Group, consumer.Queue),
 							Messages: claims,
 						}
-						t.consumer(consumer.ConsumerFun, consumer.Group, ch)
+						t.consumer(ctx, consumer.ConsumerFun, consumer.Group, ch)
 						close(ch)
 					}
 				}
@@ -395,15 +331,7 @@ func (t *RedisBroker) claim(consumers []*ConsumerHandler) {
 	}
 }
 
-// consumer
-//
-//	@Description:
-//
-//	@receiver t
-//	@param f
-//	@param group
-//	@param ch
-func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStream) {
+func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, ch <-chan *redis.XStream) {
 	info := SuccessInfo
 	result := &ConsumerResult{
 		Level:   InfoLevel,
@@ -414,13 +342,9 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 
 	for {
 		select {
-		case <-t.done:
-
-			return
-		case <-t.ctx.Done():
-			if !errors.Is(t.ctx.Err(), context.Canceled) {
-				t.err <- t.ctx.Err()
-				Logger.Error(t.ctx.Err())
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				Logger.Error(ctx.Err())
 			}
 			return
 		case msg := <-ch:
@@ -448,21 +372,18 @@ func (t *RedisBroker) consumer(f DoConsumer, group string, ch <-chan *redis.XStr
 				result.Queue = msg.Stream
 				result.Group = group
 				// Successfully consumed data, stored in `string`
-				if err := t.logJob.saveLog(t.ctx, result); err != nil {
-					t.err <- err
+				if err := t.logJob.saveLog(ctx, result); err != nil {
 					Logger.Error(err)
 					continue
 				}
 
 				// `stream` confirmation message
-				if err := t.client.XAck(t.ctx, base.MakeStreamKey(group, msg.Stream), group, vm.ID).Err(); err != nil {
-					t.err <- fmt.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+				if err := t.client.XAck(ctx, base.MakeStreamKey(group, msg.Stream), group, vm.ID).Err(); err != nil {
 					Logger.Errorf("XACKErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
 				// delete data from `stream`
-				if err := t.client.XDel(t.ctx, base.MakeStreamKey(group, msg.Stream), vm.ID).Err(); err != nil {
-					t.err <- fmt.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+				if err := t.client.XDel(ctx, base.MakeStreamKey(group, msg.Stream), vm.ID).Err(); err != nil {
 					Logger.Errorf("XdelErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 					continue
 				}
@@ -479,23 +400,6 @@ func (t *RedisBroker) close() error {
 		close(t.stop)
 	}
 	return t.client.Close()
-}
-
-// Error
-//
-//	@Description:
-//
-// this function can't get errors always,need improve
-//
-//	@receiver t
-//	@return error
-func (t *RedisBroker) Error() error {
-	select {
-	case err := <-t.err:
-		return err
-	default:
-		return nil
-	}
 }
 
 func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {

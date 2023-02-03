@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package options
-// @Description:
 package options
 
 import (
@@ -66,12 +64,6 @@ type (
 	executeTime    time.Time
 )
 
-// Queue
-// queue name
-//
-//	@Description:
-//	@param name
-//	@return OptionI
 func Queue(name string) OptionI {
 	return queueOption(name)
 }
@@ -88,12 +80,6 @@ func (queue queueOption) Value() any {
 	return string(queue)
 }
 
-// Retry
-// retry count
-//
-//	@Description:
-//	@param retries
-//	@return OptionI
 func Retry(retries int) OptionI {
 	if retries < 0 {
 		retries = 0
@@ -113,12 +99,6 @@ func (retry retryOption) Value() any {
 	return int(retry)
 }
 
-// Group
-// group name
-//
-//	@Description:
-//	@param name
-//	@return OptionI
 func Group(name string) OptionI {
 	return groupOption(name)
 }
@@ -135,11 +115,6 @@ func (group groupOption) Value() any {
 	return string(group)
 }
 
-// MaxLen
-//
-//	@Description:
-//	@param maxLen
-//	@return OptionI
 func MaxLen(maxLen int) OptionI {
 	if maxLen < 0 {
 		maxLen = 1000
@@ -159,12 +134,6 @@ func (ml maxLenOption) Value() any {
 	return int(ml)
 }
 
-// ExecuteTime
-// execute time
-//
-//	@Description:
-//	@param unixTime
-//	@return OptionI
 func ExecuteTime(unixTime time.Time) OptionI {
 	if unixTime.IsZero() {
 		unixTime = time.Now()
@@ -184,12 +153,6 @@ func (et executeTime) Value() any {
 	return time.Time(et)
 }
 
-// Priority
-// Priority attribute
-//
-//	@Description:
-//	@param priority
-//	@return OptionI
 func Priority(priority float64) OptionI {
 	if priority > 10 {
 		priority = 10
@@ -212,12 +175,6 @@ func (pri priorityOption) Value() any {
 	return float64(pri)
 }
 
-// ComposeOptions
-//
-//	@Description:
-//	@param options
-//	@return Option
-//	@return error
 func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
 		Priority:    DefaultOptions.Priority,
@@ -258,7 +215,7 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	return res, nil
 }
 
-// need more parameters
+// TODO: need more parameters
 type Result struct {
 	Id   string
 	Args []any
@@ -271,6 +228,7 @@ type Options struct {
 	KeepFailedJobsInHistory  time.Duration
 	KeepSuccessJobsInHistory time.Duration
 
+	PoolSize    int
 	MinWorkers  int
 	JobMaxRetry int
 	Prefix      string
@@ -289,6 +247,7 @@ var DefaultOptions = &Options{
 	KeepJobInQueue:           7 * 1440 * 60 * time.Second,
 	KeepFailedJobsInHistory:  7 * 1440 * 60 * time.Second,
 	KeepSuccessJobsInHistory: 7 * 1440 * 60 * time.Second,
+	PoolSize:                 20,
 	MinWorkers:               10,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",

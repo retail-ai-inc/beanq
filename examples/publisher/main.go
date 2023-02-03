@@ -17,11 +17,7 @@ func main() {
 	pubDelayInfo()
 }
 
-// pubOneInfo
-//
-//	@Description:
 func pubOneInfo() {
-
 	// msg can struct or map
 	msg := struct {
 		Id   int
@@ -43,12 +39,8 @@ func pubOneInfo() {
 
 	// publish information
 	fmt.Printf("SendMsgs：%+v \n", task)
-
 }
 
-// pubMoreInfo
-//
-//	@Description:
 func pubMoreInfo() {
 	pub := beanq.NewPublisher()
 	m := make(map[string]string)
@@ -71,15 +63,12 @@ func pubMoreInfo() {
 	defer pub.Close()
 }
 
-// pubDelayInfo
-//
-//	@Description:
 func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 
 	m := make(map[string]string)
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 500; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
@@ -89,6 +78,9 @@ func pubDelayInfo() {
 
 		if i == 3 {
 			y = 10
+		}
+		if i > 200 {
+			delayT = time.Now().Add(25 * time.Second)
 		}
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)

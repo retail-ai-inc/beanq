@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -64,6 +62,7 @@ type logJobI interface {
 	saveLog(ctx context.Context, result *ConsumerResult) error
 	archive(ctx context.Context) error
 }
+
 type logJob struct {
 	client *redis.Client
 }
@@ -71,9 +70,11 @@ type logJob struct {
 func newLogJob(client *redis.Client) *logJob {
 	return &logJob{client: client}
 }
+
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
 	return t.client.SetEX(ctx, key, val, expiration).Err()
 }
+
 func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 	var opts *opt.Options
 	if optsVal, ok := ctx.Value("options").(*opt.Options); ok {
@@ -97,6 +98,7 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 	}
 	return t.setEx(ctx, key, b, expiration)
 }
+
 func (t *logJob) archive(ctx context.Context) error {
 	return nil
 }

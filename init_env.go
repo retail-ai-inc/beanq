@@ -20,8 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Package beanq
-// @Description:
 package beanq
 
 import (
@@ -55,6 +53,7 @@ type BeanqConfig struct {
 			PoolTimeout        time.Duration
 		}
 		Driver                   string
+		PoolSize                 int
 		JobMaxRetries            int
 		KeepJobsInQueue          time.Duration
 		KeepFailedJobsInHistory  time.Duration
@@ -88,5 +87,4 @@ func initEnv() {
 	if err := vp.Unmarshal(&Config); err != nil {
 		log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 	}
-
 }
