@@ -53,6 +53,7 @@ type BeanqConfig struct {
 			PoolTimeout        time.Duration
 		}
 		Driver                   string
+		PoolSize                 int
 		JobMaxRetries            int
 		KeepJobsInQueue          time.Duration
 		KeepFailedJobsInHistory  time.Duration

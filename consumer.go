@@ -39,6 +39,9 @@ import (
 
 	"beanq/helper/logger"
 	opt "beanq/internal/options"
+	"go.uber.org/zap"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 type ConsumerHandler struct {
@@ -92,10 +95,18 @@ func NewConsumer() *Consumer {
 		if Config.Queue.JobMaxRetries != 0 {
 			opts.JobMaxRetry = Config.Queue.JobMaxRetries
 		}
+		if Config.Queue.PoolSize != 0 {
+			opts.PoolSize = Config.Queue.PoolSize
+		}
+
+		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+		if err != nil {
+			Logger.Fatal("goroutine pool error", zap.Error(err))
+		}
 
 		if Config.Queue.Driver == "redis" {
 			beanqConsumer = &Consumer{
-				broker: NewRedisBroker(Config),
+				broker: NewRedisBroker(pool, Config),
 				opts:   opts,
 				mu:     sync.RWMutex{},
 			}

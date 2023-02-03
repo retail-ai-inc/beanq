@@ -51,6 +51,9 @@ import (
 	"beanq/helper/logger"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
+	"go.uber.org/zap"
+
+	"github.com/panjf2000/ants/v2"
 )
 
 type pubClient struct {
@@ -66,6 +69,8 @@ var (
 )
 
 func NewPublisher() *pubClient {
+	opts := opt.DefaultOptions
+
 	beanqPublisherOnce.Do(func() {
 		initEnv()
 
@@ -75,11 +80,20 @@ func NewPublisher() *pubClient {
 			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
 		// Initialize the beanq consumer log
-		// Logger = logger.NewZapLog(param...)
+		Logger = logger.InitLogger(param...)
+
+		if Config.Queue.PoolSize != 0 {
+			opts.PoolSize = Config.Queue.PoolSize
+		}
+
+		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+		if err != nil {
+			Logger.Fatal("goroutine pool error", zap.Error(err))
+		}
 
 		if Config.Queue.Driver == "redis" {
 			beanqPublisher = &pubClient{
-				broker: NewRedisBroker(Config),
+				broker: NewRedisBroker(pool, Config),
 				wg:     nil,
 			}
 		} else {

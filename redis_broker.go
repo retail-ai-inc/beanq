@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -61,7 +60,7 @@ type RedisBroker struct {
 
 var _ Broker = new(RedisBroker)
 
-func NewRedisBroker(config BeanqConfig) *RedisBroker {
+func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 	client := redis.NewClient(&redis.Options{
 		Addr:         config.Queue.Redis.Host + ":" + config.Queue.Redis.Port,
 		Password:     config.Queue.Redis.Password,
@@ -74,16 +73,12 @@ func NewRedisBroker(config BeanqConfig) *RedisBroker {
 		MinIdleConns: config.Queue.Redis.MinIdleConnections,
 		PoolTimeout:  config.Queue.Redis.PoolTimeout,
 	})
-	pool, err := ants.NewPool(10)
-	if err != nil {
-		log.Fatalln(err)
-	}
 	return &RedisBroker{
 		client:      client,
 		done:        make(chan struct{}),
 		stop:        make(chan struct{}),
 		healthCheck: newHealthCheck(client),
-		scheduleJob: newScheduleJob(client),
+		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client),
 		opts:        nil,
 		wg:          &sync.WaitGroup{},
@@ -110,13 +105,23 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithCancel(ctx)
+	defer func() {
+		defer t.pool.Release()
+		defer cancel()
+	}()
 
+	// consume data
 	t.worker(ctx, consumers)
-	// consumer schedule jobs
+	// check information
 	t.scheduleJob.start(ctx, consumers)
 	// check client health
-	t.healthCheckerStart(ctx)
-	t.waitSignal()
+	if err := t.healthCheckerStart(ctx); err != nil {
+		Logger.Error("health check err", zap.Error(err))
+	}
+	// monitor signal
+	if err := t.waitSignal(); err != nil {
+		Logger.Error("wait signal err", zap.Error(err))
+	}
 
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
@@ -126,15 +131,16 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	case <-ctx.Done():
 		return
 	case <-t.done:
-		cancel()
 		Logger.Info("----DONE----")
 		return
 	}
 }
 
-func (t *RedisBroker) healthCheckerStart(ctx context.Context) {
+func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 	ticker := time.NewTicker(10 * time.Second)
-	go func(ctx context.Context, ticker *time.Ticker) {
+
+	if err := t.pool.Submit(func() {
+
 		defer ticker.Stop()
 		for {
 			select {
@@ -150,8 +156,10 @@ func (t *RedisBroker) healthCheckerStart(ctx context.Context) {
 				}
 			}
 		}
-	}(ctx, ticker)
-
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) {
@@ -174,12 +182,17 @@ func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) 
 		}
 
 		workers <- struct{}{}
-		go t.work(ctx, v, workers)
+		if err := t.pool.Submit(func() {
+			t.work(ctx, v, workers)
+		}); err != nil {
+			Logger.Error("worker err", zap.Error(err))
+			continue
+		}
 	}
 }
 
-func (t *RedisBroker) waitSignal() {
-	go func() {
+func (t *RedisBroker) waitSignal() error {
+	return t.pool.Submit(func() {
 		sigs := make(chan os.Signal)
 		signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGSTOP, syscall.SIGHUP)
 		select {
@@ -189,12 +202,13 @@ func (t *RedisBroker) waitSignal() {
 				t.once.Do(func() {
 					close(t.stop)
 					t.done <- struct{}{}
+					t.pool.Release()
 				})
 				return
 			}
 		}
-	}()
 
+	})
 }
 
 func (t *RedisBroker) work(ctx context.Context, handler *ConsumerHandler, workers chan struct{}) {
@@ -220,7 +234,8 @@ func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) erro
 func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count int64) (<-chan *redis.XStream, error) {
 	consumer := uuid.New().String()
 	ch := make(chan *redis.XStream)
-	go func() {
+
+	err := t.pool.Submit(func() {
 		for {
 			select {
 			case <-t.done:
@@ -252,7 +267,11 @@ func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count
 				}
 			}
 		}
-	}()
+
+	})
+	if err != nil {
+		return nil, err
+	}
 	return ch, nil
 }
 

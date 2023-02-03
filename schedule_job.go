@@ -51,8 +51,6 @@ var _ scheduleJobI = (*scheduleJob)(nil)
 
 // schedule job config
 var defaultScheduleJobConfig = struct {
-	// ants pool size
-	poolSize int
 	// zset attribute score,default 0-10
 	scoreMin, scoreMax string
 	// zset data limit
@@ -60,7 +58,6 @@ var defaultScheduleJobConfig = struct {
 	// delayJob and consumer executeTime
 	delayJobTicker, consumeTicker time.Duration
 }{
-	poolSize:       10,
 	scoreMin:       "0",
 	scoreMax:       "10",
 	offset:         0,
@@ -69,18 +66,18 @@ var defaultScheduleJobConfig = struct {
 	consumeTicker:  80 * time.Millisecond,
 }
 
-func newScheduleJob(client *redis.Client) *scheduleJob {
-	pool, err := ants.NewPool(defaultScheduleJobConfig.poolSize, ants.WithPreAlloc(true))
-	if err != nil {
-		Logger.Error("ants pool err", zap.Error(err))
-		return nil
-	}
+func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
+
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool}
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
-	go t.delayJobs(ctx, consumers)
-	go t.consume(ctx, consumers)
+	t.pool.Submit(func() {
+		t.delayJobs(ctx, consumers)
+	})
+	t.pool.Submit(func() {
+		t.consume(ctx, consumers)
+	})
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
@@ -192,9 +189,6 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 
 func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandler) {
 
-	var wg sync.WaitGroup
-	var newConsumer *ConsumerHandler
-
 	zRangeBy := &redis.ZRangeBy{
 		Min:    defaultScheduleJobConfig.scoreMin,
 		Max:    defaultScheduleJobConfig.scoreMax,
@@ -214,18 +208,8 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 			continue
 		}
 
-		wg.Add(1)
-		newConsumer = consumer
-		fun := func() {
-			defer wg.Done()
-			t.doConsumeZset(ctx, val, newConsumer)
-		}
-		if err := t.pool.Submit(fun); err != nil {
-			Logger.Error("consume zset err", zap.Error(err))
-			continue
-		}
+		t.doConsumeZset(ctx, val, consumer)
 	}
-	wg.Wait()
 }
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
@@ -248,7 +232,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		// If the message is delayed, it will be pushed to the `list` header
 		if !flag {
 			// if executeTime after now
-			if err := t.client.LPush(ctx, base.MakeListKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
+			if err := t.client.RPush(ctx, base.MakeListKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
 				return err
 			}
 		}

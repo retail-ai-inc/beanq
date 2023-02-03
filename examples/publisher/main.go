@@ -79,6 +79,9 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
+		if i > 200 {
+			delayT = time.Now().Add(25 * time.Second)
+		}
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
