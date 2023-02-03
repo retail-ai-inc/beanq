@@ -37,7 +37,7 @@ import (
 )
 
 type scheduleJobI interface {
-	start(ctx context.Context, consumers []*ConsumerHandler)
+	start(ctx context.Context, consumers []*ConsumerHandler) error
 	enqueue(ctx context.Context, zsetStr string, task *Task, option options.Option) error
 }
 
@@ -71,13 +71,18 @@ func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) {
-	t.pool.Submit(func() {
+func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) error {
+	if err := t.pool.Submit(func() {
 		t.delayJobs(ctx, consumers)
-	})
-	t.pool.Submit(func() {
+	}); err != nil {
+		return err
+	}
+	if err := t.pool.Submit(func() {
 		t.consume(ctx, consumers)
-	})
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {

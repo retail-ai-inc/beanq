@@ -113,7 +113,9 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// consume data
 	t.worker(ctx, consumers)
 	// check information
-	t.scheduleJob.start(ctx, consumers)
+	if err := t.scheduleJob.start(ctx, consumers); err != nil {
+		Logger.Error("schedule job err", zap.Error(err))
+	}
 	// check client health
 	if err := t.healthCheckerStart(ctx); err != nil {
 		Logger.Error("health check err", zap.Error(err))
@@ -212,7 +214,7 @@ func (t *RedisBroker) waitSignal() error {
 }
 
 func (t *RedisBroker) work(ctx context.Context, handler *ConsumerHandler, workers chan struct{}) {
-	ch, err := t.readGroups(ctx, handler.Queue, handler.Group, int64(t.opts.MinWorkers))
+	ch, err := t.readGroups(ctx, handler.Queue, handler.Group, t.opts.MinWorkers)
 
 	if err != nil {
 		Logger.Error("readGroup err", zap.Error(err))

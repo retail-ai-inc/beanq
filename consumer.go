@@ -117,9 +117,6 @@ func NewConsumer() *Consumer {
 	})
 	return beanqConsumer
 }
-func (t *Consumer) CustomLogger(log logger.Logger) {
-	// Logger = log
-}
 
 // Register
 // Register the group and queue to be consumed
