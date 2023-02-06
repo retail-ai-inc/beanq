@@ -1,10 +1,24 @@
 package main
 
 import (
+	"os"
+	"runtime/pprof"
+
 	"beanq"
+	"go.uber.org/zap"
 )
 
 func main() {
+
+	f, err := os.Create("cpu.prof")
+	if err != nil {
+		beanq.Logger.Fatal("err", zap.Error(err))
+	}
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+	fm, err := os.Create("mem.prof")
+	pprof.WriteHeapProfile(fm)
+
 	// register consumer
 	csm := beanq.NewConsumer()
 	// register normal consumer

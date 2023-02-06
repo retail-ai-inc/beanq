@@ -229,7 +229,7 @@ type Options struct {
 	KeepSuccessJobsInHistory time.Duration
 
 	PoolSize    int
-	MinWorkers  int64
+	MinWorkers  int
 	JobMaxRetry int
 	Prefix      string
 	Priority    float64

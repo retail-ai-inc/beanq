@@ -41,7 +41,7 @@ import (
 )
 
 type Broker interface {
-	enqueue(ctx context.Context, stream string, task *Task, options opt.Option) error
+	enqueue(ctx context.Context, task *Task, options opt.Option) error
 	close() error
 	start(ctx context.Context, consumers []*ConsumerHandler)
 }
@@ -87,11 +87,11 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 	}
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, stream string, task *Task, opts opt.Option) error {
-	if stream == "" || task == nil {
+func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts opt.Option) error {
+	if task == nil {
 		return fmt.Errorf("stream or values can't empty")
 	}
-	if err := t.scheduleJob.enqueue(ctx, stream, task, opts); err != nil {
+	if err := t.scheduleJob.enqueue(ctx, task, opts); err != nil {
 		return err
 	}
 	return nil
@@ -214,7 +214,7 @@ func (t *RedisBroker) waitSignal() error {
 }
 
 func (t *RedisBroker) work(ctx context.Context, handler *ConsumerHandler, workers chan struct{}) {
-	ch, err := t.readGroups(ctx, handler.Queue, handler.Group, t.opts.MinWorkers)
+	ch, err := t.readGroups(ctx, handler.Queue, handler.Group, 10)
 
 	if err != nil {
 		Logger.Error("readGroup err", zap.Error(err))
@@ -240,8 +240,6 @@ func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count
 	err := t.pool.Submit(func() {
 		for {
 			select {
-			case <-t.done:
-				return
 			case <-ctx.Done():
 				if !errors.Is(ctx.Err(), context.Canceled) {
 					Logger.Error("context closed", zap.Error(ctx.Err()))
@@ -253,17 +251,15 @@ func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count
 					Streams:  []string{base.MakeStreamKey(group, queue), ">"},
 					Consumer: consumer,
 					Count:    count,
-					Block:    0,
+					Block:    10 * time.Second,
 				}).Result()
-
-				if err != nil {
+				if err != nil && err != redis.Nil {
 					Logger.Error("XReadGroup err", zap.Error(err))
 					continue
 				}
 				if len(streams) <= 0 {
 					continue
 				}
-
 				for _, v := range streams {
 					ch <- &v
 				}
@@ -279,7 +275,7 @@ func (t *RedisBroker) readGroups(ctx context.Context, queue, group string, count
 
 // Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(50 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -352,15 +348,18 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			}
 			return
 		case msg := <-ch:
-
 			stream := msg.Stream
 			for _, vm := range msg.Messages {
 
-				task := t.parseMapToTask(vm, stream)
+				task, err := t.parseMapToTask(vm, stream)
+				if err != nil {
+					Logger.Error("parse json to task err", zap.Error(err))
+					continue
+				}
 				now = time.Now()
 
 				// if error,then retry to consume
-				err := base.Retry(func() error {
+				err = base.Retry(func() error {
 					return f(task)
 				}, t.opts.RetryTime)
 				if err != nil {
@@ -406,8 +405,11 @@ func (t *RedisBroker) close() error {
 	return t.client.Close()
 }
 
-func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
-	payload, id, streamStr, addTime, queue, group, executeTime, retry, maxLen := openTaskMap(BqMessage(msg), stream)
+func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) (*Task, error) {
+	payload, id, streamStr, addTime, queue, group, executeTime, retry, maxLen, err := openTaskMap(BqMessage(msg), stream)
+	if err != nil {
+		return nil, err
+	}
 	return &Task{
 		Values: values{
 			"id":          id,
@@ -421,5 +423,5 @@ func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) *Task {
 			"executeTime": executeTime,
 		},
 		rw: new(sync.RWMutex),
-	}
+	}, nil
 }

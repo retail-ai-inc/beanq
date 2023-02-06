@@ -68,7 +68,7 @@ func pubDelayInfo() {
 
 	m := make(map[string]string)
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 50000; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)

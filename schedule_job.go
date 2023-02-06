@@ -38,7 +38,7 @@ import (
 
 type scheduleJobI interface {
 	start(ctx context.Context, consumers []*ConsumerHandler) error
-	enqueue(ctx context.Context, zsetStr string, task *Task, option options.Option) error
+	enqueue(ctx context.Context, task *Task, option options.Option) error
 }
 
 type scheduleJob struct {
@@ -85,9 +85,14 @@ func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) e
 	return nil
 }
 
-func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, opt options.Option) error {
+func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt options.Option) error {
 	if task == nil {
 		return errors.New("values can't empty")
+	}
+
+	flag := false
+	if task.ExecuteTime().After(time.Now()) {
+		flag = true
 	}
 
 	bt, err := json.Marshal(task.Values)
@@ -95,11 +100,16 @@ func (t *scheduleJob) enqueue(ctx context.Context, zsetStr string, task *Task, o
 		return err
 	}
 
-	if err := t.client.ZAdd(ctx, zsetStr, &redis.Z{
-		Score:  opt.Priority,
-		Member: bt,
-	}).Err(); err != nil {
-		return err
+	if flag {
+		return t.client.RPush(ctx, base.MakeListKey(opt.Group, opt.Queue), bt).Err()
+	}
+	if !flag {
+		if err := t.client.ZAdd(ctx, base.MakeZSetKey(opt.Group, opt.Queue), &redis.Z{
+			Score:  opt.Priority,
+			Member: bt,
+		}).Err(); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -142,11 +152,14 @@ func (t *scheduleJob) pollList(ctx context.Context, client *redis.Client, key st
 	}
 }
 
-func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals string) {
+func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, val string) {
 	// declare delayTask function
 	doTask := func(ctx context.Context, client *redis.Client, key, val string) error {
-		task := jsonToTask([]byte(val))
 
+		task, err := jsonToTask(val)
+		if err != nil {
+			return err
+		}
 		flag := false
 		if task.ExecuteTime().After(time.Now()) {
 			flag = true
@@ -159,7 +172,9 @@ func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals string) 
 		}
 		// if not delay job,send data to zset
 		if !flag {
-			if err := t.enqueue(ctx, base.MakeZSetKey(task.Group(), task.Queue()), task, options.Option{
+			if err := t.enqueue(ctx, task, options.Option{
+				Group:    task.Group(),
+				Queue:    task.Queue(),
 				Priority: task.Priority(),
 			}); err != nil {
 				return err
@@ -169,7 +184,7 @@ func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, vals string) 
 		return nil
 	}
 	// begin to execute the task
-	if err := doTask(ctx, t.client, key, vals); err != nil {
+	if err := doTask(ctx, t.client, key, val); err != nil {
 		Logger.Error("delay job err", zap.Error(err))
 		return
 	}
@@ -204,7 +219,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 	for _, consumer := range consumers {
 		key := base.MakeZSetKey(consumer.Group, consumer.Queue)
 		cmd := t.client.ZRevRangeByScore(ctx, key, zRangeBy)
-		if cmd.Err() != nil {
+		if cmd.Err() != nil && cmd.Err() != redis.Nil {
 			Logger.Error("ZRevRangeByScore err", zap.Error(cmd.Err()))
 			continue
 		}
@@ -220,27 +235,15 @@ func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandle
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
-		byteV := []byte(vv)
-		task := jsonToTask(byteV)
-		executeTime := task.ExecuteTime()
+		task, err := jsonToTask(vv)
+		if err != nil {
+			return err
+		}
 
-		flag := false
-		if executeTime.Before(time.Now()) {
-			flag = true
+		if err := t.sendToStream(ctx, task); err != nil {
+			return err
 		}
-		// if you need to consume now,then send data to `stream`
-		if flag {
-			if err := t.sendToStream(ctx, task); err != nil {
-				return err
-			}
-		}
-		// If the message is delayed, it will be pushed to the `list` header
-		if !flag {
-			// if executeTime after now
-			if err := t.client.RPush(ctx, base.MakeListKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
-				return err
-			}
-		}
+
 		// Delete data from `zset`
 		if err := t.client.ZRem(ctx, base.MakeZSetKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
 			return err

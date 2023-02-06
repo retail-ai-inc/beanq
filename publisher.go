@@ -49,7 +49,6 @@ import (
 	"time"
 
 	"beanq/helper/logger"
-	"beanq/internal/base"
 	opt "beanq/internal/options"
 	"go.uber.org/zap"
 
@@ -81,7 +80,7 @@ func NewPublisher() *pubClient {
 		}
 		// Initialize the beanq consumer log
 		Logger = logger.InitLogger(param...)
-
+		Logger.With(zap.String("prefix", Config.Queue.Redis.Prefix))
 		if Config.Queue.PoolSize != 0 {
 			opts.PoolSize = Config.Queue.PoolSize
 		}
@@ -118,7 +117,7 @@ func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option .
 	task.Values["maxLen"] = opts.MaxLen
 	task.Values["executeTime"] = opts.ExecuteTime
 
-	return t.broker.enqueue(ctx, base.MakeZSetKey(opts.Group, opts.Queue), task, opts)
+	return t.broker.enqueue(ctx, task, opts)
 }
 
 func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {

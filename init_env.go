@@ -58,7 +58,7 @@ type BeanqConfig struct {
 		KeepJobsInQueue          time.Duration
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration
-		MinWorkers               int64
+		MinWorkers               int
 	}
 }
 
