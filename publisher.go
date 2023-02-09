@@ -63,14 +63,14 @@ type pubClient struct {
 var _ BeanqPub = new(pubClient)
 
 var (
-	beanqPublisherOnce sync.Once
-	beanqPublisher     *pubClient
+	publisherOnce  sync.Once
+	beanqPublisher *pubClient
 )
 
 func NewPublisher() *pubClient {
 	opts := opt.DefaultOptions
 
-	beanqPublisherOnce.Do(func() {
+	publisherOnce.Do(func() {
 		initEnv()
 
 		param := make([]logger.LoggerInfoFun, 0)

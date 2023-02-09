@@ -39,12 +39,14 @@ import (
 type scheduleJobI interface {
 	start(ctx context.Context, consumers []*ConsumerHandler) error
 	enqueue(ctx context.Context, task *Task, option options.Option) error
+	shutDown()
 }
 
 type scheduleJob struct {
-	client *redis.Client
-	wg     *sync.WaitGroup
-	pool   *ants.Pool
+	client     *redis.Client
+	wg         *sync.WaitGroup
+	pool       *ants.Pool
+	stop, done chan struct{}
 }
 
 var _ scheduleJobI = (*scheduleJob)(nil)
@@ -68,10 +70,11 @@ var defaultScheduleJobConfig = struct {
 
 func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 
-	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool}
+	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) error {
+
 	if err := t.pool.Submit(func() {
 		t.delayJobs(ctx, consumers)
 	}); err != nil {
@@ -135,6 +138,8 @@ func (t *scheduleJob) pollList(ctx context.Context, client *redis.Client, key st
 		select {
 		case <-ctx.Done():
 			t.pool.Release()
+			return
+		case <-t.stop:
 			return
 		default:
 			// get a data from `list` header
@@ -200,6 +205,8 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 		select {
 		case <-ctx.Done():
 			t.pool.Release()
+			return
+		case <-t.done:
 			return
 		case <-ticker.C:
 			t.doConsume(ctx, consumers)
@@ -275,4 +282,8 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 	}
 	cmd := t.client.XAdd(ctx, xAddArgs)
 	return cmd.Err()
+}
+func (t *scheduleJob) shutDown() {
+	t.stop <- struct{}{}
+	t.done <- struct{}{}
 }

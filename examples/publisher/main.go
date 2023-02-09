@@ -68,7 +68,7 @@ func pubDelayInfo() {
 
 	m := make(map[string]string)
 
-	for i := 0; i < 50000; i++ {
+	for i := 0; i < 2000; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
@@ -79,9 +79,10 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
-		if i > 20 {
-			delayT = time.Now().Add(25 * time.Second)
-		}
+		/*
+			if i > 20 {
+				delayT = time.Now().Add(25 * time.Second)
+			}*/
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
