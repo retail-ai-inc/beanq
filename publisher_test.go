@@ -12,6 +12,7 @@ import (
 	"beanq/helper/json"
 	opt "beanq/internal/options"
 	"github.com/spf13/cast"
+	"go.uber.org/zap"
 )
 
 func TestPublishOne(t *testing.T) {
@@ -32,7 +33,7 @@ func TestPublishOne(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	Logger.Info(task)
+	Logger.Info("data", zap.Any("task", task))
 }
 
 func TestPublishMore(t *testing.T) {

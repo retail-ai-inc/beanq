@@ -35,12 +35,12 @@ package beanq
 
 import (
 	"context"
-	"os"
 	"sync"
 
-	"beanq/helper/file"
+	"beanq/helper/logger"
 	opt "beanq/internal/options"
-	"github.com/labstack/gommon/log"
+	"go.uber.org/zap"
+
 	"github.com/panjf2000/ants/v2"
 )
 
@@ -67,23 +67,15 @@ func NewConsumer() *Consumer {
 
 	beanqConsumerOnce.Do(func() {
 		initEnv()
-		// Initialize the beanq consumer log
-		Logger = log.New(Config.Queue.Redis.Prefix)
 
+		param := make([]logger.LoggerInfoFun, 0)
 		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
 		if Config.Queue.DebugLog.Path != "" {
-			if file, err := file.OpenFile(Config.Queue.DebugLog.Path); err != nil {
-				Logger.Errorf("Unable to open log file: %v", err)
-				beanqConsumer = nil
-				return
-			} else {
-				Logger.SetOutput(file)
-			}
+			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
-
-		// Set the default log level as DEBUG.
-		Logger.SetLevel(log.DEBUG)
-
+		// Initialize the beanq consumer log
+		Logger = logger.InitLogger(param...)
+		Logger.With(zap.String("prefix", Config.Queue.Redis.Prefix))
 		if Config.Queue.KeepJobsInQueue != 0 {
 			opts.KeepJobInQueue = Config.Queue.KeepJobsInQueue
 		}
@@ -109,8 +101,7 @@ func NewConsumer() *Consumer {
 
 		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 		if err != nil {
-			Logger.Error(err)
-			os.Exit(1)
+			Logger.Fatal("goroutine pool error", zap.Error(err))
 		}
 
 		if Config.Queue.Driver == "redis" {

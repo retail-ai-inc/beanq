@@ -45,16 +45,14 @@ package beanq
 
 import (
 	"context"
-	"os"
 	"sync"
 	"time"
 
-	"beanq/helper/file"
-	"beanq/internal/base"
+	"beanq/helper/logger"
 	opt "beanq/internal/options"
-	"github.com/panjf2000/ants/v2"
+	"go.uber.org/zap"
 
-	"github.com/labstack/gommon/log"
+	"github.com/panjf2000/ants/v2"
 )
 
 type pubClient struct {
@@ -65,39 +63,32 @@ type pubClient struct {
 var _ BeanqPub = new(pubClient)
 
 var (
-	beanqPublisherOnce sync.Once
-	beanqPublisher     *pubClient
+	publisherOnce  sync.Once
+	beanqPublisher *pubClient
 )
 
 func NewPublisher() *pubClient {
 	opts := opt.DefaultOptions
 
-	beanqPublisherOnce.Do(func() {
+	publisherOnce.Do(func() {
 		initEnv()
-		// Initialize the beanq consumer log
-		Logger = log.New(Config.Queue.Redis.Prefix)
 
+		param := make([]logger.LoggerInfoFun, 0)
 		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
 		if Config.Queue.DebugLog.Path != "" {
-			if file, err := file.OpenFile(Config.Queue.DebugLog.Path); err != nil {
-				Logger.Errorf("Unable to open log file: %v", err)
-				beanqPublisher = nil
-				return
-			} else {
-				Logger.SetOutput(file)
-			}
+			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
+		// Initialize the beanq consumer log
+		Logger = logger.InitLogger(param...)
+		Logger.With(zap.String("prefix", Config.Queue.Redis.Prefix))
 		if Config.Queue.PoolSize != 0 {
 			opts.PoolSize = Config.Queue.PoolSize
 		}
 
 		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 		if err != nil {
-			Logger.Error(err)
-			os.Exit(1)
+			Logger.Fatal("goroutine pool error", zap.Error(err))
 		}
-		// Set the default log level as DEBUG.
-		Logger.SetLevel(log.DEBUG)
 
 		if Config.Queue.Driver == "redis" {
 			beanqPublisher = &pubClient{
@@ -126,7 +117,7 @@ func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option .
 	task.Values["maxLen"] = opts.MaxLen
 	task.Values["executeTime"] = opts.ExecuteTime
 
-	return t.broker.enqueue(ctx, base.MakeZSetKey(opts.Group, opts.Queue), task, opts)
+	return t.broker.enqueue(ctx, task, opts)
 }
 
 func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {

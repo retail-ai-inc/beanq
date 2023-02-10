@@ -156,7 +156,9 @@ func NewTask(payload []byte, opt ...TaskOpt) *Task {
 
 type DoConsumer func(*Task) error
 
-func jsonToTask(data []byte) *Task {
+func jsonToTask(dataStr string) (*Task, error) {
+	data := stringx.StringToByte(dataStr)
+
 	jn := json.Json
 	executeTimeStr := jn.Get(data, "executeTime").ToString()
 	task := Task{
@@ -175,7 +177,7 @@ func jsonToTask(data []byte) *Task {
 		rw: new(sync.RWMutex),
 	}
 
-	return &task
+	return &task, nil
 }
 
 type BqMessage struct {
@@ -183,51 +185,24 @@ type BqMessage struct {
 	Values map[string]interface{}
 }
 
-func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64) {
+func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64, err error) {
 	id = msg.ID
 	stream = streamStr
 
-	if queueVal, ok := msg.Values["queue"]; ok {
-		if v, ok := queueVal.(string); ok {
-			queue = v
-		}
+	bt, err := json.Marshal(msg.Values)
+	if err != nil {
+		return nil, "", "", "", "", "", time.Time{}, 0, 0, err
 	}
 
-	if groupVal, ok := msg.Values["group"]; ok {
-		if v, ok := groupVal.(string); ok {
-			group = v
-		}
+	queue = json.Json.Get(bt, "queue").ToString()
+	group = json.Json.Get(bt, "group").ToString()
+	maxLen = json.Json.Get(bt, "maxLen").ToInt64()
+	retry = json.Json.Get(bt, "retry").ToInt()
+	payload = stringx.StringToByte(json.Json.Get(bt, "payload").ToString())
+	addTime = json.Json.Get(bt, "addTime").ToString()
+	executeTime = cast.ToTime(json.Json.Get(bt, "executeTime").ToString())
+	if executeTime.IsZero() {
+		executeTime = time.Now()
 	}
-
-	if maxLenV, ok := msg.Values["maxLen"]; ok {
-		if v, ok := maxLenV.(string); ok {
-			maxLen = cast.ToInt64(v)
-		}
-	}
-
-	if retryVal, ok := msg.Values["retry"]; ok {
-		if v, ok := retryVal.(string); ok {
-			retry = cast.ToInt(v)
-		}
-	}
-
-	if payloadVal, ok := msg.Values["payload"]; ok {
-		if payloadV, ok := payloadVal.(string); ok {
-			payload = stringx.StringToByte(payloadV)
-		}
-	}
-
-	if addtimeV, ok := msg.Values["addTime"]; ok {
-		if addtimeStr, ok := addtimeV.(string); ok {
-			addTime = addtimeStr
-		}
-	}
-
-	if executeTVal, ok := msg.Values["executeTime"]; ok {
-		if executeTm, ok := executeTVal.(string); ok {
-			executeTime = cast.ToTime(executeTm)
-		}
-	}
-
 	return
 }
