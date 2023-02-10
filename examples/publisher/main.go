@@ -79,6 +79,8 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 		}
+
+		// This part is for the convenience of future testing, so keep it for now
 		/*
 			if i > 20 {
 				delayT = time.Now().Add(25 * time.Second)

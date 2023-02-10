@@ -258,9 +258,9 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 	for {
 		select {
 		case <-ctx.Done():
-			// if !errors.Is(ctx.Err(), context.Canceled) {
-			Logger.Error("context closed", zap.Error(ctx.Err()))
-			// }
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				Logger.Error("context closed", zap.Error(ctx.Err()))
+			}
 			return
 		case <-ticker.C:
 			start := "-"
