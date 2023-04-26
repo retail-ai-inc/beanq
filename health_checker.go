@@ -27,7 +27,8 @@ import (
 	"strings"
 
 	"beanq/helper/json"
-	"github.com/go-redis/redis/v8"
+	"beanq/internal/base"
+	"github.com/redis/go-redis/v9"
 )
 
 type healthCheckI interface {
@@ -43,7 +44,8 @@ func newHealthCheck(client *redis.Client) *healthCheck {
 }
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
-	key := "health_checker"
+
+	key := base.MakeHealthKey(Config.Queue.Redis.Prefix)
 	var str string
 
 	info, err := t.info(ctx)

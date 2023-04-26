@@ -31,9 +31,10 @@ import (
 	"beanq/helper/json"
 	"beanq/helper/stringx"
 	"beanq/helper/timex"
+	"beanq/internal/base"
 	opt "beanq/internal/options"
-	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 )
 
 type FlagInfo string
@@ -72,7 +73,7 @@ func newLogJob(client *redis.Client) *logJob {
 }
 
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
-	return t.client.SetEX(ctx, key, val, expiration).Err()
+	return t.client.SetEx(ctx, key, val, expiration).Err()
 }
 
 func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
@@ -89,11 +90,12 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 		return fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 	}
 	// default ErrorLevel
-	key := "result:fail:" + uuid.NewString()
+	uuids := uuid.NewString()
+	key := base.MakeLogKey(Config.Queue.Redis.Prefix, "fail", uuids)
 	expiration := opts.KeepFailedJobsInHistory
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = "result:success:" + uuid.NewString()
+		key = base.MakeLogKey(Config.Queue.Redis.Prefix, "success", uuids)
 		expiration = opts.KeepSuccessJobsInHistory
 	}
 	return t.setEx(ctx, key, b, expiration)

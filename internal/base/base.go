@@ -29,7 +29,7 @@ import (
 	"beanq/internal/options"
 )
 
-func makeKey(group, queue, name string) string {
+func makeKey(prefix, group, queue, name string) string {
 	if group == "" {
 		group = options.DefaultOptions.DefaultGroup
 	}
@@ -37,7 +37,8 @@ func makeKey(group, queue, name string) string {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
 	var builder strings.Builder
-
+	builder.WriteString(prefix)
+	builder.WriteString(":")
 	builder.WriteString(group)
 	builder.WriteString(":")
 	builder.WriteString(queue)
@@ -47,18 +48,36 @@ func makeKey(group, queue, name string) string {
 	return builder.String()
 }
 
-func MakeListKey(group, queue string) string {
-	return makeKey(group, queue, "list")
+func MakeListKey(prefix, group, queue string) string {
+	return makeKey(prefix, group, queue, "list")
 }
 
-func MakeZSetKey(group, queue string) string {
-	return makeKey(group, queue, "zset")
+func MakeZSetKey(prefix, group, queue string) string {
+	return makeKey(prefix, group, queue, "zset")
 }
 
-func MakeStreamKey(group, queue string) string {
-	return makeKey(group, queue, "stream")
+func MakeStreamKey(prefix, group, queue string) string {
+	return makeKey(prefix, group, queue, "stream")
 }
+func MakeLogKey(prefix, resultType, uniqueId string) string {
+	var builder strings.Builder
+	builder.WriteString(prefix)
+	builder.WriteString(":")
+	builder.WriteString("logs")
+	builder.WriteString(":")
+	builder.WriteString(resultType)
+	builder.WriteString(":")
+	builder.WriteString(uniqueId)
 
+	return builder.String()
+}
+func MakeHealthKey(prefix string) string {
+	var builder strings.Builder
+	builder.WriteString(prefix)
+	builder.WriteString(":")
+	builder.WriteString("health_checker")
+	return builder.String()
+}
 func Retry(f func() error, delayTime time.Duration) error {
 	index := 0
 	errChan := make(chan error, 1)

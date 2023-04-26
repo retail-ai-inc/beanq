@@ -68,16 +68,19 @@ func pubDelayInfo() {
 
 	m := make(map[string]string)
 
-	for i := 0; i < 2000; i++ {
+	for i := 0; i < 10; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
 		task := beanq.NewTask(b, beanq.SetName("update"))
 		delayT := time.Now().Add(10 * time.Second)
-
+		if i == 2 {
+			delayT = time.Now()
+		}
 		if i == 3 {
 			y = 10
+			delayT = time.Now().Add(35 * time.Minute)
 		}
 
 		// This part is for the convenience of future testing, so keep it for now
