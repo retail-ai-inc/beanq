@@ -35,29 +35,30 @@ import (
 	"beanq/helper/timex"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
-	"github.com/google/uuid"
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
-type Broker interface {
-	enqueue(ctx context.Context, task *Task, options opt.Option) error
-	close() error
-	start(ctx context.Context, consumers []*ConsumerHandler)
-}
+type (
+	Broker interface {
+		enqueue(ctx context.Context, task *Task, options opt.Option) error
+		close() error
+		start(ctx context.Context, consumers []*ConsumerHandler)
+	}
 
-type RedisBroker struct {
-	client                    *redis.Client
-	done, stop, healCheckDone chan struct{}
-	healthCheck               healthCheckI
-	scheduleJob               scheduleJobI
-	logJob                    logJobI
-	opts                      *opt.Options
-	wg                        *sync.WaitGroup
-	once                      *sync.Once
-	pool                      *ants.Pool
-}
+	RedisBroker struct {
+		client                    *redis.Client
+		done, stop, healCheckDone chan struct{}
+		healthCheck               healthCheckI
+		scheduleJob               scheduleJobI
+		logJob                    logJobI
+		opts                      *opt.Options
+		wg                        *sync.WaitGroup
+		once                      *sync.Once
+		pool                      *ants.Pool
+	}
+)
 
 var _ Broker = new(RedisBroker)
 
@@ -125,14 +126,19 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		t.opts = opts
 	}
 
-	// consume data
-	if err := t.worker(ctx, consumers); err != nil {
-		Logger.Error("worker err", zap.Error(err))
+	for _, consumer := range consumers {
+
+		// consume data
+		if err := t.worker(ctx, consumer); err != nil {
+			Logger.Error("worker err", zap.Error(err))
+		}
+		// check information
+		if err := t.scheduleJob.start(ctx, consumer); err != nil {
+			Logger.Error("schedule job err", zap.Error(err))
+		}
+
 	}
-	// check information
-	if err := t.scheduleJob.start(ctx, consumers); err != nil {
-		Logger.Error("schedule job err", zap.Error(err))
-	}
+
 	// check client health
 	if err := t.healthCheckerStart(ctx); err != nil {
 		Logger.Error("health check err", zap.Error(err))
@@ -176,32 +182,26 @@ func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 	return nil
 }
 
-func (t *RedisBroker) worker(ctx context.Context, consumers []*ConsumerHandler) error {
+func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) error {
 
-	workers := make(chan struct{}, t.opts.MinWorkers)
+	result, err := t.client.XInfoGroups(ctx, base.MakeStreamKey(Config.Queue.Redis.Prefix, consumer.Group, consumer.Queue)).Result()
+	if err != nil && err.Error() != "ERR no such key" {
+		Logger.Error("infoGroup err", zap.Error(err))
+		return err
+	}
 
-	for _, v := range consumers {
-		// if has bound a group,then continue
-		result, err := t.client.XInfoGroups(ctx, base.MakeStreamKey(Config.Queue.Redis.Prefix, v.Group, v.Queue)).Result()
-		if err != nil && err.Error() != "ERR no such key" {
-			Logger.Error("infoGroup err", zap.Error(err))
-			continue
+	if len(result) < 1 {
+		if err := t.createGroup(ctx, consumer.Queue, consumer.Group); err != nil {
+			Logger.Error("create group err", zap.Error(err))
+			return err
 		}
+	}
 
-		if len(result) < 1 {
-			if err := t.createGroup(ctx, v.Queue, v.Group); err != nil {
-				Logger.Error("create group err", zap.Error(err))
-				continue
-			}
-		}
-
-		workers <- struct{}{}
-		if err := t.pool.Submit(func() {
-			t.work(ctx, 10, v)
-		}); err != nil {
-			Logger.Error("worker err", zap.Error(err))
-			continue
-		}
+	if err := t.pool.Submit(func() {
+		t.work(ctx, 10, consumer)
+	}); err != nil {
+		Logger.Error("worker err", zap.Error(err))
+		return err
 	}
 	return nil
 }
@@ -226,15 +226,14 @@ func (t *RedisBroker) waitSignal() {
 }
 
 func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) error {
-	cmd := t.client.XGroupCreateMkStream(ctx, base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue), group, "0")
-	if cmd.Err() != nil && cmd.Err().Error() != "BUSYGROUP Consumer Group name already exists" {
-		return cmd.Err()
+	if err := t.client.XGroupCreateMkStream(ctx, base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue), group, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+		return err
 	}
 	return nil
 }
 
 func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHandler) {
-	consumer := uuid.New().String()
+	// consumer := uuid.New().String()
 	group := handler.Group
 	queue := handler.Queue
 
@@ -253,7 +252,7 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 			streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    group,
 				Streams:  []string{base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue), ">"},
-				Consumer: consumer,
+				Consumer: base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue),
 				Count:    count,
 				Block:    10 * time.Second,
 			}).Result()

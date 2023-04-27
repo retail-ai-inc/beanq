@@ -30,12 +30,7 @@ import (
 )
 
 func makeKey(prefix, group, queue, name string) string {
-	if group == "" {
-		group = options.DefaultOptions.DefaultGroup
-	}
-	if queue == "" {
-		queue = options.DefaultOptions.DefaultQueueName
-	}
+
 	var builder strings.Builder
 	builder.WriteString(prefix)
 	builder.WriteString(":")
@@ -49,14 +44,32 @@ func makeKey(prefix, group, queue, name string) string {
 }
 
 func MakeListKey(prefix, group, queue string) string {
+	if group == "" {
+		group = options.DefaultOptions.DefaultGroup
+	}
+	if queue == "" {
+		queue = options.DefaultOptions.DefaultQueueName
+	}
 	return makeKey(prefix, group, queue, "list")
 }
 
 func MakeZSetKey(prefix, group, queue string) string {
+	if group == "" {
+		group = options.DefaultOptions.DefaultGroup
+	}
+	if queue == "" {
+		queue = options.DefaultOptions.DefaultQueueName
+	}
 	return makeKey(prefix, group, queue, "zset")
 }
 
 func MakeStreamKey(prefix, group, queue string) string {
+	if group == "" {
+		group = options.DefaultOptions.DefaultGroup
+	}
+	if queue == "" {
+		queue = options.DefaultOptions.DefaultQueueName
+	}
 	return makeKey(prefix, group, queue, "stream")
 }
 func MakeLogKey(prefix, resultType, uniqueId string) string {

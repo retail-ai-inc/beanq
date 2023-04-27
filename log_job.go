@@ -37,8 +37,30 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type FlagInfo string
-type LevelMsg string
+type (
+	FlagInfo string
+	LevelMsg string
+
+	ConsumerResult struct {
+		Level   LevelMsg
+		Info    FlagInfo
+		Payload any
+
+		AddTime string
+		RunTime string
+
+		Queue, Group, Consumer string
+	}
+
+	logJobI interface {
+		saveLog(ctx context.Context, result *ConsumerResult) error
+		archive(ctx context.Context) error
+	}
+
+	logJob struct {
+		client *redis.Client
+	}
+)
 
 const (
 	SuccessInfo FlagInfo = "success"
@@ -47,26 +69,6 @@ const (
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"
 )
-
-type ConsumerResult struct {
-	Level   LevelMsg
-	Info    FlagInfo
-	Payload any
-
-	AddTime string
-	RunTime string
-
-	Queue, Group, Consumer string
-}
-
-type logJobI interface {
-	saveLog(ctx context.Context, result *ConsumerResult) error
-	archive(ctx context.Context) error
-}
-
-type logJob struct {
-	client *redis.Client
-}
 
 func newLogJob(client *redis.Client) *logJob {
 	return &logJob{client: client}

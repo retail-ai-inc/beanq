@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -40,7 +39,7 @@ import (
 
 type (
 	scheduleJobI interface {
-		start(ctx context.Context, consumers []*ConsumerHandler) error
+		start(ctx context.Context, consumer *ConsumerHandler) error
 		enqueue(ctx context.Context, task *Task, option options.Option) error
 		shutDown()
 	}
@@ -76,10 +75,10 @@ func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) error {
+func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) error {
 
 	if err := t.pool.Submit(func() {
-		t.consume(ctx, consumers)
+		t.consume(ctx, consumer)
 	}); err != nil {
 		return err
 	}
@@ -103,14 +102,13 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt options.Optio
 	return nil
 }
 
-func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
+func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	ticker := time.NewTicker(defaultScheduleJobConfig.consumeTicker)
 	defer ticker.Stop()
 
 	var (
-		now  time.Time
-		now2 time.Time
+		now, now2 time.Time
 	)
 	for {
 		select {
@@ -123,22 +121,24 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 
 			now = time.Now()
 			now2 = timex.HalfHour(now)
-
-			t.doConsume(ctx, now2, consumers)
-
-			fmt.Printf("now:%+v,now2:%+v \n", now.Format(timex.DateTime), now2.Format(timex.DateTime))
-
 			sub := now2.Sub(now)
+
 			if sub.Seconds() <= 0 {
-				sub = 8 * time.Second
+				sub = 30 * time.Minute
+				now2 = now2.Add(30 * time.Minute)
 			}
-			fmt.Printf("sub:%+v \n", sub)
+
+			if err := t.doConsume(ctx, now2, consumer); err != nil {
+				Logger.Error("consume err", zap.Error(err))
+				continue
+			}
+
 			ticker.Reset(sub)
 		}
 	}
 }
 
-func (t *scheduleJob) doConsume(ctx context.Context, time2 time.Time, consumers []*ConsumerHandler) {
+func (t *scheduleJob) doConsume(ctx context.Context, time2 time.Time, consumer *ConsumerHandler) error {
 
 	max := time2.Add(9 * time.Second).Unix()
 
@@ -148,22 +148,19 @@ func (t *scheduleJob) doConsume(ctx context.Context, time2 time.Time, consumers 
 		Offset: defaultScheduleJobConfig.offset,
 		Count:  defaultScheduleJobConfig.count,
 	}
-
-	for _, consumer := range consumers {
-		key := base.MakeZSetKey(Config.Queue.Redis.Prefix, consumer.Group, consumer.Queue)
-		cmd := t.client.ZRangeByScore(ctx, key, zRangeBy)
-		if err := cmd.Err(); err != nil && err != redis.Nil {
-			Logger.Error("ZRangeByScore err", zap.Error(err))
-			continue
-		}
-
-		val := cmd.Val()
-		if len(val) <= 0 {
-			continue
-		}
-
-		t.doConsumeZset(ctx, val, consumer)
+	key := base.MakeZSetKey(Config.Queue.Redis.Prefix, consumer.Group, consumer.Queue)
+	cmd := t.client.ZRangeByScore(ctx, key, zRangeBy)
+	if err := cmd.Err(); err != nil && err != redis.Nil {
+		return err
 	}
+
+	val := cmd.Val()
+	if len(val) <= 0 {
+		return nil
+	}
+
+	t.doConsumeZset(ctx, val, consumer)
+	return nil
 }
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
