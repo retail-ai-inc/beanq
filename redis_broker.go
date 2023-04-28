@@ -343,12 +343,13 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 				Logger.Error("parse json to task err", zap.Error(err))
 				continue
 			}
-			if task.ExecuteTime().After(time.Now()) {
+			now = time.Now()
+
+			if task.ExecuteTime().After(now) {
 				if err := t.scheduleJob.sendToStream(ctx, task); err != nil {
 					Logger.Error("xadd error", zap.Error(err))
 				}
 			} else {
-				now = time.Now()
 
 				// if error,then retry to consume
 				if err := base.Retry(func() error {
