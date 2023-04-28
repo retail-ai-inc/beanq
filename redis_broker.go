@@ -60,7 +60,7 @@ type (
 	}
 )
 
-var _ Broker = new(RedisBroker)
+var _ Broker = (*RedisBroker)(nil)
 
 func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 
@@ -93,7 +93,7 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 
 func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts opt.Option) error {
 	if task == nil {
-		return fmt.Errorf("stream or values can't empty")
+		return fmt.Errorf("enqueue Task Err:%+v", "stream or values is nil")
 	}
 	nowTime := timex.HalfHour(time.Now())
 	if task.ExecuteTime().Before(nowTime.Add(time.Duration(task.Priority()) * time.Second)) {
@@ -205,6 +205,7 @@ func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) err
 	}
 	return nil
 }
+
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
@@ -343,18 +344,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 				continue
 			}
 			if task.ExecuteTime().After(time.Now().Add(time.Duration(task.Priority()) * time.Second)) {
-
-				xAddArgs := &redis.XAddArgs{
-					Stream:     base.MakeStreamKey(Config.Queue.Redis.Prefix, task.Group(), task.Queue()),
-					NoMkStream: false,
-					MaxLen:     task.MaxLen(),
-					MinID:      "",
-					Approx:     false,
-					// Limit:      0,
-					ID:     "*",
-					Values: map[string]any(task.Values),
-				}
-				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+				if err := t.scheduleJob.sendToStream(ctx, task); err != nil {
 					Logger.Error("xadd error", zap.Error(err))
 				}
 			} else {

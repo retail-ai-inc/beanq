@@ -32,20 +32,22 @@ import (
 	"github.com/shirou/gopsutil/v3/net"
 )
 
-type DeviceI interface {
-	Info() error
-}
+type (
+	DeviceI interface {
+		Info() error
+	}
+	device struct {
+		Memory devMemory `json:"memory"`
+		Cpu    devCpu    `json:"cpu"`
+		Net    devNet    `json:"net"`
+		// Disk   devDisk   `json:"disk"`
+	}
+)
 
-var _ DeviceI = new(device)
-
-type device struct {
-	Memory devMemory `json:"memory"`
-	Cpu    devCpu    `json:"cpu"`
-	Net    devNet    `json:"net"`
-	// Disk   devDisk   `json:"disk"`
-}
-
-var Device = new(device)
+var (
+	_      DeviceI = (*device)(nil)
+	Device         = new(device)
+)
 
 func (t *device) Info() (err error) {
 

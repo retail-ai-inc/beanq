@@ -29,18 +29,15 @@ import (
 	"beanq/internal/options"
 )
 
-func makeKey(prefix, group, queue, name string) string {
+func makeKey(keys ...string) string {
 
 	var builder strings.Builder
-	builder.WriteString(prefix)
-	builder.WriteString(":")
-	builder.WriteString(group)
-	builder.WriteString(":")
-	builder.WriteString(queue)
-	builder.WriteString(":")
-	builder.WriteString(name)
 
+	for _, v := range keys {
+		builder.WriteString(v)
+	}
 	return builder.String()
+
 }
 
 func MakeListKey(prefix, group, queue string) string {
@@ -50,7 +47,7 @@ func MakeListKey(prefix, group, queue string) string {
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	return makeKey(prefix, group, queue, "list")
+	return makeKey(prefix, ":", group, ":", queue, ":", "list")
 }
 
 func MakeZSetKey(prefix, group, queue string) string {
@@ -60,7 +57,7 @@ func MakeZSetKey(prefix, group, queue string) string {
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	return makeKey(prefix, group, queue, "zset")
+	return makeKey(prefix, ":", group, ":", queue, ":", "zset")
 }
 
 func MakeStreamKey(prefix, group, queue string) string {
@@ -70,27 +67,17 @@ func MakeStreamKey(prefix, group, queue string) string {
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	return makeKey(prefix, group, queue, "stream")
+	return makeKey(prefix, ":", group, ":", queue, ":", "stream")
 }
-func MakeLogKey(prefix, resultType, uniqueId string) string {
-	var builder strings.Builder
-	builder.WriteString(prefix)
-	builder.WriteString(":")
-	builder.WriteString("logs")
-	builder.WriteString(":")
-	builder.WriteString(resultType)
-	builder.WriteString(":")
-	builder.WriteString(uniqueId)
 
-	return builder.String()
+func MakeLogKey(prefix, resultType, uniqueId string) string {
+	return makeKey(prefix, ":", "logs", ":", resultType, ":", uniqueId)
 }
+
 func MakeHealthKey(prefix string) string {
-	var builder strings.Builder
-	builder.WriteString(prefix)
-	builder.WriteString(":")
-	builder.WriteString("health_checker")
-	return builder.String()
+	return makeKey(prefix, ":", "health_checker")
 }
+
 func Retry(f func() error, delayTime time.Duration) error {
 	index := 0
 	errChan := make(chan error, 1)

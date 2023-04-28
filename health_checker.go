@@ -31,13 +31,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type healthCheckI interface {
-	start(ctx context.Context) error
-}
-
-type healthCheck struct {
-	client *redis.Client
-}
+type (
+	healthCheckI interface {
+		start(ctx context.Context) error
+	}
+	healthCheck struct {
+		client *redis.Client
+	}
+)
 
 func newHealthCheck(client *redis.Client) *healthCheck {
 	return &healthCheck{client: client}
@@ -46,7 +47,6 @@ func newHealthCheck(client *redis.Client) *healthCheck {
 func (t *healthCheck) start(ctx context.Context) (err error) {
 
 	key := base.MakeHealthKey(Config.Queue.Redis.Prefix)
-	var str string
 
 	info, err := t.info(ctx)
 	if err != nil {
@@ -58,15 +58,16 @@ func (t *healthCheck) start(ctx context.Context) (err error) {
 		return err
 	}
 	if id, ok := data["server"]["redis_build_id"].(string); ok {
-		if err = t.client.HDel(ctx, key, id).Err(); err != nil {
-			return
+		if err := t.client.HDel(ctx, key, id).Err(); err != nil {
+			return err
 		}
 
-		if str, err = json.Json.MarshalToString(data); err != nil {
-			return
+		str, err := json.Json.MarshalToString(data)
+		if err != nil {
+			return err
 		}
-		if err = t.client.HMSet(ctx, key, id, str).Err(); err != nil {
-			return
+		if err := t.client.HMSet(ctx, key, id, str).Err(); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -42,6 +42,7 @@ type (
 		start(ctx context.Context, consumer *ConsumerHandler) error
 		enqueue(ctx context.Context, task *Task, option options.Option) error
 		shutDown()
+		sendToStream(ctx context.Context, task *Task) error
 	}
 	scheduleJob struct {
 		client     *redis.Client
@@ -204,9 +205,9 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 		ID:     "*",
 		Values: map[string]any(task.Values),
 	}
-	cmd := t.client.XAdd(ctx, xAddArgs)
-	return cmd.Err()
+	return t.client.XAdd(ctx, xAddArgs).Err()
 }
+
 func (t *scheduleJob) shutDown() {
 	t.stop <- struct{}{}
 	t.done <- struct{}{}
