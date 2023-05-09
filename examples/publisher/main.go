@@ -35,6 +35,15 @@ func pubOneInfo() {
 	if err != nil {
 
 	}
+	msg2 := struct {
+		Id   int
+		Info string
+	}{
+		2, "msg----2",
+	}
+	d2, _ := json.Marshal(msg2)
+	task2 := beanq.NewTask(d2)
+	pub.Publish(task2, opt.Queue("delay-ch"), opt.Group("delay-group"))
 	defer pub.Close()
 
 	// publish information
@@ -68,7 +77,7 @@ func pubDelayInfo() {
 
 	m := make(map[string]string)
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 10000; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)

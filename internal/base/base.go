@@ -32,7 +32,7 @@ import (
 func makeKey(keys ...string) string {
 
 	var builder strings.Builder
-
+	builder.Grow(len(keys))
 	for _, v := range keys {
 		builder.WriteString(v)
 	}

@@ -39,7 +39,7 @@ import (
 
 type (
 	scheduleJobI interface {
-		start(ctx context.Context, consumer *ConsumerHandler) error
+		start(ctx context.Context, consumer *ConsumerHandler, cond *sync.Cond, isStop bool) error
 		enqueue(ctx context.Context, task *Task, option options.Option) error
 		shutDown()
 		sendToStream(ctx context.Context, task *Task) error
@@ -76,13 +76,18 @@ func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) error {
+func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler, cond *sync.Cond, isStop bool) error {
 
+	cond.L.Lock()
+	for isStop {
+		cond.Wait()
+	}
 	if err := t.pool.Submit(func() {
 		t.consume(ctx, consumer)
 	}); err != nil {
 		return err
 	}
+	cond.L.Unlock()
 	return nil
 }
 
