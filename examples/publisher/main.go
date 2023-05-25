@@ -66,11 +66,17 @@ func pubMoreInfo() {
 func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 
-	m := make(map[string]string)
+	m := make(map[string]any)
 
 	for i := 0; i < 10; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
+		m["a"] = "sfdsf"
+		m["b"] = "bbbb"
+		m["c"] = "ccccc"
+		m["d"] = "sdfsfdsfsf"
+		m["e"] = "sdfsfsfsf"
+
 		b, _ := json.Marshal(m)
 
 		task := beanq.NewTask(b, beanq.SetName("update"))
@@ -78,10 +84,10 @@ func pubDelayInfo() {
 		if i == 2 {
 			delayT = time.Now()
 		}
-		if i == 3 {
-			y = 10
-			delayT = time.Now().Add(35 * time.Minute)
-		}
+		// if i == 3 {
+		// 	y = 10
+		// 	delayT = time.Now().Add(35 * time.Minute)
+		// }
 
 		// This part is for the convenience of future testing, so keep it for now
 		/*

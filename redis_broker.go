@@ -104,9 +104,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts opt.Option) 
 			MaxLen:     task.MaxLen(),
 			MinID:      "",
 			Approx:     false,
-			// Limit:      0,
-			ID:     "*",
-			Values: map[string]any(task.Values),
+			ID:         "*",
+			Values:     map[string]any(task.Values),
 		}
 
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
