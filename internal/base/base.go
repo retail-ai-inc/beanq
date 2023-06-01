@@ -77,7 +77,9 @@ func MakeLogKey(prefix, resultType, uniqueId string) string {
 func MakeHealthKey(prefix string) string {
 	return makeKey(prefix, ":", "health_checker")
 }
-
+func MakeTimeUnit(prefix string) string {
+	return makeKey(prefix, ":", "time_unit")
+}
 func Retry(f func() error, delayTime time.Duration) error {
 	index := 0
 	errChan := make(chan error, 1)

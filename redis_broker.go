@@ -32,7 +32,6 @@ import (
 	"syscall"
 	"time"
 
-	"beanq/helper/timex"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
@@ -95,8 +94,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts opt.Option) 
 	if task == nil {
 		return fmt.Errorf("enqueue Task Err:%+v", "stream or values is nil")
 	}
-	nowTime := timex.HalfHour(time.Now())
-	if task.ExecuteTime().Before(nowTime.Add(time.Duration(task.Priority()) * time.Second)) {
+
+	if task.ExecuteTime().Before(time.Now()) {
 
 		xAddArgs := &redis.XAddArgs{
 			Stream:     base.MakeStreamKey(Config.Queue.Redis.Prefix, task.Group(), task.Queue()),
@@ -207,19 +206,21 @@ func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) err
 
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal)
+
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
-	for {
-		select {
-		case sig := <-sigs:
-			if sig == syscall.SIGTSTP {
-				t.once.Do(func() {
-					close(t.stop)
-					t.pool.Release()
-					t.done <- struct{}{}
-					t.healCheckDone <- struct{}{}
-					t.scheduleJob.shutDown()
-				})
-			}
+
+	select {
+	case sig := <-sigs:
+		if sig == syscall.SIGINT {
+			t.once.Do(func() {
+				close(t.stop)
+				t.pool.Release()
+				t.done <- struct{}{}
+				t.healCheckDone <- struct{}{}
+				t.scheduleJob.shutDown()
+				t.client.Close()
+				os.Exit(0)
+			})
 		}
 	}
 
@@ -344,32 +345,25 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			}
 			now = time.Now()
 
-			if task.ExecuteTime().After(now) {
-				if err := t.scheduleJob.sendToStream(ctx, task); err != nil {
-					Logger.Error("xadd error", zap.Error(err))
-				}
-			} else {
+			// if error,then retry to consume
+			if err := base.Retry(func() error {
+				return f(task)
+			}, t.opts.RetryTime); err != nil {
+				info = FailedInfo
+				result.Level = ErrLevel
+				result.Info = FlagInfo(err.Error())
+			}
 
-				// if error,then retry to consume
-				if err := base.Retry(func() error {
-					return f(task)
-				}, t.opts.RetryTime); err != nil {
-					info = FailedInfo
-					result.Level = ErrLevel
-					result.Info = FlagInfo(err.Error())
-				}
+			sub := time.Now().Sub(now)
 
-				sub := time.Now().Sub(now)
-
-				result.Payload = task.Payload()
-				result.RunTime = sub.String()
-				result.Queue = stream
-				result.Group = group
-				// Successfully consumed data, stored in `string`
-				if err := t.logJob.saveLog(ctx, result); err != nil {
-					Logger.Error("save log err", zap.Error(err))
-					continue
-				}
+			result.Payload = task.Payload()
+			result.RunTime = sub.String()
+			result.Queue = stream
+			result.Group = group
+			// Successfully consumed data, stored in `string`
+			if err := t.logJob.saveLog(ctx, result); err != nil {
+				Logger.Error("save log err", zap.Error(err))
+				continue
 			}
 
 			// `stream` confirmation message
