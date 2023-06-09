@@ -40,7 +40,6 @@ type (
 		Memory devMemory `json:"memory"`
 		Cpu    devCpu    `json:"cpu"`
 		Net    devNet    `json:"net"`
-		// Disk   devDisk   `json:"disk"`
 	}
 )
 
@@ -94,38 +93,6 @@ func (t *device) memory() error {
 	}
 	return nil
 }
-
-/*
-	func (t *device) disk() error {
-		dk, err := disk.Partitions(false)
-		if err != nil {
-			return err
-		}
-		if len(dk) <= 0 {
-			return errors.New("no disk")
-		}
-
-		for _, stat := range dk {
-			if stat.Mountpoint != "/" {
-				continue
-			}
-			s, err := disk.Usage(stat.Mountpoint)
-			if err != nil {
-				return err
-			}
-			if s != nil {
-				t.Disk = devDisk{
-					Name:           stat.Device,
-					AvailableBytes: s.Free,
-					UsageBytes:     s.Used,
-					UsageRatio:     s.UsedPercent,
-				}
-			}
-			break
-		}
-		return nil
-	}
-*/
 
 func (t *device) net() error {
 	localIp, err := IpV4Addr()

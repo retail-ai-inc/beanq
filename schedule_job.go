@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"beanq/helper/json"
-	"beanq/helper/timex"
 	"beanq/internal/base"
 	"beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
@@ -39,7 +38,7 @@ import (
 
 type (
 	scheduleJobI interface {
-		start(ctx context.Context, consumer *ConsumerHandler, cond *sync.Cond, isStop bool) error
+		start(ctx context.Context, consumer *ConsumerHandler) error
 		enqueue(ctx context.Context, task *Task, option options.Option) error
 		shutDown()
 		sendToStream(ctx context.Context, task *Task) error
@@ -68,7 +67,7 @@ var (
 		offset:         0,
 		count:          -1,
 		delayJobTicker: 10 * time.Second,
-		consumeTicker:  80 * time.Millisecond,
+		consumeTicker:  1 * time.Second,
 	}
 )
 
@@ -76,18 +75,13 @@ func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler, cond *sync.Cond, isStop bool) error {
+func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) error {
 
-	cond.L.Lock()
-	for isStop {
-		cond.Wait()
-	}
 	if err := t.pool.Submit(func() {
 		t.consume(ctx, consumer)
 	}); err != nil {
 		return err
 	}
-	cond.L.Unlock()
 	return nil
 }
 
@@ -98,9 +92,17 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt options.Optio
 		return err
 	}
 
+	priority := cast.ToFloat64(task.ExecuteTime().Unix()) + opt.Priority
+
 	if err := t.client.ZAdd(ctx, base.MakeZSetKey(Config.Queue.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
-		Score:  cast.ToFloat64(task.ExecuteTime().Unix()) + opt.Priority,
+		Score:  priority,
 		Member: bt,
+	}).Err(); err != nil {
+		return err
+	}
+	if err := t.client.ZAdd(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), redis.Z{
+		Score:  priority,
+		Member: priority,
 	}).Err(); err != nil {
 		return err
 	}
@@ -114,7 +116,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 	defer ticker.Stop()
 
 	var (
-		now, now2 time.Time
+		now time.Time
 	)
 	for {
 		select {
@@ -126,31 +128,41 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 		case <-ticker.C:
 
 			now = time.Now()
-			now2 = timex.HalfHour(now)
-			sub := now2.Sub(now)
 
-			if sub.Seconds() <= 0 {
-				sub = 30 * time.Minute
-				now2 = now2.Add(30 * time.Minute)
-			}
+			max := cast.ToString(now.Unix() + 9)
 
-			if err := t.doConsume(ctx, now2, consumer); err != nil {
+			cmd := t.client.ZRangeByScore(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), &redis.ZRangeBy{
+				Min:    "0",
+				Max:    max,
+				Offset: 0,
+				Count:  1,
+			})
+			if err := cmd.Err(); err != nil {
 				Logger.Error("consume err", zap.Error(err))
+			}
+			val := cmd.Val()
+			if len(val) <= 0 {
 				continue
 			}
 
-			ticker.Reset(sub)
+			if err := t.client.ZRem(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), val[0]).Err(); err != nil {
+				Logger.Error("zrem err", zap.Error(err))
+
+			}
+
+			if err := t.doConsume(ctx, max, consumer); err != nil {
+				Logger.Error("consume err", zap.Error(err))
+				continue
+			}
 		}
 	}
 }
 
-func (t *scheduleJob) doConsume(ctx context.Context, time2 time.Time, consumer *ConsumerHandler) error {
-
-	max := time2.Add(9 * time.Second).Unix()
+func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *ConsumerHandler) error {
 
 	zRangeBy := &redis.ZRangeBy{
 		Min:    defaultScheduleJobConfig.scoreMin,
-		Max:    cast.ToString(max),
+		Max:    max,
 		Offset: defaultScheduleJobConfig.offset,
 		Count:  defaultScheduleJobConfig.count,
 	}

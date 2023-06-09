@@ -31,12 +31,7 @@ import (
 
 func makeKey(keys ...string) string {
 
-	var builder strings.Builder
-	builder.Grow(len(keys))
-	for _, v := range keys {
-		builder.WriteString(v)
-	}
-	return builder.String()
+	return strings.Join(keys, ":")
 
 }
 
@@ -47,7 +42,7 @@ func MakeListKey(prefix, group, queue string) string {
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	return makeKey(prefix, ":", group, ":", queue, ":", "list")
+	return makeKey(prefix, group, queue, "list")
 }
 
 func MakeZSetKey(prefix, group, queue string) string {
@@ -57,7 +52,7 @@ func MakeZSetKey(prefix, group, queue string) string {
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	return makeKey(prefix, ":", group, ":", queue, ":", "zset")
+	return makeKey(prefix, group, queue, "zset")
 }
 
 func MakeStreamKey(prefix, group, queue string) string {
@@ -67,17 +62,19 @@ func MakeStreamKey(prefix, group, queue string) string {
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	return makeKey(prefix, ":", group, ":", queue, ":", "stream")
+	return makeKey(prefix, group, queue, "stream")
 }
 
 func MakeLogKey(prefix, resultType, uniqueId string) string {
-	return makeKey(prefix, ":", "logs", ":", resultType, ":", uniqueId)
+	return makeKey(prefix, "logs", resultType, uniqueId)
 }
 
 func MakeHealthKey(prefix string) string {
-	return makeKey(prefix, ":", "health_checker")
+	return makeKey(prefix, "health_checker")
 }
-
+func MakeTimeUnit(prefix string) string {
+	return makeKey(prefix, "time_unit")
+}
 func Retry(f func() error, delayTime time.Duration) error {
 	index := 0
 	errChan := make(chan error, 1)
