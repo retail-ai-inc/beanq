@@ -32,7 +32,6 @@ import (
 	"syscall"
 	"time"
 
-	"beanq/helper/timex"
 	"beanq/internal/base"
 	opt "beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
@@ -48,21 +47,19 @@ type (
 	}
 
 	RedisBroker struct {
-		client      *redis.Client
-		isStop      bool
-		healthCheck healthCheckI
-		scheduleJob scheduleJobI
-		logJob      logJobI
-		cond        *sync.Cond
-		opts        *opt.Options
-		wg          *sync.WaitGroup
-		pool        *ants.Pool
+		client                    *redis.Client
+		done, stop, healCheckDone chan struct{}
+		healthCheck               healthCheckI
+		scheduleJob               scheduleJobI
+		logJob                    logJobI
+		opts                      *opt.Options
+		wg                        *sync.WaitGroup
+		once                      *sync.Once
+		pool                      *ants.Pool
 	}
 )
 
-var (
-	_ Broker = (*RedisBroker)(nil)
-)
+var _ Broker = (*RedisBroker)(nil)
 
 func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 
@@ -79,15 +76,17 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		PoolTimeout:  config.Queue.Redis.PoolTimeout,
 	})
 	return &RedisBroker{
-		client:      client,
-		isStop:      false,
-		healthCheck: newHealthCheck(client),
-		scheduleJob: newScheduleJob(pool, client),
-		logJob:      newLogJob(client),
-		cond:        sync.NewCond(&sync.Mutex{}),
-		opts:        nil,
-		wg:          &sync.WaitGroup{},
-		pool:        pool,
+		client:        client,
+		done:          make(chan struct{}),
+		stop:          make(chan struct{}),
+		healCheckDone: make(chan struct{}),
+		healthCheck:   newHealthCheck(client),
+		scheduleJob:   newScheduleJob(pool, client),
+		logJob:        newLogJob(client),
+		opts:          nil,
+		wg:            &sync.WaitGroup{},
+		once:          &sync.Once{},
+		pool:          pool,
 	}
 }
 
@@ -95,9 +94,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts opt.Option) 
 	if task == nil {
 		return fmt.Errorf("enqueue Task Err:%+v", "stream or values is nil")
 	}
-	nowTime := timex.HalfHour(time.Now())
 
-	if task.ExecuteTime().Before(nowTime.Add(time.Duration(task.Priority()) * time.Second)) {
+	if task.ExecuteTime().Before(time.Now()) {
 
 		xAddArgs := &redis.XAddArgs{
 			Stream:     base.MakeStreamKey(Config.Queue.Redis.Prefix, task.Group(), task.Queue()),
@@ -105,9 +103,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts opt.Option) 
 			MaxLen:     task.MaxLen(),
 			MinID:      "",
 			Approx:     false,
-			// Limit:      0,
-			ID:     "*",
-			Values: map[string]any(task.Values),
+			ID:         "*",
+			Values:     map[string]any(task.Values),
 		}
 
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
@@ -130,10 +127,13 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	for _, consumer := range consumers {
 
 		// consume data
-		go t.worker(ctx, consumer)
-
+		if err := t.worker(ctx, consumer); err != nil {
+			Logger.Error("worker err", zap.Error(err))
+		}
 		// check information
-		t.scheduleJob.start(ctx, consumer, t.cond, t.isStop)
+		if err := t.scheduleJob.start(ctx, consumer); err != nil {
+			Logger.Error("schedule job err", zap.Error(err))
+		}
 
 	}
 
@@ -152,14 +152,19 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 
-	do := func() {
+	if err := t.pool.Submit(func() {
+
 		ticker := time.NewTicker(10 * time.Second)
+
 		for {
 			select {
 			case <-ctx.Done():
 				if !errors.Is(ctx.Err(), context.Canceled) {
 					Logger.Error("context closed", zap.Error(ctx.Err()))
 				}
+				ticker.Stop()
+				return
+			case <-t.healCheckDone:
 				ticker.Stop()
 				return
 			case <-ticker.C:
@@ -169,34 +174,24 @@ func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 				}
 			}
 		}
-	}
-	t.cond.L.Lock()
-	for t.isStop {
-		t.cond.Wait()
-	}
-	if err := t.pool.Submit(do); err != nil {
+	}); err != nil {
 		return err
 	}
-	t.cond.L.Unlock()
 	return nil
 }
 
-func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) {
+func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) error {
 
-	t.cond.L.Lock()
-	for t.isStop {
-		t.cond.Wait()
-	}
 	result, err := t.client.XInfoGroups(ctx, base.MakeStreamKey(Config.Queue.Redis.Prefix, consumer.Group, consumer.Queue)).Result()
 	if err != nil && err.Error() != "ERR no such key" {
-		Logger.Error("worker err", zap.Error(err))
-		return
+		Logger.Error("infoGroup err", zap.Error(err))
+		return err
 	}
 
 	if len(result) < 1 {
 		if err := t.createGroup(ctx, consumer.Queue, consumer.Group); err != nil {
-			Logger.Error("worker err", zap.Error(err))
-			return
+			Logger.Error("create group err", zap.Error(err))
+			return err
 		}
 	}
 
@@ -204,31 +199,31 @@ func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) {
 		t.work(ctx, 10, consumer)
 	}); err != nil {
 		Logger.Error("worker err", zap.Error(err))
-		return
+		return err
 	}
-
-	t.cond.L.Unlock()
+	return nil
 }
 
 func (t *RedisBroker) waitSignal() {
-	sigs := make(chan os.Signal, 1)
+	sigs := make(chan os.Signal)
+
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
 
-	for {
-		select {
-		case <-sigs:
-
-			// todo
-			// will improve what stop schedule job
-			t.isStop = true
-			t.pool.Release()
-			Logger.Fatal("----STOP----")
-
-		default:
-			t.isStop = false
-			t.cond.Broadcast()
+	select {
+	case sig := <-sigs:
+		if sig == syscall.SIGINT {
+			t.once.Do(func() {
+				close(t.stop)
+				t.pool.Release()
+				t.done <- struct{}{}
+				t.healCheckDone <- struct{}{}
+				t.scheduleJob.shutDown()
+				t.client.Close()
+				os.Exit(0)
+			})
 		}
 	}
+
 }
 
 func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) error {
@@ -239,32 +234,38 @@ func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) erro
 }
 
 func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHandler) {
-
+	// consumer := uuid.New().String()
 	group := handler.Group
 	queue := handler.Queue
 
 	for {
-		// block XReadGroup to read data
-		readGroup := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-			Group:    group,
-			Streams:  []string{base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue), ">"},
-			Consumer: base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue),
-			Count:    count,
-			Block:    10 * time.Second,
-		})
-		if err := readGroup.Err(); err != nil && err != redis.Nil {
-			Logger.Error("XReadGroup err", zap.Error(err))
-			continue
+		select {
+		case <-t.done:
+			Logger.Info("--------STOP--------")
+			return
+		case <-ctx.Done():
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				Logger.Error("context closed", zap.Error(ctx.Err()))
+			}
+			return
+		default:
+			// block XReadGroup to read data
+			streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+				Group:    group,
+				Streams:  []string{base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue), ">"},
+				Consumer: base.MakeStreamKey(Config.Queue.Redis.Prefix, group, queue),
+				Count:    count,
+				Block:    10 * time.Second,
+			}).Result()
+			if err != nil && err != redis.Nil {
+				Logger.Error("XReadGroup err", zap.Error(err))
+				continue
+			}
+			if len(streams) <= 0 {
+				continue
+			}
+			t.consumer(ctx, handler.ConsumerFun, group, streams)
 		}
-
-		streams, err := readGroup.Result()
-		if err != nil {
-			continue
-		}
-		if len(streams) <= 0 {
-			continue
-		}
-		t.consumer(ctx, handler.ConsumerFun, group, streams)
 	}
 }
 
@@ -344,32 +345,25 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			}
 			now = time.Now()
 
-			if task.ExecuteTime().After(now) {
-				if err := t.scheduleJob.sendToStream(ctx, task); err != nil {
-					Logger.Error("xadd error", zap.Error(err))
-				}
-			} else {
+			// if error,then retry to consume
+			if err := base.Retry(func() error {
+				return f(task)
+			}, t.opts.RetryTime); err != nil {
+				info = FailedInfo
+				result.Level = ErrLevel
+				result.Info = FlagInfo(err.Error())
+			}
 
-				// if error,then retry to consume
-				if err := base.Retry(func() error {
-					return f(task)
-				}, t.opts.RetryTime); err != nil {
-					info = FailedInfo
-					result.Level = ErrLevel
-					result.Info = FlagInfo(err.Error())
-				}
+			sub := time.Now().Sub(now)
 
-				sub := time.Now().Sub(now)
-
-				result.Payload = task.Payload()
-				result.RunTime = sub.String()
-				result.Queue = stream
-				result.Group = group
-				// Successfully consumed data, stored in `string`
-				if err := t.logJob.saveLog(ctx, result); err != nil {
-					Logger.Error("save log err", zap.Error(err))
-					continue
-				}
+			result.Payload = task.Payload()
+			result.RunTime = sub.String()
+			result.Queue = stream
+			result.Group = group
+			// Successfully consumed data, stored in `string`
+			if err := t.logJob.saveLog(ctx, result); err != nil {
+				Logger.Error("save log err", zap.Error(err))
+				continue
 			}
 
 			// `stream` confirmation message
@@ -387,6 +381,12 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 }
 
 func (t *RedisBroker) close() error {
+	select {
+	case <-t.stop:
+		return errors.New("redis broker already closed")
+	default:
+		close(t.stop)
+	}
 	return t.client.Close()
 }
 
