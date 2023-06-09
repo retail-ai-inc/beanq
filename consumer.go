@@ -74,8 +74,8 @@ func NewConsumer() *Consumer {
 			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
 		// Initialize the beanq consumer log
-		Logger = logger.InitLogger(param...)
-		Logger.With(zap.String("prefix", Config.Queue.Redis.Prefix))
+		Logger = logger.InitLogger(param...).With(zap.String("prefix", Config.Queue.Redis.Prefix))
+
 		if Config.Queue.KeepJobsInQueue != 0 {
 			opts.KeepJobInQueue = Config.Queue.KeepJobsInQueue
 		}

@@ -29,36 +29,52 @@ import (
 	"beanq/internal/options"
 )
 
-func makeKey(group, queue, name string) string {
+func makeKey(keys ...string) string {
+
+	return strings.Join(keys, ":")
+
+}
+
+func MakeListKey(prefix, group, queue string) string {
 	if group == "" {
 		group = options.DefaultOptions.DefaultGroup
 	}
 	if queue == "" {
 		queue = options.DefaultOptions.DefaultQueueName
 	}
-	var builder strings.Builder
-
-	builder.WriteString(group)
-	builder.WriteString(":")
-	builder.WriteString(queue)
-	builder.WriteString(":")
-	builder.WriteString(name)
-
-	return builder.String()
+	return makeKey(prefix, group, queue, "list")
 }
 
-func MakeListKey(group, queue string) string {
-	return makeKey(group, queue, "list")
+func MakeZSetKey(prefix, group, queue string) string {
+	if group == "" {
+		group = options.DefaultOptions.DefaultGroup
+	}
+	if queue == "" {
+		queue = options.DefaultOptions.DefaultQueueName
+	}
+	return makeKey(prefix, group, queue, "zset")
 }
 
-func MakeZSetKey(group, queue string) string {
-	return makeKey(group, queue, "zset")
+func MakeStreamKey(prefix, group, queue string) string {
+	if group == "" {
+		group = options.DefaultOptions.DefaultGroup
+	}
+	if queue == "" {
+		queue = options.DefaultOptions.DefaultQueueName
+	}
+	return makeKey(prefix, group, queue, "stream")
 }
 
-func MakeStreamKey(group, queue string) string {
-	return makeKey(group, queue, "stream")
+func MakeLogKey(prefix, resultType, uniqueId string) string {
+	return makeKey(prefix, "logs", resultType, uniqueId)
 }
 
+func MakeHealthKey(prefix string) string {
+	return makeKey(prefix, "health_checker")
+}
+func MakeTimeUnit(prefix string) string {
+	return makeKey(prefix, "time_unit")
+}
 func Retry(f func() error, delayTime time.Duration) error {
 	index := 0
 	errChan := make(chan error, 1)

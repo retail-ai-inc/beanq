@@ -79,8 +79,8 @@ func NewPublisher() *pubClient {
 			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
 		}
 		// Initialize the beanq consumer log
-		Logger = logger.InitLogger(param...)
-		Logger.With(zap.String("prefix", Config.Queue.Redis.Prefix))
+		Logger = logger.InitLogger(param...).With(zap.String("prefix", Config.Queue.Redis.Prefix))
+
 		if Config.Queue.PoolSize != 0 {
 			opts.PoolSize = Config.Queue.PoolSize
 		}

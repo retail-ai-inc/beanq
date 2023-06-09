@@ -25,10 +25,34 @@ package options
 import (
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
-type OptionType int
+type (
+	OptionType int
+
+	Option struct {
+		Priority    float64
+		Retry       int
+		Queue       string
+		Group       string
+		MaxLen      int64
+		ExecuteTime time.Time
+	}
+
+	OptionI interface {
+		String() string
+		OptType() OptionType
+		Value() any
+	}
+
+	priorityOption float64
+	retryOption    int
+	queueOption    string
+	groupOption    string
+	maxLenOption   int64
+	executeTime    time.Time
+)
 
 const (
 	MaxRetryOpt OptionType = iota + 1
@@ -38,30 +62,6 @@ const (
 	MaxLenOpt
 	ExecuteTimeOpt
 	IdleTime
-)
-
-type Option struct {
-	Priority    float64
-	Retry       int
-	Queue       string
-	Group       string
-	MaxLen      int64
-	ExecuteTime time.Time
-}
-
-type OptionI interface {
-	String() string
-	OptType() OptionType
-	Value() any
-}
-
-type (
-	priorityOption float64
-	retryOption    int
-	queueOption    string
-	groupOption    string
-	maxLenOption   int64
-	executeTime    time.Time
 )
 
 func Queue(name string) OptionI {

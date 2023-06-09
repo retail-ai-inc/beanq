@@ -24,64 +24,61 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
 	"beanq/helper/json"
 	"beanq/internal/base"
 	"beanq/internal/options"
-	"github.com/go-redis/redis/v8"
 	"github.com/panjf2000/ants/v2"
+	"github.com/redis/go-redis/v9"
+	"github.com/spf13/cast"
 	"go.uber.org/zap"
 )
 
-type scheduleJobI interface {
-	start(ctx context.Context, consumers []*ConsumerHandler) error
-	enqueue(ctx context.Context, task *Task, option options.Option) error
-	shutDown()
-}
+type (
+	scheduleJobI interface {
+		start(ctx context.Context, consumer *ConsumerHandler) error
+		enqueue(ctx context.Context, task *Task, option options.Option) error
+		shutDown()
+		sendToStream(ctx context.Context, task *Task) error
+	}
+	scheduleJob struct {
+		client     *redis.Client
+		wg         *sync.WaitGroup
+		pool       *ants.Pool
+		stop, done chan struct{}
+	}
+)
 
-type scheduleJob struct {
-	client     *redis.Client
-	wg         *sync.WaitGroup
-	pool       *ants.Pool
-	stop, done chan struct{}
-}
-
-var _ scheduleJobI = (*scheduleJob)(nil)
-
-// schedule job config
-var defaultScheduleJobConfig = struct {
-	// zset attribute score,default 0-10
-	scoreMin, scoreMax string
-	// zset data limit
-	offset, count int64
-	// delayJob and consumer executeTime
-	delayJobTicker, consumeTicker time.Duration
-}{
-	scoreMin:       "0",
-	scoreMax:       "10",
-	offset:         0,
-	count:          500,
-	delayJobTicker: 10 * time.Second,
-	consumeTicker:  80 * time.Millisecond,
-}
+var (
+	_ scheduleJobI = (*scheduleJob)(nil)
+	// schedule job config
+	defaultScheduleJobConfig = struct {
+		// zset attribute score,default 0-10
+		scoreMin, scoreMax string
+		// zset data limit
+		offset, count int64
+		// delayJob and consumer executeTime
+		delayJobTicker, consumeTicker time.Duration
+	}{
+		scoreMin:       "0",
+		scoreMax:       "10",
+		offset:         0,
+		count:          -1,
+		delayJobTicker: 10 * time.Second,
+		consumeTicker:  1 * time.Second,
+	}
+)
 
 func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
-
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
-func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) error {
+func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) error {
 
 	if err := t.pool.Submit(func() {
-		t.delayJobs(ctx, consumers)
-	}); err != nil {
-		return err
-	}
-	if err := t.pool.Submit(func() {
-		t.consume(ctx, consumers)
+		t.consume(ctx, consumer)
 	}); err != nil {
 		return err
 	}
@@ -89,118 +86,38 @@ func (t *scheduleJob) start(ctx context.Context, consumers []*ConsumerHandler) e
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt options.Option) error {
-	if task == nil {
-		return errors.New("values can't empty")
-	}
-
-	flag := false
-	if task.ExecuteTime().After(time.Now()) {
-		flag = true
-	}
 
 	bt, err := json.Marshal(task.Values)
 	if err != nil {
 		return err
 	}
 
-	if flag {
-		return t.client.RPush(ctx, base.MakeListKey(opt.Group, opt.Queue), bt).Err()
+	priority := cast.ToFloat64(task.ExecuteTime().Unix()) + opt.Priority
+
+	if err := t.client.ZAdd(ctx, base.MakeZSetKey(Config.Queue.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
+		Score:  priority,
+		Member: bt,
+	}).Err(); err != nil {
+		return err
 	}
-	if !flag {
-		if err := t.client.ZAdd(ctx, base.MakeZSetKey(opt.Group, opt.Queue), &redis.Z{
-			Score:  opt.Priority,
-			Member: bt,
-		}).Err(); err != nil {
-			return err
-		}
+	if err := t.client.ZAdd(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), redis.Z{
+		Score:  priority,
+		Member: priority,
+	}).Err(); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (t *scheduleJob) delayJobs(ctx context.Context, consumers []*ConsumerHandler) {
-	key := ""
-	for _, consumer := range consumers {
-		key = base.MakeListKey(consumer.Group, consumer.Queue)
+func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
-		fun := func() {
-			t.pollList(ctx, t.client, key)
-		}
-
-		if err := t.pool.Submit(fun); err != nil {
-			Logger.Error("poll list err ", zap.Error(err))
-			continue
-		}
-	}
-}
-func (t *scheduleJob) pollList(ctx context.Context, client *redis.Client, key string) {
-	for {
-		select {
-		case <-ctx.Done():
-			t.pool.Release()
-			return
-		case <-t.stop:
-			return
-		default:
-			// get a data from `list` header
-			cmd := client.BLPop(ctx, defaultScheduleJobConfig.delayJobTicker, key)
-			if cmd.Err() != nil && cmd.Err() != redis.Nil {
-				Logger.Error("blpop err", zap.Error(cmd.Err()))
-				continue
-			}
-			vals := cmd.Val()
-			if len(vals) < 2 {
-				continue
-			}
-			t.doDelayJobs(ctx, key, vals[1])
-		}
-	}
-}
-
-func (t *scheduleJob) doDelayJobs(ctx context.Context, key string, val string) {
-	// declare delayTask function
-	doTask := func(ctx context.Context, client *redis.Client, key, val string) error {
-
-		task, err := jsonToTask(val)
-		if err != nil {
-			return err
-		}
-		flag := false
-		if task.ExecuteTime().After(time.Now()) {
-			flag = true
-		}
-		// if delay job,publish the data to the end of `list`
-		if flag {
-			if err := client.RPush(ctx, key, val).Err(); err != nil {
-				return err
-			}
-		}
-		// if not delay job,send data to zset
-		if !flag {
-			if err := t.enqueue(ctx, task, options.Option{
-				Group:    task.Group(),
-				Queue:    task.Queue(),
-				Priority: task.Priority(),
-			}); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}
-	// begin to execute the task
-	if err := doTask(ctx, t.client, key, val); err != nil {
-		Logger.Error("delay job err", zap.Error(err))
-		return
-	}
-}
-
-func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(defaultScheduleJobConfig.consumeTicker)
-	defer func() {
-		ticker.Stop()
-	}()
+	defer ticker.Stop()
 
+	var (
+		now time.Time
+	)
 	for {
 		select {
 		case <-ctx.Done():
@@ -209,34 +126,59 @@ func (t *scheduleJob) consume(ctx context.Context, consumers []*ConsumerHandler)
 		case <-t.done:
 			return
 		case <-ticker.C:
-			t.doConsume(ctx, consumers)
+
+			now = time.Now()
+
+			max := cast.ToString(now.Unix() + 9)
+
+			cmd := t.client.ZRangeByScore(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), &redis.ZRangeBy{
+				Min:    "0",
+				Max:    max,
+				Offset: 0,
+				Count:  1,
+			})
+			if err := cmd.Err(); err != nil {
+				Logger.Error("consume err", zap.Error(err))
+			}
+			val := cmd.Val()
+			if len(val) <= 0 {
+				continue
+			}
+
+			if err := t.client.ZRem(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), val[0]).Err(); err != nil {
+				Logger.Error("zrem err", zap.Error(err))
+
+			}
+
+			if err := t.doConsume(ctx, max, consumer); err != nil {
+				Logger.Error("consume err", zap.Error(err))
+				continue
+			}
 		}
 	}
 }
 
-func (t *scheduleJob) doConsume(ctx context.Context, consumers []*ConsumerHandler) {
+func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *ConsumerHandler) error {
 
 	zRangeBy := &redis.ZRangeBy{
 		Min:    defaultScheduleJobConfig.scoreMin,
-		Max:    defaultScheduleJobConfig.scoreMax,
+		Max:    max,
 		Offset: defaultScheduleJobConfig.offset,
 		Count:  defaultScheduleJobConfig.count,
 	}
-
-	for _, consumer := range consumers {
-		key := base.MakeZSetKey(consumer.Group, consumer.Queue)
-		cmd := t.client.ZRevRangeByScore(ctx, key, zRangeBy)
-		if cmd.Err() != nil && cmd.Err() != redis.Nil {
-			Logger.Error("ZRevRangeByScore err", zap.Error(cmd.Err()))
-			continue
-		}
-		val := cmd.Val()
-		if len(val) <= 0 {
-			continue
-		}
-
-		t.doConsumeZset(ctx, val, consumer)
+	key := base.MakeZSetKey(Config.Queue.Redis.Prefix, consumer.Group, consumer.Queue)
+	cmd := t.client.ZRangeByScore(ctx, key, zRangeBy)
+	if err := cmd.Err(); err != nil && err != redis.Nil {
+		return err
 	}
+
+	val := cmd.Val()
+	if len(val) <= 0 {
+		return nil
+	}
+
+	t.doConsumeZset(ctx, val, consumer)
+	return nil
 }
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
@@ -252,7 +194,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		}
 
 		// Delete data from `zset`
-		if err := t.client.ZRem(ctx, base.MakeZSetKey(consumer.Group, consumer.Queue), vv).Err(); err != nil {
+		if err := t.client.ZRem(ctx, base.MakeZSetKey(Config.Queue.Redis.Prefix, consumer.Group, consumer.Queue), vv).Err(); err != nil {
 			return err
 		}
 		return nil
@@ -271,7 +213,7 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 	maxLen := task.MaxLen()
 
 	xAddArgs := &redis.XAddArgs{
-		Stream:     base.MakeStreamKey(task.Group(), queue),
+		Stream:     base.MakeStreamKey(Config.Queue.Redis.Prefix, task.Group(), queue),
 		NoMkStream: false,
 		MaxLen:     maxLen,
 		MinID:      "",
@@ -280,9 +222,9 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 		ID:     "*",
 		Values: map[string]any(task.Values),
 	}
-	cmd := t.client.XAdd(ctx, xAddArgs)
-	return cmd.Err()
+	return t.client.XAdd(ctx, xAddArgs).Err()
 }
+
 func (t *scheduleJob) shutDown() {
 	t.stop <- struct{}{}
 	t.done <- struct{}{}
