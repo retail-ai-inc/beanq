@@ -39,12 +39,7 @@ func pubDelayInfo() {
 			y = 10
 			delayT = time.Now().Add(35 * time.Minute)
 		}
-
-		// This part is for the convenience of future testing, so keep it for now
-		/*
-			if i > 20 {
-				delayT = time.Now().Add(25 * time.Second)
-			}*/
+		
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
