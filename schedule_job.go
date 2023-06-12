@@ -226,6 +226,5 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 }
 
 func (t *scheduleJob) shutDown() {
-	t.stop <- struct{}{}
 	t.done <- struct{}{}
 }

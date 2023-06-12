@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"path"
@@ -10,6 +11,11 @@ import (
 
 	"beanq/client/helper/jsonx"
 	"beanq/client/internal/redisx"
+)
+
+const (
+	ScheduleQueueKey = "beanq:*:zset"
+	QueueKey         = "beanq:*:stream"
 )
 
 func IndexHandler(writer http.ResponseWriter, request *http.Request) {
@@ -27,8 +33,27 @@ func IndexHandler(writer http.ResponseWriter, request *http.Request) {
 	hdl.ServeHTTP(writer, request)
 	return
 }
+
 func ScheduleHandler(writer http.ResponseWriter, request *http.Request) {
 
+	bt, err := queueInfo(request.Context(), ScheduleQueueKey)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	writer.Write(bt)
+	return
+}
+func QueueHandler(writer http.ResponseWriter, request *http.Request) {
+	bt, err := queueInfo(request.Context(), QueueKey)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	writer.Write(bt)
+	return
+}
+func RedisHandler(writer http.ResponseWriter, request *http.Request) {
 	var data map[string]any
 	data = make(map[string]any, 3)
 	data["errorCode"] = "0000"
@@ -36,47 +61,29 @@ func ScheduleHandler(writer http.ResponseWriter, request *http.Request) {
 
 	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
 	defer client.Close()
-
-	ctx := request.Context()
-	// get queues
-	queues, err := redisx.Keys(ctx, client, "beanq:*:zset")
+	d, err := redisx.Info(request.Context(), client)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 		return
 	}
-	d := make([]map[string]any, 0, len(queues))
-	for _, queue := range queues {
-		objStr := redisx.Object(ctx, client, queue)
-		// get memory
-		r, err := client.MemoryUsage(ctx, queue).Result()
-		if err != nil {
-			log.Println(err)
-			continue
-		}
-		d = append(d, map[string]any{"queue": queue, "state": "Run", "size": objStr.SerizlizedLength, "memory": r, "process": 112067, "fail": 0, "errRate": "2%"})
-	}
-
 	data["data"] = d
 	bt, _ := jsonx.Marshal(&data)
 	writer.Write(bt)
 	return
 }
-func QueueHandler(writer http.ResponseWriter, request *http.Request) {
+func queueInfo(ctx context.Context, queueKey string) ([]byte, error) {
 
-	var data map[string]any
-	data = make(map[string]any, 3)
+	data := make(map[string]any, 3)
 	data["errorCode"] = "0000"
 	data["errorMsg"] = "success"
 
 	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
 	defer client.Close()
 
-	ctx := request.Context()
 	// get queues
-	queues, err := redisx.Keys(ctx, client, "beanq:*:stream")
+	queues, err := redisx.Keys(ctx, client, queueKey)
 	if err != nil {
-		log.Fatal(err)
-		return
+		return nil, err
 	}
 	d := make([]map[string]any, 0, len(queues))
 	for _, queue := range queues {
@@ -91,25 +98,9 @@ func QueueHandler(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	data["data"] = d
-	bt, _ := jsonx.Marshal(&data)
-	writer.Write(bt)
-	return
-}
-func RedisHandler(w http.ResponseWriter, r *http.Request) {
-	var data map[string]any
-	data = make(map[string]any, 3)
-	data["errorCode"] = "0000"
-	data["errorMsg"] = "success"
-
-	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
-	defer client.Close()
-	d, err := redisx.Info(r.Context(), client)
+	bt, err := jsonx.Marshal(&data)
 	if err != nil {
-		log.Println(err)
-		return
+		return nil, err
 	}
-	data["data"] = d
-	bt, _ := jsonx.Marshal(&data)
-	w.Write(bt)
-	return
+	return bt, nil
 }
