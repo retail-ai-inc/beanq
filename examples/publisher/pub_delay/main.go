@@ -31,15 +31,15 @@ func pubDelayInfo() {
 		b, _ := json.Marshal(m)
 
 		task := beanq.NewTask(b, beanq.SetName("update"))
-		delayT := time.Now().Add(100 * time.Second)
+		delayT := time.Now().Add(10 * time.Second)
 		if i == 2 {
 			delayT = time.Now()
 		}
 		if i == 3 {
 			y = 10
-			delayT = time.Now().Add(35 * time.Minute)
+			delayT = time.Now().Add(35 * time.Second)
 		}
-		
+
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}

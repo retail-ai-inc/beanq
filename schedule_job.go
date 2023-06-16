@@ -92,7 +92,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt options.Optio
 		return err
 	}
 
-	priority := cast.ToFloat64(task.ExecuteTime().Unix()) + opt.Priority
+	priority := cast.ToFloat64(task.ExecuteTime().UnixMilli()) + opt.Priority
 
 	if err := t.client.ZAdd(ctx, base.MakeZSetKey(Config.Queue.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
 		Score:  priority,
@@ -129,7 +129,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 			now = time.Now()
 
-			max := cast.ToString(now.Unix() + 9)
+			max := cast.ToString(now.UnixMilli() + 9)
 
 			cmd := t.client.ZRangeByScore(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), &redis.ZRangeBy{
 				Min:    "0",
