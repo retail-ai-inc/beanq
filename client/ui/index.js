@@ -43,6 +43,7 @@
       { path: '/server', component: () => loadModule('./src/pages/server.vue', options) },
       { path: '/schedule', component: () => loadModule("./src/pages/schedule.vue", options) },
       { path: '/queue', component: () => loadModule("./src/pages/queue.vue", options) },
+      {path:'/log',component:()=>loadModule("./src/pages/log.vue",options)},
       { path: '/redis', component: () => loadModule("./src/pages/redis.vue", options) },
     ],
   })

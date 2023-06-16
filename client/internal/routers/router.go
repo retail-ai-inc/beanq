@@ -11,6 +11,8 @@ import (
 
 	"beanq/client/helper/jsonx"
 	"beanq/client/internal/redisx"
+	"beanq/helper/stringx"
+	"github.com/spf13/cast"
 )
 
 const (
@@ -51,6 +53,50 @@ func QueueHandler(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writer.Write(bt)
+	return
+}
+func LogHandler(w http.ResponseWriter, r *http.Request) {
+
+	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
+	defer client.Close()
+
+	ctx := r.Context()
+	var page uint64 = 0
+	page = cast.ToUint64(r.FormValue("page"))
+
+	var length int64 = 10
+	cmd := client.Scan(ctx, page, "beanq:logs:success:*", length)
+	if cmd.Err() != nil {
+		return
+	}
+	keys, _, err := cmd.Result()
+	if err != nil {
+		return
+	}
+	data := make(map[string]any, 3)
+	data["errorCode"] = "0000"
+	data["errorMsg"] = "success"
+	json := jsonx.Json
+	
+	d := make([]map[string]any, 0, length)
+	for _, key := range keys {
+		ttl, _ := client.TTL(ctx, key).Result()
+		payload, _ := client.Get(ctx, key).Result()
+		nkey := strings.ReplaceAll(key, "beanq:logs:success:", "")
+
+		payloadByte := stringx.StringToByte(payload)
+		npayload := json.Get(payloadByte, "Payload")
+		addTime := json.Get(payloadByte, "AddTime")
+		runTime := json.Get(payloadByte, "RunTime")
+		group := json.Get(payloadByte, "Group")
+		queue := json.Get(payloadByte, "Queue")
+
+		d = append(d, map[string]any{"key": nkey, "ttl": ttl.Seconds(), "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
+
+	}
+	data["data"] = d
+	bt, _ := jsonx.Marshal(&data)
+	w.Write(bt)
 	return
 }
 func RedisHandler(writer http.ResponseWriter, request *http.Request) {

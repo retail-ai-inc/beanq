@@ -18,6 +18,9 @@
             <router-link to="/queue" class="nav-link text-muted" :class="route == '/queue' ? 'active' : ''">Queue</router-link>
           </li>
           <li class="nav-item">
+            <router-link to="/log" class="nav-link text-muted" :class="route == '/log' ? 'active' : ''">Log</router-link>
+          </li>
+          <li class="nav-item">
             <router-link to="/redis" class="nav-link text-muted" :class="route == '/redis' ? 'active' : ''">Redis</router-link>
           </li>
         </ul>

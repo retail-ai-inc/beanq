@@ -14,6 +14,7 @@ func main() {
 	mux.HandleFunc("/", routers.IndexHandler)
 	mux.HandleFunc("/schedule", routers.ScheduleHandler)
 	mux.HandleFunc("/queue", routers.QueueHandler)
+	mux.HandleFunc("/log", routers.LogHandler)
 	mux.HandleFunc("/redis", routers.RedisHandler)
 
 	srv := &http.Server{
