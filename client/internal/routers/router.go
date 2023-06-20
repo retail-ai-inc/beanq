@@ -61,11 +61,26 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	defer client.Close()
 
 	ctx := r.Context()
-	var page uint64 = 0
-	page = cast.ToUint64(r.FormValue("page"))
 
-	var length int64 = 10
-	cmd := client.Scan(ctx, page, "beanq:logs:success:*", length)
+	var (
+		page, pageSize uint64
+		dataType       string = "success"
+		matchStr       string = "beanq:logs:success:*"
+		replaeceStr    string = "beanq:logs:success:"
+	)
+	page = cast.ToUint64(r.FormValue("page"))
+	pageSize = cast.ToUint64(r.FormValue("pageSize"))
+	dataType = r.FormValue("type")
+
+	if pageSize <= 0 {
+		pageSize = 10
+	}
+	if dataType == "error" {
+		matchStr = "beanq:logs:error:*"
+		replaeceStr = "beanq:logs:error:"
+	}
+
+	cmd := client.Scan(ctx, page, matchStr, cast.ToInt64(pageSize))
 	if cmd.Err() != nil {
 		return
 	}
@@ -77,12 +92,12 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	data["errorCode"] = "0000"
 	data["errorMsg"] = "success"
 	json := jsonx.Json
-	
-	d := make([]map[string]any, 0, length)
+
+	d := make([]map[string]any, 0, pageSize)
 	for _, key := range keys {
 		ttl, _ := client.TTL(ctx, key).Result()
 		payload, _ := client.Get(ctx, key).Result()
-		nkey := strings.ReplaceAll(key, "beanq:logs:success:", "")
+		nkey := strings.ReplaceAll(key, replaeceStr, "")
 
 		payloadByte := stringx.StringToByte(payload)
 		npayload := json.Get(payloadByte, "Payload")
@@ -99,6 +114,7 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(bt)
 	return
 }
+
 func RedisHandler(writer http.ResponseWriter, request *http.Request) {
 	var data map[string]any
 	data = make(map[string]any, 3)
