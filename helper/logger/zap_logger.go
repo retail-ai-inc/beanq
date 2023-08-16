@@ -129,3 +129,11 @@ func getErrWriter(parameter *LoggerParameter) zapcore.WriteSyncer {
 		Compress:   parameter.Compress,
 	})
 }
+
+type NewZapLogger struct {
+	log *zap.Logger
+}
+
+func (t NewZapLogger) Error(msg string, err error) {
+
+}

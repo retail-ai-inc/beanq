@@ -23,9 +23,18 @@
                   <td>{{item.queue}}</td>
                     <td>{{ item.payload }}</td>
                     <td>
-                        <button type="button" class="btn btn-danger btn-sm" style="font-size: .5rem;margin:0 .5rem">Delete</button>
-                        <button type="button" class="btn btn-success btn-sm" style="font-size: .5rem;margin:0 .5rem">Retry</button>
-                      <button type="button" class="btn btn-info btn-sm" style="font-size: .5rem;margin:0 .5rem">Archive</button>
+                      <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
+                        <div class="btn-group" role="group">
+                          <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            Actions
+                          </button>
+                          <ul class="dropdown-menu">
+                            <li><a type="button" class="dropdown-item" href="#">Delete</a></li>
+                            <li><a type="button" class="dropdown-item" href="#">Retry</a></li>
+                            <li><a type="button" class="dropdown-item" href="#">Archive</a></li>
+                          </ul>
+                        </div>
+                      </div>
                     </td>
                 </tr>
             </tbody>

@@ -46,9 +46,10 @@ type (
 		Info    FlagInfo
 		Payload any
 
-		AddTime string
-		RunTime string
-
+		AddTime                string
+		RunTime                string
+		BeginTime              time.Time
+		EndTime                time.Time
 		Queue, Group, Consumer string
 	}
 

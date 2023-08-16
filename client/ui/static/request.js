@@ -8,10 +8,12 @@ const request = axios.create({
 })
 request.interceptors.request.use(
     config=>{
-        console.log(config)
+
         const token = "aa";
+        config.headers["Content-Type"] = "application/json";
         if(token){
             config.headers["auth"] = token;
+
         }
         return config;
     },

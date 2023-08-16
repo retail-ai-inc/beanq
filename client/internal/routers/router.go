@@ -2,6 +2,7 @@ package routers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"path"
@@ -18,9 +19,40 @@ import (
 const (
 	ScheduleQueueKey = "beanq:*:zset"
 	QueueKey         = "beanq:*:stream"
+	RedisAddr        = "127.0.0.1:6379"
+	RedisPassWord    = "secret"
+	RedisDb          = 0
 )
 
+type HandleFunc func(writer http.ResponseWriter, request *http.Request)
+
+func ServeMux() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", IndexHandler)
+	mux.HandleFunc("/schedule", AuthMiddle(ScheduleHandler))
+	mux.HandleFunc("/queue", QueueHandler)
+	mux.HandleFunc("/log", AuthMiddle(LogHandler))
+	mux.HandleFunc("/redis", RedisHandler)
+	return mux
+}
+func AuthMiddle(handleFunc HandleFunc) HandleFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		method := request.Method
+		path := request.URL.Path
+
+		// auth := writer.Header().Get("")
+
+		fmt.Println(method)
+		fmt.Printf("%+v", path)
+
+		handleFunc(writer, request)
+	}
+}
+
 func IndexHandler(writer http.ResponseWriter, request *http.Request) {
+
 	url := request.RequestURI
 	if strings.HasSuffix(url, ".vue") {
 		writer.Header().Set("Content-Type", "application/octet-stream")
@@ -57,8 +89,11 @@ func QueueHandler(writer http.ResponseWriter, request *http.Request) {
 }
 func LogHandler(w http.ResponseWriter, r *http.Request) {
 
-	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
-	defer client.Close()
+	if r.Method != "GET" {
+
+	}
+
+	client := redisx.RClient(RedisAddr, RedisPassWord, RedisDb)
 
 	ctx := r.Context()
 
@@ -68,10 +103,27 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 		matchStr       string = "beanq:logs:success:*"
 		replaeceStr    string = "beanq:logs:success:"
 	)
+	data := make(map[string]any, 3)
+	data["errorCode"] = "0000"
+	data["errorMsg"] = "success"
+
 	page = cast.ToUint64(r.FormValue("page"))
 	pageSize = cast.ToUint64(r.FormValue("pageSize"))
 	dataType = r.FormValue("type")
 
+	httpCode := http.StatusOK
+
+	w.Header().Set("Content-Type", "application/json")
+	if dataType != "success" && dataType != "error" {
+		httpCode = http.StatusInternalServerError
+		w.WriteHeader(httpCode)
+		data["errorCode"] = "100001"
+		data["errorMsg"] = "type is error"
+		b, _ := jsonx.Marshal(data)
+		w.Write(b)
+
+		return
+	}
 	if pageSize <= 0 {
 		pageSize = 10
 	}
@@ -88,9 +140,7 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	data := make(map[string]any, 3)
-	data["errorCode"] = "0000"
-	data["errorMsg"] = "success"
+
 	json := jsonx.Json
 
 	d := make([]map[string]any, 0, pageSize)
@@ -111,6 +161,7 @@ func LogHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	data["data"] = d
 	bt, _ := jsonx.Marshal(&data)
+	w.WriteHeader(httpCode)
 	w.Write(bt)
 	return
 }
@@ -121,8 +172,8 @@ func RedisHandler(writer http.ResponseWriter, request *http.Request) {
 	data["errorCode"] = "0000"
 	data["errorMsg"] = "success"
 
-	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
-	defer client.Close()
+	client := redisx.RClient(RedisAddr, RedisPassWord, RedisDb)
+
 	d, err := redisx.Info(request.Context(), client)
 	if err != nil {
 		log.Println(err)
@@ -139,8 +190,7 @@ func queueInfo(ctx context.Context, queueKey string) ([]byte, error) {
 	data["errorCode"] = "0000"
 	data["errorMsg"] = "success"
 
-	client := redisx.RClient("127.0.0.1:6381", "secret", 0)
-	defer client.Close()
+	client := redisx.RClient(RedisAddr, RedisPassWord, RedisDb)
 
 	// get queues
 	queues, err := redisx.Keys(ctx, client, queueKey)

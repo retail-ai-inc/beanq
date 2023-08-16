@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"runtime"
 	"time"
 
 	"beanq"
@@ -11,6 +12,7 @@ import (
 )
 
 func main() {
+	runtime.GOMAXPROCS(2)
 	pubDelayInfo()
 }
 
@@ -18,8 +20,13 @@ func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 
 	m := make(map[string]any)
-
+	ntime := time.Now()
 	for i := 0; i < 10; i++ {
+
+		if time.Now().Sub(ntime).Minutes() >= 1 {
+			break
+		}
+
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		m["a"] = "sfdsf"

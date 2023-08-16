@@ -9,19 +9,11 @@ import (
 
 func main() {
 
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/", routers.IndexHandler)
-	mux.HandleFunc("/schedule", routers.ScheduleHandler)
-	mux.HandleFunc("/queue", routers.QueueHandler)
-	mux.HandleFunc("/log", routers.LogHandler)
-	mux.HandleFunc("/redis", routers.RedisHandler)
-
 	srv := &http.Server{
 		Addr:    ":9090",
-		Handler: mux,
+		Handler: routers.ServeMux(),
 	}
-	log.Println("---start---")
+	log.Printf("----start----,listen on %s", srv.Addr)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalln(err)
 	}

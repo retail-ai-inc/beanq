@@ -124,7 +124,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		t.opts = opts
 	}
 
-	for _, consumer := range consumers {
+	for key, consumer := range consumers {
 
 		// consume data
 		if err := t.worker(ctx, consumer); err != nil {
@@ -134,7 +134,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		if err := t.scheduleJob.start(ctx, consumer); err != nil {
 			Logger.Error("schedule job err", zap.Error(err))
 		}
-
+		consumers[key] = nil
 	}
 
 	// check client health
@@ -219,7 +219,6 @@ func (t *RedisBroker) waitSignal() {
 				t.healCheckDone <- struct{}{}
 				t.scheduleJob.shutDown()
 				t.client.Close()
-				os.Exit(0)
 			})
 		}
 	}
@@ -249,6 +248,7 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 			}
 			return
 		default:
+
 			// block XReadGroup to read data
 			streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    group,
@@ -274,8 +274,6 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 	ticker := time.NewTicker(50 * time.Second)
 	defer ticker.Stop()
 
-	streams := make([]redis.XStream, 1)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -299,6 +297,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 					Logger.Error("XPending err", zap.Error(err))
 					break
 				}
+				streams := make([]redis.XStream, len(res))
 				for _, v := range res {
 
 					if v.Idle.Seconds() > 60 {
@@ -334,8 +333,8 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 		Info:    info,
 		RunTime: "",
 	}
-	var now time.Time
-	for _, v := range streams {
+
+	for key, v := range streams {
 		stream := v.Stream
 		for _, vv := range v.Messages {
 			task, err := t.parseMapToTask(vv, stream)
@@ -343,8 +342,8 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 				Logger.Error("parse json to task err", zap.Error(err))
 				continue
 			}
-			now = time.Now()
 
+			result.BeginTime = time.Now()
 			// if error,then retry to consume
 			if err := base.Retry(func() error {
 				return f(task)
@@ -354,7 +353,9 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 				result.Info = FlagInfo(err.Error())
 			}
 
-			sub := time.Now().Sub(now)
+			result.EndTime = time.Now()
+
+			sub := result.EndTime.Sub(result.BeginTime)
 
 			result.Payload = task.Payload()
 			result.RunTime = sub.String()
@@ -377,6 +378,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 				continue
 			}
 		}
+		streams[key] = redis.XStream{}
 	}
 }
 
