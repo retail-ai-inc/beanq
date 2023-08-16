@@ -27,11 +27,11 @@ import (
 	"sync"
 	"time"
 
-	"beanq/helper/json"
-	"beanq/internal/base"
-	"beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
 )

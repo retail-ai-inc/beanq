@@ -26,9 +26,9 @@ import (
 	"context"
 	"strings"
 
-	"beanq/helper/json"
-	"beanq/internal/base"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/internal/base"
 )
 
 type (

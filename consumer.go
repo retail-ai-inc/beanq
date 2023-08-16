@@ -37,8 +37,8 @@ import (
 	"context"
 	"sync"
 
-	"beanq/helper/logger"
-	opt "beanq/internal/options"
+	"github.com/retail-ai-inc/beanq/helper/logger"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"go.uber.org/zap"
 
 	"github.com/panjf2000/ants/v2"

@@ -26,7 +26,7 @@ import (
 	"context"
 	"time"
 
-	opt "beanq/internal/options"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 )
 
 type BeanqPub interface {

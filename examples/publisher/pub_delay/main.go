@@ -4,9 +4,9 @@ import (
 	"log"
 	"time"
 
-	"beanq"
-	"beanq/helper/json"
-	opt "beanq/internal/options"
+	"github.com/retail-ai-inc/beanq"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 )
 
@@ -18,7 +18,7 @@ func pubDelayInfo() {
 	pub := beanq.NewPublisher()
 
 	m := make(map[string]any)
-
+	now := time.Now()
 	for i := 0; i < 10; i++ {
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
@@ -31,13 +31,13 @@ func pubDelayInfo() {
 		b, _ := json.Marshal(m)
 
 		task := beanq.NewTask(b, beanq.SetName("update"))
-		delayT := time.Now().Add(10 * time.Second)
+		delayT := now.Add(10 * time.Second)
 		if i == 2 {
-			delayT = time.Now()
+			delayT = now
 		}
 		if i == 3 {
 			y = 10
-			delayT = time.Now().Add(35 * time.Second)
+			delayT = now.Add(35 * time.Second)
 		}
 
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
