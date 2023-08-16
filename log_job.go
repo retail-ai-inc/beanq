@@ -28,13 +28,13 @@ import (
 	"runtime/debug"
 	"time"
 
-	"beanq/helper/json"
-	"beanq/helper/stringx"
-	"beanq/helper/timex"
-	"beanq/internal/base"
-	opt "beanq/internal/options"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 )
 
 type (

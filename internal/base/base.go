@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"beanq/internal/options"
+	"github.com/retail-ai-inc/beanq/internal/options"
 )
 
 func makeKey(keys ...string) string {

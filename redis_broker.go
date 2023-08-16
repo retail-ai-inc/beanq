@@ -32,10 +32,10 @@ import (
 	"syscall"
 	"time"
 
-	"beanq/internal/base"
-	opt "beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"go.uber.org/zap"
 )
 

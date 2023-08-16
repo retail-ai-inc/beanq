@@ -1,23 +1,17 @@
 package main
 
 import (
-	"os"
-	"runtime/pprof"
+	"net/http"
+	_ "net/http/pprof"
 
-	"beanq"
-	"go.uber.org/zap"
+	"github.com/retail-ai-inc/beanq"
 )
 
 func main() {
 
-	f, err := os.Create("cpu.prof")
-	if err != nil {
-		beanq.Logger.Fatal("err", zap.Error(err))
-	}
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
-	fm, err := os.Create("mem.prof")
-	pprof.WriteHeapProfile(fm)
+	go func() {
+		http.ListenAndServe("0.0.0.0:8000", nil)
+	}()
 
 	// register consumer
 	csm := beanq.NewConsumer()

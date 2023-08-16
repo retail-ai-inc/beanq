@@ -27,11 +27,11 @@ import (
 	"sync"
 	"time"
 
-	"beanq/helper/json"
-	"beanq/internal/base"
-	"beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
 )
@@ -92,7 +92,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt options.Optio
 		return err
 	}
 
-	priority := cast.ToFloat64(task.ExecuteTime().Unix()) + opt.Priority
+	priority := cast.ToFloat64(task.ExecuteTime().UnixMilli()) + opt.Priority
 
 	if err := t.client.ZAdd(ctx, base.MakeZSetKey(Config.Queue.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
 		Score:  priority,
@@ -129,7 +129,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 			now = time.Now()
 
-			max := cast.ToString(now.Unix() + 9)
+			max := cast.ToString(now.UnixMilli() + 9)
 
 			cmd := t.client.ZRangeByScore(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), &redis.ZRangeBy{
 				Min:    "0",
@@ -226,6 +226,5 @@ func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 }
 
 func (t *scheduleJob) shutDown() {
-	t.stop <- struct{}{}
 	t.done <- struct{}{}
 }
