@@ -1,4 +1,3 @@
-
 ; (async () => {
 
   const { loadModule, version } = window["vue3-sfc-loader"];
@@ -34,23 +33,40 @@
       console.log(type, ...args);
     }
   }
+  // admin routes
+  const adminRoute =  {
+        path:'/admin',
+        component:()=>loadModule("./src/layout/adminMain.vue",options),
+        children:[
+          { path: '', component: () => loadModule('./src/pages/home.vue', options) },
+          { path: 'home',component:()=>loadModule("./src/pages/home.vue",options)},
+          { path: 'server', component: () => loadModule('./src/pages/server.vue', options) },
+          { path: 'schedule', component: () => loadModule("./src/pages/schedule.vue", options) },
+          { path: 'queue', component: () => loadModule("./src/pages/queue.vue", options) },
+          { path: 'log', component:()=>loadModule("./src/pages/log/success.vue",options),children:[
+              {path:'success',component:()=>loadModule("./src/pages/log/success.vue",options)},
+              {path:'error',component:()=>loadModule("./src/pages/log/error.vue",options)}
+            ]
+          },
+          { path: 'redis', component: () => loadModule("./src/pages/redis.vue", options) },
+        ]
+  };
+  // login route
+  const loginRoute = { path:"/login",component:()=>loadModule("./src/pages/login.vue",options)};
 
   // router
   const router = VueRouter.createRouter({
     history: VueRouter.createWebHashHistory(),
     routes: [
-      { path: '/', component: () => loadModule('./src/pages/home.vue', options) },
-      { path: '/server', component: () => loadModule('./src/pages/server.vue', options) },
-      { path: '/schedule', component: () => loadModule("./src/pages/schedule.vue", options) },
-      { path: '/queue', component: () => loadModule("./src/pages/queue.vue", options) },
-      {path:'/log/success',component:()=>loadModule("./src/pages/log/success.vue",options)},
-      {path:'/log/error',component:()=>loadModule("./src/pages/log/error.vue",options)},
-      { path: '/redis', component: () => loadModule("./src/pages/redis.vue", options) },
+      adminRoute,
+      loginRoute
     ],
-  })
+  });
   router.beforeEach((to, from) => {
-    // console.log(to);
-    // console.log(from);
+    let token = sessionStorage.getItem("token");
+    if (token == null && to.path !== "/login"){
+      return {path:"/login"};
+    }
   })
 
   const app = Vue.createApp({

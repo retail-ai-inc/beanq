@@ -26,11 +26,11 @@ import (
 	"sync"
 	"time"
 
-	"beanq/helper/json"
-	"beanq/helper/stringx"
-	"beanq/helper/timex"
-	"beanq/internal/options"
 	"github.com/google/uuid"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 )
 

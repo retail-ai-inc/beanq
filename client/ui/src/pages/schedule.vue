@@ -27,25 +27,37 @@
             </tbody>
 
         </table>
+      <Pagination :page="page" :total="total" @changePage="changePage"/>
     </div>
 </template>
   
   
 <script setup>
 
-import { reactive,onMounted,onUnmounted } from "vue";
+import { reactive,toRefs,onMounted,onUnmounted } from "vue";
 import request  from "request";
+import Pagination from "./components/pagination.vue";
 
-const schedule = reactive([])
-function getQueue(){
-  return request.get("schedule");
+const data = reactive({
+  page:1,
+  total:1,
+  schedule:[]
+})
+function getSchedule(page,pageSize){
+  return request.get("schedule",{"params":{"page":page,"pageSize":pageSize}});
+}
+async function changePage(page){
+  let schedule = await getSchedule(page,10);
+  data.schedule = {...schedule.data.data};
+  data.total = Math.ceil(schedule.data.total / 10);
+  data.page = page;
 }
 onMounted(async ()=>{
-  let data = await getQueue();
-  Object.assign(schedule,data.data);
-
+  let schedule = await getSchedule(data.page,10);
+  data.schedule = {...schedule.data.data};
+  data.total = Math.ceil(schedule.data.total / 10);
 })
-
+const {page,total,schedule} = toRefs(data);
 </script>
   
 <style scoped>

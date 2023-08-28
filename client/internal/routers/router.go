@@ -2,60 +2,28 @@ package routers
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
-	"beanq/client/helper/jsonx"
-	"beanq/client/internal/redisx"
-	"beanq/helper/stringx"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
+	"github.com/retail-ai-inc/beanq/client/internal/redisx"
+	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/spf13/cast"
 )
 
-const (
-	ScheduleQueueKey = "beanq:*:zset"
-	QueueKey         = "beanq:*:stream"
-	RedisAddr        = "127.0.0.1:6379"
-	RedisPassWord    = "secret"
-	RedisDb          = 0
-)
+func IndexHandler(ctx *simple_router.Context) error {
 
-type HandleFunc func(writer http.ResponseWriter, request *http.Request)
-
-func ServeMux() *http.ServeMux {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/", IndexHandler)
-	mux.HandleFunc("/schedule", AuthMiddle(ScheduleHandler))
-	mux.HandleFunc("/queue", QueueHandler)
-	mux.HandleFunc("/log", AuthMiddle(LogHandler))
-	mux.HandleFunc("/redis", RedisHandler)
-	return mux
-}
-func AuthMiddle(handleFunc HandleFunc) HandleFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		writer.Header().Set("Content-Type", "application/json")
-		method := request.Method
-		path := request.URL.Path
-
-		// auth := writer.Header().Get("")
-
-		fmt.Println(method)
-		fmt.Printf("%+v", path)
-
-		handleFunc(writer, request)
-	}
-}
-
-func IndexHandler(writer http.ResponseWriter, request *http.Request) {
-
-	url := request.RequestURI
+	url := ctx.Request().RequestURI
 	if strings.HasSuffix(url, ".vue") {
-		writer.Header().Set("Content-Type", "application/octet-stream")
+		ctx.Response().Header().Set("Content-Type", "application/octet-stream")
 	}
 	var dir string = "./"
 	_, f, _, ok := runtime.Caller(0)
@@ -64,133 +32,257 @@ func IndexHandler(writer http.ResponseWriter, request *http.Request) {
 	}
 
 	hdl := http.FileServer(http.Dir(path.Join(dir, "../../ui/")))
-	hdl.ServeHTTP(writer, request)
-	return
+	hdl.ServeHTTP(ctx.Response(), ctx.Request())
+	return nil
 }
 
-func ScheduleHandler(writer http.ResponseWriter, request *http.Request) {
+func LoginHandler(ctx *simple_router.Context) error {
 
-	bt, err := queueInfo(request.Context(), ScheduleQueueKey)
+	// request := ctx.Request()
+	// username := request.PostFormValue("username")
+	// password := request.PostFormValue("password")
+
+	result := resultPool.Get().(*Result)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
+	claim := jwt.RegisteredClaims{
+		Issuer:    "",
+		Subject:   "beanq monitor ui",
+		Audience:  nil,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(7200 * time.Second)),
+		NotBefore: nil,
+		IssuedAt:  nil,
+		ID:        "",
+	}
+	token, err := jwtx.MakeRsaToken(claim)
 	if err != nil {
-		log.Println(err)
-		return
+
 	}
-	writer.Write(bt)
-	return
+
+	result.Data = map[string]any{"token": token}
+	return ctx.Json(http.StatusOK, result)
+
 }
-func QueueHandler(writer http.ResponseWriter, request *http.Request) {
-	bt, err := queueInfo(request.Context(), QueueKey)
+
+func ScheduleHandler(ctx *simple_router.Context) error {
+
+	result := resultPool.Get().(*Result)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
+
+	bt, err := queueInfo(ctx.Context(), redisx.ScheduleQueueKey("beanq"))
+
 	if err != nil {
-		log.Println(err)
-		return
+		result.Code = "1001"
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
 	}
-	writer.Write(bt)
-	return
+	result.Data = bt
+	return ctx.Json(http.StatusOK, result)
 }
-func LogHandler(w http.ResponseWriter, r *http.Request) {
 
-	if r.Method != "GET" {
+func QueueHandler(ctx *simple_router.Context) error {
 
+	result := resultPool.Get().(*Result)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
+	nctx := ctx.Context()
+	bt, err := queueInfo(nctx, redisx.QueueKey("beanq"))
+	if err != nil {
+		result.Code = "1001"
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
-	client := redisx.RClient(RedisAddr, RedisPassWord, RedisDb)
+	result.Data = bt
 
-	ctx := r.Context()
+	return ctx.Json(http.StatusOK, result)
+}
+
+func LogArchiveHandler(ctx *simple_router.Context) error {
+	result := resultPool.Get().(*Result)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
+
+	return ctx.Json(http.StatusOK, result)
+}
+
+func LogRetryHandler(ctx *simple_router.Context) error {
+	result := resultPool.Get().(*Result)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
+	req := ctx.Request()
+	id := req.PostFormValue("id")
+	if id == "" {
+		result.Code = "1000"
+		result.Msg = "missing parameter"
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	// client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+
+	return ctx.Json(http.StatusOK, result)
+}
+
+func LogDelHandler(ctx *simple_router.Context) error {
+
+	result := resultPool.Get().(*Result)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
+	req := ctx.Request()
+	id := req.FormValue("id")
+	if id == "" {
+		result.Code = "1000"
+		result.Msg = "missing parameter"
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+
+	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+
+	nid := cast.ToInt64(id)
+	var start int64
+	start = nid - 1
+	if start <= 0 {
+		start = 0
+	}
+
+	cmd := client.ZRemRangeByRank(ctx.Context(), "beanq:logs:success", start, nid)
+
+	if cmd.Err() != nil {
+		result.Code = "1000"
+		result.Msg = cmd.Err().Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+
+	return ctx.Json(http.StatusOK, result)
+}
+
+func LogHandler(ctx *simple_router.Context) error {
+
+	resultRes := resultPool.Get().(*Result)
+	defer func() {
+		resultRes.Reset()
+		resultPool.Put(resultRes)
+	}()
+
+	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
 
 	var (
-		page, pageSize uint64
+		page, pageSize int64
 		dataType       string = "success"
-		matchStr       string = "beanq:logs:success:*"
-		replaeceStr    string = "beanq:logs:success:"
+		matchStr       string = "beanq:logs:success"
+		// replaeceStr    string = "beanq:logs:success:"
 	)
-	data := make(map[string]any, 3)
-	data["errorCode"] = "0000"
-	data["errorMsg"] = "success"
 
-	page = cast.ToUint64(r.FormValue("page"))
-	pageSize = cast.ToUint64(r.FormValue("pageSize"))
-	dataType = r.FormValue("type")
+	req := ctx.Request()
+	page = cast.ToInt64(req.FormValue("page"))
+	pageSize = cast.ToInt64(req.FormValue("pageSize"))
+	dataType = req.FormValue("type")
 
-	httpCode := http.StatusOK
-
-	w.Header().Set("Content-Type", "application/json")
 	if dataType != "success" && dataType != "error" {
-		httpCode = http.StatusInternalServerError
-		w.WriteHeader(httpCode)
-		data["errorCode"] = "100001"
-		data["errorMsg"] = "type is error"
-		b, _ := jsonx.Marshal(data)
-		w.Write(b)
+		resultRes.Code = "1001"
+		resultRes.Msg = "type is error"
 
-		return
+		return ctx.Json(http.StatusInternalServerError, resultRes)
+
 	}
-	if pageSize <= 0 {
-		pageSize = 10
+
+	nowPage := (page - 1) * pageSize
+	if nowPage <= 0 {
+		nowPage = 0
 	}
+	nowPageSize := page * pageSize
+	if nowPageSize <= 0 {
+		nowPageSize = 9
+	}
+
 	if dataType == "error" {
-		matchStr = "beanq:logs:error:*"
-		replaeceStr = "beanq:logs:error:"
+		matchStr = "beanq:logs:error"
+		// replaeceStr = "beanq:logs:error:"
 	}
-
-	cmd := client.Scan(ctx, page, matchStr, cast.ToInt64(pageSize))
+	nctx := ctx.Context()
+	cmd := client.ZRange(nctx, matchStr, nowPage, nowPageSize)
 	if cmd.Err() != nil {
-		return
+		resultRes.Msg = cmd.Err().Error()
+		resultRes.Code = "1001"
+		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
-	keys, _, err := cmd.Result()
+
+	result, err := cmd.Result()
 	if err != nil {
-		return
+		resultRes.Msg = cmd.Err().Error()
+		resultRes.Code = "1001"
+		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 
-	json := jsonx.Json
+	json := json.Json
 
+	len, err := client.ZLexCount(nctx, matchStr, "-", "+").Result()
+	if err != nil {
+		resultRes.Msg = err.Error()
+		resultRes.Code = "1001"
+		return ctx.Json(http.StatusInternalServerError, resultRes)
+	}
 	d := make([]map[string]any, 0, pageSize)
-	for _, key := range keys {
-		ttl, _ := client.TTL(ctx, key).Result()
-		payload, _ := client.Get(ctx, key).Result()
-		nkey := strings.ReplaceAll(key, replaeceStr, "")
+	for _, v := range result {
 
-		payloadByte := stringx.StringToByte(payload)
+		cmd := client.ZRank(nctx, matchStr, v)
+		key, err := cmd.Result()
+		if err != nil {
+			continue
+		}
+		payloadByte := stringx.StringToByte(v)
 		npayload := json.Get(payloadByte, "Payload")
 		addTime := json.Get(payloadByte, "AddTime")
 		runTime := json.Get(payloadByte, "RunTime")
 		group := json.Get(payloadByte, "Group")
 		queue := json.Get(payloadByte, "Queue")
 
-		d = append(d, map[string]any{"key": nkey, "ttl": ttl.Seconds(), "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
+		ttl := cast.ToTime(json.Get(payloadByte, "ExpireTime").ToString()).Sub(time.Now()).Seconds()
+		d = append(d, map[string]any{"key": key, "ttl": ttl, "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
 
 	}
-	data["data"] = d
-	bt, _ := jsonx.Marshal(&data)
-	w.WriteHeader(httpCode)
-	w.Write(bt)
-	return
+	resultRes.Data = map[string]any{"data": d, "total": len}
+
+	return ctx.Json(http.StatusOK, resultRes)
 }
 
-func RedisHandler(writer http.ResponseWriter, request *http.Request) {
-	var data map[string]any
-	data = make(map[string]any, 3)
-	data["errorCode"] = "0000"
-	data["errorMsg"] = "success"
+func RedisHandler(ctx *simple_router.Context) error {
+	result := resultPool.Get().(*Result)
 
-	client := redisx.RClient(RedisAddr, RedisPassWord, RedisDb)
+	defer func() {
+		result.Reset()
+		resultPool.Put(result)
+	}()
 
-	d, err := redisx.Info(request.Context(), client)
+	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+
+	d, err := redisx.Info(ctx.Context(), client)
 	if err != nil {
-		log.Println(err)
-		return
+		result.Code = "1001"
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
 	}
-	data["data"] = d
-	bt, _ := jsonx.Marshal(&data)
-	writer.Write(bt)
-	return
+
+	result.Data = d
+
+	return ctx.Json(http.StatusOK, result)
 }
-func queueInfo(ctx context.Context, queueKey string) ([]byte, error) {
 
-	data := make(map[string]any, 3)
-	data["errorCode"] = "0000"
-	data["errorMsg"] = "success"
+func queueInfo(ctx context.Context, queueKey string) (any, error) {
 
-	client := redisx.RClient(RedisAddr, RedisPassWord, RedisDb)
+	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
 
 	// get queues
 	queues, err := redisx.Keys(ctx, client, queueKey)
@@ -209,10 +301,5 @@ func queueInfo(ctx context.Context, queueKey string) ([]byte, error) {
 		d = append(d, map[string]any{"queue": queue, "state": "Run", "size": objStr.SerizlizedLength, "memory": r, "process": objStr.LruSecondsIdle, "fail": 0, "errRate": "2%"})
 	}
 
-	data["data"] = d
-	bt, err := jsonx.Marshal(&data)
-	if err != nil {
-		return nil, err
-	}
-	return bt, nil
+	return d, nil
 }

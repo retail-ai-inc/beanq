@@ -5,7 +5,7 @@ import (
 	_ "net/http/pprof"
 	"time"
 
-	"beanq"
+	"github.com/retail-ai-inc/beanq"
 )
 
 func main() {

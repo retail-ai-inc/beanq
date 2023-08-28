@@ -28,13 +28,14 @@ import (
 	"runtime/debug"
 	"time"
 
-	"beanq/helper/json"
-	"beanq/helper/stringx"
-	"beanq/helper/timex"
-	"beanq/internal/base"
-	opt "beanq/internal/options"
-	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
+	"github.com/spf13/cast"
+	"go.uber.org/zap"
 )
 
 type (
@@ -47,6 +48,7 @@ type (
 		Payload any
 
 		AddTime                string
+		ExpireTime             time.Time
 		RunTime                string
 		BeginTime              time.Time
 		EndTime                time.Time
@@ -55,6 +57,7 @@ type (
 
 	logJobI interface {
 		saveLog(ctx context.Context, result *ConsumerResult) error
+		checkExpiration(ctx context.Context)
 		archive(ctx context.Context) error
 	}
 
@@ -84,26 +87,48 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 	if optsVal, ok := ctx.Value("options").(*opt.Options); ok {
 		opts = optsVal
 	}
-
+	now := time.Now()
 	if result.AddTime == "" {
-		result.AddTime = time.Now().Format(timex.DateTime)
+		result.AddTime = now.Format(timex.DateTime)
 	}
+
+	// default ErrorLevel
+
+	key := base.MakeLogKey(Config.Queue.Redis.Prefix, "fail")
+	expiration := opts.KeepFailedJobsInHistory
+
+	// InfoLevel
+	if result.Level == InfoLevel {
+		key = base.MakeLogKey(Config.Queue.Redis.Prefix, "success")
+		expiration = opts.KeepSuccessJobsInHistory
+	}
+	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
+
 	b, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 	}
-	// default ErrorLevel
-	uuids := uuid.NewString()
-	key := base.MakeLogKey(Config.Queue.Redis.Prefix, "fail", uuids)
-	expiration := opts.KeepFailedJobsInHistory
-	// InfoLevel
-	if result.Level == InfoLevel {
-		key = base.MakeLogKey(Config.Queue.Redis.Prefix, "success", uuids)
-		expiration = opts.KeepSuccessJobsInHistory
-	}
-	return t.setEx(ctx, key, b, expiration)
-}
 
+	return t.client.ZAdd(ctx, key, redis.Z{
+		Score:  float64(time.Now().UnixMilli() + expiration.Milliseconds()),
+		Member: b,
+	}).Err()
+
+}
+func (t *logJob) checkExpiration(ctx context.Context) {
+
+	now := time.Now()
+	successKey := base.MakeLogKey(Config.Queue.Redis.Prefix, "success")
+	failKey := base.MakeLogKey(Config.Queue.Redis.Prefix, "fail")
+
+	if err := t.client.ZRemRangeByScore(ctx, successKey, cast.ToString(0), cast.ToString(now.UnixMilli())).Err(); err != nil {
+		Logger.Error("rem zset success error:%+v", zap.Error(err))
+	}
+	if err := t.client.ZRemRangeByScore(ctx, failKey, cast.ToString(0), cast.ToString(now.UnixMilli())).Err(); err != nil {
+		Logger.Error("rem zset fail error:%+v", zap.Error(err))
+	}
+
+}
 func (t *logJob) archive(ctx context.Context) error {
 	return nil
 }

@@ -8,6 +8,12 @@ import (
 	"github.com/spf13/cast"
 )
 
+const (
+	Addr     = "127.0.0.1:6379"
+	PassWord = "secret"
+	Db       = 0
+)
+
 type ObjectStruct struct {
 	ValueAt          string
 	RefCount         int
@@ -73,4 +79,10 @@ func Info(ctx context.Context, client *redis.Client) (map[string]string, error) 
 	}
 	return info, nil
 
+}
+func ScheduleQueueKey(prefix string) string {
+	return strings.Join([]string{prefix, "*", "zset"}, ":")
+}
+func QueueKey(prefix string) string {
+	return strings.Join([]string{prefix, "*", "stream"}, ":")
 }

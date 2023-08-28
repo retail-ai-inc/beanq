@@ -32,10 +32,10 @@ import (
 	"syscall"
 	"time"
 
-	"beanq/internal/base"
-	opt "beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"go.uber.org/zap"
 )
 
@@ -47,15 +47,15 @@ type (
 	}
 
 	RedisBroker struct {
-		client                    *redis.Client
-		done, stop, healCheckDone chan struct{}
-		healthCheck               healthCheckI
-		scheduleJob               scheduleJobI
-		logJob                    logJobI
-		opts                      *opt.Options
-		wg                        *sync.WaitGroup
-		once                      *sync.Once
-		pool                      *ants.Pool
+		client                                  *redis.Client
+		done, stop, healCheckDone, logCheckDone chan struct{}
+		healthCheck                             healthCheckI
+		scheduleJob                             scheduleJobI
+		logJob                                  logJobI
+		opts                                    *opt.Options
+		wg                                      *sync.WaitGroup
+		once                                    *sync.Once
+		pool                                    *ants.Pool
 	}
 )
 
@@ -80,6 +80,7 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		done:          make(chan struct{}),
 		stop:          make(chan struct{}),
 		healCheckDone: make(chan struct{}),
+		logCheckDone:  make(chan struct{}),
 		healthCheck:   newHealthCheck(client),
 		scheduleJob:   newScheduleJob(pool, client),
 		logJob:        newLogJob(client),
@@ -125,13 +126,13 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	}
 
 	for key, consumer := range consumers {
-
+		cs := consumer
 		// consume data
-		if err := t.worker(ctx, consumer); err != nil {
+		if err := t.worker(ctx, cs); err != nil {
 			Logger.Error("worker err", zap.Error(err))
 		}
 		// check information
-		if err := t.scheduleJob.start(ctx, consumer); err != nil {
+		if err := t.scheduleJob.start(ctx, cs); err != nil {
 			Logger.Error("schedule job err", zap.Error(err))
 		}
 		consumers[key] = nil
@@ -141,6 +142,8 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	if err := t.healthCheckerStart(ctx); err != nil {
 		Logger.Error("health check err", zap.Error(err))
 	}
+	t.CheckLogs(ctx)
+
 	// REFERENCE: https://redis.io/commands/xclaim/
 	// monitor other stream pending
 	// go t.claim(ctx, consumers)
@@ -149,7 +152,26 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// // monitor signal
 	t.waitSignal()
 }
+func (t *RedisBroker) CheckLogs(ctx context.Context) {
+	if err := t.pool.Submit(func() {
+		ticker := time.NewTicker(10 * time.Second)
 
+		for {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-t.logCheckDone:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				t.logJob.checkExpiration(ctx)
+			}
+		}
+	}); err != nil {
+		Logger.Error("check logs error:%+v", zap.Error(err))
+	}
+}
 func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 
 	if err := t.pool.Submit(func() {
@@ -217,6 +239,7 @@ func (t *RedisBroker) waitSignal() {
 				t.pool.Release()
 				t.done <- struct{}{}
 				t.healCheckDone <- struct{}{}
+				t.logCheckDone <- struct{}{}
 				t.scheduleJob.shutDown()
 				t.client.Close()
 			})

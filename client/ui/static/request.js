@@ -3,17 +3,15 @@ const baseURL = "http://localhost:9090/";
 const request = axios.create({
     baseURL:baseURL,
     timeout:5000,
-    responseType: 'json',
+    //responseType: 'json',
     responseEncoding: 'utf8',
 })
 request.interceptors.request.use(
     config=>{
 
-        const token = "aa";
-        config.headers["Content-Type"] = "application/json";
+        const token = sessionStorage.getItem("token");
         if(token){
-            config.headers["auth"] = token;
-
+            config.headers["BEANQ-Authorization"] = "Bearer " + token;
         }
         return config;
     },
@@ -24,12 +22,16 @@ request.interceptors.request.use(
 request.interceptors.response.use(
     res=>{
         let data = res.data;
-        if (data.errorCode == "0000"){
+        if (data.code == "0000"){
             return Promise.resolve(data);
         }
-        return Promise.reject(new Error(data.errorMsg));
+        return Promise.reject(new Error(data.msg));
     },
     err=>{
+
+        if (err.response.status == 401){
+            sessionStorage.clear()
+        }
         return Promise.reject(err);
     }
 )

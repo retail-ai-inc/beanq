@@ -11,7 +11,7 @@ var (
 	client    *redis.Client
 )
 
-func RClient(addr, password string, db int) *redis.Client {
+func Client(addr, password string, db int) *redis.Client {
 
 	redisOnce.Do(func() {
 		client = redis.NewClient(&redis.Options{

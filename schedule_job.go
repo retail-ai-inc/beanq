@@ -27,11 +27,11 @@ import (
 	"sync"
 	"time"
 
-	"beanq/helper/json"
-	"beanq/internal/base"
-	"beanq/internal/options"
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/internal/base"
+	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
 )
@@ -129,7 +129,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 			now = time.Now()
 
-			max := cast.ToString(now.UnixMilli() + 9)
+			max := cast.ToString(now.UnixMilli() + 10)
 
 			cmd := t.client.ZRangeByScore(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), &redis.ZRangeBy{
 				Min:    "0",
@@ -145,15 +145,22 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 				continue
 			}
 
-			if err := t.client.ZRem(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), val[0]).Err(); err != nil {
-				Logger.Error("zrem err", zap.Error(err))
-
-			}
-
-			if err := t.doConsume(ctx, max, consumer); err != nil {
-				Logger.Error("consume err", zap.Error(err))
+			if err := t.pool.Submit(func() {
+				if err := t.client.ZRem(ctx, base.MakeTimeUnit(Config.Queue.Redis.Prefix), val[0]).Err(); err != nil {
+					Logger.Error("zrem err", zap.Error(err))
+				}
+			}); err != nil {
 				continue
 			}
+			if err := t.pool.Submit(func() {
+				if err := t.doConsume(ctx, max, consumer); err != nil {
+					Logger.Error("consume err", zap.Error(err))
+					// continue
+				}
+			}); err != nil {
+				continue
+			}
+
 		}
 	}
 }

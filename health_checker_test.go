@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	opt "beanq/internal/options"
 	"github.com/redis/go-redis/v9"
+	opt "github.com/retail-ai-inc/beanq/internal/options"
 )
 
 var (
