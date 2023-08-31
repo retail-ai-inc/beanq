@@ -98,8 +98,8 @@ func (t *Task) Priority() float64 {
 
 func (t *Task) Payload() string {
 	if v, ok := t.Values["payload"]; ok {
-		if payload, ok := v.([]byte); ok {
-			return string(payload)
+		if payload, ok := v.(string); ok {
+			return payload
 		}
 	}
 	return ""
@@ -185,20 +185,20 @@ type BqMessage struct {
 	Values map[string]interface{}
 }
 
-func openTaskMap(msg BqMessage, streamStr string) (payload []byte, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64, err error) {
+func openTaskMap(msg BqMessage, streamStr string) (payload string, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64, err error) {
 	id = msg.ID
 	stream = streamStr
 
 	bt, err := json.Marshal(msg.Values)
 	if err != nil {
-		return nil, "", "", "", "", "", time.Time{}, 0, 0, err
+		return "", "", "", "", "", "", time.Time{}, 0, 0, err
 	}
 
 	queue = json.Json.Get(bt, "queue").ToString()
 	group = json.Json.Get(bt, "group").ToString()
 	maxLen = json.Json.Get(bt, "maxLen").ToInt64()
 	retry = json.Json.Get(bt, "retry").ToInt()
-	payload = stringx.StringToByte(json.Json.Get(bt, "payload").ToString())
+	payload = json.Json.Get(bt, "payload").ToString()
 	addTime = json.Json.Get(bt, "addTime").ToString()
 	executeTime = cast.ToTime(json.Json.Get(bt, "executeTime").ToString())
 	if executeTime.IsZero() {

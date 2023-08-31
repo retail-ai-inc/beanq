@@ -65,8 +65,8 @@ func MakeStreamKey(prefix, group, queue string) string {
 	return makeKey(prefix, group, queue, "stream")
 }
 
-func MakeLogKey(prefix, resultType, uniqueId string) string {
-	return makeKey(prefix, "logs", resultType, uniqueId)
+func MakeLogKey(prefix, resultType string) string {
+	return makeKey(prefix, "logs", resultType)
 }
 
 func MakeHealthKey(prefix string) string {

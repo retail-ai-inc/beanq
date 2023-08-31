@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/retail-ai-inc/beanq"
-	"github.com/retail-ai-inc/beanq/helper/json"
-	opt "github.com/retail-ai-inc/beanq/internal/options"
+	"beanq"
+	"beanq/helper/json"
+	opt "beanq/internal/options"
 )
 
 func main() {
