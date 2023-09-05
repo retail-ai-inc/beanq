@@ -13,6 +13,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
 	"github.com/retail-ai-inc/beanq/client/internal/redisx"
+	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
 	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -77,7 +78,7 @@ func ScheduleHandler(ctx *simple_router.Context) error {
 	bt, err := queueInfo(ctx.Context(), redisx.ScheduleQueueKey("beanq"))
 
 	if err != nil {
-		result.Code = "1001"
+		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
@@ -95,7 +96,7 @@ func QueueHandler(ctx *simple_router.Context) error {
 	nctx := ctx.Context()
 	bt, err := queueInfo(nctx, redisx.QueueKey("beanq"))
 	if err != nil {
-		result.Code = "1001"
+		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
@@ -124,12 +125,15 @@ func LogRetryHandler(ctx *simple_router.Context) error {
 	req := ctx.Request()
 	id := req.PostFormValue("id")
 	if id == "" {
-		result.Code = "1000"
-		result.Msg = "missing parameter"
+		result.Code = consts.MissParameterCode
+		result.Msg = consts.MissParameterMsg
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
 	// client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
 
+	// publish := beanq.NewPublisher()
+	// task := beanq.NewTask()
+	// publish.Publish()
 	return ctx.Json(http.StatusOK, result)
 }
 
@@ -143,8 +147,8 @@ func LogDelHandler(ctx *simple_router.Context) error {
 	req := ctx.Request()
 	id := req.FormValue("id")
 	if id == "" {
-		result.Code = "1000"
-		result.Msg = "missing parameter"
+		result.Code = consts.MissParameterCode
+		result.Msg = consts.MissParameterMsg
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
@@ -160,7 +164,7 @@ func LogDelHandler(ctx *simple_router.Context) error {
 	cmd := client.ZRemRangeByRank(ctx.Context(), "beanq:logs:success", start, nid)
 
 	if cmd.Err() != nil {
-		result.Code = "1000"
+		result.Code = consts.InternalServerErrorCode
 		result.Msg = cmd.Err().Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
@@ -191,8 +195,8 @@ func LogHandler(ctx *simple_router.Context) error {
 	dataType = req.FormValue("type")
 
 	if dataType != "success" && dataType != "error" {
-		resultRes.Code = "1001"
-		resultRes.Msg = "type is error"
+		resultRes.Code = consts.TypeErrorCode
+		resultRes.Msg = consts.TypeErrorMsg
 
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 
@@ -215,23 +219,23 @@ func LogHandler(ctx *simple_router.Context) error {
 	cmd := client.ZRange(nctx, matchStr, nowPage, nowPageSize)
 	if cmd.Err() != nil {
 		resultRes.Msg = cmd.Err().Error()
-		resultRes.Code = "1001"
+		resultRes.Code = consts.InternalServerErrorCode
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 
 	result, err := cmd.Result()
 	if err != nil {
 		resultRes.Msg = cmd.Err().Error()
-		resultRes.Code = "1001"
+		resultRes.Code = consts.InternalServerErrorCode
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 
-	json := json.Json
+	njson := json.Json
 
-	len, err := client.ZLexCount(nctx, matchStr, "-", "+").Result()
+	length, err := client.ZLexCount(nctx, matchStr, "-", "+").Result()
 	if err != nil {
 		resultRes.Msg = err.Error()
-		resultRes.Code = "1001"
+		resultRes.Code = consts.InternalServerErrorCode
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 	d := make([]map[string]any, 0, pageSize)
@@ -243,17 +247,17 @@ func LogHandler(ctx *simple_router.Context) error {
 			continue
 		}
 		payloadByte := stringx.StringToByte(v)
-		npayload := json.Get(payloadByte, "Payload")
-		addTime := json.Get(payloadByte, "AddTime")
-		runTime := json.Get(payloadByte, "RunTime")
-		group := json.Get(payloadByte, "Group")
-		queue := json.Get(payloadByte, "Queue")
+		npayload := njson.Get(payloadByte, "Payload")
+		addTime := njson.Get(payloadByte, "AddTime")
+		runTime := njson.Get(payloadByte, "RunTime")
+		group := njson.Get(payloadByte, "Group")
+		queue := njson.Get(payloadByte, "Queue")
 
-		ttl := cast.ToTime(json.Get(payloadByte, "ExpireTime").ToString()).Sub(time.Now()).Seconds()
+		ttl := cast.ToTime(njson.Get(payloadByte, "ExpireTime").ToString()).Sub(time.Now()).Seconds()
 		d = append(d, map[string]any{"key": key, "ttl": ttl, "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
 
 	}
-	resultRes.Data = map[string]any{"data": d, "total": len}
+	resultRes.Data = map[string]any{"data": d, "total": length}
 
 	return ctx.Json(http.StatusOK, resultRes)
 }
