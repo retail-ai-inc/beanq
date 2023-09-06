@@ -43,7 +43,7 @@ func pubDelayInfo() {
 		}
 		if i == 3 {
 			y = 10
-			delayT = ntime.Add(35 * time.Second)
+			delayT = ntime.Add(35 * time.Hour)
 
 		}
 
