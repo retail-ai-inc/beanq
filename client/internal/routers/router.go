@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
 	"github.com/retail-ai-inc/beanq/client/internal/redisx"
 	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
 	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 )
 
@@ -129,11 +131,50 @@ func LogRetryHandler(ctx *simple_router.Context) error {
 		result.Msg = consts.MissParameterMsg
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
-	// client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
 
-	// publish := beanq.NewPublisher()
-	// task := beanq.NewTask()
-	// publish.Publish()
+	nid := cast.ToInt64(id)
+
+	cmd := client.ZRange(ctx.Context(), "beanq:logs:success", nid, nid)
+	if err := cmd.Err(); err != nil {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	vals := cmd.Val()
+	if len(vals) < 1 {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = "record is empty"
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	valByte := []byte(vals[0])
+
+	newJson := json.Json
+	payload := newJson.Get(valByte, "Payload").ToString()
+	executeTime := newJson.Get(valByte, "ExecuteTime").ToString()
+	groupName := newJson.Get(valByte, "Group").ToString()
+	queue := newJson.Get(valByte, "Queue").ToString()
+	queues := strings.Split(queue, ":")
+	if len(queues) < 4 {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = "data error"
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+
+	dup, err := time.ParseInLocation(time.RFC3339, executeTime, time.Local)
+	if err != nil {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	publish := beanq.NewPublisher()
+	task := beanq.NewTask([]byte(payload))
+	if err := publish.PublishWithContext(ctx.Context(), task, options.ExecuteTime(dup), options.Group(groupName), options.Queue(queues[2])); err != nil {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+
 	return ctx.Json(http.StatusOK, result)
 }
 

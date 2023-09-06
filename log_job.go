@@ -52,6 +52,7 @@ type (
 		RunTime                string
 		BeginTime              time.Time
 		EndTime                time.Time
+		ExecuteTime            time.Time
 		Queue, Group, Consumer string
 	}
 

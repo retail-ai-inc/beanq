@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -138,7 +137,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 				Offset: 0,
 				Count:  1,
 			})
-			fmt.Println(cmd.String())
+
 			if err := cmd.Err(); err != nil {
 				Logger.Error("consume err", zap.Error(err))
 			}
@@ -152,7 +151,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 					Logger.Error("zrem err", zap.Error(err))
 				}
 			}); err != nil {
-				fmt.Println("----------")
+
 				continue
 			}
 			if err := t.pool.Submit(func() {
