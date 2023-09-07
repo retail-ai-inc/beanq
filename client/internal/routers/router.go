@@ -336,6 +336,11 @@ func queueInfo(ctx context.Context, queueKey string) (any, error) {
 	}
 	d := make([]map[string]any, 0, len(queues))
 	for _, queue := range queues {
+
+		queueArr := strings.Split(queue, ":")
+		if len(queueArr) < 4 {
+			continue
+		}
 		objStr := redisx.Object(ctx, client, queue)
 		// get memory
 		r, err := client.MemoryUsage(ctx, queue).Result()
@@ -343,7 +348,7 @@ func queueInfo(ctx context.Context, queueKey string) (any, error) {
 			log.Println(err)
 			continue
 		}
-		d = append(d, map[string]any{"queue": queue, "state": "Run", "size": objStr.SerizlizedLength, "memory": r, "process": objStr.LruSecondsIdle, "fail": 0, "errRate": "2%"})
+		d = append(d, map[string]any{"group": queueArr[1], "queue": queueArr[2], "state": "Run", "size": objStr.SerizlizedLength, "memory": r, "process": objStr.LruSecondsIdle, "fail": 0})
 	}
 
 	return d, nil

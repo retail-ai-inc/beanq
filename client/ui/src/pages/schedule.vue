@@ -3,6 +3,7 @@
         <table class="table table-striped">
             <thead>
                 <tr>
+                  <th scope="col">Group</th>
                     <th scope="col">Queue</th>
                     <th scope="col">State</th>
                     <th scope="col">Size</th>
@@ -14,6 +15,7 @@
             </thead>
             <tbody>
                 <tr v-for="(item,key) in schedule" :key="key">
+                  <th scope="row">{{item.group}}</th>
                     <th scope="row">{{ item.queue }}</th>
                     <td :class="item.state == 'Run' ? 'text-success-emphasis': 'text-danger-emphasis'">{{ item.state }}</td>
                     <td>{{ item.size }}</td>

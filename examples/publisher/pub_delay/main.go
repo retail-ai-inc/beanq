@@ -51,6 +51,6 @@ func pubDelayInfo() {
 			log.Fatalln(err)
 		}
 	}
-
+	pub.Publish(beanq.NewTask([]byte("aaa")), opt.Group("group1"), opt.Queue("queue1"))
 	defer pub.Close()
 }
