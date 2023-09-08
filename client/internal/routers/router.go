@@ -41,27 +41,39 @@ func IndexHandler(ctx *simple_router.Context) error {
 
 func LoginHandler(ctx *simple_router.Context) error {
 
-	// request := ctx.Request()
-	// username := request.PostFormValue("username")
-	// password := request.PostFormValue("password")
+	request := ctx.Request()
+	username := request.PostFormValue("username")
+	password := request.PostFormValue("password")
 
 	result := resultPool.Get().(*Result)
 	defer func() {
 		result.Reset()
 		resultPool.Put(result)
 	}()
-	claim := jwt.RegisteredClaims{
-		Issuer:    "",
-		Subject:   "beanq monitor ui",
-		Audience:  nil,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(7200 * time.Second)),
-		NotBefore: nil,
-		IssuedAt:  nil,
-		ID:        "",
+
+	if username != "aa" && password != "bb" {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = "username or password mismatch"
+		return ctx.Json(http.StatusUnauthorized, result)
 	}
+	claim := jwtx.Claim{
+		UserName: username,
+		Claims: jwt.RegisteredClaims{
+			Issuer:    "Trial China",
+			Subject:   "beanq monitor ui",
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7200 * time.Second)),
+			NotBefore: nil,
+			IssuedAt:  nil,
+			ID:        "",
+		},
+	}
+
 	token, err := jwtx.MakeRsaToken(claim)
 	if err != nil {
-
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
 	result.Data = map[string]any{"token": token}

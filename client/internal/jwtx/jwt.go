@@ -9,7 +9,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func MakeRsaToken(claims jwt.Claims) (string, error) {
+type Claim struct {
+	UserName string
+	jwt.Claims
+}
+
+func MakeRsaToken(claims Claim) (string, error) {
 
 	_, p, _, ok := runtime.Caller(0)
 	if ok {

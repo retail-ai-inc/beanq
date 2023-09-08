@@ -1,10 +1,12 @@
 package routers
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
+	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
 	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
 )
 
@@ -24,20 +26,22 @@ func Auth(next simple_router.HandlerFunc) simple_router.HandlerFunc {
 		strs := strings.Split(auth, " ")
 		if len(strs) < 2 {
 			// return data format err
-			result.Code = "1001"
+			result.Code = consts.InternalServerErrorCode
 			result.Msg = "missing parameter"
 			return ctx.Json(http.StatusInternalServerError, result)
 		}
 
 		token, err := jwtx.ParseRsaToken(strs[1])
 		if err != nil {
-			result.Code = "1001"
+			result.Code = consts.InternalServerErrorCode
 			result.Msg = err.Error()
 			return ctx.Json(http.StatusUnauthorized, result)
 		}
+		fmt.Println(token.Claims)
 		//
 		_, err = token.Claims.GetExpirationTime()
 		if err != nil {
+			result.Code = consts.InternalServerErrorCode
 			result.Msg = err.Error()
 			return ctx.Json(http.StatusUnauthorized, result)
 		}
