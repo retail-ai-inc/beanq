@@ -11,11 +11,14 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
 	"github.com/retail-ai-inc/beanq/client/internal/redisx"
+	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
 	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 )
 
@@ -38,27 +41,39 @@ func IndexHandler(ctx *simple_router.Context) error {
 
 func LoginHandler(ctx *simple_router.Context) error {
 
-	// request := ctx.Request()
-	// username := request.PostFormValue("username")
-	// password := request.PostFormValue("password")
+	request := ctx.Request()
+	username := request.PostFormValue("username")
+	password := request.PostFormValue("password")
 
 	result := resultPool.Get().(*Result)
 	defer func() {
 		result.Reset()
 		resultPool.Put(result)
 	}()
-	claim := jwt.RegisteredClaims{
-		Issuer:    "",
-		Subject:   "beanq monitor ui",
-		Audience:  nil,
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(7200 * time.Second)),
-		NotBefore: nil,
-		IssuedAt:  nil,
-		ID:        "",
+
+	if username != "aa" && password != "bb" {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = "username or password mismatch"
+		return ctx.Json(http.StatusUnauthorized, result)
 	}
+	claim := jwtx.Claim{
+		UserName: username,
+		Claims: jwt.RegisteredClaims{
+			Issuer:    "Trial China",
+			Subject:   "beanq monitor ui",
+			Audience:  nil,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7200 * time.Second)),
+			NotBefore: nil,
+			IssuedAt:  nil,
+			ID:        "",
+		},
+	}
+
 	token, err := jwtx.MakeRsaToken(claim)
 	if err != nil {
-
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
 	result.Data = map[string]any{"token": token}
@@ -77,7 +92,7 @@ func ScheduleHandler(ctx *simple_router.Context) error {
 	bt, err := queueInfo(ctx.Context(), redisx.ScheduleQueueKey("beanq"))
 
 	if err != nil {
-		result.Code = "1001"
+		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
@@ -95,7 +110,7 @@ func QueueHandler(ctx *simple_router.Context) error {
 	nctx := ctx.Context()
 	bt, err := queueInfo(nctx, redisx.QueueKey("beanq"))
 	if err != nil {
-		result.Code = "1001"
+		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
@@ -124,11 +139,53 @@ func LogRetryHandler(ctx *simple_router.Context) error {
 	req := ctx.Request()
 	id := req.PostFormValue("id")
 	if id == "" {
-		result.Code = "1000"
-		result.Msg = "missing parameter"
+		result.Code = consts.MissParameterCode
+		result.Msg = consts.MissParameterMsg
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
-	// client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+
+	nid := cast.ToInt64(id)
+
+	cmd := client.ZRange(ctx.Context(), "beanq:logs:success", nid, nid)
+	if err := cmd.Err(); err != nil {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	vals := cmd.Val()
+	if len(vals) < 1 {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = "record is empty"
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	valByte := []byte(vals[0])
+
+	newJson := json.Json
+	payload := newJson.Get(valByte, "Payload").ToString()
+	executeTime := newJson.Get(valByte, "ExecuteTime").ToString()
+	groupName := newJson.Get(valByte, "Group").ToString()
+	queue := newJson.Get(valByte, "Queue").ToString()
+	queues := strings.Split(queue, ":")
+	if len(queues) < 4 {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = "data error"
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+
+	dup, err := time.ParseInLocation(time.RFC3339, executeTime, time.Local)
+	if err != nil {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
+	publish := beanq.NewPublisher()
+	task := beanq.NewTask([]byte(payload))
+	if err := publish.PublishWithContext(ctx.Context(), task, options.ExecuteTime(dup), options.Group(groupName), options.Queue(queues[2])); err != nil {
+		result.Code = consts.InternalServerErrorCode
+		result.Msg = err.Error()
+		return ctx.Json(http.StatusInternalServerError, result)
+	}
 
 	return ctx.Json(http.StatusOK, result)
 }
@@ -143,8 +200,8 @@ func LogDelHandler(ctx *simple_router.Context) error {
 	req := ctx.Request()
 	id := req.FormValue("id")
 	if id == "" {
-		result.Code = "1000"
-		result.Msg = "missing parameter"
+		result.Code = consts.MissParameterCode
+		result.Msg = consts.MissParameterMsg
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
@@ -160,7 +217,7 @@ func LogDelHandler(ctx *simple_router.Context) error {
 	cmd := client.ZRemRangeByRank(ctx.Context(), "beanq:logs:success", start, nid)
 
 	if cmd.Err() != nil {
-		result.Code = "1000"
+		result.Code = consts.InternalServerErrorCode
 		result.Msg = cmd.Err().Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
@@ -191,8 +248,8 @@ func LogHandler(ctx *simple_router.Context) error {
 	dataType = req.FormValue("type")
 
 	if dataType != "success" && dataType != "error" {
-		resultRes.Code = "1001"
-		resultRes.Msg = "type is error"
+		resultRes.Code = consts.TypeErrorCode
+		resultRes.Msg = consts.TypeErrorMsg
 
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 
@@ -215,23 +272,23 @@ func LogHandler(ctx *simple_router.Context) error {
 	cmd := client.ZRange(nctx, matchStr, nowPage, nowPageSize)
 	if cmd.Err() != nil {
 		resultRes.Msg = cmd.Err().Error()
-		resultRes.Code = "1001"
+		resultRes.Code = consts.InternalServerErrorCode
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 
 	result, err := cmd.Result()
 	if err != nil {
 		resultRes.Msg = cmd.Err().Error()
-		resultRes.Code = "1001"
+		resultRes.Code = consts.InternalServerErrorCode
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 
-	json := json.Json
+	njson := json.Json
 
-	len, err := client.ZLexCount(nctx, matchStr, "-", "+").Result()
+	length, err := client.ZLexCount(nctx, matchStr, "-", "+").Result()
 	if err != nil {
 		resultRes.Msg = err.Error()
-		resultRes.Code = "1001"
+		resultRes.Code = consts.InternalServerErrorCode
 		return ctx.Json(http.StatusInternalServerError, resultRes)
 	}
 	d := make([]map[string]any, 0, pageSize)
@@ -243,17 +300,17 @@ func LogHandler(ctx *simple_router.Context) error {
 			continue
 		}
 		payloadByte := stringx.StringToByte(v)
-		npayload := json.Get(payloadByte, "Payload")
-		addTime := json.Get(payloadByte, "AddTime")
-		runTime := json.Get(payloadByte, "RunTime")
-		group := json.Get(payloadByte, "Group")
-		queue := json.Get(payloadByte, "Queue")
+		npayload := njson.Get(payloadByte, "Payload")
+		addTime := njson.Get(payloadByte, "AddTime")
+		runTime := njson.Get(payloadByte, "RunTime")
+		group := njson.Get(payloadByte, "Group")
+		queue := njson.Get(payloadByte, "Queue")
 
-		ttl := cast.ToTime(json.Get(payloadByte, "ExpireTime").ToString()).Sub(time.Now()).Seconds()
+		ttl := cast.ToTime(njson.Get(payloadByte, "ExpireTime").ToString()).Sub(time.Now()).Seconds()
 		d = append(d, map[string]any{"key": key, "ttl": ttl, "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
 
 	}
-	resultRes.Data = map[string]any{"data": d, "total": len}
+	resultRes.Data = map[string]any{"data": d, "total": length}
 
 	return ctx.Json(http.StatusOK, resultRes)
 }
@@ -291,6 +348,11 @@ func queueInfo(ctx context.Context, queueKey string) (any, error) {
 	}
 	d := make([]map[string]any, 0, len(queues))
 	for _, queue := range queues {
+
+		queueArr := strings.Split(queue, ":")
+		if len(queueArr) < 4 {
+			continue
+		}
 		objStr := redisx.Object(ctx, client, queue)
 		// get memory
 		r, err := client.MemoryUsage(ctx, queue).Result()
@@ -298,7 +360,7 @@ func queueInfo(ctx context.Context, queueKey string) (any, error) {
 			log.Println(err)
 			continue
 		}
-		d = append(d, map[string]any{"queue": queue, "state": "Run", "size": objStr.SerizlizedLength, "memory": r, "process": objStr.LruSecondsIdle, "fail": 0, "errRate": "2%"})
+		d = append(d, map[string]any{"group": queueArr[1], "queue": queueArr[2], "state": "Run", "size": objStr.SerizlizedLength, "memory": r, "process": objStr.LruSecondsIdle, "fail": 0})
 	}
 
 	return d, nil

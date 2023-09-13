@@ -4,24 +4,26 @@
         <table class="table table-striped">
             <thead>
                 <tr>
+                  <th scope="col">Group</th>
                     <th scope="col">Queue</th>
                     <th scope="col">State</th>
                     <th scope="col">Size</th>
                     <th scope="col">Memory usage</th>
                     <th scope="col">Processed</th>
-                    <th scope="col">Failed</th>
+<!--                    <th scope="col">Failed</th>-->
 <!--                    <th scope="col">Error rate</th>-->
                     <th scope="col">Action</th>
                 </tr>
             </thead>
             <tbody>
                 <tr v-for="(item, key) in queues" :key="key">
+                  <th scope="row">{{item.group}}</th>
                     <th scope="row">{{ item.queue }}</th>
                     <td :class="item.state == 'Run' ? 'text-success-emphasis' : 'text-danger-emphasis'">{{ item.state }}</td>
                     <td>{{ item.size }}</td>
                     <td>{{ item.memory }}</td>
                     <td>{{ item.process }}</td>
-                    <td>{{ item.fail }}</td>
+<!--                    <td>{{ item.fail }}</td>-->
 <!--                    <td>{{ item.errRate }}</td>-->
                     <td>
                       <div class="btn-group" role="group" aria-label="Button group with nested dropdown">

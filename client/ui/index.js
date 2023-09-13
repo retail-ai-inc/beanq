@@ -35,8 +35,7 @@
   }
   // admin routes
   const adminRoute =  {
-        path:'/admin',
-        component:()=>loadModule("./src/layout/adminMain.vue",options),
+        path:'/admin',component:()=>loadModule("./src/layout/adminMain.vue",options),
         children:[
           { path: '', component: () => loadModule('./src/pages/home.vue', options) },
           { path: 'home',component:()=>loadModule("./src/pages/home.vue",options)},
@@ -58,6 +57,7 @@
   const router = VueRouter.createRouter({
     history: VueRouter.createWebHashHistory(),
     routes: [
+      {path:'/',redirect:'/admin'},
       adminRoute,
       loginRoute
     ],

@@ -61,12 +61,14 @@ import {ref,onMounted,watch} from "vue";
 
 const route = ref('/admin/home');
 
-const useR = useRoute();
+const uroute = useRoute();
+const urouter = useRouter();
+
 
 onMounted(()=>{
-  route.value = useR.fullPath;
+  route.value = uroute.fullPath;
 })
-watch(()=>useR.fullPath,(newVal,oldVal)=>{
+watch(()=>uroute.fullPath,(newVal,oldVal)=>{
   route.value = newVal;
 })
 function setting(){
@@ -74,7 +76,7 @@ function setting(){
 }
 function logout(){
   sessionStorage.clear();
-  useRouter().push("/login");
+  urouter.push("/login");
 }
 </script>
 

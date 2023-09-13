@@ -382,6 +382,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 
 			result.Payload = task.Payload()
 			result.RunTime = sub.String()
+			result.ExecuteTime = task.ExecuteTime()
 			result.Queue = stream
 			result.Group = group
 			// Successfully consumed data, stored in `string`

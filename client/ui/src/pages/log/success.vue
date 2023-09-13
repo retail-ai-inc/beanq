@@ -87,7 +87,11 @@ async function options(optType,id){
         console.error(err)
       })
     case "retry":
-
+      await request.post("/log/retry",{id:id},{headers:{"Content-Type":"multipart/form-data"}} ).then(res=>{
+        getLog(data.page,10);
+      }).catch(err=>{
+        console.error(err)
+      })
     case "archive":
 
     default:

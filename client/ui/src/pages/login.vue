@@ -12,6 +12,7 @@
           </div>
 
           <button type="button" class="btn btn-primary" style="margin-top: 10px" @click="onSubmit">Login</button>
+          <div id="errorMsg" style="color: red;margin-top:10px;">{{msg}}</div>
         </div>
 
 
@@ -20,26 +21,32 @@
   </div>
 </template>
 <script setup>
-import { reactive,onMounted,onUnmounted } from "vue";
+import { reactive,toRefs,onMounted,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
 
 import request  from "request";
 
-const user =reactive({"username":"","password":""});
+const data = reactive({
+  user:{"username":"","password":""},
+  msg:""
+})
 const useRe = useRouter();
 
 function onSubmit(){
-  if (user.username == "" || user.password == ""){
+  if (data.user.username == "" || data.user.password == ""){
     console.log("can not empty");
     return;
   }
-  request.post("/login", {username:user.username,password:user.password},{headers:{"Content-Type":"multipart/form-data"}} ).then(res=>{
+  request.post("/login", {username:data.user.username,password:data.user.password},{headers:{"Content-Type":"multipart/form-data"}} ).then(res=>{
     sessionStorage.setItem("token",res.data.token);
     useRe.push("/admin/home");
   }).catch(err=>{
-    console.error(err)
+    if (err.response.status == 401){
+      data.msg = err.response.data.msg;
+    }
   })
 }
+const {user,msg} = toRefs(data);
 </script>
 <style scoped>
 .left-col{

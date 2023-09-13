@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"runtime"
 	"time"
@@ -38,20 +37,20 @@ func pubDelayInfo() {
 		if i == 2 {
 			delayT = ntime
 		}
-		fmt.Printf("---:%+v \n", delayT.Format("2006-01-02 15:04:05 "))
+
 		if i == 4 {
 			y = 8
 		}
 		if i == 3 {
 			y = 10
 			delayT = ntime.Add(35 * time.Second)
-			fmt.Printf("=====%+v \n", delayT.Format("2006-01-02 15:04:05"))
+
 		}
 
 		if err := pub.DelayPublish(task, delayT, opt.Queue("delay-ch"), opt.Group("delay-group"), opt.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
 	}
-
+	pub.Publish(beanq.NewTask([]byte("aaa")), opt.Group("group1"), opt.Queue("queue1"))
 	defer pub.Close()
 }

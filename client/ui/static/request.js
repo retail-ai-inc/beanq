@@ -30,7 +30,8 @@ request.interceptors.response.use(
     err=>{
 
         if (err.response.status == 401){
-            sessionStorage.clear()
+
+            sessionStorage.clear();
         }
         return Promise.reject(err);
     }
