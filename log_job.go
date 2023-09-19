@@ -32,8 +32,6 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/retail-ai-inc/beanq/internal/base"
-	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
 )
@@ -84,8 +82,8 @@ func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration t
 }
 
 func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
-	var opts *opt.Options
-	if optsVal, ok := ctx.Value("options").(*opt.Options); ok {
+	var opts *Options
+	if optsVal, ok := ctx.Value("options").(*Options); ok {
 		opts = optsVal
 	}
 	now := time.Now()
@@ -95,12 +93,12 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	// default ErrorLevel
 
-	key := base.MakeLogKey(Config.Queue.Redis.Prefix, "fail")
+	key := MakeLogKey(Config.Redis.Prefix, "fail")
 	expiration := opts.KeepFailedJobsInHistory
 
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = base.MakeLogKey(Config.Queue.Redis.Prefix, "success")
+		key = MakeLogKey(Config.Redis.Prefix, "success")
 		expiration = opts.KeepSuccessJobsInHistory
 	}
 	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
@@ -119,8 +117,8 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 func (t *logJob) checkExpiration(ctx context.Context) {
 
 	now := time.Now()
-	successKey := base.MakeLogKey(Config.Queue.Redis.Prefix, "success")
-	failKey := base.MakeLogKey(Config.Queue.Redis.Prefix, "fail")
+	successKey := MakeLogKey(Config.Redis.Prefix, "success")
+	failKey := MakeLogKey(Config.Redis.Prefix, "fail")
 
 	if err := t.client.ZRemRangeByScore(ctx, successKey, cast.ToString(0), cast.ToString(now.UnixMilli())).Err(); err != nil {
 		Logger.Error("rem zset success error:%+v", zap.Error(err))

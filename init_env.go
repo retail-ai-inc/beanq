@@ -32,26 +32,24 @@ import (
 	"go.uber.org/zap"
 )
 
-type BeanqConfig struct {
-	Queue struct {
-		DebugLog struct {
-			On   bool
-			Path string
-		}
-		Redis struct {
-			Host               string
-			Port               string
-			Password           string
-			Database           int
-			Prefix             string
-			MaxRetries         int
-			PoolSize           int
-			MinIdleConnections int
-			DialTimeout        time.Duration
-			ReadTimeout        time.Duration
-			WriteTimeout       time.Duration
-			PoolTimeout        time.Duration
-		}
+type (
+	DebugLog struct {
+		On   bool
+		Path string
+	}
+	Redis struct {
+		Host               string
+		Port               string
+		Password           string
+		Database           int
+		Prefix             string
+		MinIdleConnections int
+		DialTimeout        time.Duration
+		ReadTimeout        time.Duration
+		WriteTimeout       time.Duration
+		PoolTimeout        time.Duration
+	}
+	BeanqConfig struct {
 		Driver                   string
 		PoolSize                 int
 		JobMaxRetries            int
@@ -59,8 +57,10 @@ type BeanqConfig struct {
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration
 		MinWorkers               int
+		DebugLog
+		Redis
 	}
-}
+)
 
 // This is a global variable to hold the debug logger so that we can log data from anywhere.
 var Logger *zap.Logger

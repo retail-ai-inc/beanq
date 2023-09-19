@@ -38,7 +38,6 @@ import (
 	"sync"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
-	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"go.uber.org/zap"
 
 	"github.com/panjf2000/ants/v2"
@@ -51,70 +50,66 @@ type ConsumerHandler struct {
 
 type Consumer struct {
 	broker Broker
-	opts   *opt.Options
+	opts   *Options
 	mu     sync.RWMutex
 	m      []*ConsumerHandler
 }
 
 var _ BeanqSub = new(Consumer)
 var (
-	beanqConsumerOnce sync.Once
-	beanqConsumer     *Consumer
+	beanqConsumer *Consumer
 )
 
-func NewConsumer() *Consumer {
-	opts := opt.DefaultOptions
+func NewConsumer(config BeanqConfig) *Consumer {
+	opts := DefaultOptions
 
-	beanqConsumerOnce.Do(func() {
-		initEnv()
+	param := make([]logger.LoggerInfoFun, 0)
+	// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
+	if config.DebugLog.Path != "" {
+		param = append(param, logger.WithInfoFile(config.DebugLog.Path))
+	}
+	// Initialize the beanq consumer log
+	Logger = logger.InitLogger(param...).With(zap.String("prefix", config.Redis.Prefix))
 
-		param := make([]logger.LoggerInfoFun, 0)
-		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
-		if Config.Queue.DebugLog.Path != "" {
-			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
-		}
-		// Initialize the beanq consumer log
-		Logger = logger.InitLogger(param...).With(zap.String("prefix", Config.Queue.Redis.Prefix))
+	if config.KeepJobsInQueue != 0 {
+		opts.KeepJobInQueue = config.KeepJobsInQueue
+	}
 
-		if Config.Queue.KeepJobsInQueue != 0 {
-			opts.KeepJobInQueue = Config.Queue.KeepJobsInQueue
-		}
+	if config.KeepFailedJobsInHistory != 0 {
+		opts.KeepFailedJobsInHistory = config.KeepFailedJobsInHistory
+	}
 
-		if Config.Queue.KeepFailedJobsInHistory != 0 {
-			opts.KeepFailedJobsInHistory = Config.Queue.KeepFailedJobsInHistory
-		}
+	if config.KeepSuccessJobsInHistory != 0 {
+		opts.KeepSuccessJobsInHistory = config.KeepSuccessJobsInHistory
+	}
 
-		if Config.Queue.KeepSuccessJobsInHistory != 0 {
-			opts.KeepSuccessJobsInHistory = Config.Queue.KeepSuccessJobsInHistory
-		}
+	if config.MinWorkers != 0 {
+		opts.MinWorkers = config.MinWorkers
+	}
 
-		if Config.Queue.MinWorkers != 0 {
-			opts.MinWorkers = Config.Queue.MinWorkers
-		}
+	if config.JobMaxRetries != 0 {
+		opts.JobMaxRetry = config.JobMaxRetries
+	}
+	if config.PoolSize != 0 {
+		opts.PoolSize = config.PoolSize
+	}
 
-		if Config.Queue.JobMaxRetries != 0 {
-			opts.JobMaxRetry = Config.Queue.JobMaxRetries
+	pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+	if err != nil {
+		Logger.Fatal("goroutine pool error", zap.Error(err))
+	}
+	Config = config
+	if config.Driver == "redis" {
+		beanqConsumer = &Consumer{
+			broker: NewRedisBroker(pool, config),
+			opts:   opts,
+			mu:     sync.RWMutex{},
 		}
-		if Config.Queue.PoolSize != 0 {
-			opts.PoolSize = Config.Queue.PoolSize
-		}
+	} else {
+		// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
+		beanqConsumer = nil
+	}
 
-		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
-		if err != nil {
-			Logger.Fatal("goroutine pool error", zap.Error(err))
-		}
-
-		if Config.Queue.Driver == "redis" {
-			beanqConsumer = &Consumer{
-				broker: NewRedisBroker(pool, Config),
-				opts:   opts,
-				mu:     sync.RWMutex{},
-			}
-		} else {
-			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
-			beanqConsumer = nil
-		}
-	})
 	return beanqConsumer
 }
 
@@ -131,10 +126,10 @@ func (t *Consumer) Register(group, queue string, consumerFun DoConsumer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if group == "" {
-		group = opt.DefaultOptions.DefaultGroup
+		group = DefaultOptions.DefaultGroup
 	}
 	if queue == "" {
-		queue = opt.DefaultOptions.DefaultQueueName
+		queue = DefaultOptions.DefaultQueueName
 	}
 
 	t.m = append(t.m, &ConsumerHandler{

@@ -20,13 +20,11 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package base
+package beanq
 
 import (
 	"strings"
 	"time"
-
-	"github.com/retail-ai-inc/beanq/internal/options"
 )
 
 func makeKey(keys ...string) string {
@@ -37,30 +35,30 @@ func makeKey(keys ...string) string {
 
 func MakeListKey(prefix, group, queue string) string {
 	if group == "" {
-		group = options.DefaultOptions.DefaultGroup
+		group = DefaultOptions.DefaultGroup
 	}
 	if queue == "" {
-		queue = options.DefaultOptions.DefaultQueueName
+		queue = DefaultOptions.DefaultQueueName
 	}
 	return makeKey(prefix, group, queue, "list")
 }
 
 func MakeZSetKey(prefix, group, queue string) string {
 	if group == "" {
-		group = options.DefaultOptions.DefaultGroup
+		group = DefaultOptions.DefaultGroup
 	}
 	if queue == "" {
-		queue = options.DefaultOptions.DefaultQueueName
+		queue = DefaultOptions.DefaultQueueName
 	}
 	return makeKey(prefix, group, queue, "zset")
 }
 
 func MakeStreamKey(prefix, group, queue string) string {
 	if group == "" {
-		group = options.DefaultOptions.DefaultGroup
+		group = DefaultOptions.DefaultGroup
 	}
 	if queue == "" {
-		queue = options.DefaultOptions.DefaultQueueName
+		queue = DefaultOptions.DefaultQueueName
 	}
 	return makeKey(prefix, group, queue, "stream")
 }
@@ -75,7 +73,7 @@ func MakeHealthKey(prefix string) string {
 func MakeTimeUnit(prefix string) string {
 	return makeKey(prefix, "time_unit")
 }
-func Retry(f func() error, delayTime time.Duration) error {
+func RetryInfo(f func() error, delayTime time.Duration) error {
 	index := 0
 	errChan := make(chan error, 1)
 	stop := make(chan struct{}, 1)

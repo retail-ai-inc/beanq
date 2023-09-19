@@ -1,21 +1,54 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"path/filepath"
+	"runtime"
+	"sync"
 	"time"
 
 	"github.com/retail-ai-inc/beanq"
+	"github.com/spf13/viper"
 )
 
+var (
+	configOnce sync.Once
+	bqConfig   beanq.BeanqConfig
+)
+
+func initCnf() beanq.BeanqConfig {
+	configOnce.Do(func() {
+		var envPath string = "./"
+		if _, file, _, ok := runtime.Caller(0); ok {
+			envPath = filepath.Dir(file)
+		}
+
+		vp := viper.New()
+		vp.AddConfigPath(envPath)
+		vp.SetConfigType("json")
+		vp.SetConfigName("env")
+
+		if err := vp.ReadInConfig(); err != nil {
+			log.Fatalf("Unable to open beanq env.json file: %v", err)
+		}
+
+		// IMPORTANT: Unmarshal the env.json into global Config object.
+		if err := vp.Unmarshal(&bqConfig); err != nil {
+			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
+		}
+	})
+	return bqConfig
+}
 func main() {
 
 	go func() {
 		http.ListenAndServe("0.0.0.0:8000", nil)
 	}()
-
+	config := initCnf()
 	// register consumer
-	csm := beanq.NewConsumer()
+	csm := beanq.NewConsumer(config)
 	// register normal consumer
 	csm.Register("g2", "ch2", func(task *beanq.Task) error {
 		// TODO:logic
@@ -29,6 +62,10 @@ func main() {
 	csm.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
 		beanq.Logger.Info(task.Payload())
 
+		return nil
+	})
+	csm.Register("default-group", "BatchCartStateTimoutJobHandler", func(task *beanq.Task) error {
+		beanq.Logger.Info(task.Payload())
 		return nil
 	})
 	// begin to consume information

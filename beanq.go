@@ -25,14 +25,12 @@ package beanq
 import (
 	"context"
 	"time"
-
-	opt "github.com/retail-ai-inc/beanq/internal/options"
 )
 
 type BeanqPub interface {
-	Publish(task *Task, option ...opt.OptionI) error
-	PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) error
-	DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error
+	Publish(task *Task, option ...OptionI) error
+	PublishWithContext(ctx context.Context, task *Task, option ...OptionI) error
+	DelayPublish(task *Task, delayTime time.Time, option ...OptionI) error
 }
 
 type BeanqSub interface {

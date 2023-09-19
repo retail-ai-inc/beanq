@@ -1,7 +1,6 @@
 package routers
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -37,7 +36,6 @@ func Auth(next simple_router.HandlerFunc) simple_router.HandlerFunc {
 			result.Msg = err.Error()
 			return ctx.Json(http.StatusUnauthorized, result)
 		}
-		fmt.Println(token.Claims)
 		//
 		_, err = token.Claims.GetExpirationTime()
 		if err != nil {

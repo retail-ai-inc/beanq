@@ -28,7 +28,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/helper/json"
-	"github.com/retail-ai-inc/beanq/internal/base"
 )
 
 type (
@@ -46,7 +45,7 @@ func newHealthCheck(client *redis.Client) *healthCheck {
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
 
-	key := base.MakeHealthKey(Config.Queue.Redis.Prefix)
+	key := MakeHealthKey(Config.Redis.Prefix)
 
 	info, err := t.info(ctx)
 	if err != nil {

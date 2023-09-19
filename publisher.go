@@ -49,7 +49,6 @@ import (
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
-	opt "github.com/retail-ai-inc/beanq/internal/options"
 	"go.uber.org/zap"
 
 	"github.com/panjf2000/ants/v2"
@@ -67,32 +66,31 @@ var (
 	beanqPublisher *pubClient
 )
 
-func NewPublisher() *pubClient {
-	opts := opt.DefaultOptions
+func NewPublisher(config BeanqConfig) *pubClient {
+	opts := DefaultOptions
 
 	publisherOnce.Do(func() {
-		initEnv()
 
 		param := make([]logger.LoggerInfoFun, 0)
 		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
-		if Config.Queue.DebugLog.Path != "" {
-			param = append(param, logger.WithInfoFile(Config.Queue.DebugLog.Path))
+		if config.DebugLog.Path != "" {
+			param = append(param, logger.WithInfoFile(config.DebugLog.Path))
 		}
 		// Initialize the beanq consumer log
-		Logger = logger.InitLogger(param...).With(zap.String("prefix", Config.Queue.Redis.Prefix))
+		Logger = logger.InitLogger(param...).With(zap.String("prefix", config.Redis.Prefix))
 
-		if Config.Queue.PoolSize != 0 {
-			opts.PoolSize = Config.Queue.PoolSize
+		if config.PoolSize != 0 {
+			opts.PoolSize = config.PoolSize
 		}
 
 		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 		if err != nil {
 			Logger.Fatal("goroutine pool error", zap.Error(err))
 		}
-
-		if Config.Queue.Driver == "redis" {
+		Config = config
+		if config.Driver == "redis" {
 			beanqPublisher = &pubClient{
-				broker: NewRedisBroker(pool, Config),
+				broker: NewRedisBroker(pool, config),
 				wg:     nil,
 			}
 		} else {
@@ -104,8 +102,8 @@ func NewPublisher() *pubClient {
 	return beanqPublisher
 }
 
-func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option ...opt.OptionI) error {
-	opts, err := opt.ComposeOptions(option...)
+func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option ...OptionI) error {
+	opts, err := ComposeOptions(option...)
 	if err != nil {
 		return err
 	}
@@ -120,12 +118,12 @@ func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option .
 	return t.broker.enqueue(ctx, task, opts)
 }
 
-func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...opt.OptionI) error {
-	option = append(option, opt.ExecuteTime(delayTime))
+func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...OptionI) error {
+	option = append(option, ExecuteTime(delayTime))
 	return t.Publish(task, option...)
 }
 
-func (t *pubClient) Publish(task *Task, option ...opt.OptionI) error {
+func (t *pubClient) Publish(task *Task, option ...OptionI) error {
 	return t.PublishWithContext(context.Background(), task, option...)
 }
 

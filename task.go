@@ -30,7 +30,6 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
 )
 
@@ -136,11 +135,11 @@ func NewTask(payload []byte, opt ...TaskOpt) *Task {
 	task := Task{
 		Values: values{
 			"id":          uuid.NewString(),
-			"name":        options.DefaultOptions.DefaultQueueName,
-			"queue":       options.DefaultOptions.DefaultQueueName,
-			"group":       options.DefaultOptions.DefaultGroup,
-			"maxLen":      options.DefaultOptions.DefaultMaxLen,
-			"retry":       options.DefaultOptions.JobMaxRetry,
+			"name":        DefaultOptions.DefaultQueueName,
+			"queue":       DefaultOptions.DefaultQueueName,
+			"group":       DefaultOptions.DefaultGroup,
+			"maxLen":      DefaultOptions.DefaultMaxLen,
+			"retry":       DefaultOptions.JobMaxRetry,
 			"priority":    1,
 			"payload":     stringx.ByteToString(payload),
 			"addTime":     now.Format(timex.DateTime),

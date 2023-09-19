@@ -2,6 +2,7 @@ package routers
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"path"
@@ -18,8 +19,8 @@ import (
 	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
-	"github.com/retail-ai-inc/beanq/internal/options"
 	"github.com/spf13/cast"
+	"github.com/spf13/viper"
 )
 
 func IndexHandler(ctx *simple_router.Context) error {
@@ -108,7 +109,7 @@ func QueueHandler(ctx *simple_router.Context) error {
 		resultPool.Put(result)
 	}()
 	nctx := ctx.Context()
-	bt, err := queueInfo(nctx, redisx.QueueKey("beanq"))
+	bt, err := queueInfo(nctx, redisx.QueueKey("yakiimo_test_queue"))
 	if err != nil {
 		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
@@ -179,9 +180,10 @@ func LogRetryHandler(ctx *simple_router.Context) error {
 		result.Msg = err.Error()
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
-	publish := beanq.NewPublisher()
+
+	publish := beanq.NewPublisher(getBqConfig("./"))
 	task := beanq.NewTask([]byte(payload))
-	if err := publish.PublishWithContext(ctx.Context(), task, options.ExecuteTime(dup), options.Group(groupName), options.Queue(queues[2])); err != nil {
+	if err := publish.PublishWithContext(ctx.Context(), task, beanq.ExecuteTime(dup), beanq.Group(groupName), beanq.Queue(queues[2])); err != nil {
 		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
 		return ctx.Json(http.StatusInternalServerError, result)
@@ -238,7 +240,7 @@ func LogHandler(ctx *simple_router.Context) error {
 	var (
 		page, pageSize int64
 		dataType       string = "success"
-		matchStr       string = "beanq:logs:success"
+		matchStr       string = "yakiimo_test_queue:logs:success"
 		// replaeceStr    string = "beanq:logs:success:"
 	)
 
@@ -265,7 +267,7 @@ func LogHandler(ctx *simple_router.Context) error {
 	}
 
 	if dataType == "error" {
-		matchStr = "beanq:logs:error"
+		matchStr = "yakiimo_test_queue:logs:error"
 		// replaeceStr = "beanq:logs:error:"
 	}
 	nctx := ctx.Context()
@@ -304,10 +306,16 @@ func LogHandler(ctx *simple_router.Context) error {
 		addTime := njson.Get(payloadByte, "AddTime")
 		runTime := njson.Get(payloadByte, "RunTime")
 		group := njson.Get(payloadByte, "Group")
-		queue := njson.Get(payloadByte, "Queue")
+
+		queuestr := njson.Get(payloadByte, "Queue").ToString()
+		queues := strings.Split(queuestr, ":")
+		queue := queuestr
+		if len(queues) >= 4 {
+			queue = queues[2]
+		}
 
 		ttl := cast.ToTime(njson.Get(payloadByte, "ExpireTime").ToString()).Sub(time.Now()).Seconds()
-		d = append(d, map[string]any{"key": key, "ttl": ttl, "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
+		d = append(d, map[string]any{"key": key, "ttl": fmt.Sprintf("%.3f", ttl), "addTime": addTime, "runTime": runTime, "group": group, "queue": queue, "payload": npayload})
 
 	}
 	resultRes.Data = map[string]any{"data": d, "total": length}
@@ -364,4 +372,21 @@ func queueInfo(ctx context.Context, queueKey string) (any, error) {
 	}
 
 	return d, nil
+}
+func getBqConfig(path string) beanq.BeanqConfig {
+	var config beanq.BeanqConfig
+	vp := viper.New()
+	vp.AddConfigPath(path)
+	vp.SetConfigType("json")
+	vp.SetConfigName("env")
+
+	if err := vp.ReadInConfig(); err != nil {
+		log.Fatalf("Unable to open beanq env.json file: %v", err)
+	}
+
+	// IMPORTANT: Unmarshal the env.json into global Config object.
+	if err := vp.Unmarshal(&config); err != nil {
+		log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
+	}
+	return config
 }
