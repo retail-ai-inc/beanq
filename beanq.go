@@ -25,7 +25,50 @@ package beanq
 import (
 	"context"
 	"time"
+
+	"go.uber.org/zap"
 )
+
+type (
+	DebugLog struct {
+		On   bool
+		Path string
+	}
+	Health struct {
+		Port string
+		Host string
+	}
+	Redis struct {
+		Host               string
+		Port               string
+		Password           string
+		Database           int
+		Prefix             string
+		MinIdleConnections int
+		DialTimeout        time.Duration
+		ReadTimeout        time.Duration
+		WriteTimeout       time.Duration
+		PoolTimeout        time.Duration
+	}
+	BeanqConfig struct {
+		Driver                   string
+		PoolSize                 int
+		JobMaxRetries            int
+		KeepJobsInQueue          time.Duration
+		KeepFailedJobsInHistory  time.Duration
+		KeepSuccessJobsInHistory time.Duration
+		MinWorkers               int
+		DebugLog
+		Redis
+		Health
+	}
+)
+
+// This is a global variable to hold the debug logger so that we can log data from anywhere.
+var Logger *zap.Logger
+
+// Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
+var Config BeanqConfig
 
 type BeanqPub interface {
 	Publish(task *Task, option ...OptionI) error
@@ -37,5 +80,5 @@ type BeanqSub interface {
 	Register(group, queue string, consumerFun DoConsumer)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
-	StartUI() error
+	StartPing() error
 }

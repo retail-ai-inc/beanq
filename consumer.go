@@ -35,6 +35,8 @@ package beanq
 
 import (
 	"context"
+	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -151,6 +153,22 @@ func (t *Consumer) StartConsumer() {
 	t.StartConsumerWithContext(ctx)
 
 }
-func (t *Consumer) StartUI() error {
+func (t *Consumer) StartPing() error {
+	go func() {
+		hdl := &http.ServeMux{}
+		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {
+			writer.WriteHeader(http.StatusOK)
+			writer.Write([]byte("Beanq 🚀  pong"))
+			return
+		})
+		srv := &http.Server{
+			Addr:    strings.Join([]string{Config.Health.Host, Config.Health.Port}, ":"),
+			Handler: hdl,
+		}
+		if err := srv.ListenAndServe(); err != nil {
+			Logger.Error("ping server error:", zap.Error(err))
+		}
+	}()
+
 	return nil
 }

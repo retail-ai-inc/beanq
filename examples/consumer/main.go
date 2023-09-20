@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
@@ -43,9 +42,6 @@ func initCnf() beanq.BeanqConfig {
 }
 func main() {
 
-	go func() {
-		http.ListenAndServe("0.0.0.0:8000", nil)
-	}()
 	config := initCnf()
 	// register consumer
 	csm := beanq.NewConsumer(config)
@@ -68,6 +64,8 @@ func main() {
 		beanq.Logger.Info(task.Payload())
 		return nil
 	})
+	// start ping
+	csm.StartPing()
 	// begin to consume information
 	csm.StartConsumer()
 }
