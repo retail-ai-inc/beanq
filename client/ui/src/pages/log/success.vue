@@ -2,17 +2,17 @@
     <div>
       <Pagination :page="page" :total="total" @changePage="changePage"/>
 
-        <table class="table table-striped">
+        <table class="table table-striped" style="table-layout: fixed">
             <thead>
                 <tr>
-                    <th scope="col">Key</th>
-                    <th scope="col">TTL(s)</th>
-                    <th scope="col">AddTime</th>
-                    <th scope="col">RunTime</th>
-                    <th scope="col">Group</th>
-                    <th scope="col">Queue</th>
-                    <th scope="col">Payload</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" style="width:3%">Key</th>
+                    <th scope="col" style="width:5%">TTL(s)</th>
+                    <th scope="col" style="width:10%">AddTime</th>
+                    <th scope="col" style="width:5%">RunTime</th>
+                    <th scope="col" style="width:6%">Group</th>
+                    <th scope="col" style="width:10%">Queue</th>
+                    <th scope="col" style="width:35%">Payload</th>
+                    <th scope="col" style="width:6%">Action</th>
                 </tr>
             </thead>
             <tbody class="table-body">
@@ -23,7 +23,7 @@
                     <td>{{item.runTime}}</td>
                     <td>{{ item.group }}</td>
                     <td>{{item.queue}}</td>
-                    <td>{{ item.payload }}</td>
+                    <td>{{item.payload}}</td>
                     <td>
                       <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
                         <div class="btn-group" role="group">
@@ -113,6 +113,9 @@ const {logs,page,total} = toRefs(data);
 
 .table .text-danger-emphasis {
     color: var(--bs-danger) !important;
+}
+.table-body tr td{
+  word-break:break-all;overflow:hidden;
 }
 .dropdown-menu .dropdown-item{cursor: pointer}
 </style>
