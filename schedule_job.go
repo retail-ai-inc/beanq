@@ -60,7 +60,7 @@ var (
 		// delayJob and consumer executeTime
 		delayJobTicker, consumeTicker time.Duration
 	}{
-		scoreMin:       "0",
+		scoreMin:       "-inf",
 		scoreMax:       "10",
 		offset:         0,
 		count:          -1,
@@ -144,21 +144,13 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 				continue
 			}
 
-			if err := t.pool.Submit(func() {
-				if err := t.client.ZRem(ctx, MakeTimeUnit(Config.Redis.Prefix), val[0]).Err(); err != nil {
-					Logger.Error("zrem err", zap.Error(err))
-				}
-			}); err != nil {
-
-				continue
+			if err := t.client.ZRem(ctx, MakeTimeUnit(Config.Redis.Prefix), val[0]).Err(); err != nil {
+				Logger.Error("zrem err", zap.Error(err))
 			}
-			if err := t.pool.Submit(func() {
-				if err := t.doConsume(ctx, max, consumer); err != nil {
-					Logger.Error("consume err", zap.Error(err))
-					// continue
-				}
-			}); err != nil {
-				continue
+
+			if err := t.doConsume(ctx, max, consumer); err != nil {
+				Logger.Error("consume err", zap.Error(err))
+				// continue
 			}
 
 		}
@@ -168,10 +160,8 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *ConsumerHandler) error {
 
 	zRangeBy := &redis.ZRangeBy{
-		Min:    defaultScheduleJobConfig.scoreMin,
-		Max:    max,
-		Offset: defaultScheduleJobConfig.offset,
-		Count:  defaultScheduleJobConfig.count,
+		Min: defaultScheduleJobConfig.scoreMin,
+		Max: max,
 	}
 	key := MakeZSetKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
 	cmd := t.client.ZRangeByScore(ctx, key, zRangeBy)

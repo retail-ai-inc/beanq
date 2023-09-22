@@ -20,7 +20,14 @@ func main() {
 	rt.Delete("/log/del", routers.Auth(routers.LogDelHandler))
 	rt.Post("/log/retry", routers.Auth(routers.LogRetryHandler))
 	rt.Post("/log/archive", routers.Auth(routers.LogArchiveHandler))
-
+	// rt.Get("/test", func(ctx *simple_router.Context) error {
+	// 	fmt.Println("aa")
+	// 	return nil
+	// })
+	// rt.Post("/test", func(ctx *simple_router.Context) error {
+	// 	fmt.Println("bb")
+	// 	return nil
+	// })
 	if err := rt.Run(":9090"); err != nil {
 		log.Fatalln(err)
 	}

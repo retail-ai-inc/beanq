@@ -256,7 +256,7 @@ var DefaultOptions = &Options{
 	Priority:         0,
 	DefaultQueueName: "default-queue",
 	DefaultGroup:     "default-group",
-	DefaultMaxLen:    1000,
+	DefaultMaxLen:    2000,
 
 	DefaultDelayQueueName: "default-delay-queue",
 	DefaultDelayGroup:     "default-delay-group",

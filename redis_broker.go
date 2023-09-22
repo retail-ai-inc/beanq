@@ -204,13 +204,11 @@ func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) err
 
 	result, err := t.client.XInfoGroups(ctx, MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)).Result()
 	if err != nil && err.Error() != "ERR no such key" {
-		Logger.Error("infoGroup err", zap.Error(err))
 		return err
 	}
 
 	if len(result) < 1 {
 		if err := t.createGroup(ctx, consumer.Queue, consumer.Group); err != nil {
-			Logger.Error("create group err", zap.Error(err))
 			return err
 		}
 	}
@@ -218,9 +216,9 @@ func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) err
 	if err := t.pool.Submit(func() {
 		t.work(ctx, 10, consumer)
 	}); err != nil {
-		Logger.Error("worker err", zap.Error(err))
 		return err
 	}
+
 	return nil
 }
 
@@ -239,7 +237,7 @@ func (t *RedisBroker) waitSignal() {
 				t.healCheckDone <- struct{}{}
 				t.logCheckDone <- struct{}{}
 				t.scheduleJob.shutDown()
-				t.client.Close()
+				_ = t.client.Close()
 			})
 		}
 	}
@@ -257,7 +255,7 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 	// consumer := uuid.New().String()
 	group := handler.Group
 	queue := handler.Queue
-
+	stream := MakeStreamKey(Config.Redis.Prefix, group, queue)
 	for {
 		select {
 		case <-t.done:
@@ -273,11 +271,12 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 			// block XReadGroup to read data
 			streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    group,
-				Streams:  []string{MakeStreamKey(Config.Redis.Prefix, group, queue), ">"},
-				Consumer: MakeStreamKey(Config.Redis.Prefix, group, queue),
+				Streams:  []string{stream, ">"},
+				Consumer: stream,
 				Count:    count,
 				Block:    10 * time.Second,
 			}).Result()
+
 			if err != nil && err != redis.Nil {
 				Logger.Error("XReadGroup err", zap.Error(err))
 				continue
@@ -359,7 +358,8 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 
 	for key, v := range streams {
 		stream := v.Stream
-		for _, vv := range v.Messages {
+		message := v.Messages
+		for _, vv := range message {
 			task, err := t.parseMapToTask(vv, stream)
 			if err != nil {
 				Logger.Error("parse json to task err", zap.Error(err))
@@ -386,10 +386,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			r.Group = group
 			// Successfully consumed data, stored in `string`
 			if err := t.logJob.saveLog(ctx, r); err != nil {
-				r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-				result.Put(r)
 				Logger.Error("save log err", zap.Error(err))
-				continue
 			}
 
 			r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
@@ -398,13 +395,13 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			// `stream` confirmation message
 			if err := t.client.XAck(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), group, vv.ID).Err(); err != nil {
 				Logger.Error("xack err", zap.Error(err))
-				continue
+
 			}
 			// delete data from `stream`
-			if err := t.client.XDel(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), vv.ID).Err(); err != nil {
-				Logger.Error("xdel err", zap.Error(err))
-				continue
-			}
+			// if err := t.client.XDel(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), vv.ID).Err(); err != nil {
+			// 	Logger.Error("xdel err", zap.Error(err))
+			//
+			// }
 		}
 		streams[key] = redis.XStream{}
 	}
