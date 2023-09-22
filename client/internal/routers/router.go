@@ -13,12 +13,12 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/retail-ai-inc/beanq"
-	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
-	"github.com/retail-ai-inc/beanq/client/internal/redisx"
-	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
-	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/client/internal/jwtx"
+	"github.com/retail-ai-inc/client/internal/redisx"
+	"github.com/retail-ai-inc/client/internal/routers/consts"
+	"github.com/retail-ai-inc/client/internal/simple_router"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )

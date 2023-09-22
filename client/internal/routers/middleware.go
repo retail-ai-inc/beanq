@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/retail-ai-inc/beanq/client/internal/jwtx"
-	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
-	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
+	"github.com/retail-ai-inc/client/internal/jwtx"
+	"github.com/retail-ai-inc/client/internal/routers/consts"
+	"github.com/retail-ai-inc/client/internal/simple_router"
 )
 
 func Auth(next simple_router.HandlerFunc) simple_router.HandlerFunc {

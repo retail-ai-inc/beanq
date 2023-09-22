@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/retail-ai-inc/beanq/client/internal/routers"
-	"github.com/retail-ai-inc/beanq/client/internal/simple_router"
+	"github.com/retail-ai-inc/client/internal/routers"
+	"github.com/retail-ai-inc/client/internal/simple_router"
 )
 
 func main() {

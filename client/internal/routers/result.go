@@ -3,7 +3,7 @@ package routers
 import (
 	"sync"
 
-	"github.com/retail-ai-inc/beanq/client/internal/routers/consts"
+	"github.com/retail-ai-inc/client/internal/routers/consts"
 )
 
 type Result struct {
