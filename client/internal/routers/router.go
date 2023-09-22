@@ -20,7 +20,6 @@ import (
 	"github.com/retail-ai-inc/client/internal/routers/consts"
 	"github.com/retail-ai-inc/client/internal/simple_router"
 	"github.com/spf13/cast"
-	"github.com/spf13/viper"
 )
 
 func IndexHandler(ctx *simple_router.Context) error {
@@ -90,7 +89,7 @@ func ScheduleHandler(ctx *simple_router.Context) error {
 		resultPool.Put(result)
 	}()
 
-	bt, err := queueInfo(ctx.Context(), redisx.ScheduleQueueKey("beanq"))
+	bt, err := queueInfo(ctx.Context(), redisx.ScheduleQueueKey(redisx.BqConfig.Redis.Prefix))
 
 	if err != nil {
 		result.Code = consts.InternalServerErrorCode
@@ -109,7 +108,8 @@ func QueueHandler(ctx *simple_router.Context) error {
 		resultPool.Put(result)
 	}()
 	nctx := ctx.Context()
-	bt, err := queueInfo(nctx, redisx.QueueKey("yakiimo_test_queue"))
+
+	bt, err := queueInfo(nctx, redisx.QueueKey(redisx.BqConfig.Redis.Prefix))
 	if err != nil {
 		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
@@ -144,11 +144,11 @@ func LogRetryHandler(ctx *simple_router.Context) error {
 		result.Msg = consts.MissParameterMsg
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
-	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client()
 
 	nid := cast.ToInt64(id)
 
-	cmd := client.ZRange(ctx.Context(), "beanq:logs:success", nid, nid)
+	cmd := client.ZRange(ctx.Context(), strings.Join([]string{redisx.BqConfig.Redis.Prefix, "logs", "success"}, ":"), nid, nid)
 	if err := cmd.Err(); err != nil {
 		result.Code = consts.InternalServerErrorCode
 		result.Msg = err.Error()
@@ -181,7 +181,7 @@ func LogRetryHandler(ctx *simple_router.Context) error {
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
-	publish := beanq.NewPublisher(getBqConfig("./"))
+	publish := beanq.NewPublisher(redisx.BqConfig)
 	task := beanq.NewTask([]byte(payload))
 	if err := publish.PublishWithContext(ctx.Context(), task, beanq.ExecuteTime(dup), beanq.Group(groupName), beanq.Queue(queues[2])); err != nil {
 		result.Code = consts.InternalServerErrorCode
@@ -207,7 +207,7 @@ func LogDelHandler(ctx *simple_router.Context) error {
 		return ctx.Json(http.StatusInternalServerError, result)
 	}
 
-	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client()
 
 	nid := cast.ToInt64(id)
 	var start int64
@@ -216,7 +216,7 @@ func LogDelHandler(ctx *simple_router.Context) error {
 		start = 0
 	}
 
-	cmd := client.ZRemRangeByRank(ctx.Context(), "beanq:logs:success", start, nid)
+	cmd := client.ZRemRangeByRank(ctx.Context(), strings.Join([]string{redisx.BqConfig.Redis.Prefix, "logs", "success"}, ":"), start, nid)
 
 	if cmd.Err() != nil {
 		result.Code = consts.InternalServerErrorCode
@@ -235,13 +235,12 @@ func LogHandler(ctx *simple_router.Context) error {
 		resultPool.Put(resultRes)
 	}()
 
-	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client()
 
 	var (
 		page, pageSize int64
 		dataType       string = "success"
-		matchStr       string = "yakiimo_test_queue:logs:success"
-		// replaeceStr    string = "beanq:logs:success:"
+		matchStr       string = strings.Join([]string{redisx.BqConfig.Redis.Prefix, "logs", "success"}, ":")
 	)
 
 	req := ctx.Request()
@@ -267,8 +266,7 @@ func LogHandler(ctx *simple_router.Context) error {
 	}
 
 	if dataType == "error" {
-		matchStr = "yakiimo_test_queue:logs:error"
-		// replaeceStr = "beanq:logs:error:"
+		matchStr = strings.Join([]string{redisx.BqConfig.Redis.Prefix, "logs", "error"}, ":")
 	}
 	nctx := ctx.Context()
 	cmd := client.ZRange(nctx, matchStr, nowPage, nowPageSize)
@@ -331,7 +329,7 @@ func RedisHandler(ctx *simple_router.Context) error {
 		resultPool.Put(result)
 	}()
 
-	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client()
 
 	d, err := redisx.Info(ctx.Context(), client)
 	if err != nil {
@@ -347,13 +345,14 @@ func RedisHandler(ctx *simple_router.Context) error {
 
 func queueInfo(ctx context.Context, queueKey string) (any, error) {
 
-	client := redisx.Client(redisx.Addr, redisx.PassWord, redisx.Db)
+	client := redisx.Client()
 
 	// get queues
 	queues, err := redisx.Keys(ctx, client, queueKey)
 	if err != nil {
 		return nil, err
 	}
+
 	d := make([]map[string]any, 0, len(queues))
 	for _, queue := range queues {
 
@@ -372,21 +371,4 @@ func queueInfo(ctx context.Context, queueKey string) (any, error) {
 	}
 
 	return d, nil
-}
-func getBqConfig(path string) beanq.BeanqConfig {
-	var config beanq.BeanqConfig
-	vp := viper.New()
-	vp.AddConfigPath(path)
-	vp.SetConfigType("json")
-	vp.SetConfigName("env")
-
-	if err := vp.ReadInConfig(); err != nil {
-		log.Fatalf("Unable to open beanq env.json file: %v", err)
-	}
-
-	// IMPORTANT: Unmarshal the env.json into global Config object.
-	if err := vp.Unmarshal(&config); err != nil {
-		log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
-	}
-	return config
 }

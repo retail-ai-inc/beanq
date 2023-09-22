@@ -8,12 +8,6 @@ import (
 	"github.com/spf13/cast"
 )
 
-const (
-	Addr     = "127.0.0.1:6379"
-	PassWord = "secret"
-	Db       = 0
-)
-
 type ObjectStruct struct {
 	ValueAt          string
 	RefCount         int
