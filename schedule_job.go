@@ -98,7 +98,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt Option) error
 	}).Err(); err != nil {
 		return err
 	}
-	if err := t.client.ZAdd(ctx, MakeTimeUnit(Config.Redis.Prefix), redis.Z{
+	if err := t.client.ZAdd(ctx, MakeTimeUnit(Config.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
 		Score:  priority,
 		Member: priority,
 	}).Err(); err != nil {
@@ -115,7 +115,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	var (
 		now      time.Time
-		timeUnit = MakeTimeUnit(Config.Redis.Prefix)
+		timeUnit = MakeTimeUnit(Config.Redis.Prefix, consumer.Group, consumer.Queue)
 	)
 	for {
 		select {

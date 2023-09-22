@@ -70,8 +70,8 @@ func MakeLogKey(prefix, resultType string) string {
 func MakeHealthKey(prefix string) string {
 	return makeKey(prefix, "health_checker")
 }
-func MakeTimeUnit(prefix string) string {
-	return makeKey(prefix, "time_unit")
+func MakeTimeUnit(prefix, group, queue string) string {
+	return makeKey(prefix, group, queue, "time_unit")
 }
 func RetryInfo(f func() error, delayTime time.Duration) error {
 	index := 0
