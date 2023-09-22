@@ -256,6 +256,13 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 	group := handler.Group
 	queue := handler.Queue
 	stream := MakeStreamKey(Config.Redis.Prefix, group, queue)
+	readGroupArgs := &redis.XReadGroupArgs{
+		Group:    group,
+		Streams:  []string{stream, ">"},
+		Consumer: stream,
+		Count:    count,
+		Block:    10 * time.Second,
+	}
 	for {
 		select {
 		case <-t.done:
@@ -269,13 +276,7 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 		default:
 
 			// block XReadGroup to read data
-			streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-				Group:    group,
-				Streams:  []string{stream, ">"},
-				Consumer: stream,
-				Count:    count,
-				Block:    10 * time.Second,
-			}).Result()
+			streams, err := t.client.XReadGroup(ctx, readGroupArgs).Result()
 
 			if err != nil && err != redis.Nil {
 				Logger.Error("XReadGroup err", zap.Error(err))
@@ -306,8 +307,9 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 			end := "+"
 
 			for _, consumer := range consumers {
+				streamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
 				res, err := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
-					Stream: MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue),
+					Stream: streamKey,
 					Group:  consumer.Group,
 					Start:  start,
 					End:    end,
@@ -324,7 +326,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 
 						claims, err := t.client.XClaim(ctx, &redis.XClaimArgs{
 
-							Stream:   MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue),
+							Stream:   streamKey,
 							Group:    consumer.Group,
 							Consumer: consumer.Queue,
 							MinIdle:  60 * time.Second,
@@ -336,7 +338,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 							continue
 						}
 
-						streams = append(streams, redis.XStream{Stream: MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue), Messages: claims})
+						streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
 						t.consumer(ctx, consumer.ConsumerFun, consumer.Group, streams)
 						streams = nil
 					}
@@ -359,6 +361,8 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 	for key, v := range streams {
 		stream := v.Stream
 		message := v.Messages
+		streamKey := MakeStreamKey(Config.Redis.Prefix, group, stream)
+
 		for _, vv := range message {
 			task, err := t.parseMapToTask(vv, stream)
 			if err != nil {
@@ -393,7 +397,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			result.Put(r)
 
 			// `stream` confirmation message
-			if err := t.client.XAck(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), group, vv.ID).Err(); err != nil {
+			if err := t.client.XAck(ctx, streamKey, group, vv.ID).Err(); err != nil {
 				Logger.Error("xack err", zap.Error(err))
 
 			}

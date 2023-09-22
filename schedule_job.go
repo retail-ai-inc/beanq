@@ -114,7 +114,8 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 	defer ticker.Stop()
 
 	var (
-		now time.Time
+		now      time.Time
+		timeUnit = MakeTimeUnit(Config.Redis.Prefix)
 	)
 	for {
 		select {
@@ -129,7 +130,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 			max := cast.ToString(now.UnixMilli() + 10)
 
-			cmd := t.client.ZRangeByScore(ctx, MakeTimeUnit(Config.Redis.Prefix), &redis.ZRangeBy{
+			cmd := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
 				Min:    "0",
 				Max:    max,
 				Offset: 0,
@@ -144,7 +145,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 				continue
 			}
 
-			if err := t.client.ZRem(ctx, MakeTimeUnit(Config.Redis.Prefix), val[0]).Err(); err != nil {
+			if err := t.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
 				Logger.Error("zrem err", zap.Error(err))
 			}
 
@@ -180,6 +181,8 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
+	var zsetKey = MakeZSetKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
+
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
 		task, err := jsonToTask(vv)
 		if err != nil {
@@ -191,7 +194,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		}
 
 		// Delete data from `zset`
-		if err := t.client.ZRem(ctx, MakeZSetKey(Config.Redis.Prefix, consumer.Group, consumer.Queue), vv).Err(); err != nil {
+		if err := t.client.ZRem(ctx, zsetKey, vv).Err(); err != nil {
 			return err
 		}
 		return nil
