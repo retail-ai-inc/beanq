@@ -5,17 +5,16 @@ import (
 	"testing"
 
 	"github.com/redis/go-redis/v9"
-	opt "github.com/retail-ai-inc/beanq/internal/options"
 )
 
 var (
 	group           = "g2"
 	consumer        = "cs1"
-	optionParameter opt.Options
+	optionParameter Options
 )
 
 func init() {
-	optionParameter = opt.Options{
+	optionParameter = Options{
 		RedisOptions: &redis.Options{
 			Addr:     "localhost:6381",
 			Username: "",
