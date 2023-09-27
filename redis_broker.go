@@ -402,10 +402,10 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 
 			}
 			// delete data from `stream`
-			// if err := t.client.XDel(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), vv.ID).Err(); err != nil {
-			// 	Logger.Error("xdel err", zap.Error(err))
-			//
-			// }
+			if err := t.client.XDel(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), vv.ID).Err(); err != nil {
+				Logger.Error("xdel err", zap.Error(err))
+
+			}
 		}
 		streams[key] = redis.XStream{}
 	}

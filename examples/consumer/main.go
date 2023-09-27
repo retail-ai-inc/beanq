@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 var (
@@ -49,14 +49,14 @@ func main() {
 	csm.Register("g2", "ch2", func(task *beanq.Task) error {
 		// TODO:logic
 		// like this:
-		time.Sleep(3 * time.Second) // this is my business.
-		beanq.Logger.Info(task.Payload())
+		// time.Sleep(3 * time.Second) // this is my business.
+		beanq.Logger.Info(task.Payload(), zap.String("g2", "ch2"))
 
 		return nil
 	})
 	// register delay consumer
 	csm.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
-		beanq.Logger.Info(task.Payload())
+		beanq.Logger.Info(task.Payload(), zap.String("delay-group", "delay-ch"))
 
 		return nil
 	})

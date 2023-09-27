@@ -81,6 +81,7 @@ func pubDelayInfo() {
 		if err := pub.DelayPublish(task, delayT, beanq.Queue("delay-ch"), beanq.Group("delay-group"), beanq.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
+		// pub.Publish(task, beanq.Queue("ch2"), beanq.Group("g2"))
 	}
 	pub.Publish(beanq.NewTask([]byte("aaa")), beanq.Group("group1"), beanq.Queue("queue1"))
 	defer pub.Close()

@@ -3,7 +3,6 @@ module github.com/retail-ai-inc/beanq
 go 1.19
 
 require (
-	github.com/golang-jwt/jwt/v5 v5.0.0
 	github.com/google/uuid v1.3.0
 	github.com/json-iterator/go v1.1.12
 	github.com/labstack/gommon v0.4.0
