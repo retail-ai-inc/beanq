@@ -55,7 +55,6 @@ type (
 		scheduleJob scheduleJobI
 		logJob      logJobI
 		opts        *Options
-		wg          *sync.WaitGroup
 		once        *sync.Once
 		pool        *ants.Pool
 	}
@@ -86,7 +85,6 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		scheduleJob:   newScheduleJob(pool, client),
 		logJob:        newLogJob(client),
 		opts:          nil,
-		wg:            &sync.WaitGroup{},
 		once:          &sync.Once{},
 		pool:          pool,
 	}
