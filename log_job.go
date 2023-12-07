@@ -26,14 +26,13 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/spf13/cast"
-	"go.uber.org/zap"
 )
 
 type (
@@ -41,6 +40,7 @@ type (
 	LevelMsg string
 
 	ConsumerResult struct {
+		Id      string
 		Level   LevelMsg
 		Info    FlagInfo
 		Payload any
@@ -56,7 +56,6 @@ type (
 
 	logJobI interface {
 		saveLog(ctx context.Context, result *ConsumerResult) error
-		checkExpiration(ctx context.Context)
 		archive(ctx context.Context) error
 	}
 
@@ -93,12 +92,12 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	// default ErrorLevel
 
-	key := MakeLogKey(Config.Redis.Prefix, "fail")
+	key := strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "fail"), result.Id}, ":")
 	expiration := opts.KeepFailedJobsInHistory
 
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = MakeLogKey(Config.Redis.Prefix, "success")
+		key = strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "success"), result.Id}, ":")
 		expiration = opts.KeepSuccessJobsInHistory
 	}
 	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
@@ -107,27 +106,9 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 	if err != nil {
 		return fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
 	}
-
-	return t.client.ZAdd(ctx, key, redis.Z{
-		Score:  float64(time.Now().UnixMilli() + expiration.Milliseconds()),
-		Member: b,
-	}).Err()
-
+	return t.client.Set(ctx, key, b, Config.KeepSuccessJobsInHistory).Err()
 }
-func (t *logJob) checkExpiration(ctx context.Context) {
 
-	now := time.Now()
-	successKey := MakeLogKey(Config.Redis.Prefix, "success")
-	failKey := MakeLogKey(Config.Redis.Prefix, "fail")
-
-	if err := t.client.ZRemRangeByScore(ctx, successKey, cast.ToString(0), cast.ToString(now.UnixMilli())).Err(); err != nil {
-		Logger.Error("rem zset success error:%+v", zap.Error(err))
-	}
-	if err := t.client.ZRemRangeByScore(ctx, failKey, cast.ToString(0), cast.ToString(now.UnixMilli())).Err(); err != nil {
-		Logger.Error("rem zset fail error:%+v", zap.Error(err))
-	}
-
-}
 func (t *logJob) archive(ctx context.Context) error {
 	return nil
 }
