@@ -315,13 +315,26 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			r.Id = vv.ID
 			r.BeginTime = time.Now()
 			// if error,then retry to consume
+			nerr := make(chan error, 1)
 			if err := RetryInfo(func() error {
+				defer func() {
+					if ne := recover(); ne != nil {
+						nerr <- fmt.Errorf("%+v", ne)
+					}
+				}()
 				return f(task)
 			}, t.opts.JobMaxRetry); err != nil {
-				r.Level = ErrLevel
-				r.Info = FlagInfo(err.Error())
+				nerr <- err
 			}
+			select {
+			case v := <-nerr:
+				if v != nil {
+					r.Level = ErrLevel
+					r.Info = FlagInfo(v.Error())
+				}
+			default:
 
+			}
 			r.EndTime = time.Now()
 
 			sub := r.EndTime.Sub(r.BeginTime)
