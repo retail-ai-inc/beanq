@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -47,9 +48,9 @@ type (
 	}
 
 	RedisBroker struct {
-		client                    *redis.Client
-		done, stop, healCheckDone chan struct{}
-		healthCheck               interface {
+		client      *redis.Client
+		done, stop  chan struct{}
+		healthCheck interface {
 			start(ctx context.Context) error
 		}
 		scheduleJob scheduleJobI
@@ -77,16 +78,15 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		PoolTimeout:  config.Redis.PoolTimeout,
 	})
 	return &RedisBroker{
-		client:        client,
-		done:          make(chan struct{}),
-		stop:          make(chan struct{}),
-		healCheckDone: make(chan struct{}),
-		healthCheck:   newHealthCheck(client),
-		scheduleJob:   newScheduleJob(pool, client),
-		logJob:        newLogJob(client),
-		opts:          nil,
-		once:          &sync.Once{},
-		pool:          pool,
+		client:      client,
+		done:        make(chan struct{}),
+		stop:        make(chan struct{}),
+		healthCheck: newHealthCheck(client),
+		scheduleJob: newScheduleJob(pool, client),
+		logJob:      newLogJob(client),
+		opts:        nil,
+		once:        &sync.Once{},
+		pool:        pool,
 	}
 }
 
@@ -128,6 +128,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		consumers[key] = nil
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
 	// check client health
 	if err := t.healthCheckerStart(ctx); err != nil {
 		Logger.Error("health check err", zap.Error(err))
@@ -139,7 +140,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 	Logger.Info("----START----")
 	// // monitor signal
-	t.waitSignal()
+	t.waitSignal(cancel)
 }
 func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 
@@ -150,12 +151,7 @@ func (t *RedisBroker) healthCheckerStart(ctx context.Context) error {
 		for {
 			select {
 			case <-ctx.Done():
-				if !errors.Is(ctx.Err(), context.Canceled) {
-					Logger.Error("context closed", zap.Error(ctx.Err()))
-				}
-				ticker.Stop()
-				return
-			case <-t.healCheckDone:
+				Logger.Info("-----Health Checker Stop")
 				ticker.Stop()
 				return
 			case <-ticker.C:
@@ -193,7 +189,7 @@ func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) err
 	return nil
 }
 
-func (t *RedisBroker) waitSignal() {
+func (t *RedisBroker) waitSignal(cancelFunc context.CancelFunc) {
 	sigs := make(chan os.Signal)
 
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
@@ -202,10 +198,10 @@ func (t *RedisBroker) waitSignal() {
 	case sig := <-sigs:
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
+				cancelFunc()
 				close(t.stop)
 				t.pool.Release()
 				t.done <- struct{}{}
-				t.healCheckDone <- struct{}{}
 				t.scheduleJob.shutDown()
 				_ = t.client.Close()
 			})
@@ -230,12 +226,10 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 	for {
 		select {
 		case <-t.done:
-			Logger.Info("--------STOP--------")
+			Logger.Info("--------Main Task STOP--------")
 			return
 		case <-ctx.Done():
-			if !errors.Is(ctx.Err(), context.Canceled) {
-				Logger.Error("context closed", zap.Error(ctx.Err()))
-			}
+			Logger.Info("--------STOP--------")
 			return
 		default:
 
@@ -319,7 +313,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			if err := RetryInfo(func() error {
 				defer func() {
 					if ne := recover(); ne != nil {
-						nerr <- fmt.Errorf("%+v", ne)
+						nerr <- fmt.Errorf("error:%+v,stack:%s", ne, string(debug.Stack()))
 					}
 				}()
 				return f(task)

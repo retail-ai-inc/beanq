@@ -77,12 +77,16 @@ func pubDelayInfo() {
 			delayT = ntime.Add(35 * time.Second)
 
 		}
-
+		// fmt.Println(delayT)
+		// continue
 		if err := pub.DelayPublish(task, delayT, beanq.Queue("delay-ch"), beanq.Group("delay-group"), beanq.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
+		// if err := pub.Publish(task, beanq.Queue("delay-ch2"), beanq.Group("delay-group")); err != nil {
+		// 	log.Fatalln(err)
+		// }
 		// pub.Publish(task, beanq.Queue("ch2"), beanq.Group("g2"))
 	}
-	pub.Publish(beanq.NewTask([]byte("aaa")), beanq.Group("group1"), beanq.Queue("queue1"))
+	// pub.Publish(beanq.NewTask([]byte("aaa")), beanq.Group("group1"), beanq.Queue("queue1"))
 	defer pub.Close()
 }

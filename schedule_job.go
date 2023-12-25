@@ -125,6 +125,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 			t.pool.Release()
 			return
 		case <-t.done:
+			t.pool.Release()
 			return
 		case <-ticker.C:
 

@@ -60,6 +60,10 @@ func main() {
 		panic("this is a panic")
 		return nil
 	})
+	csm.Register("delay-group", "delay-ch2", func(task *beanq.Task) error {
+		beanq.Logger.Info(task.Payload(), zap.String("delay-group", "delay-ch2"))
+		return nil
+	})
 	csm.Register("default-group", "BatchCartStateTimoutJobHandler", func(task *beanq.Task) error {
 		beanq.Logger.Info(task.Payload())
 		return nil
