@@ -23,7 +23,10 @@
 package beanq
 
 import (
+	"math"
+	"math/rand"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -73,7 +76,7 @@ func MakeHealthKey(prefix string) string {
 func MakeTimeUnit(prefix, group, queue string) string {
 	return makeKey(prefix, group, queue, "time_unit")
 }
-func RetryInfo(f func() error, delayTime time.Duration) error {
+func RetryInfo(f func() error, retry int) error {
 	index := 0
 	errChan := make(chan error, 1)
 	stop := make(chan struct{}, 1)
@@ -83,17 +86,17 @@ func RetryInfo(f func() error, delayTime time.Duration) error {
 			select {
 			case <-timer.C:
 				e := f()
-				if e == nil || index >= 2 {
+				if e == nil || index >= retry {
 					timer.Stop()
 					stop <- struct{}{}
 					err <- e
 					return
 				}
 				index++
-				timer.Reset(time.Duration(index) * delayTime)
+				timer.Reset(jitterBackoff(500*time.Millisecond, time.Second, retry))
 			}
 		}
-	}(time.NewTimer(time.Duration(index)*delayTime), errChan, stop)
+	}(time.NewTimer(time.Duration(index)*time.Millisecond), errChan, stop)
 
 	var e error
 
@@ -106,4 +109,30 @@ func RetryInfo(f func() error, delayTime time.Duration) error {
 	}
 	close(stop)
 	return e
+}
+func jitterBackoff(min, max time.Duration, attempt int) time.Duration {
+	base := float64(min)
+	capLevel := float64(max)
+
+	temp := math.Min(capLevel, base*math.Exp2(float64(attempt)))
+	ri := time.Duration(temp / 2)
+	dura := randDuration(ri)
+
+	if dura < min {
+		dura = min
+	}
+
+	return dura
+}
+
+var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
+var rndMu sync.Mutex
+
+func randDuration(center time.Duration) time.Duration {
+	rndMu.Lock()
+	defer rndMu.Unlock()
+
+	var ri = int64(center)
+	var jitter = rnd.Int63n(ri)
+	return time.Duration(math.Abs(float64(ri + jitter)))
 }

@@ -23,7 +23,6 @@
 package beanq
 
 import (
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,7 +48,6 @@ type values map[string]any
 
 type Task struct {
 	Values values
-	rw     *sync.RWMutex
 }
 
 // get val functions
@@ -145,7 +143,6 @@ func NewTask(payload []byte, opt ...TaskOpt) *Task {
 			"addTime":     now.Format(timex.DateTime),
 			"executeTime": now,
 		},
-		rw: new(sync.RWMutex),
 	}
 	for _, o := range opt {
 		o(&task)
@@ -173,7 +170,6 @@ func jsonToTask(dataStr string) (*Task, error) {
 			"addTime":     jn.Get(data, "addTime").ToString(),
 			"executeTime": cast.ToTime(executeTimeStr),
 		},
-		rw: new(sync.RWMutex),
 	}
 
 	return &task, nil

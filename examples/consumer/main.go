@@ -57,7 +57,7 @@ func main() {
 	// register delay consumer
 	csm.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
 		beanq.Logger.Info(task.Payload(), zap.String("delay-group", "delay-ch"))
-
+		panic("this is a panic")
 		return nil
 	})
 	csm.Register("default-group", "BatchCartStateTimoutJobHandler", func(task *beanq.Task) error {

@@ -57,7 +57,7 @@ type (
 		KeepJobsInQueue          time.Duration
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration
-		MinWorkers               int
+		MinWorkers               int64
 		DebugLog
 		Redis
 		Health

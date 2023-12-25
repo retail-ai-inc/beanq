@@ -30,6 +30,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
 )
@@ -92,6 +93,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt Option) error
 
 	priority := cast.ToFloat64(task.ExecuteTime().UnixMilli()) + opt.Priority
 
+	// p := t.client.Pipeline() // Cluster not support pipeline
 	if err := t.client.ZAdd(ctx, MakeZSetKey(Config.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
 		Score:  priority,
 		Member: bt,
@@ -211,17 +213,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 	queue := task.Queue()
 	maxLen := task.MaxLen()
-
-	xAddArgs := &redis.XAddArgs{
-		Stream:     MakeStreamKey(Config.Redis.Prefix, task.Group(), queue),
-		NoMkStream: false,
-		MaxLen:     maxLen,
-		MinID:      "",
-		Approx:     false,
-		// Limit:      0,
-		ID:     "*",
-		Values: map[string]any(task.Values),
-	}
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), queue), "", "*", maxLen, 0, map[string]any(task.Values))
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 

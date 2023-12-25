@@ -31,9 +31,6 @@ import (
 )
 
 type (
-	healthCheckI interface {
-		start(ctx context.Context) error
-	}
 	healthCheck struct {
 		client *redis.Client
 	}

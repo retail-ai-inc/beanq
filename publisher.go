@@ -124,7 +124,10 @@ func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...Opti
 }
 
 func (t *pubClient) Publish(task *Task, option ...OptionI) error {
-	return t.PublishWithContext(context.Background(), task, option...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return t.PublishWithContext(ctx, task, option...)
 }
 
 func (t *pubClient) Close() error {
