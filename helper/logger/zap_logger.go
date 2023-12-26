@@ -2,138 +2,187 @@ package logger
 
 import (
 	"os"
+	"sync"
 
+	"github.com/spf13/cast"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-type LoggerParameter struct {
-	InfoFileName        string
-	ErrFileName         string
-	MaxSize             int
-	MaxAge              int
-	MaxBackups          int
-	LocalTime, Compress bool
-}
-type LoggerInfoFun func(info *LoggerParameter)
+type (
+	LoggerNew struct {
+		logger    *zap.Logger
+		zapFields []zap.Field
+	}
+)
 
-func WithInfoFile(file string) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.InfoFileName = file
-	}
-}
-func WithErrFile(file string) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.ErrFileName = file
-	}
-}
-func WithMaxSize(size int) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.MaxSize = size
-	}
-}
-func WithMaxAge(age int) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.MaxAge = age
-	}
-}
-func WithMaxBackups(backup int) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.MaxBackups = backup
-	}
-}
-func WithLocalTime(b bool) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.LocalTime = b
-	}
-}
-func WithCompress(b bool) LoggerInfoFun {
-	return func(info *LoggerParameter) {
-		info.Compress = b
-	}
-}
-func composeParameter(funs ...LoggerInfoFun) *LoggerParameter {
+var (
+	logOnce sync.Once
+	lg      *LoggerNew
 
-	param := LoggerParameter{
-		InfoFileName: "",
-		ErrFileName:  "",
-		MaxSize:      200,
-		MaxAge:       3,
-		MaxBackups:   5,
-		LocalTime:    false,
-		Compress:     false,
+	// set lumberjack logger default parameter
+	defaultLogger = struct {
+		Filename                    string
+		MaxSize, MaxAge, MaxBackups int
+		LocalTime, Compress         bool
+		Pre                         string
+	}{
+		Filename:   "./log.txt",
+		MaxSize:    0,
+		MaxAge:     0,
+		MaxBackups: 0,
+		LocalTime:  false,
+		Compress:   false,
+		Pre:        "beanq",
 	}
-	for _, f := range funs {
-		f(&param)
-	}
-	return &param
-}
+)
 
-func InitLogger(funs ...LoggerInfoFun) *zap.Logger {
+func NewLogger(fileName string, maxSize, maxAge, maxBackups int, localTime, compress, accessLog bool) *LoggerNew {
 
-	highPriority := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level >= zap.ErrorLevel
+	logOnce.Do(func() {
+		config := zap.NewProductionEncoderConfig()
+		config.EncodeTime = zapcore.RFC3339TimeEncoder
+		config.EncodeLevel = zapcore.CapitalLevelEncoder
+		config.TimeKey = "time"
+		cfg := zapcore.NewJSONEncoder(config)
+
+		level := zapcore.LevelOf(zap.InfoLevel)
+
+		if fileName == "" {
+			fileName = defaultLogger.Filename
+		}
+		if maxSize < 0 {
+			maxSize = defaultLogger.MaxSize
+		}
+		if maxAge < 0 {
+			maxAge = defaultLogger.MaxAge
+		}
+		if maxBackups < 0 {
+			maxBackups = defaultLogger.MaxBackups
+		}
+		syncer := &lumberjack.Logger{
+			Filename:   fileName,
+			MaxSize:    maxSize,
+			MaxAge:     maxAge,
+			MaxBackups: maxBackups,
+			LocalTime:  localTime,
+			Compress:   compress,
+		}
+
+		levelAble := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
+			return level >= zap.ErrorLevel
+		})
+		var isLog []zapcore.WriteSyncer
+		if accessLog {
+			isLog = []zapcore.WriteSyncer{os.Stdout, zapcore.AddSync(syncer)}
+		}
+		newMultiWriteSyncer := zapcore.NewMultiWriteSyncer(isLog...)
+		newCore := zapcore.NewCore(cfg, newMultiWriteSyncer, level)
+		newTee := zapcore.NewTee(newCore)
+
+		l := zap.New(newTee).With(zap.String("pre", defaultLogger.Pre)).WithOptions(zap.AddStacktrace(levelAble))
+
+		lg = &LoggerNew{
+			logger:    l,
+			zapFields: []zap.Field{},
+		}
 	})
-	lowerPriority := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
-		return level < zap.ErrorLevel && level >= zap.DebugLevel
-	})
+	return lg
+}
 
-	// The log will be print on console by default
-	arr, highArr := []zapcore.WriteSyncer{os.Stdout}, []zapcore.WriteSyncer{os.Stdout}
-	// and save the log in a file
+func (t LoggerNew) With(key string, val any) LoggerNew {
 
-	parameter := composeParameter(funs...)
-	if parameter.InfoFileName != "" {
-		arr = append(arr, getInfoWriter(parameter))
+	switch v := val.(type) {
+	case int, int64, *int, *int64:
+		t.zapFields = append(t.zapFields, zap.Int64(key, cast.ToInt64(v)))
+	case int8, *int8:
+		t.zapFields = append(t.zapFields, zap.Int8(key, cast.ToInt8(v)))
+	case int16, *int16:
+		t.zapFields = append(t.zapFields, zap.Int16(key, cast.ToInt16(v)))
+	case int32, *int32:
+		t.zapFields = append(t.zapFields, zap.Int32(key, cast.ToInt32(v)))
+
+	case uint, uint64, *uint, *uint64:
+		t.zapFields = append(t.zapFields, zap.Uint64(key, cast.ToUint64(v)))
+	case uint8, *uint8:
+		t.zapFields = append(t.zapFields, zap.Uint8(key, cast.ToUint8(v)))
+	case uint16, *uint16:
+		t.zapFields = append(t.zapFields, zap.Uint16(key, cast.ToUint16(v)))
+	case uint32, *uint32:
+		t.zapFields = append(t.zapFields, zap.Uint32(key, cast.ToUint32(v)))
+
+	case uintptr:
+		t.zapFields = append(t.zapFields, zap.Uintptr(key, v))
+	case *uintptr:
+		t.zapFields = append(t.zapFields, zap.Uintptrp(key, v))
+
+	case string:
+		t.zapFields = append(t.zapFields, zap.String(key, v))
+	case *string:
+		t.zapFields = append(t.zapFields, zap.Stringp(key, v))
+
+	case error:
+		t.zapFields = append(t.zapFields, zap.Error(v))
+	default:
+
 	}
-	if parameter.ErrFileName != "" {
-		highArr = append(highArr, getErrWriter(parameter))
-	}
-
-	infoFile := zapcore.NewCore(encoder(), zapcore.NewMultiWriteSyncer(arr...), lowerPriority)
-	errFile := zapcore.NewCore(encoder(), zapcore.NewMultiWriteSyncer(highArr...), highPriority)
-	logger := zap.New(zapcore.NewTee(infoFile, errFile), zap.AddCaller())
-	defer logger.Sync()
-	return logger
+	return t
 }
 
-// log format
-func encoder() zapcore.Encoder {
-	config := zap.NewProductionEncoderConfig()
-	config.EncodeTime = zapcore.ISO8601TimeEncoder
-	config.EncodeLevel = zapcore.CapitalLevelEncoder
-	config.TimeKey = "time"
-	return zapcore.NewJSONEncoder(config)
+func (t LoggerNew) Info(msg string) {
+
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).Info(msg)
+	return
 }
 
-func getInfoWriter(parameter *LoggerParameter) zapcore.WriteSyncer {
-
-	return zapcore.AddSync(&lumberjack.Logger{
-		Filename:   parameter.InfoFileName,
-		MaxSize:    parameter.MaxSize,
-		MaxAge:     parameter.MaxAge,
-		MaxBackups: parameter.MaxBackups,
-		LocalTime:  parameter.LocalTime,
-		Compress:   parameter.Compress,
-	})
-}
-func getErrWriter(parameter *LoggerParameter) zapcore.WriteSyncer {
-
-	return zapcore.AddSync(&lumberjack.Logger{
-		Filename:   parameter.ErrFileName,
-		MaxSize:    parameter.MaxSize,
-		MaxAge:     parameter.MaxAge,
-		MaxBackups: parameter.MaxBackups,
-		LocalTime:  parameter.LocalTime,
-		Compress:   parameter.Compress,
-	})
+func (t LoggerNew) Debug(msg string) {
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).Debug(msg)
+	return
 }
 
-type NewZapLogger struct {
-	log *zap.Logger
+func (t LoggerNew) Warn(msg string) {
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).Warn(msg)
+	return
 }
 
-func (t NewZapLogger) Error(msg string, err error) {
+func (t LoggerNew) Error(msg string) {
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).Error(msg)
+	return
+}
 
+func (t LoggerNew) DPanic(msg string) {
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).DPanic(msg)
+	return
+}
+
+func (t LoggerNew) Panic(msg string) {
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).Panic(msg)
+	return
+}
+
+func (t LoggerNew) Fatal(msg string) {
+	defer func() {
+		_ = t.logger.Sync()
+	}()
+	t.logger.With(t.zapFields...).Fatal(msg)
+	return
 }

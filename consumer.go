@@ -39,9 +39,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/retail-ai-inc/beanq/helper/logger"
-	"go.uber.org/zap"
-
 	"github.com/panjf2000/ants/v2"
 )
 
@@ -64,14 +61,6 @@ var (
 
 func NewConsumer(config BeanqConfig) *Consumer {
 	opts := DefaultOptions
-
-	param := make([]logger.LoggerInfoFun, 0)
-	// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
-	if config.DebugLog.Path != "" {
-		param = append(param, logger.WithInfoFile(config.DebugLog.Path))
-	}
-	// Initialize the beanq consumer log
-	Logger = logger.InitLogger(param...).With(zap.String("prefix", config.Redis.Prefix))
 
 	if config.KeepJobsInQueue != 0 {
 		opts.KeepJobInQueue = config.KeepJobsInQueue
@@ -98,7 +87,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 
 	pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 	if err != nil {
-		Logger.Fatal("goroutine pool error", zap.Error(err))
+		Logger().With("", err).Fatal("goroutine pool error")
 	}
 	Config = config
 	if config.Driver == "redis" {
@@ -166,7 +155,7 @@ func (t *Consumer) StartPing() error {
 			Handler: hdl,
 		}
 		if err := srv.ListenAndServe(); err != nil {
-			Logger.Error("ping server error:", zap.Error(err))
+			Logger().With("", err).Error("ping server error")
 		}
 	}()
 

@@ -25,8 +25,6 @@ package beanq
 import (
 	"context"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type (
@@ -63,9 +61,6 @@ type (
 		Health
 	}
 )
-
-// This is a global variable to hold the debug logger so that we can log data from anywhere.
-var Logger *zap.Logger
 
 // Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config BeanqConfig
