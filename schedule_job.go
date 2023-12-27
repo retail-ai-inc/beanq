@@ -213,8 +213,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 
 func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
 	queue := task.Queue()
-	maxLen := task.MaxLen()
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), queue), "", "*", maxLen, 0, map[string]any(task.Values))
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), queue), "", "*", Config.Redis.MaxLen, 0, map[string]any(task.Values))
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 

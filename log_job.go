@@ -104,7 +104,7 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	b, err := json.Marshal(result)
 	if err != nil {
-		return fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+		return fmt.Errorf("JsonMarshalErr:%s,Stack:%+v", err.Error(), stringx.ByteToString(debug.Stack()))
 	}
 	return t.client.Set(ctx, key, b, Config.KeepSuccessJobsInHistory).Err()
 }

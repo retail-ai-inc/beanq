@@ -42,6 +42,7 @@ type (
 		Password           string
 		Database           int
 		Prefix             string
+		MaxLen             int64
 		MinIdleConnections int
 		DialTimeout        time.Duration
 		ReadTimeout        time.Duration

@@ -38,6 +38,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 )
 
 type (
@@ -93,7 +94,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts Option) erro
 
 	if task.ExecuteTime().Before(time.Now()) {
 
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), task.Queue()), "", "*", task.MaxLen(), 0, map[string]any(task.Values))
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), task.Queue()), "", "*", Config.Redis.MaxLen, 0, map[string]any(task.Values))
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
@@ -278,7 +279,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			if err := RetryInfo(func() error {
 				defer func() {
 					if ne := recover(); ne != nil {
-						nerr <- fmt.Errorf("error:%+v,stack:%s", ne, string(debug.Stack()))
+						nerr <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 					}
 				}()
 				return f(task)
