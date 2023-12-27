@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/retail-ai-inc/beanq"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
 )
 
@@ -49,22 +50,22 @@ func main() {
 		// TODO:logic
 		// like this:
 		// time.Sleep(3 * time.Second) // this is my business.
-		beanq.Logger().With("g2", "ch2").Info(task.Payload())
+		logger.New().With("g2", "ch2").Info(task.Payload())
 
 		return nil
 	})
 	// register delay consumer
 	csm.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
-		beanq.Logger().With("delay-group", "delay-ch").Info(task.Payload())
+		logger.New().With("delay-group", "delay-ch").Info(task.Payload())
 		panic("this is a panic")
 		return nil
 	})
 	csm.Register("delay-group", "delay-ch2", func(task *beanq.Task) error {
-		beanq.Logger().With("delay-group", "delay-ch2").Info(task.Payload())
+		logger.New().With("delay-group", "delay-ch2").Info(task.Payload())
 		return nil
 	})
 	csm.Register("default-group", "BatchCartStateTimoutJobHandler", func(task *beanq.Task) error {
-		beanq.Logger().Info(task.Payload())
+		logger.New().Info(task.Payload())
 		return nil
 	})
 	// start ping

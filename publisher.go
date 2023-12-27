@@ -49,6 +49,7 @@ import (
 	"time"
 
 	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type pubClient struct {
@@ -74,7 +75,7 @@ func NewPublisher(config BeanqConfig) *pubClient {
 
 		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 		if err != nil {
-			Logger().With("", err).Fatal("goroutine pool error")
+			logger.New().With("", err).Fatal("goroutine pool error")
 		}
 		Config = config
 		if config.Driver == "redis" {

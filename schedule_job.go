@@ -30,6 +30,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/spf13/cast"
 )
@@ -140,7 +141,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 			})
 
 			if err := cmd.Err(); err != nil {
-				Logger().With("", err).Error("consume err")
+				logger.New().With("", err).Error("consume err")
 			}
 			val := cmd.Val()
 			if len(val) <= 0 {
@@ -148,11 +149,11 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 			}
 
 			if err := t.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
-				Logger().With("", err).Error("zrem err")
+				logger.New().With("", err).Error("zrem err")
 			}
 
 			if err := t.doConsume(ctx, max, consumer); err != nil {
-				Logger().With("", err).Error("consume err")
+				logger.New().With("", err).Error("consume err")
 				// continue
 			}
 
@@ -204,7 +205,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 	// begin to execute consumer's datas
 	for _, vv := range vals {
 		if err := doTask(ctx, vv, consumer); err != nil {
-			Logger().With("", err).Error("consumer err")
+			logger.New().With("", err).Error("consumer err")
 			continue
 		}
 	}

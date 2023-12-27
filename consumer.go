@@ -40,6 +40,7 @@ import (
 	"sync"
 
 	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type ConsumerHandler struct {
@@ -87,7 +88,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 
 	pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 	if err != nil {
-		Logger().With("", err).Fatal("goroutine pool error")
+		logger.New().With("", err).Fatal("goroutine pool error")
 	}
 	Config = config
 	if config.Driver == "redis" {
@@ -155,7 +156,7 @@ func (t *Consumer) StartPing() error {
 			Handler: hdl,
 		}
 		if err := srv.ListenAndServe(); err != nil {
-			Logger().With("", err).Error("ping server error")
+			logger.New().With("", err).Error("ping server error")
 		}
 	}()
 

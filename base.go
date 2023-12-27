@@ -28,8 +28,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 func makeKey(keys ...string) string {
@@ -137,9 +135,4 @@ func randDuration(center time.Duration) time.Duration {
 	var ri = int64(center)
 	var jitter = rnd.Int63n(ri)
 	return time.Duration(math.Abs(float64(ri + jitter)))
-}
-
-// Logger init logger
-func Logger() *logger.LoggerNew {
-	return logger.NewLogger("", 0, 0, 0, true, true, true)
 }

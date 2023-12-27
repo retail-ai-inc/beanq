@@ -36,6 +36,7 @@ import (
 
 	"github.com/panjf2000/ants/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 )
 
@@ -114,11 +115,11 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		cs := consumer
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
-			Logger().With("", err).Error("worker err")
+			logger.New().With("", err).Error("worker err")
 		}
 		// check information
 		if err := t.scheduleJob.start(ctx, cs); err != nil {
-			Logger().With("", err).Error("schedule job err")
+			logger.New().With("", err).Error("schedule job err")
 		}
 		consumers[key] = nil
 	}
@@ -127,7 +128,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	// monitor other stream pending
 	// go t.claim(ctx, consumers)
 
-	Logger().Info("----START----")
+	logger.New().Info("----START----")
 	// // monitor signal
 	t.waitSignal()
 }
@@ -190,10 +191,10 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 	for {
 		select {
 		case <-t.done:
-			Logger().Info("--------Main Task STOP--------")
+			logger.New().Info("--------Main Task STOP--------")
 			return
 		case <-ctx.Done():
-			Logger().Info("--------STOP--------")
+			logger.New().Info("--------STOP--------")
 			return
 		default:
 
@@ -201,7 +202,7 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 			streams, err := t.client.XReadGroup(ctx, readGroupArgs).Result()
 
 			if err != nil && err != redis.Nil {
-				Logger().With("", err).Error("XReadGroup err")
+				logger.New().With("", err).Error("XReadGroup err")
 				continue
 			}
 
@@ -222,7 +223,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 		select {
 		case <-ctx.Done():
 			if !errors.Is(ctx.Err(), context.Canceled) {
-				Logger().With("", ctx.Err()).Error("context closed")
+				logger.New().With("", ctx.Err()).Error("context closed")
 			}
 			return
 		case <-ticker.C:
@@ -235,7 +236,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
 				xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Group, 600*time.Second, "0-0", 100, consumer.Queue)
 				claims, _, err := t.client.XAutoClaim(ctx, xAutoClaim).Result()
 				if err != nil && err != redis.Nil {
-					Logger().With("", err).Error("XClaim err")
+					logger.New().With("", err).Error("XClaim err")
 					continue
 				}
 
@@ -266,7 +267,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 		for _, vv := range message {
 			task, err := t.parseMapToTask(vv, stream)
 			if err != nil {
-				Logger().With("", err).Error("parse json to task err")
+				logger.New().With("", err).Error("parse json to task err")
 				continue
 			}
 			r := result.Get().(*ConsumerResult)
@@ -304,7 +305,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			r.Group = group
 			// Successfully consumed data, stored in `string`
 			if err := t.logJob.saveLog(ctx, r); err != nil {
-				Logger().With("", err).Error("save log err")
+				logger.New().With("", err).Error("save log err")
 			}
 
 			r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
@@ -312,12 +313,12 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 
 			// `stream` confirmation message
 			if err := t.client.XAck(ctx, streamKey, group, vv.ID).Err(); err != nil {
-				Logger().With("", err).Error("xack err")
+				logger.New().With("", err).Error("xack err")
 
 			}
 			// delete data from `stream`
 			if err := t.client.XDel(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), vv.ID).Err(); err != nil {
-				Logger().With("", err).Error("xdel err")
+				logger.New().With("", err).Error("xdel err")
 
 			}
 		}

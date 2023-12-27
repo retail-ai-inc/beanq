@@ -11,79 +11,96 @@ import (
 )
 
 type (
-	LoggerNew struct {
+	ZapLogger struct {
 		logger    *zap.Logger
 		zapFields []zap.Field
+	}
+	ZapLoggerConfig struct {
+		Filename                    string
+		Level                       zapcore.Level
+		EncoderType                 string
+		MaxSize, MaxAge, MaxBackups int
+		LocalTime, Compress         bool
+		Pre                         string
 	}
 )
 
 var (
 	logOnce sync.Once
-	lg      *LoggerNew
+	lg      *ZapLogger
 
 	// set lumberjack logger default parameter
-	defaultLogger = struct {
-		Filename                    string
-		MaxSize, MaxAge, MaxBackups int
-		LocalTime, Compress         bool
-		Pre                         string
-	}{
-		Filename:   "./log.txt",
-		MaxSize:    0,
-		MaxAge:     0,
-		MaxBackups: 0,
-		LocalTime:  false,
-		Compress:   false,
-		Pre:        "beanq",
+	defaultZapConfig = ZapLoggerConfig{
+		Filename:    "",
+		Level:       zap.InfoLevel,
+		EncoderType: "json",
+		MaxSize:     0,
+		MaxAge:      0,
+		MaxBackups:  0,
+		LocalTime:   false,
+		Compress:    false,
+		Pre:         "beanq",
 	}
 )
 
-func NewLogger(fileName string, maxSize, maxAge, maxBackups int, localTime, compress, accessLog bool) *LoggerNew {
+// Logger init logger
+func New() *ZapLogger {
+	return NewWithConfig(defaultZapConfig)
+}
+
+func NewWithConfig(cfg ZapLoggerConfig) *ZapLogger {
 
 	logOnce.Do(func() {
+		var (
+			encoder zapcore.Encoder
+			syncer  zapcore.WriteSyncer
+		)
+
 		config := zap.NewProductionEncoderConfig()
 		config.EncodeTime = zapcore.RFC3339TimeEncoder
 		config.EncodeLevel = zapcore.CapitalLevelEncoder
 		config.TimeKey = "time"
-		cfg := zapcore.NewJSONEncoder(config)
 
-		level := zapcore.LevelOf(zap.InfoLevel)
+		// set encoder
+		if cfg.EncoderType == "" {
+			cfg.EncoderType = "json"
+		}
+		switch cfg.EncoderType {
+		case "json":
+			encoder = zapcore.NewJSONEncoder(config)
+		case "console":
+			encoder = zapcore.NewConsoleEncoder(config)
+		default:
+			encoder = zapcore.NewJSONEncoder(config)
+		}
 
-		if fileName == "" {
-			fileName = defaultLogger.Filename
-		}
-		if maxSize < 0 {
-			maxSize = defaultLogger.MaxSize
-		}
-		if maxAge < 0 {
-			maxAge = defaultLogger.MaxAge
-		}
-		if maxBackups < 0 {
-			maxBackups = defaultLogger.MaxBackups
-		}
-		syncer := &lumberjack.Logger{
-			Filename:   fileName,
-			MaxSize:    maxSize,
-			MaxAge:     maxAge,
-			MaxBackups: maxBackups,
-			LocalTime:  localTime,
-			Compress:   compress,
+		// set level
+		level := zapcore.LevelOf(cfg.Level)
+
+		if cfg.Filename == "" {
+			syncer = zapcore.WriteSyncer(os.Stdout)
+		} else {
+			syncer = zapcore.AddSync(&lumberjack.Logger{
+				Filename:   cfg.Filename,
+				MaxSize:    cfg.MaxSize,
+				MaxAge:     cfg.MaxAge,
+				MaxBackups: cfg.MaxBackups,
+				LocalTime:  cfg.LocalTime,
+				Compress:   cfg.Compress,
+			})
 		}
 
 		levelAble := zap.LevelEnablerFunc(func(level zapcore.Level) bool {
 			return level >= zap.ErrorLevel
 		})
-		var isLog []zapcore.WriteSyncer
-		if accessLog {
-			isLog = []zapcore.WriteSyncer{os.Stdout, zapcore.AddSync(syncer)}
-		}
-		newMultiWriteSyncer := zapcore.NewMultiWriteSyncer(isLog...)
-		newCore := zapcore.NewCore(cfg, newMultiWriteSyncer, level)
+
+		newMultiWriteSyncer := zapcore.NewMultiWriteSyncer(syncer)
+		newCore := zapcore.NewCore(encoder, newMultiWriteSyncer, level)
 		newTee := zapcore.NewTee(newCore)
 
-		l := zap.New(newTee).With(zap.String("pre", defaultLogger.Pre)).WithOptions(zap.AddStacktrace(levelAble))
+		l := zap.New(newTee).With(zap.String("pre", cfg.Pre)).WithOptions(zap.AddStacktrace(levelAble))
 
-		lg = &LoggerNew{
+		lg = &ZapLogger{
 			logger:    l,
 			zapFields: []zap.Field{},
 		}
@@ -91,7 +108,7 @@ func NewLogger(fileName string, maxSize, maxAge, maxBackups int, localTime, comp
 	return lg
 }
 
-func (t LoggerNew) With(key string, val any) LoggerNew {
+func (t ZapLogger) With(key string, val any) ZapLogger {
 
 	switch v := val.(type) {
 	case int, int64, *int, *int64:
@@ -130,7 +147,7 @@ func (t LoggerNew) With(key string, val any) LoggerNew {
 	return t
 }
 
-func (t LoggerNew) Info(msg string) {
+func (t ZapLogger) Info(msg string) {
 
 	defer func() {
 		_ = t.logger.Sync()
@@ -139,7 +156,7 @@ func (t LoggerNew) Info(msg string) {
 	return
 }
 
-func (t LoggerNew) Debug(msg string) {
+func (t ZapLogger) Debug(msg string) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
@@ -147,7 +164,7 @@ func (t LoggerNew) Debug(msg string) {
 	return
 }
 
-func (t LoggerNew) Warn(msg string) {
+func (t ZapLogger) Warn(msg string) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
@@ -155,7 +172,7 @@ func (t LoggerNew) Warn(msg string) {
 	return
 }
 
-func (t LoggerNew) Error(msg string) {
+func (t ZapLogger) Error(msg string) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
@@ -163,7 +180,7 @@ func (t LoggerNew) Error(msg string) {
 	return
 }
 
-func (t LoggerNew) DPanic(msg string) {
+func (t ZapLogger) DPanic(msg string) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
@@ -171,7 +188,7 @@ func (t LoggerNew) DPanic(msg string) {
 	return
 }
 
-func (t LoggerNew) Panic(msg string) {
+func (t ZapLogger) Panic(msg string) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
@@ -179,7 +196,7 @@ func (t LoggerNew) Panic(msg string) {
 	return
 }
 
-func (t LoggerNew) Fatal(msg string) {
+func (t ZapLogger) Fatal(msg string) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
