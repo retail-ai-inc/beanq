@@ -90,24 +90,31 @@ func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt Option) error
 	if err != nil {
 		return err
 	}
-
 	priority := cast.ToFloat64(task.ExecuteTime().UnixMilli()) + opt.Priority
 
-	// p := t.client.Pipeline() // Cluster not support pipeline
-	if err := t.client.ZAdd(ctx, MakeZSetKey(Config.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
-		Score:  priority,
-		Member: bt,
-	}).Err(); err != nil {
-		return err
-	}
-	if err := t.client.ZAdd(ctx, MakeTimeUnit(Config.Redis.Prefix, opt.Group, opt.Queue), redis.Z{
-		Score:  priority,
-		Member: priority,
-	}).Err(); err != nil {
-		return err
-	}
+	setKey := MakeZSetKey(Config.Redis.Prefix, opt.Group, opt.Queue)
+	timeUnitKey := MakeTimeUnit(Config.Redis.Prefix, opt.Group, opt.Queue)
 
-	return nil
+	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
+
+		_, err := tx.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+
+			// set value
+			if err := pipeliner.ZAdd(ctx, setKey, redis.Z{Score: priority, Member: bt}).Err(); err != nil {
+				return err
+			}
+			// set time unit
+			if err := pipeliner.ZAdd(ctx, timeUnitKey, redis.Z{Score: priority, Member: priority}).Err(); err != nil {
+				return err
+			}
+			return nil
+		})
+
+		return err
+
+	}, setKey, timeUnitKey)
+
+	return err
 }
 
 func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
@@ -168,7 +175,8 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 		Max: max,
 	}
 	key := MakeZSetKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
-	cmd := t.client.ZRangeByScore(ctx, key, zRangeBy)
+
+	cmd := t.client.ZRevRangeByScore(ctx, key, zRangeBy)
 	if err := cmd.Err(); err != nil && err != redis.Nil {
 		return err
 	}
