@@ -36,34 +36,34 @@ func makeKey(keys ...string) string {
 
 }
 
-func MakeListKey(prefix, group, queue string) string {
-	if group == "" {
-		group = DefaultOptions.DefaultGroup
+func MakeListKey(prefix, channel, topic string) string {
+	if channel == "" {
+		channel = DefaultOptions.DefaultChannel
 	}
-	if queue == "" {
-		queue = DefaultOptions.DefaultQueueName
+	if topic == "" {
+		topic = DefaultOptions.DefaultTopic
 	}
-	return makeKey(prefix, group, queue, "list")
+	return makeKey(prefix, channel, topic, "list")
 }
 
-func MakeZSetKey(prefix, group, queue string) string {
-	if group == "" {
-		group = DefaultOptions.DefaultGroup
+func MakeZSetKey(prefix, channel, topic string) string {
+	if channel == "" {
+		channel = DefaultOptions.DefaultChannel
 	}
-	if queue == "" {
-		queue = DefaultOptions.DefaultQueueName
+	if topic == "" {
+		topic = DefaultOptions.DefaultTopic
 	}
-	return makeKey(prefix, group, queue, "zset")
+	return makeKey(prefix, channel, topic, "zset")
 }
 
-func MakeStreamKey(prefix, group, queue string) string {
-	if group == "" {
-		group = DefaultOptions.DefaultGroup
+func MakeStreamKey(prefix, channel, topic string) string {
+	if channel == "" {
+		channel = DefaultOptions.DefaultChannel
 	}
-	if queue == "" {
-		queue = DefaultOptions.DefaultQueueName
+	if topic == "" {
+		topic = DefaultOptions.DefaultTopic
 	}
-	return makeKey(prefix, group, queue, "stream")
+	return makeKey(prefix, channel, topic, "stream")
 }
 
 func MakeLogKey(prefix, resultType string) string {
@@ -73,8 +73,8 @@ func MakeLogKey(prefix, resultType string) string {
 func MakeHealthKey(prefix string) string {
 	return makeKey(prefix, "health_checker")
 }
-func MakeTimeUnit(prefix, group, queue string) string {
-	return makeKey(prefix, group, queue, "time_unit")
+func MakeTimeUnit(prefix, channel, topic string) string {
+	return makeKey(prefix, channel, topic, "time_unit")
 }
 func RetryInfo(f func() error, retry int) error {
 	index := 0

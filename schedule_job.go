@@ -38,9 +38,9 @@ import (
 type (
 	scheduleJobI interface {
 		start(ctx context.Context, consumer *ConsumerHandler) error
-		enqueue(ctx context.Context, task *Task, option Option) error
+		enqueue(ctx context.Context, msg *Message, option Option) error
 		shutDown()
-		sendToStream(ctx context.Context, task *Task) error
+		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
 		client     *redis.Client
@@ -84,16 +84,16 @@ func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) erro
 	return nil
 }
 
-func (t *scheduleJob) enqueue(ctx context.Context, task *Task, opt Option) error {
+func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) error {
 
-	bt, err := json.Marshal(task.Values)
+	bt, err := json.Marshal(msg.Values)
 	if err != nil {
 		return err
 	}
-	priority := cast.ToFloat64(task.ExecuteTime().UnixMilli()) + opt.Priority
+	priority := cast.ToFloat64(msg.ExecuteTime().UnixMilli()) + opt.Priority
 
-	setKey := MakeZSetKey(Config.Redis.Prefix, opt.Group, opt.Queue)
-	timeUnitKey := MakeTimeUnit(Config.Redis.Prefix, opt.Group, opt.Queue)
+	setKey := MakeZSetKey(Config.Redis.Prefix, opt.Channel, opt.Topic)
+	timeUnitKey := MakeTimeUnit(Config.Redis.Prefix, opt.Channel, opt.Topic)
 
 	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
 
@@ -124,7 +124,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	var (
 		now      time.Time
-		timeUnit = MakeTimeUnit(Config.Redis.Prefix, consumer.Group, consumer.Queue)
+		timeUnit = MakeTimeUnit(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 	)
 	for {
 		select {
@@ -174,7 +174,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 		Min: defaultScheduleJobConfig.scoreMin,
 		Max: max,
 	}
-	key := MakeZSetKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
+	key := MakeZSetKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 
 	cmd := t.client.ZRevRangeByScore(ctx, key, zRangeBy)
 	if err := cmd.Err(); err != nil && err != redis.Nil {
@@ -192,15 +192,15 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
-	var zsetKey = MakeZSetKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
+	var zsetKey = MakeZSetKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
-		task, err := jsonToTask(vv)
+		msg, err := jsonToMessage(vv)
 		if err != nil {
 			return err
 		}
 
-		if err := t.sendToStream(ctx, task); err != nil {
+		if err := t.sendToStream(ctx, msg); err != nil {
 			return err
 		}
 
@@ -219,9 +219,9 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 	}
 }
 
-func (t *scheduleJob) sendToStream(ctx context.Context, task *Task) error {
-	queue := task.Queue()
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), queue), "", "*", Config.Redis.MaxLen, 0, map[string]any(task.Values))
+func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
+
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, map[string]any(msg.Values))
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 

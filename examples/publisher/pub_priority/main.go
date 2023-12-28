@@ -55,13 +55,13 @@ func pubMoreAndPriorityInfo() {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
-		task := beanq.NewTask(b, beanq.SetName("update"))
+		msg := beanq.NewMessage(b, beanq.SetName("update"))
 		delayT := time.Now().Add(10 * time.Second)
 
 		if i == 3 {
 			y = 10
 		}
-		if err := pub.DelayPublish(task, delayT, beanq.Queue("delay-ch"), beanq.Group("delay-group"), beanq.Priority(y)); err != nil {
+		if err := pub.DelayPublish(msg, delayT, beanq.Topic("delay-topic"), beanq.Channel("delay-channel"), beanq.Priority(y)); err != nil {
 			log.Fatalln(err)
 		}
 	}

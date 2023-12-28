@@ -67,13 +67,13 @@ type (
 var Config BeanqConfig
 
 type BeanqPub interface {
-	Publish(task *Task, option ...OptionI) error
-	PublishWithContext(ctx context.Context, task *Task, option ...OptionI) error
-	DelayPublish(task *Task, delayTime time.Time, option ...OptionI) error
+	Publish(msg *Message, option ...OptionI) error
+	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
+	DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error
 }
 
 type BeanqSub interface {
-	Register(group, queue string, consumerFun DoConsumer)
+	Register(channek, topic string, consumerFun DoConsumer)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	StartPing() error

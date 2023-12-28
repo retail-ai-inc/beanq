@@ -46,30 +46,30 @@ func main() {
 	// register consumer
 	csm := beanq.NewConsumer(config)
 	// register normal consumer
-	csm.Register("g2", "ch2", func(task *beanq.Task) error {
+	csm.Register("g2", "ch2", func(msg *beanq.Message) error {
 		// TODO:logic
 		// like this:
 		// time.Sleep(3 * time.Second) // this is my business.
-		logger.New().With("g2", "ch2").Info(task.Payload())
+		logger.New().With("g2", "ch2").Info(msg.Payload())
 
 		return nil
 	})
 	// register delay consumer
-	csm.Register("delay-group", "delay-ch", func(task *beanq.Task) error {
-		logger.New().With("delay-group", "delay-ch").Info(task.Payload())
+	csm.Register("delay-channel", "delay-topic", func(msg *beanq.Message) error {
+		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload())
 		panic("this is a panic")
 		return nil
 	})
-	csm.Register("delay-group", "delay-ch2", func(task *beanq.Task) error {
-		logger.New().With("delay-group", "delay-ch2").Info(task.Payload())
+	csm.Register("delay-channel", "delay-ch2", func(msg *beanq.Message) error {
+		logger.New().With("delay-channel", "delay-ch2").Info(msg.Payload())
 		return nil
 	})
-	csm.Register("default-group", "BatchCartStateTimoutJobHandler", func(task *beanq.Task) error {
-		logger.New().Info(task.Payload())
+	csm.Register("default-channel", "BatchCartStateTimoutJobHandler", func(msg *beanq.Message) error {
+		logger.New().Info(msg.Payload())
 		return nil
 	})
 	// start ping
-	csm.StartPing()
+	// csm.StartPing()
 	// begin to consume information
 	csm.StartConsumer()
 }

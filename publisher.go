@@ -31,10 +31,10 @@
 	}
 
 	d, _ := json.Marshal(msg)
-	// get task
-	task := beanq.NewTask(d)
+	// get message
+	message := beanq.NewMessage(d)
 	pub := beanq.NewPublisher()
-	err := pub.Publish(task, opt.Queue("ch2"), opt.Group("g2"),opt.Retry(3),opt.MaxLen(100),opt.Priority(10))
+	err := pub.Publish(message, opt.Topic("ch2"), opt.Channel("g2"),opt.Retry(3),opt.MaxLen(100),opt.Priority(10))
 	if err != nil {
 		Logger.Error(err)
 	}
@@ -92,32 +92,32 @@ func NewPublisher(config BeanqConfig) *pubClient {
 	return beanqPublisher
 }
 
-func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option ...OptionI) error {
+func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
 	opts, err := ComposeOptions(option...)
 	if err != nil {
 		return err
 	}
 
-	task.Values["queue"] = opts.Queue
-	task.Values["group"] = opts.Group
-	task.Values["retry"] = opts.Retry
-	task.Values["priority"] = opts.Priority
-	task.Values["maxLen"] = opts.MaxLen
-	task.Values["executeTime"] = opts.ExecuteTime
+	msg.Values["topic"] = opts.Topic
+	msg.Values["channel"] = opts.Channel
+	msg.Values["retry"] = opts.Retry
+	msg.Values["priority"] = opts.Priority
+	msg.Values["maxLen"] = opts.MaxLen
+	msg.Values["executeTime"] = opts.ExecuteTime
 
-	return t.broker.enqueue(ctx, task, opts)
+	return t.broker.enqueue(ctx, msg, opts)
 }
 
-func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...OptionI) error {
+func (t *pubClient) DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error {
 	option = append(option, ExecuteTime(delayTime))
-	return t.Publish(task, option...)
+	return t.Publish(msg, option...)
 }
 
-func (t *pubClient) Publish(task *Task, option ...OptionI) error {
+func (t *pubClient) Publish(msg *Message, option ...OptionI) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return t.PublishWithContext(ctx, task, option...)
+	return t.PublishWithContext(ctx, msg, option...)
 }
 
 func (t *pubClient) Close() error {

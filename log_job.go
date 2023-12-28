@@ -45,13 +45,13 @@ type (
 		Info    FlagInfo
 		Payload any
 
-		AddTime                string
-		ExpireTime             time.Time
-		RunTime                string
-		BeginTime              time.Time
-		EndTime                time.Time
-		ExecuteTime            time.Time
-		Queue, Group, Consumer string
+		AddTime                  string
+		ExpireTime               time.Time
+		RunTime                  string
+		BeginTime                time.Time
+		EndTime                  time.Time
+		ExecuteTime              time.Time
+		Topic, Channel, Consumer string
 	}
 
 	logJobI interface {

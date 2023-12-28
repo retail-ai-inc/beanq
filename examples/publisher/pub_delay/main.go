@@ -63,7 +63,7 @@ func pubDelayInfo() {
 
 		b, _ := json.Marshal(m)
 
-		task := beanq.NewTask(b, beanq.SetName("update"))
+		msg := beanq.NewMessage(b, beanq.SetName("update"))
 		delayT := ntime.Add(10 * time.Second)
 		if i == 2 {
 			delayT = ntime
@@ -79,14 +79,14 @@ func pubDelayInfo() {
 		}
 		// fmt.Println(delayT)
 		// continue
-		if err := pub.DelayPublish(task, delayT, beanq.Queue("delay-ch"), beanq.Group("delay-group"), beanq.Priority(float64(y))); err != nil {
+		if err := pub.DelayPublish(msg, delayT, beanq.Topic("delay-topic"), beanq.Channel("delay-channel"), beanq.Priority(float64(y))); err != nil {
 			log.Fatalln(err)
 		}
-		// if err := pub.Publish(task, beanq.Queue("delay-ch2"), beanq.Group("delay-group")); err != nil {
+		// if err := pub.Publish(msg, beanq.Topic("delay-ch2"), beanq.Channel("delay-channel")); err != nil {
 		// 	log.Fatalln(err)
 		// }
-		// pub.Publish(task, beanq.Queue("ch2"), beanq.Group("g2"))
+		// pub.Publish(task, beanq.Topic("ch2"), beanq.Channel("g2"))
 	}
-	// pub.Publish(beanq.NewTask([]byte("aaa")), beanq.Group("group1"), beanq.Queue("queue1"))
+	// pub.Publish(beanq.NewMessage([]byte("aaa")), beanq.Channel("channel1"), beanq.Topic("topic1"))
 	defer pub.Close()
 }

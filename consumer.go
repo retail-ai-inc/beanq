@@ -23,9 +23,9 @@
 // EXAMPLE:
 /*
 	csm := beanq.NewConsumer()
-	csm.Register("group_name", "queue_name", func(task *beanq.Task) error {
+	csm.Register("channel_name", "topic_name", func(msg *beanq.Message) error {
 		// TODO:logic
-		beanq.Logger.Info(task.Payload())
+		beanq.Logger.Info(msg.Payload())
 		return nil
 	})
 	csm.StartConsumer()
@@ -44,8 +44,8 @@ import (
 )
 
 type ConsumerHandler struct {
-	Group, Queue string
-	ConsumerFun  DoConsumer
+	Channel, Topic string
+	ConsumerFun    DoConsumer
 }
 
 type Consumer struct {
@@ -106,27 +106,27 @@ func NewConsumer(config BeanqConfig) *Consumer {
 }
 
 // Register
-// Register the group and queue to be consumed
+// Register the channel and topic to be consumed
 //
 //	@Description:
 //
 //	@receiver t
-//	@param group
-//	@param queue
+//	@param channel
+//	@param topic
 //	@param consumerFun
-func (t *Consumer) Register(group, queue string, consumerFun DoConsumer) {
+func (t *Consumer) Register(channelName, topicName string, consumerFun DoConsumer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if group == "" {
-		group = DefaultOptions.DefaultGroup
+	if channelName == "" {
+		channelName = DefaultOptions.DefaultChannel
 	}
-	if queue == "" {
-		queue = DefaultOptions.DefaultQueueName
+	if topicName == "" {
+		topicName = DefaultOptions.DefaultTopic
 	}
 
 	t.m = append(t.m, &ConsumerHandler{
-		Group:       group,
-		Queue:       queue,
+		Channel:     channelName,
+		Topic:       topicName,
 		ConsumerFun: consumerFun,
 	})
 }

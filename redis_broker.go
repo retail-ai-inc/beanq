@@ -43,7 +43,7 @@ import (
 
 type (
 	Broker interface {
-		enqueue(ctx context.Context, task *Task, options Option) error
+		enqueue(ctx context.Context, msg *Message, options Option) error
 		close() error
 		start(ctx context.Context, consumers []*ConsumerHandler)
 	}
@@ -88,20 +88,20 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 	}
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, task *Task, opts Option) error {
-	if task == nil {
-		return fmt.Errorf("enqueue Task Err:%+v", "stream or values is nil")
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
+	if msg == nil {
+		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
 	}
 
-	if task.ExecuteTime().Before(time.Now()) {
+	if msg.ExecuteTime().Before(time.Now()) {
 
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, task.Group(), task.Queue()), "", "*", Config.Redis.MaxLen, 0, map[string]any(task.Values))
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, map[string]any(msg.Values))
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
 		return nil
 	}
-	if err := t.scheduleJob.enqueue(ctx, task, opts); err != nil {
+	if err := t.scheduleJob.enqueue(ctx, msg, opts); err != nil {
 		return err
 	}
 	return nil
@@ -138,13 +138,13 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) error {
 
-	result, err := t.client.XInfoGroups(ctx, MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)).Result()
+	result, err := t.client.XInfoGroups(ctx, MakeStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)).Result()
 	if err != nil && err.Error() != "ERR no such key" {
 		return err
 	}
 
 	if len(result) < 1 {
-		if err := t.createGroup(ctx, consumer.Queue, consumer.Group); err != nil {
+		if err := t.createGroup(ctx, consumer.Topic, consumer.Channel); err != nil {
 			return err
 		}
 	}
@@ -179,8 +179,8 @@ func (t *RedisBroker) waitSignal() {
 
 }
 
-func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) error {
-	if err := t.client.XGroupCreateMkStream(ctx, MakeStreamKey(Config.Redis.Prefix, group, queue), group, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+func (t *RedisBroker) createGroup(ctx context.Context, topic, channel string) error {
+	if err := t.client.XGroupCreateMkStream(ctx, MakeStreamKey(Config.Redis.Prefix, channel, topic), channel, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
 		return err
 	}
 	return nil
@@ -188,10 +188,10 @@ func (t *RedisBroker) createGroup(ctx context.Context, queue, group string) erro
 
 func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHandler) {
 	// consumer := uuid.New().String()
-	group := handler.Group
-	queue := handler.Queue
-	stream := MakeStreamKey(Config.Redis.Prefix, group, queue)
-	readGroupArgs := redisx.NewReadGroupArgs(group, stream, []string{stream, ">"}, count, 10*time.Second)
+	channel := handler.Channel
+	topic := handler.Topic
+	stream := MakeStreamKey(Config.Redis.Prefix, channel, topic)
+	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, count, 10*time.Second)
 	for {
 		select {
 		case <-t.done:
@@ -213,15 +213,22 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 			if len(streams) <= 0 {
 				continue
 			}
-			t.consumer(ctx, handler.ConsumerFun, group, streams)
+			t.consumer(ctx, handler.ConsumerFun, channel, streams)
 		}
 	}
 }
 
 // Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisBroker) claim(ctx context.Context, consumer *ConsumerHandler) error {
-	idleTime := 600 * time.Second
+
 	return t.pool.Submit(func() {
+
+		streamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
+		xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Channel, 50*time.Second, "0-0", 100, consumer.Topic)
+
+		ticker := time.NewTicker(100 * time.Second)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -232,13 +239,12 @@ func (t *RedisBroker) claim(ctx context.Context, consumer *ConsumerHandler) erro
 			case <-t.claimDone:
 				logger.New().Info("--------Claim STOP--------")
 				return
-			default:
+			case <-ticker.C:
+
 				var streams []redis.XStream
 
-				streamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
-
-				xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Group, idleTime, "0-0", 100, consumer.Queue)
 				claims, _, err := t.client.XAutoClaim(ctx, xAutoClaim).Result()
+
 				if err != nil && err != redis.Nil {
 					logger.New().With("", err).Error("XClaim err")
 					continue
@@ -246,7 +252,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumer *ConsumerHandler) erro
 
 				if len(claims) > 0 {
 					streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
-					t.consumer(ctx, consumer.ConsumerFun, consumer.Group, streams)
+					t.consumer(ctx, consumer.ConsumerFun, consumer.Channel, streams)
 					streams = nil
 				}
 			}
@@ -263,17 +269,17 @@ var result = sync.Pool{New: func() any {
 	}
 }}
 
-func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, streams []redis.XStream) {
+func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, channel string, streams []redis.XStream) {
 
 	for key, v := range streams {
+
 		stream := v.Stream
 		message := v.Messages
-		streamKey := MakeStreamKey(Config.Redis.Prefix, group, stream)
 
 		for _, vv := range message {
-			task, err := t.parseMapToTask(vv, stream)
+			msg, err := t.parseMapToMessage(vv, stream)
 			if err != nil {
-				logger.New().With("", err).Error("parse json to task err")
+				logger.New().With("", err).Error("parse json to Message err")
 				continue
 			}
 			r := result.Get().(*ConsumerResult)
@@ -287,7 +293,7 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 						nerr <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 					}
 				}()
-				return f(task)
+				return f(msg)
 			}, t.opts.JobMaxRetry); err != nil {
 				nerr <- err
 			}
@@ -304,11 +310,11 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 
 			sub := r.EndTime.Sub(r.BeginTime)
 
-			r.Payload = task.Payload()
+			r.Payload = msg.Payload()
 			r.RunTime = sub.String()
-			r.ExecuteTime = task.ExecuteTime()
-			r.Queue = stream
-			r.Group = group
+			r.ExecuteTime = msg.ExecuteTime()
+			r.Topic = stream
+			r.Channel = channel
 			// Successfully consumed data, stored in `string`
 			if err := t.logJob.saveLog(ctx, r); err != nil {
 				logger.New().With("", err).Error("save log err")
@@ -318,14 +324,12 @@ func (t *RedisBroker) consumer(ctx context.Context, f DoConsumer, group string, 
 			result.Put(r)
 
 			// `stream` confirmation message
-			if err := t.client.XAck(ctx, streamKey, group, vv.ID).Err(); err != nil {
+			if err := t.client.XAck(ctx, stream, channel, vv.ID).Err(); err != nil {
 				logger.New().With("", err).Error("xack err")
-
 			}
 			// delete data from `stream`
-			if err := t.client.XDel(ctx, MakeStreamKey(Config.Redis.Prefix, group, stream), vv.ID).Err(); err != nil {
+			if err := t.client.XDel(ctx, stream, vv.ID).Err(); err != nil {
 				logger.New().With("", err).Error("xdel err")
-
 			}
 		}
 		streams[key] = redis.XStream{}
@@ -342,20 +346,20 @@ func (t *RedisBroker) close() error {
 	return t.client.Close()
 }
 
-func (t *RedisBroker) parseMapToTask(msg redis.XMessage, stream string) (*Task, error) {
-	payload, id, streamStr, addTime, queue, group, executeTime, retry, maxLen, err := openTaskMap(BqMessage(msg), stream)
+func (t *RedisBroker) parseMapToMessage(msg redis.XMessage, stream string) (*Message, error) {
+	message, id, streamStr, addTime, topic, channel, executeTime, retry, maxLen, err := openMessageMap(BqMessage(msg), stream)
 	if err != nil {
 		return nil, err
 	}
-	return &Task{
+	return &Message{
 		Values: values{
 			"id":          id,
 			"name":        streamStr,
-			"queue":       queue,
-			"group":       group,
+			"topic":       topic,
+			"channel":     channel,
 			"maxLen":      maxLen,
 			"retry":       retry,
-			"payload":     payload,
+			"message":     message,
 			"addTime":     addTime,
 			"executeTime": executeTime,
 		},
