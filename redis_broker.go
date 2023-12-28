@@ -49,13 +49,13 @@ type (
 	}
 
 	RedisBroker struct {
-		client      *redis.Client
-		done, stop  chan struct{}
-		scheduleJob scheduleJobI
-		logJob      logJobI
-		opts        *Options
-		once        *sync.Once
-		pool        *ants.Pool
+		client                *redis.Client
+		done, stop, claimDone chan struct{}
+		scheduleJob           scheduleJobI
+		logJob                logJobI
+		opts                  *Options
+		once                  *sync.Once
+		pool                  *ants.Pool
 	}
 )
 
@@ -79,6 +79,7 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		client:      client,
 		done:        make(chan struct{}),
 		stop:        make(chan struct{}),
+		claimDone:   make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client),
 		opts:        nil,
@@ -122,12 +123,13 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		if err := t.scheduleJob.start(ctx, cs); err != nil {
 			logger.New().With("", err).Error("schedule job err")
 		}
+		// REFERENCE: https://redis.io/commands/xclaim/
+		// monitor other stream pending
+		if err := t.claim(ctx, cs); err != nil {
+			logger.New().With("", err).Error("claim job err")
+		}
 		consumers[key] = nil
 	}
-
-	// REFERENCE: https://redis.io/commands/xclaim/
-	// monitor other stream pending
-	// go t.claim(ctx, consumers)
 
 	logger.New().Info("----START----")
 	// // monitor signal
@@ -166,8 +168,9 @@ func (t *RedisBroker) waitSignal() {
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
 				close(t.stop)
-				t.pool.Release()
 				t.done <- struct{}{}
+				t.claimDone <- struct{}{}
+				t.pool.Release()
 				t.scheduleJob.shutDown()
 				_ = t.client.Close()
 			})
@@ -216,38 +219,40 @@ func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHa
 }
 
 // Please refer to http://www.redis.cn/commands/xclaim.html
-func (t *RedisBroker) claim(ctx context.Context, consumers []*ConsumerHandler) {
-	ticker := time.NewTicker(50 * time.Second)
-	defer ticker.Stop()
+func (t *RedisBroker) claim(ctx context.Context, consumer *ConsumerHandler) error {
+	idleTime := 600 * time.Second
+	return t.pool.Submit(func() {
+		for {
+			select {
+			case <-ctx.Done():
+				if !errors.Is(ctx.Err(), context.Canceled) {
+					logger.New().With("", ctx.Err()).Error("context closed")
+				}
+				return
+			case <-t.claimDone:
+				logger.New().Info("--------Claim STOP--------")
+				return
+			default:
+				var streams []redis.XStream
 
-	for {
-		select {
-		case <-ctx.Done():
-			if !errors.Is(ctx.Err(), context.Canceled) {
-				logger.New().With("", ctx.Err()).Error("context closed")
-			}
-			return
-		case <-ticker.C:
-
-			for _, consumer := range consumers {
 				streamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Group, consumer.Queue)
 
-				streams := make([]redis.XStream, 100)
-
-				xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Group, 600*time.Second, "0-0", 100, consumer.Queue)
+				xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Group, idleTime, "0-0", 100, consumer.Queue)
 				claims, _, err := t.client.XAutoClaim(ctx, xAutoClaim).Result()
 				if err != nil && err != redis.Nil {
 					logger.New().With("", err).Error("XClaim err")
 					continue
 				}
 
-				streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
-				t.consumer(ctx, consumer.ConsumerFun, consumer.Group, streams)
-				streams = nil
-
+				if len(claims) > 0 {
+					streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
+					t.consumer(ctx, consumer.ConsumerFun, consumer.Group, streams)
+					streams = nil
+				}
 			}
 		}
-	}
+	})
+
 }
 
 var result = sync.Pool{New: func() any {
