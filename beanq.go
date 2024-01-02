@@ -53,6 +53,7 @@ type (
 		Driver                   string
 		PoolSize                 int
 		JobMaxRetries            int
+		DeadLetterIdle           time.Duration
 		KeepJobsInQueue          time.Duration
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration

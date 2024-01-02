@@ -224,7 +224,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumer *ConsumerHandler) erro
 	return t.pool.Submit(func() {
 
 		streamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
-		xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Channel, time.Hour, "0-0", 100, consumer.Topic)
+		xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Channel, Config.DeadLetterIdle, "0-0", 100, consumer.Topic)
 
 		ticker := time.NewTicker(100 * time.Second)
 		defer ticker.Stop()
