@@ -20,17 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// EXAMPLE:
-/*
-	csm := beanq.NewConsumer()
-	csm.Register("group_name", "queue_name", func(task *beanq.Task) error {
-		// TODO:logic
-		beanq.Logger.Info(task.Payload())
-		return nil
-	})
-	csm.StartConsumer()
-*/
-
 package beanq
 
 import (
@@ -39,15 +28,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/retail-ai-inc/beanq/helper/logger"
-	"go.uber.org/zap"
-
 	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type ConsumerHandler struct {
-	Group, Queue string
-	ConsumerFun  DoConsumer
+	Channel, Topic string
+	ConsumerFun    DoConsumer
 }
 
 type Consumer struct {
@@ -64,14 +51,6 @@ var (
 
 func NewConsumer(config BeanqConfig) *Consumer {
 	opts := DefaultOptions
-
-	param := make([]logger.LoggerInfoFun, 0)
-	// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
-	if config.DebugLog.Path != "" {
-		param = append(param, logger.WithInfoFile(config.DebugLog.Path))
-	}
-	// Initialize the beanq consumer log
-	Logger = logger.InitLogger(param...).With(zap.String("prefix", config.Redis.Prefix))
 
 	if config.KeepJobsInQueue != 0 {
 		opts.KeepJobInQueue = config.KeepJobsInQueue
@@ -98,7 +77,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 
 	pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 	if err != nil {
-		Logger.Fatal("goroutine pool error", zap.Error(err))
+		logger.New().With("", err).Fatal("goroutine pool error")
 	}
 	Config = config
 	if config.Driver == "redis" {
@@ -116,27 +95,27 @@ func NewConsumer(config BeanqConfig) *Consumer {
 }
 
 // Register
-// Register the group and queue to be consumed
+// Register the channel and topic to be consumed
 //
 //	@Description:
 //
 //	@receiver t
-//	@param group
-//	@param queue
+//	@param channel
+//	@param topic
 //	@param consumerFun
-func (t *Consumer) Register(group, queue string, consumerFun DoConsumer) {
+func (t *Consumer) Register(channelName, topicName string, consumerFun DoConsumer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if group == "" {
-		group = DefaultOptions.DefaultGroup
+	if channelName == "" {
+		channelName = DefaultOptions.DefaultChannel
 	}
-	if queue == "" {
-		queue = DefaultOptions.DefaultQueueName
+	if topicName == "" {
+		topicName = DefaultOptions.DefaultTopic
 	}
 
 	t.m = append(t.m, &ConsumerHandler{
-		Group:       group,
-		Queue:       queue,
+		Channel:     channelName,
+		Topic:       topicName,
 		ConsumerFun: consumerFun,
 	})
 }
@@ -166,7 +145,7 @@ func (t *Consumer) StartPing() error {
 			Handler: hdl,
 		}
 		if err := srv.ListenAndServe(); err != nil {
-			Logger.Error("ping server error:", zap.Error(err))
+			logger.New().With("", err).Error("ping server error")
 		}
 	}()
 

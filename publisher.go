@@ -20,27 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// EXAMPLE:
-/*
-	msg := struct {
-		Id   int
-		Info string
-	}{
-		1,
-		"msg",
-	}
-
-	d, _ := json.Marshal(msg)
-	// get task
-	task := beanq.NewTask(d)
-	pub := beanq.NewPublisher()
-	err := pub.Publish(task, opt.Queue("ch2"), opt.Group("g2"),opt.Retry(3),opt.MaxLen(100),opt.Priority(10))
-	if err != nil {
-		Logger.Error(err)
-	}
-	defer pub.Close()
-*/
-
 package beanq
 
 import (
@@ -48,10 +27,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/helper/logger"
-	"go.uber.org/zap"
-
 	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type pubClient struct {
@@ -71,21 +48,13 @@ func NewPublisher(config BeanqConfig) *pubClient {
 
 	publisherOnce.Do(func() {
 
-		param := make([]logger.LoggerInfoFun, 0)
-		// IMPORTANT: Configure debug log. If `path` is empty then push the log into `stdout`.
-		if config.DebugLog.Path != "" {
-			param = append(param, logger.WithInfoFile(config.DebugLog.Path))
-		}
-		// Initialize the beanq consumer log
-		Logger = logger.InitLogger(param...).With(zap.String("prefix", config.Redis.Prefix))
-
 		if config.PoolSize != 0 {
 			opts.PoolSize = config.PoolSize
 		}
 
 		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 		if err != nil {
-			Logger.Fatal("goroutine pool error", zap.Error(err))
+			logger.New().With("", err).Fatal("goroutine pool error")
 		}
 		Config = config
 		if config.Driver == "redis" {
@@ -102,32 +71,32 @@ func NewPublisher(config BeanqConfig) *pubClient {
 	return beanqPublisher
 }
 
-func (t *pubClient) PublishWithContext(ctx context.Context, task *Task, option ...OptionI) error {
+func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
 	opts, err := ComposeOptions(option...)
 	if err != nil {
 		return err
 	}
 
-	task.Values["queue"] = opts.Queue
-	task.Values["group"] = opts.Group
-	task.Values["retry"] = opts.Retry
-	task.Values["priority"] = opts.Priority
-	task.Values["maxLen"] = opts.MaxLen
-	task.Values["executeTime"] = opts.ExecuteTime
+	msg.Values["topic"] = opts.Topic
+	msg.Values["channel"] = opts.Channel
+	msg.Values["retry"] = opts.Retry
+	msg.Values["priority"] = opts.Priority
+	msg.Values["maxLen"] = opts.MaxLen
+	msg.Values["executeTime"] = opts.ExecuteTime
 
-	return t.broker.enqueue(ctx, task, opts)
+	return t.broker.enqueue(ctx, msg, opts)
 }
 
-func (t *pubClient) DelayPublish(task *Task, delayTime time.Time, option ...OptionI) error {
+func (t *pubClient) DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error {
 	option = append(option, ExecuteTime(delayTime))
-	return t.Publish(task, option...)
+	return t.Publish(msg, option...)
 }
 
-func (t *pubClient) Publish(task *Task, option ...OptionI) error {
+func (t *pubClient) Publish(msg *Message, option ...OptionI) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return t.PublishWithContext(ctx, task, option...)
+	return t.PublishWithContext(ctx, msg, option...)
 }
 
 func (t *pubClient) Close() error {

@@ -32,32 +32,20 @@ import (
 	"github.com/spf13/cast"
 )
 
-// task values APPOINTMENT:
-// task["id"] =>   job's id
-// task["name"] => job's name
-// task["queue"] => job's queue name
-// task["group"] => job's group name
-// task["maxLen"] =>  upper limit `stream`
-// task["retry"] => retry count
-// task["priority"] => attribute priority;0-10;The larger the value, the earlier the execution
-// task["payload"] => data payload
-// task["addTime"] => The time when the task was added, the default is the current time
-// task["executeTime"] => task execute time
-
 type values map[string]any
 
-type Task struct {
+type Message struct {
 	Values values
 }
 
 // get val functions
 
-type iTaskValue interface {
+type iMessageValue interface {
 	string | int64 | time.Time | float64 | int
 }
 
-func taskGetValue[T iTaskValue](taskValues values, key string, defaultValue T) T {
-	if v, ok := taskValues[key]; ok {
+func messageGetValue[T iMessageValue](msgValues values, key string, defaultValue T) T {
+	if v, ok := msgValues[key]; ok {
 		if value, ok := v.(T); ok {
 			return value
 		}
@@ -65,36 +53,36 @@ func taskGetValue[T iTaskValue](taskValues values, key string, defaultValue T) T
 	return defaultValue
 }
 
-func (t *Task) Id() string {
-	return taskGetValue(t.Values, "id", "")
+func (t *Message) Id() string {
+	return messageGetValue(t.Values, "id", "")
 }
 
-func (t *Task) Name() string {
-	return taskGetValue(t.Values, "name", "")
+func (t *Message) Name() string {
+	return messageGetValue(t.Values, "name", "")
 }
 
-func (t *Task) Queue() string {
-	return taskGetValue(t.Values, "queue", "")
+func (t *Message) Topic() string {
+	return messageGetValue(t.Values, "topic", "")
 }
 
-func (t *Task) Group() string {
-	return taskGetValue(t.Values, "group", "")
+func (t *Message) Channel() string {
+	return messageGetValue(t.Values, "channel", "")
 }
 
-func (t *Task) MaxLen() int64 {
-	return taskGetValue(t.Values, "maxLen", int64(0))
+func (t *Message) MaxLen() int64 {
+	return messageGetValue(t.Values, "maxLen", int64(0))
 }
 
-func (t *Task) Retry() int {
-	return taskGetValue(t.Values, "retry", 0)
+func (t *Message) Retry() int {
+	return messageGetValue(t.Values, "retry", 0)
 }
 
-func (t *Task) Priority() float64 {
-	return taskGetValue(t.Values, "priority", float64(0))
+func (t *Message) Priority() float64 {
+	return messageGetValue(t.Values, "priority", float64(0))
 }
 
-func (t *Task) Payload() string {
-	if v, ok := t.Values["payload"]; ok {
+func (t *Message) Payload() string {
+	if v, ok := t.Values["message"]; ok {
 		if payload, ok := v.(string); ok {
 			return payload
 		}
@@ -102,77 +90,77 @@ func (t *Task) Payload() string {
 	return ""
 }
 
-func (t *Task) AddTime() string {
-	return taskGetValue(t.Values, "addTime", "")
+func (t *Message) AddTime() string {
+	return messageGetValue(t.Values, "addTime", "")
 }
 
-func (t *Task) ExecuteTime() time.Time {
-	return taskGetValue(t.Values, "executeTime", time.Now())
+func (t *Message) ExecuteTime() time.Time {
+	return messageGetValue(t.Values, "executeTime", time.Now())
 }
 
-type TaskOpt func(task *Task)
+type MessageOpt func(msg *Message)
 
-func SetId(id string) TaskOpt {
-	return func(task *Task) {
+func SetId(id string) MessageOpt {
+	return func(msg *Message) {
 		if id != "" {
-			task.Values["id"] = id
+			msg.Values["id"] = id
 		}
 	}
 }
 
-func SetName(name string) TaskOpt {
-	return func(task *Task) {
+func SetName(name string) MessageOpt {
+	return func(msg *Message) {
 		if name != "" {
-			task.Values["name"] = name
+			msg.Values["name"] = name
 		}
 	}
 }
 
-func NewTask(payload []byte, opt ...TaskOpt) *Task {
+func NewMessage(message []byte, opt ...MessageOpt) *Message {
 	now := time.Now()
-	task := Task{
+	msg := Message{
 		Values: values{
-			"id":          uuid.NewString(),
-			"name":        DefaultOptions.DefaultQueueName,
-			"queue":       DefaultOptions.DefaultQueueName,
-			"group":       DefaultOptions.DefaultGroup,
-			"maxLen":      DefaultOptions.DefaultMaxLen,
-			"retry":       DefaultOptions.JobMaxRetry,
-			"priority":    1,
-			"payload":     stringx.ByteToString(payload),
-			"addTime":     now.Format(timex.DateTime),
-			"executeTime": now,
+			"id":          uuid.NewString(),              // job's id
+			"name":        DefaultOptions.DefaultTopic,   // job's name
+			"topic":       DefaultOptions.DefaultTopic,   // job's topic name
+			"channel":     DefaultOptions.DefaultChannel, // job's channel name
+			"maxLen":      DefaultOptions.DefaultMaxLen,  // upper limit `stream`
+			"retry":       DefaultOptions.JobMaxRetry,    // retry count
+			"priority":    1,                             // attribute priority;0-10;The larger the value, the earlier the execution
+			"message":     stringx.ByteToString(message), // data message
+			"addTime":     now.Format(timex.DateTime),    // The time when the message was added, the default is the current time
+			"executeTime": now,                           // message execute time
 		},
 	}
 	for _, o := range opt {
-		o(&task)
+		o(&msg)
 	}
-	return &task
+	return &msg
 }
 
-type DoConsumer func(*Task) error
+type DoConsumer func(*Message) error
 
-func jsonToTask(dataStr string) (*Task, error) {
+func jsonToMessage(dataStr string) (*Message, error) {
 	data := stringx.StringToByte(dataStr)
 
 	jn := json.Json
 	executeTimeStr := jn.Get(data, "executeTime").ToString()
-	task := Task{
+	msg := Message{
 		Values: values{
 			"id":          jn.Get(data, "id").ToString(),
 			"name":        jn.Get(data, "name").ToString(),
-			"queue":       jn.Get(data, "queue").ToString(),
-			"group":       jn.Get(data, "group").ToString(),
+			"topic":       jn.Get(data, "topic").ToString(),
+			"channel":     jn.Get(data, "channel").ToString(),
 			"maxLen":      jn.Get(data, "maxLen").ToInt64(),
 			"retry":       jn.Get(data, "retry").ToInt(),
 			"priority":    jn.Get(data, "priority").ToFloat64(),
-			"payload":     jn.Get(data, "payload").ToString(),
+			"message":     jn.Get(data, "message").ToString(),
 			"addTime":     jn.Get(data, "addTime").ToString(),
 			"executeTime": cast.ToTime(executeTimeStr),
 		},
 	}
 
-	return &task, nil
+	return &msg, nil
 }
 
 type BqMessage struct {
@@ -180,7 +168,7 @@ type BqMessage struct {
 	Values map[string]interface{}
 }
 
-func openTaskMap(msg BqMessage, streamStr string) (payload string, id, stream, addTime, queue, group string, executeTime time.Time, retry int, maxLen int64, err error) {
+func openMessageMap(msg BqMessage, streamStr string) (message string, id, stream, addTime, topic, channelName string, executeTime time.Time, retry int, maxLen int64, err error) {
 	id = msg.ID
 	stream = streamStr
 
@@ -189,11 +177,11 @@ func openTaskMap(msg BqMessage, streamStr string) (payload string, id, stream, a
 		return "", "", "", "", "", "", time.Time{}, 0, 0, err
 	}
 
-	queue = json.Json.Get(bt, "queue").ToString()
-	group = json.Json.Get(bt, "group").ToString()
+	topic = json.Json.Get(bt, "topic").ToString()
+	channelName = json.Json.Get(bt, "channel").ToString()
 	maxLen = json.Json.Get(bt, "maxLen").ToInt64()
 	retry = json.Json.Get(bt, "retry").ToInt()
-	payload = json.Json.Get(bt, "payload").ToString()
+	message = json.Json.Get(bt, "message").ToString()
 	addTime = json.Json.Get(bt, "addTime").ToString()
 	executeTime = cast.ToTime(json.Json.Get(bt, "executeTime").ToString())
 	if executeTime.IsZero() {

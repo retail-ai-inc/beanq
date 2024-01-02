@@ -25,8 +25,6 @@ package beanq
 import (
 	"context"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type (
@@ -44,6 +42,7 @@ type (
 		Password           string
 		Database           int
 		Prefix             string
+		MaxLen             int64
 		MinIdleConnections int
 		DialTimeout        time.Duration
 		ReadTimeout        time.Duration
@@ -54,6 +53,7 @@ type (
 		Driver                   string
 		PoolSize                 int
 		JobMaxRetries            int
+		DeadLetterIdle           time.Duration
 		KeepJobsInQueue          time.Duration
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration
@@ -64,20 +64,17 @@ type (
 	}
 )
 
-// This is a global variable to hold the debug logger so that we can log data from anywhere.
-var Logger *zap.Logger
-
 // Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config BeanqConfig
 
 type BeanqPub interface {
-	Publish(task *Task, option ...OptionI) error
-	PublishWithContext(ctx context.Context, task *Task, option ...OptionI) error
-	DelayPublish(task *Task, delayTime time.Time, option ...OptionI) error
+	Publish(msg *Message, option ...OptionI) error
+	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
+	DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error
 }
 
 type BeanqSub interface {
-	Register(group, queue string, consumerFun DoConsumer)
+	Register(channek, topic string, consumerFun DoConsumer)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	StartPing() error

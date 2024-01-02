@@ -8,8 +8,6 @@ import (
 )
 
 var (
-	group           = "g2"
-	consumer        = "cs1"
 	optionParameter Options
 )
 

@@ -55,16 +55,16 @@ func pubOneInfo() {
 	}
 
 	d, _ := json.Marshal(msg)
-	// get task
-	task := beanq.NewTask(d)
+	// get message
+	bmsg := beanq.NewMessage(d)
 	config := initCnf()
 	pub := beanq.NewPublisher(config)
-	err := pub.Publish(task, beanq.Queue("ch2"), beanq.Group("g2"))
+	err := pub.Publish(bmsg, beanq.Topic("ch2"), beanq.Channel("g2"))
 	if err != nil {
 
 	}
 	defer pub.Close()
 
 	// publish information
-	fmt.Printf("SendMsgs：%+v \n", task)
+	fmt.Printf("SendMsgs：%+v \n", bmsg)
 }

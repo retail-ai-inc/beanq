@@ -34,8 +34,8 @@ type (
 	Option struct {
 		Priority    float64
 		Retry       int
-		Queue       string
-		Group       string
+		Topic       string
+		Channel     string
 		MaxLen      int64
 		ExecuteTime time.Time
 	}
@@ -48,8 +48,8 @@ type (
 
 	priorityOption float64
 	retryOption    int
-	queueOption    string
-	groupOption    string
+	topicOption    string
+	channelOption  string
 	maxLenOption   int64
 	executeTime    time.Time
 )
@@ -57,27 +57,27 @@ type (
 const (
 	MaxRetryOpt OptionType = iota + 1
 	PriorityOpt
-	QueueOpt
-	GroupOpt
+	TopicOpt
+	ChannelOpt
 	MaxLenOpt
 	ExecuteTimeOpt
 	IdleTime
 )
 
-func Queue(name string) OptionI {
-	return queueOption(name)
+func Topic(name string) OptionI {
+	return topicOption(name)
 }
 
-func (queue queueOption) String() string {
+func (t topicOption) String() string {
 	return "queueOption"
 }
 
-func (queue queueOption) OptType() OptionType {
-	return QueueOpt
+func (t topicOption) OptType() OptionType {
+	return TopicOpt
 }
 
-func (queue queueOption) Value() any {
-	return string(queue)
+func (t topicOption) Value() any {
+	return string(t)
 }
 
 func Retry(retries int) OptionI {
@@ -99,20 +99,20 @@ func (retry retryOption) Value() any {
 	return int(retry)
 }
 
-func Group(name string) OptionI {
-	return groupOption(name)
+func Channel(name string) OptionI {
+	return channelOption(name)
 }
 
-func (group groupOption) String() string {
-	return "groupOption"
+func (t channelOption) String() string {
+	return "channelOption"
 }
 
-func (group groupOption) OptType() OptionType {
-	return GroupOpt
+func (t channelOption) OptType() OptionType {
+	return ChannelOpt
 }
 
-func (group groupOption) Value() any {
-	return string(group)
+func (t channelOption) Value() any {
+	return string(t)
 }
 
 func MaxLen(maxLen int) OptionI {
@@ -179,8 +179,8 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
 		Priority:    DefaultOptions.Priority,
 		Retry:       DefaultOptions.JobMaxRetry,
-		Queue:       DefaultOptions.DefaultQueueName,
-		Group:       DefaultOptions.DefaultGroup,
+		Topic:       DefaultOptions.DefaultTopic,
+		Channel:     DefaultOptions.DefaultChannel,
 		MaxLen:      DefaultOptions.DefaultMaxLen,
 		ExecuteTime: time.Now(),
 	}
@@ -190,13 +190,13 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 			if v, ok := f.Value().(float64); ok {
 				res.Priority = v
 			}
-		case QueueOpt:
+		case TopicOpt:
 			if v, ok := f.Value().(string); ok {
-				res.Queue = v
+				res.Topic = v
 			}
-		case GroupOpt:
+		case ChannelOpt:
 			if v, ok := f.Value().(string); ok {
-				res.Group = v
+				res.Channel = v
 			}
 		case MaxRetryOpt:
 			if v, ok := f.Value().(int); ok {
@@ -215,7 +215,6 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	return res, nil
 }
 
-// TODO: need more parameters
 type Result struct {
 	Id   string
 	Args []any
@@ -234,10 +233,10 @@ type Options struct {
 	Prefix      string
 	Priority    float64
 
-	DefaultQueueName, DefaultGroup string
-	DefaultMaxLen                  int64
+	DefaultTopic, DefaultChannel string
+	DefaultMaxLen                int64
 
-	DefaultDelayQueueName, DefaultDelayGroup string
+	DefaultDelayTopic, DefaultDelayChannel string
 
 	RetryTime time.Duration
 	WorkCount chan struct{}
@@ -253,13 +252,13 @@ var DefaultOptions = &Options{
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
 
-	Priority:         0,
-	DefaultQueueName: "default-queue",
-	DefaultGroup:     "default-group",
-	DefaultMaxLen:    2000,
+	Priority:       0,
+	DefaultTopic:   "default-topic",
+	DefaultChannel: "default-channel",
+	DefaultMaxLen:  2000,
 
-	DefaultDelayQueueName: "default-delay-queue",
-	DefaultDelayGroup:     "default-delay-group",
+	DefaultDelayTopic:   "default-delay-topic",
+	DefaultDelayChannel: "default-delay-channel",
 
 	RetryTime: 800 * time.Millisecond,
 	WorkCount: make(chan struct{}, 20),

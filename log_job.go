@@ -45,13 +45,13 @@ type (
 		Info    FlagInfo
 		Payload any
 
-		AddTime                string
-		ExpireTime             time.Time
-		RunTime                string
-		BeginTime              time.Time
-		EndTime                time.Time
-		ExecuteTime            time.Time
-		Queue, Group, Consumer string
+		AddTime                  string
+		ExpireTime               time.Time
+		RunTime                  string
+		BeginTime                time.Time
+		EndTime                  time.Time
+		ExecuteTime              time.Time
+		Topic, Channel, Consumer string
 	}
 
 	logJobI interface {
@@ -104,11 +104,12 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	b, err := json.Marshal(result)
 	if err != nil {
-		return fmt.Errorf("JsonMarshalErr:%s,Stack:%v", err.Error(), stringx.ByteToString(debug.Stack()))
+		return fmt.Errorf("JsonMarshalErr:%s,Stack:%+v", err.Error(), stringx.ByteToString(debug.Stack()))
 	}
 	return t.client.Set(ctx, key, b, Config.KeepSuccessJobsInHistory).Err()
 }
 
 func (t *logJob) archive(ctx context.Context) error {
+	// TODO
 	return nil
 }
