@@ -215,7 +215,6 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 	return res, nil
 }
 
-// TODO: need more parameters
 type Result struct {
 	Id   string
 	Args []any

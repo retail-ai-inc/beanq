@@ -138,17 +138,30 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
 func (t *RedisBroker) worker(ctx context.Context, consumer *ConsumerHandler) error {
 
-	result, err := t.client.XInfoGroups(ctx, MakeStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)).Result()
+	// if stream don't exist,then create it
+	normalStreamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
+	normalStreamResult, err := t.client.XInfoGroups(ctx, normalStreamKey).Result()
 	if err != nil && err.Error() != "ERR no such key" {
 		return err
 	}
 
-	if len(result) < 1 {
-		if err := t.createGroup(ctx, consumer.Topic, consumer.Channel); err != nil {
+	if len(normalStreamResult) < 1 {
+		if err := t.client.XGroupCreateMkStream(ctx, normalStreamKey, consumer.Channel, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
 			return err
 		}
 	}
 
+	// if dead letter stream don't exist,then create it
+	deadLetterStreamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
+	deadLetterStreamResult, err := t.client.XInfoGroups(ctx, deadLetterStreamKey).Result()
+	if err != nil && err.Error() != "ERR no such key" {
+		return err
+	}
+	if len(deadLetterStreamResult) < 1 {
+		if err := t.client.XGroupCreateMkStream(ctx, deadLetterStreamKey, consumer.Channel, "0").Err(); err != nil {
+			return err
+		}
+	}
 	if err := t.pool.Submit(func() {
 		t.work(ctx, Config.MinWorkers, consumer)
 	}); err != nil {
@@ -177,13 +190,6 @@ func (t *RedisBroker) waitSignal() {
 		}
 	}
 
-}
-
-func (t *RedisBroker) createGroup(ctx context.Context, topic, channel string) error {
-	if err := t.client.XGroupCreateMkStream(ctx, MakeStreamKey(Config.Redis.Prefix, channel, topic), channel, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		return err
-	}
-	return nil
 }
 
 func (t *RedisBroker) work(ctx context.Context, count int64, handler *ConsumerHandler) {
@@ -223,7 +229,7 @@ func (t *RedisBroker) claim(ctx context.Context, consumer *ConsumerHandler) erro
 
 	return t.pool.Submit(func() {
 
-		streamKey := MakeStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
+		streamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 		xAutoClaim := redisx.NewAutoClaimArgs(streamKey, consumer.Channel, Config.DeadLetterIdle, "0-0", 100, consumer.Topic)
 
 		ticker := time.NewTicker(100 * time.Second)

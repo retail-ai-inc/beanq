@@ -32,18 +32,6 @@ import (
 	"github.com/spf13/cast"
 )
 
-// Message values APPOINTMENT:
-// Message["id"] =>   job's id
-// Message["name"] => job's name
-// Message["topic"] => job's topic name
-// Message["channel"] => job's channel name
-// Message["maxLen"] =>  upper limit `stream`
-// Message["retry"] => retry count
-// Message["priority"] => attribute priority;0-10;The larger the value, the earlier the execution
-// Message["message"] => data message
-// Message["addTime"] => The time when the message was added, the default is the current time
-// Message["executeTime"] => message execute time
-
 type values map[string]any
 
 type Message struct {
@@ -132,16 +120,16 @@ func NewMessage(message []byte, opt ...MessageOpt) *Message {
 	now := time.Now()
 	msg := Message{
 		Values: values{
-			"id":          uuid.NewString(),
-			"name":        DefaultOptions.DefaultTopic,
-			"topic":       DefaultOptions.DefaultTopic,
-			"channel":     DefaultOptions.DefaultChannel,
-			"maxLen":      DefaultOptions.DefaultMaxLen,
-			"retry":       DefaultOptions.JobMaxRetry,
-			"priority":    1,
-			"message":     stringx.ByteToString(message),
-			"addTime":     now.Format(timex.DateTime),
-			"executeTime": now,
+			"id":          uuid.NewString(),              // job's id
+			"name":        DefaultOptions.DefaultTopic,   // job's name
+			"topic":       DefaultOptions.DefaultTopic,   // job's topic name
+			"channel":     DefaultOptions.DefaultChannel, // job's channel name
+			"maxLen":      DefaultOptions.DefaultMaxLen,  // upper limit `stream`
+			"retry":       DefaultOptions.JobMaxRetry,    // retry count
+			"priority":    1,                             // attribute priority;0-10;The larger the value, the earlier the execution
+			"message":     stringx.ByteToString(message), // data message
+			"addTime":     now.Format(timex.DateTime),    // The time when the message was added, the default is the current time
+			"executeTime": now,                           // message execute time
 		},
 	}
 	for _, o := range opt {

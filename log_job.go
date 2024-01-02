@@ -110,5 +110,6 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 }
 
 func (t *logJob) archive(ctx context.Context) error {
+	// TODO
 	return nil
 }

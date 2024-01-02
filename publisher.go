@@ -20,27 +20,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// EXAMPLE:
-/*
-	msg := struct {
-		Id   int
-		Info string
-	}{
-		1,
-		"msg",
-	}
-
-	d, _ := json.Marshal(msg)
-	// get message
-	message := beanq.NewMessage(d)
-	pub := beanq.NewPublisher()
-	err := pub.Publish(message, opt.Topic("ch2"), opt.Channel("g2"),opt.Retry(3),opt.MaxLen(100),opt.Priority(10))
-	if err != nil {
-		Logger.Error(err)
-	}
-	defer pub.Close()
-*/
-
 package beanq
 
 import (

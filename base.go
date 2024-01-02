@@ -36,6 +36,7 @@ func makeKey(keys ...string) string {
 
 }
 
+// MakeListKey create redis key for type :list
 func MakeListKey(prefix, channel, topic string) string {
 	if channel == "" {
 		channel = DefaultOptions.DefaultChannel
@@ -46,6 +47,7 @@ func MakeListKey(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "list")
 }
 
+// MakeZSetKey create redis key for type sorted set
 func MakeZSetKey(prefix, channel, topic string) string {
 	if channel == "" {
 		channel = DefaultOptions.DefaultChannel
@@ -56,6 +58,7 @@ func MakeZSetKey(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "zset")
 }
 
+// MakeStreamKey create key for type stream
 func MakeStreamKey(prefix, channel, topic string) string {
 	if channel == "" {
 		channel = DefaultOptions.DefaultChannel
@@ -64,6 +67,17 @@ func MakeStreamKey(prefix, channel, topic string) string {
 		topic = DefaultOptions.DefaultTopic
 	}
 	return makeKey(prefix, channel, topic, "stream")
+}
+
+// MakeDeadLetterStreamKey create key for type stream,mainly dead letter
+func MakeDeadLetterStreamKey(prefix, channel, topic string) string {
+	if channel == "" {
+		channel = DefaultOptions.DefaultChannel
+	}
+	if topic == "" {
+		topic = DefaultOptions.DefaultTopic
+	}
+	return makeKey(prefix, channel, topic, "dead_letter_stream")
 }
 
 func MakeLogKey(prefix, resultType string) string {
