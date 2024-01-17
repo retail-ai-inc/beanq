@@ -71,6 +71,7 @@ type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error
 	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
 	DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error
+	SequentPublish(msg *Message, orderKey string, option ...OptionI) error
 }
 
 type BeanqSub interface {

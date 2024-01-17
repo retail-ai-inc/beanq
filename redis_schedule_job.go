@@ -23,7 +23,10 @@
 package beanq
 
 import (
+	"container/list"
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,14 +42,16 @@ type (
 	scheduleJobI interface {
 		start(ctx context.Context, consumer *ConsumerHandler) error
 		enqueue(ctx context.Context, msg *Message, option Option) error
+		sequentEnqueue(ctx context.Context, message *Message, option Option) error
 		shutDown()
 		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
-		client     *redis.Client
-		wg         *sync.WaitGroup
-		pool       *ants.Pool
-		stop, done chan struct{}
+		client              *redis.Client
+		wg                  *sync.WaitGroup
+		pool                *ants.Pool
+		stop, done, seqDone chan struct{}
+		data                *list.List
 	}
 )
 
@@ -71,13 +76,19 @@ var (
 )
 
 func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
-	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
+	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{}), seqDone: make(chan struct{}), data: list.New()}
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) error {
 
 	if err := t.pool.Submit(func() {
 		t.consume(ctx, consumer)
+	}); err != nil {
+		return err
+	}
+
+	if err := t.pool.Submit(func() {
+		t.consumeSeq(ctx, consumer)
 	}); err != nil {
 		return err
 	}
@@ -225,6 +236,84 @@ func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 
+// can order consume
+func (t *scheduleJob) sequentEnqueue(ctx context.Context, message *Message, opt Option) error {
+
+	bt, err := json.Marshal(message)
+	if err != nil {
+		return err
+	}
+	key := MakeSequentialKey(Config.Redis.Prefix, opt.Channel, opt.Topic)
+	valueKey := MakeSequentialValueKey(Config.Redis.Prefix, opt.Channel, opt.Topic, strings.Join([]string{"values", opt.OrderKey}, ":"))
+
+	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
+		_, err := tx.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			if err := pipeliner.LPush(ctx, key, opt.OrderKey).Err(); err != nil {
+				return err
+			}
+			if err := pipeliner.Set(ctx, valueKey, bt, -1).Err(); err != nil {
+				return err
+			}
+			return nil
+		})
+		return err
+	})
+
+	return err
+}
+
+// Autonomous sorting
+func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) {
+
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	// sort orderKey by user_name_* get user_name_*   alpha
+
+	key := MakeSequentialKey(Config.Redis.Prefix, handler.Channel, handler.Topic)
+	valueKey := MakeSequentialValueKey(Config.Redis.Prefix, handler.Channel, handler.Topic, "values")
+
+	by := strings.Join([]string{valueKey, "*"}, ":")
+	get := []string{by}
+
+	for {
+		select {
+		case <-t.seqDone:
+			logger.New().Info("--------Sequential STOP--------")
+			return
+		case <-ticker.C:
+			cmd := t.client.Sort(ctx, key, &redis.Sort{
+				By: by,
+				// Offset: 0,
+				// Count:  0,
+				Get:   get,
+				Order: "DESC",
+				Alpha: true,
+			})
+
+			if err := cmd.Err(); err != nil {
+				logger.New().With("", err).Error("sort error")
+				continue
+			}
+
+			vals := cmd.Val()
+
+			if len(vals) > 0 {
+				t.doConsumeSeq(vals)
+			}
+
+		}
+	}
+}
+
+func (t *scheduleJob) doConsumeSeq(vals []string) {
+
+	for _, val := range vals {
+		v := json.Json.Get([]byte(val), "Values", "message").ToString()
+		fmt.Printf("值:%+v \n", v)
+	}
+}
+
 func (t *scheduleJob) shutDown() {
 	t.done <- struct{}{}
+	t.seqDone <- struct{}{}
 }

@@ -38,6 +38,7 @@ type (
 		Channel     string
 		MaxLen      int64
 		ExecuteTime time.Time
+		OrderKey    string
 	}
 
 	OptionI interface {
@@ -49,6 +50,7 @@ type (
 	priorityOption float64
 	retryOption    int
 	topicOption    string
+	orderKeyOption string
 	channelOption  string
 	maxLenOption   int64
 	executeTime    time.Time
@@ -62,6 +64,7 @@ const (
 	MaxLenOpt
 	ExecuteTimeOpt
 	IdleTime
+	OrderKeyOpt
 )
 
 func Topic(name string) OptionI {
@@ -174,7 +177,18 @@ func (pri priorityOption) OptType() OptionType {
 func (pri priorityOption) Value() any {
 	return float64(pri)
 }
-
+func OrderKey(name string) OptionI {
+	return orderKeyOption(name)
+}
+func (t orderKeyOption) String() string {
+	return "orderKeyOption"
+}
+func (t orderKeyOption) OptType() OptionType {
+	return OrderKeyOpt
+}
+func (t orderKeyOption) Value() any {
+	return string(t)
+}
 func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
 		Priority:    DefaultOptions.Priority,
@@ -183,6 +197,7 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 		Channel:     DefaultOptions.DefaultChannel,
 		MaxLen:      DefaultOptions.DefaultMaxLen,
 		ExecuteTime: time.Now(),
+		OrderKey:    DefaultOptions.OrderKey,
 	}
 	for _, f := range options {
 		switch f.OptType() {
@@ -210,6 +225,10 @@ func ComposeOptions(options ...OptionI) (Option, error) {
 			if v, ok := f.Value().(time.Time); ok {
 				res.ExecuteTime = v
 			}
+		case OrderKeyOpt:
+			if v, ok := f.Value().(string); ok {
+				res.OrderKey = v
+			}
 		}
 	}
 	return res, nil
@@ -236,6 +255,8 @@ type Options struct {
 	DefaultTopic, DefaultChannel string
 	DefaultMaxLen                int64
 
+	OrderKey string
+
 	DefaultDelayTopic, DefaultDelayChannel string
 
 	RetryTime time.Duration
@@ -256,6 +277,8 @@ var DefaultOptions = &Options{
 	DefaultTopic:   "default-topic",
 	DefaultChannel: "default-channel",
 	DefaultMaxLen:  2000,
+
+	OrderKey: "",
 
 	DefaultDelayTopic:   "default-delay-topic",
 	DefaultDelayChannel: "default-delay-channel",

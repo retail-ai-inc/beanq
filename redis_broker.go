@@ -89,8 +89,16 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
+
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
+	}
+
+	if opts.OrderKey != "" {
+		if err := t.scheduleJob.sequentEnqueue(ctx, msg, opts); err != nil {
+			return err
+		}
+		return nil
 	}
 
 	if msg.ExecuteTime().Before(time.Now()) {
@@ -105,6 +113,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 		return err
 	}
 	return nil
+
 }
 
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {

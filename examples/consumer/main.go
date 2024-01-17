@@ -68,6 +68,10 @@ func main() {
 		logger.New().Info(msg.Payload())
 		return nil
 	})
+	csm.Register("default-channel", "default-topic", func(message *beanq.Message) error {
+		logger.New().Info(message.Payload())
+		return nil
+	})
 	// start ping
 	// csm.StartPing()
 	// begin to consume information
