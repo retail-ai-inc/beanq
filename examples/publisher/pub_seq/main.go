@@ -48,13 +48,10 @@ func main() {
 	m := make(map[string]any)
 
 	for i := 0; i < 5; i++ {
-
 		m["delayMsg"] = "new msg" + cast.ToString(i)
-
 		b, _ := json.Marshal(m)
 		msg := beanq.NewMessage(b)
-
-		if err := pub.SequentPublish(msg, cast.ToString(i)); err != nil {
+		if err := pub.SequentPublish(msg, cast.ToString(i)+"aaa"); err != nil {
 			log.Fatalln(err)
 		}
 	}

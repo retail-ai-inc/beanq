@@ -243,12 +243,18 @@ func (t *scheduleJob) sequentEnqueue(ctx context.Context, message *Message, opt 
 	if err != nil {
 		return err
 	}
+
+	now := time.Now().UnixMilli()
+
 	key := MakeSequentialKey(Config.Redis.Prefix, opt.Channel, opt.Topic)
+	pushVal := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
+
 	valueKey := MakeSequentialValueKey(Config.Redis.Prefix, opt.Channel, opt.Topic, strings.Join([]string{"values", opt.OrderKey}, ":"))
+	valueKey = strings.Join([]string{valueKey, cast.ToString(now)}, "_")
 
 	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
 		_, err := tx.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			if err := pipeliner.LPush(ctx, key, opt.OrderKey).Err(); err != nil {
+			if err := pipeliner.LPush(ctx, key, pushVal).Err(); err != nil {
 				return err
 			}
 			if err := pipeliner.Set(ctx, valueKey, bt, -1).Err(); err != nil {
