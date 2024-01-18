@@ -9,7 +9,7 @@ import (
 func TestNewLog(t *testing.T) {
 
 	cfg := ZapLoggerConfig{
-		Filename:    "./log",
+		Filename:    "",
 		Level:       0,
 		EncoderType: "",
 		MaxSize:     0,
@@ -19,6 +19,10 @@ func TestNewLog(t *testing.T) {
 		Compress:    false,
 		Pre:         "",
 	}
+
+	NewWithConfig(cfg).With("a", errors.New("aa")).Error(errors.New("err"))
+	return
+
 	for i := 0; i < 100; i++ {
 		if i <= 10 {
 			go func() {
