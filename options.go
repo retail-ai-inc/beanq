@@ -154,8 +154,8 @@ func (et executeTime) Value() any {
 }
 
 func Priority(priority float64) OptionI {
-	if priority > 10 {
-		priority = 10
+	if priority > 1000 {
+		priority = 999
 	}
 	if priority < 0 {
 		priority = 0

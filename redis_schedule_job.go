@@ -90,7 +90,11 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 	if err != nil {
 		return err
 	}
-	priority := cast.ToFloat64(msg.ExecuteTime().UnixMilli()) + opt.Priority
+	msgExecuteTime := msg.ExecuteTime().UnixMilli()
+
+	priority := opt.Priority / 1e3
+	priority = cast.ToFloat64(msgExecuteTime) + priority
+	timeUnit := cast.ToFloat64(msgExecuteTime)
 
 	setKey := MakeZSetKey(Config.Redis.Prefix, opt.Channel, opt.Topic)
 	timeUnitKey := MakeTimeUnit(Config.Redis.Prefix, opt.Channel, opt.Topic)
@@ -104,7 +108,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 				return err
 			}
 			// set time unit
-			if err := pipeliner.ZAdd(ctx, timeUnitKey, redis.Z{Score: priority, Member: priority}).Err(); err != nil {
+			if err := pipeliner.ZAdd(ctx, timeUnitKey, redis.Z{Score: timeUnit, Member: timeUnit}).Err(); err != nil {
 				return err
 			}
 			return nil
