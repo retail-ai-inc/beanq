@@ -43,7 +43,7 @@ type (
 		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
-		client     *redis.Client
+		client     redis.UniversalClient
 		wg         *sync.WaitGroup
 		pool       *ants.Pool
 		stop, done chan struct{}
@@ -70,7 +70,7 @@ var (
 	}
 )
 
-func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
+func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob {
 	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{})}
 }
 
