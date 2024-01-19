@@ -15,7 +15,7 @@ import (
 )
 
 type RedisHandle struct {
-	client         *redis.Client
+	client         redis.UniversalClient
 	channel, topic string
 	consumer       DoConsumer
 	log            logJobI
@@ -29,7 +29,7 @@ var result = sync.Pool{New: func() any {
 	}
 }}
 
-func NewRedisHandle(client *redis.Client, channel, topic string, consumer DoConsumer) *RedisHandle {
+func NewRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer) *RedisHandle {
 	return &RedisHandle{client: client, channel: channel, topic: topic, consumer: consumer, log: newLogJob(client)}
 }
 

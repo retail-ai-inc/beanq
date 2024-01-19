@@ -23,7 +23,6 @@
 package beanq
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 	"strings"
@@ -47,11 +46,10 @@ type (
 		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
-		client              *redis.Client
+		client              redis.UniversalClient
 		wg                  *sync.WaitGroup
 		pool                *ants.Pool
 		stop, done, seqDone chan struct{}
-		data                *list.List
 	}
 )
 
@@ -75,8 +73,9 @@ var (
 	}
 )
 
-func newScheduleJob(pool *ants.Pool, client *redis.Client) *scheduleJob {
-	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{}), seqDone: make(chan struct{}), data: list.New()}
+func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob {
+	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{}), seqDone: make(chan struct{})}
+
 }
 
 func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) error {

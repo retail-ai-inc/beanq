@@ -60,7 +60,7 @@ type (
 	}
 
 	logJob struct {
-		client *redis.Client
+		client redis.UniversalClient
 	}
 )
 
@@ -72,7 +72,7 @@ const (
 	InfoLevel LevelMsg = "info"
 )
 
-func newLogJob(client *redis.Client) *logJob {
+func newLogJob(client redis.UniversalClient) *logJob {
 	return &logJob{client: client}
 }
 

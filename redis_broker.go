@@ -47,7 +47,7 @@ type (
 	}
 
 	RedisBroker struct {
-		client                *redis.Client
+		client                redis.UniversalClient
 		done, stop, claimDone chan struct{}
 		scheduleJob           scheduleJobI
 		logJob                logJobI
@@ -61,8 +61,8 @@ var _ Broker = (*RedisBroker)(nil)
 
 func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 
-	client := redis.NewClient(&redis.Options{
-		Addr:         strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":"),
+	client := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
 		DB:           config.Redis.Database,
 		MaxRetries:   config.JobMaxRetries,
@@ -171,7 +171,7 @@ func (t *RedisBroker) deadLetter(ctx context.Context, handle *ConsumerHandler) e
 	})
 }
 func (t *RedisBroker) waitSignal() {
-	sigs := make(chan os.Signal)
+	sigs := make(chan os.Signal, 1)
 
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
 
