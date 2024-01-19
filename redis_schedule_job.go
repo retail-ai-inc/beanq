@@ -130,6 +130,8 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 
 func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
+	// timeWheel To be implemented
+
 	ticker := time.NewTicker(defaultScheduleJobConfig.consumeTicker)
 	defer ticker.Stop()
 
@@ -146,35 +148,34 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 			t.pool.Release()
 			return
 		case <-ticker.C:
+		}
 
-			now = time.Now()
+		now = time.Now()
 
-			max := cast.ToString(now.UnixMilli() + 10)
+		max := cast.ToString(now.UnixMilli() + 10)
 
-			cmd := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-				Min:    "0",
-				Max:    max,
-				Offset: 0,
-				Count:  1,
-			})
+		cmd := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+			Min:    "0",
+			Max:    max,
+			Offset: 0,
+			Count:  1,
+		})
 
-			if err := cmd.Err(); err != nil {
-				logger.New().With("", err).Error("consume err")
-			}
-			val := cmd.Val()
-			if len(val) <= 0 {
-				continue
-			}
+		if err := cmd.Err(); err != nil {
+			logger.New().With("", err).Error("consume err")
+		}
+		val := cmd.Val()
+		if len(val) <= 0 {
+			continue
+		}
 
-			if err := t.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
-				logger.New().With("", err).Error("zrem err")
-			}
+		if err := t.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+			logger.New().With("", err).Error("zrem err")
+		}
 
-			if err := t.doConsume(ctx, max, consumer); err != nil {
-				logger.New().With("", err).Error("consume err")
-				// continue
-			}
-
+		if err := t.doConsume(ctx, max, consumer); err != nil {
+			logger.New().With("", err).Error("consume err")
+			// continue
 		}
 	}
 }
@@ -272,27 +273,28 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 			logger.New().Info("--------Sequential STOP--------")
 			return
 		case <-ticker.C:
-			// sort will cause Performance issues
-			cmd := t.client.Sort(ctx, key, &redis.Sort{
-				By: "",
-				// Offset: 0,
-				// Count:  0,
-				Get:   nil,
-				Order: "DESC",
-				Alpha: true,
-			})
 
-			if err := cmd.Err(); err != nil {
-				logger.New().With("", err).Error("sort error")
-				continue
-			}
+		}
 
-			vals := cmd.Val()
+		// sort will cause Performance issues
+		cmd := t.client.Sort(ctx, key, &redis.Sort{
+			By: "",
+			// Offset: 0,
+			// Count:  0,
+			Get:   nil,
+			Order: "DESC",
+			Alpha: true,
+		})
 
-			if len(vals) > 0 {
-				t.doConsumeSeq(vals)
-			}
+		if err := cmd.Err(); err != nil {
+			logger.New().With("", err).Error("sort error")
+			continue
+		}
 
+		vals := cmd.Val()
+
+		if len(vals) > 0 {
+			t.doConsumeSeq(vals)
 		}
 	}
 }

@@ -80,3 +80,8 @@ type BeanqSub interface {
 	StartConsumerWithContext(ctx context.Context)
 	StartPing() error
 }
+type IHandle interface {
+	Check(ctx context.Context) error
+	Work(ctx context.Context, done <-chan struct{})
+	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
+}

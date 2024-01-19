@@ -33,6 +33,7 @@ import (
 )
 
 type ConsumerHandler struct {
+	IHandle
 	Channel, Topic string
 	ConsumerFun    DoConsumer
 }
