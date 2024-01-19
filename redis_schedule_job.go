@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -293,17 +292,34 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 		vals := cmd.Val()
 
 		if len(vals) > 0 {
-			t.doConsumeSeq(vals)
+			t.doConsumeSeq(ctx, key, handler.Channel, handler.Topic, vals)
 		}
 	}
 }
 
-func (t *scheduleJob) doConsumeSeq(vals []string) {
+func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic string, vals []string) {
 
+	var msg Message
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, channel, topic), "", "*", Config.Redis.MaxLen, 0, nil)
 	for _, val := range vals {
 
-		fmt.Printf("值:%+v \n", val)
+		strs := strings.SplitN(val, ":", 2)
+		if err := t.client.LRem(ctx, key, 1, val).Err(); err != nil {
+			logger.New().Error(err)
+		}
+
+		if len(strs) < 2 {
+			continue
+		}
+		if err := json.Unmarshal([]byte(strs[1]), &msg); err != nil {
+			logger.New().Error(err)
+		}
+		xAddArgs.Values = map[string]any(msg.Values)
+		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+			logger.New().Error(err)
+		}
 	}
+
 }
 
 func (t *scheduleJob) shutDown() {

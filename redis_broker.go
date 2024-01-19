@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -100,7 +99,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 		return nil
 	}
 
-	// delay job
+	// normal job
 	if msg.ExecuteTime().Before(time.Now()) {
 
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, map[string]any(msg.Values))
@@ -109,7 +108,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 		}
 		return nil
 	}
-	// normal job
+	// delay job
 	if err := t.scheduleJob.enqueue(ctx, msg, opts); err != nil {
 		return err
 	}
@@ -124,14 +123,16 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	}
 
 	for key, consumer := range consumers {
+
 		cs := consumer
 		cs.IHandle = NewRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun)
+
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
 			logger.New().With("", err).Error("worker err")
 		}
 
-		// check information
+		//
 		if err := t.scheduleJob.start(ctx, cs); err != nil {
 			logger.New().With("", err).Error("schedule job err")
 		}
@@ -170,6 +171,7 @@ func (t *RedisBroker) deadLetter(ctx context.Context, handle *ConsumerHandler) e
 		}
 	})
 }
+
 func (t *RedisBroker) waitSignal() {
 	sigs := make(chan os.Signal, 1)
 
@@ -192,11 +194,5 @@ func (t *RedisBroker) waitSignal() {
 }
 
 func (t *RedisBroker) close() error {
-	select {
-	case <-t.stop:
-		return errors.New("redis broker already closed")
-	default:
-		close(t.stop)
-	}
-	return t.client.Close()
+	return nil
 }

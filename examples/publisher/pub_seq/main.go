@@ -54,6 +54,8 @@ func main() {
 		if err := pub.SequentPublish(msg, "aaa"+cast.ToString(i)); err != nil {
 			log.Fatalln(err)
 		}
+
+		pub.SequentPublish(msg, "aaa---"+cast.ToString(i), beanq.Channel("delay-channel"), beanq.Topic("delay-ch2"))
 	}
 
 }

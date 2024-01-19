@@ -117,8 +117,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		if len(claims) > 0 {
 			streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
 			t.do(ctx, streams)
-			streams = nil
 		}
+		streams = nil
 	}
 
 }

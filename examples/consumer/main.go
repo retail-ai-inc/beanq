@@ -65,11 +65,11 @@ func main() {
 		return nil
 	})
 	csm.Register("default-channel", "BatchCartStateTimoutJobHandler", func(msg *beanq.Message) error {
-		logger.New().Info(msg.Payload())
+		logger.New().With("default-channel", "BatchCartStateTimoutJobHandler").Info(msg.Payload())
 		return nil
 	})
 	csm.Register("default-channel", "default-topic", func(message *beanq.Message) error {
-		logger.New().Info(message.Payload())
+		logger.New().With("default-channel", "default-topic").Info(message.Payload())
 		return nil
 	})
 	// start ping
