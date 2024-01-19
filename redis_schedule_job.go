@@ -246,26 +246,15 @@ func (t *scheduleJob) sequentEnqueue(ctx context.Context, message *Message, opt 
 
 	now := time.Now().UnixMilli()
 
-	key := MakeSequentialKey(Config.Redis.Prefix, opt.Channel, opt.Topic)
-	pushVal := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
+	key := MakeListKey(Config.Redis.Prefix, opt.Channel, opt.Topic)
 
-	valueKey := MakeSequentialValueKey(Config.Redis.Prefix, opt.Channel, opt.Topic, strings.Join([]string{"values", opt.OrderKey}, ":"))
-	valueKey = strings.Join([]string{valueKey, cast.ToString(now)}, "_")
+	valKey := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
+	value := strings.Join([]string{valKey, string(bt)}, ":")
 
-	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
-		_, err := tx.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			if err := pipeliner.LPush(ctx, key, pushVal).Err(); err != nil {
-				return err
-			}
-			if err := pipeliner.Set(ctx, valueKey, bt, -1).Err(); err != nil {
-				return err
-			}
-			return nil
-		})
+	if err := t.client.LPush(ctx, key, value).Err(); err != nil {
 		return err
-	})
-
-	return err
+	}
+	return nil
 }
 
 // Autonomous sorting
@@ -275,11 +264,7 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 	defer ticker.Stop()
 	// sort orderKey by user_name_* get user_name_*   alpha
 
-	key := MakeSequentialKey(Config.Redis.Prefix, handler.Channel, handler.Topic)
-	valueKey := MakeSequentialValueKey(Config.Redis.Prefix, handler.Channel, handler.Topic, "values")
-
-	by := strings.Join([]string{valueKey, "*"}, ":")
-	get := []string{by}
+	key := MakeListKey(Config.Redis.Prefix, handler.Channel, handler.Topic)
 
 	for {
 		select {
@@ -287,11 +272,12 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 			logger.New().Info("--------Sequential STOP--------")
 			return
 		case <-ticker.C:
+			// sort will cause Performance issues
 			cmd := t.client.Sort(ctx, key, &redis.Sort{
-				By: by,
+				By: "",
 				// Offset: 0,
 				// Count:  0,
-				Get:   get,
+				Get:   nil,
 				Order: "DESC",
 				Alpha: true,
 			})
@@ -314,8 +300,8 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 func (t *scheduleJob) doConsumeSeq(vals []string) {
 
 	for _, val := range vals {
-		v := json.Json.Get([]byte(val), "Values", "message").ToString()
-		fmt.Printf("值:%+v \n", v)
+
+		fmt.Printf("值:%+v \n", val)
 	}
 }
 

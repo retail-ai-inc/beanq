@@ -35,24 +35,6 @@ func makeKey(keys ...string) string {
 	return strings.Join(keys, ":")
 
 }
-func MakeSequentialKey(prefix, channel, topic string) string {
-	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
-	}
-	if topic == "" {
-		topic = DefaultOptions.DefaultTopic
-	}
-	return makeKey(prefix, channel, topic, "sequential", "list")
-}
-func MakeSequentialValueKey(prefix, channel, topic, key string) string {
-	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
-	}
-	if topic == "" {
-		topic = DefaultOptions.DefaultTopic
-	}
-	return makeKey(prefix, channel, topic, "sequential", key)
-}
 
 // MakeListKey create redis key for type :list
 func MakeListKey(prefix, channel, topic string) string {

@@ -51,7 +51,7 @@ func main() {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 		msg := beanq.NewMessage(b)
-		if err := pub.SequentPublish(msg, cast.ToString(i)+"aaa"); err != nil {
+		if err := pub.SequentPublish(msg, "aaa"+cast.ToString(i)); err != nil {
 			log.Fatalln(err)
 		}
 	}
