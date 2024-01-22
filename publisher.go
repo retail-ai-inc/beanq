@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -89,6 +90,14 @@ func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option
 
 func (t *pubClient) DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error {
 	option = append(option, ExecuteTime(delayTime))
+	return t.Publish(msg, option...)
+}
+
+func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...OptionI) error {
+	if orderKey == "" {
+		return errors.New("orderKey can't be empty")
+	}
+	option = append(option, OrderKey(orderKey))
 	return t.Publish(msg, option...)
 }
 

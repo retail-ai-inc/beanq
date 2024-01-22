@@ -71,6 +71,7 @@ type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error
 	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
 	DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error
+	SequentialPublish(msg *Message, orderKey string, option ...OptionI) error
 }
 
 type BeanqSub interface {
@@ -78,4 +79,9 @@ type BeanqSub interface {
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	StartPing() error
+}
+type IHandle interface {
+	Check(ctx context.Context) error
+	Work(ctx context.Context, done <-chan struct{})
+	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
 }

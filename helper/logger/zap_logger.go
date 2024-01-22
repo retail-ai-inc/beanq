@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"os"
 	"sync"
 
@@ -147,59 +148,59 @@ func (t ZapLogger) With(key string, val any) ZapLogger {
 	return t
 }
 
-func (t ZapLogger) Info(msg string) {
+func (t ZapLogger) Info(i ...any) {
 
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).Info(msg)
+	t.logger.With(t.zapFields...).Info(fmt.Sprint(i...))
 	return
 }
 
-func (t ZapLogger) Debug(msg string) {
+func (t ZapLogger) Debug(i ...any) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).Debug(msg)
+	t.logger.With(t.zapFields...).Debug(fmt.Sprint(i...))
 	return
 }
 
-func (t ZapLogger) Warn(msg string) {
+func (t ZapLogger) Warn(i ...any) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).Warn(msg)
+	t.logger.With(t.zapFields...).Warn(fmt.Sprint(i...))
 	return
 }
 
-func (t ZapLogger) Error(msg string) {
+func (t ZapLogger) Error(i ...any) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).Error(msg)
+	t.logger.With(t.zapFields...).Error(fmt.Sprint(i...))
 	return
 }
 
-func (t ZapLogger) DPanic(msg string) {
+func (t ZapLogger) DPanic(i ...any) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).DPanic(msg)
+	t.logger.With(t.zapFields...).DPanic(fmt.Sprint(i...))
 	return
 }
 
-func (t ZapLogger) Panic(msg string) {
+func (t ZapLogger) Panic(i ...any) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).Panic(msg)
+	t.logger.With(t.zapFields...).Panic(fmt.Sprint(i...))
 	return
 }
 
-func (t ZapLogger) Fatal(msg string) {
+func (t ZapLogger) Fatal(i ...any) {
 	defer func() {
 		_ = t.logger.Sync()
 	}()
-	t.logger.With(t.zapFields...).Fatal(msg)
+	t.logger.With(t.zapFields...).Fatal(fmt.Sprint(i...))
 	return
 }
