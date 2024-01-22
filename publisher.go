@@ -93,7 +93,7 @@ func (t *pubClient) DelayPublish(msg *Message, delayTime time.Time, option ...Op
 	return t.Publish(msg, option...)
 }
 
-func (t *pubClient) SequentPublish(msg *Message, orderKey string, option ...OptionI) error {
+func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...OptionI) error {
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")
 	}

@@ -40,7 +40,7 @@ type (
 	scheduleJobI interface {
 		start(ctx context.Context, consumer *ConsumerHandler) error
 		enqueue(ctx context.Context, msg *Message, option Option) error
-		sequentEnqueue(ctx context.Context, message *Message, option Option) error
+		sequentialEnqueue(ctx context.Context, message *Message, option Option) error
 		shutDown()
 		sendToStream(ctx context.Context, msg *Message) error
 	}
@@ -152,17 +152,17 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 		max := cast.ToString(now.UnixMilli() + 10)
 
-		cmd := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+		val, err := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
 			Min:    "0",
 			Max:    max,
 			Offset: 0,
 			Count:  1,
-		})
+		}).Result()
 
-		if err := cmd.Err(); err != nil {
+		if err != nil {
 			logger.New().With("", err).Error("consume err")
 		}
-		val := cmd.Val()
+
 		if len(val) <= 0 {
 			continue
 		}
@@ -186,12 +186,11 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 	}
 	key := MakeZSetKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 
-	cmd := t.client.ZRevRangeByScore(ctx, key, zRangeBy)
-	if err := cmd.Err(); err != nil && err != redis.Nil {
+	val, err := t.client.ZRevRangeByScore(ctx, key, zRangeBy).Result()
+	if err != nil && err != redis.Nil {
 		return err
 	}
 
-	val := cmd.Val()
 	if len(val) <= 0 {
 		return nil
 	}
@@ -236,7 +235,7 @@ func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 }
 
 // can order consume
-func (t *scheduleJob) sequentEnqueue(ctx context.Context, message *Message, opt Option) error {
+func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, opt Option) error {
 
 	bt, err := json.Marshal(message)
 	if err != nil {

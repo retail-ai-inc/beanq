@@ -93,7 +93,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 
 	// Sequential job
 	if opts.OrderKey != "" {
-		if err := t.scheduleJob.sequentEnqueue(ctx, msg, opts); err != nil {
+		if err := t.scheduleJob.sequentialEnqueue(ctx, msg, opts); err != nil {
 			return err
 		}
 		return nil
