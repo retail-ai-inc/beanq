@@ -138,12 +138,10 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		message := v.Messages
 
 		for _, vv := range message {
-			msg, err := parseMapToMessage(vv, stream)
-			if err != nil {
-				logger.New().Error(err)
-				continue
-			}
-			r, err := t.makeLog(ctx, stream, vv.ID, msg)
+
+			msg := Message(vv)
+
+			r, err := t.makeLog(ctx, &msg)
 			if err != nil {
 				logger.New().Error(err)
 			}
@@ -168,10 +166,10 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-func (t *RedisHandle) makeLog(ctx context.Context, stream, id string, msg *Message) (*ConsumerResult, error) {
+func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResult, error) {
 
 	r := result.Get().(*ConsumerResult)
-	r.Id = id
+	r.Id = msg.Id()
 	r.BeginTime = time.Now()
 	// if error,then retry to consume
 	nerr := make(chan error, 1)
@@ -199,10 +197,12 @@ func (t *RedisHandle) makeLog(ctx context.Context, stream, id string, msg *Messa
 
 	sub := r.EndTime.Sub(r.BeginTime)
 
+	r.AddTime = msg.AddTime()
+	
 	r.Payload = msg.Payload()
 	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime()
-	r.Topic = stream
+	r.Topic = msg.Topic()
 	r.Channel = t.channel
 	// Successfully consumed data, stored in `string`
 	if err := t.log.saveLog(ctx, r); err != nil {

@@ -23,26 +23,26 @@
 package beanq
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/spf13/cast"
 )
 
-type values map[string]any
-
-type Message struct {
-	Values values
-}
-
-// get val functions
-
-type iMessageValue interface {
-	string | int64 | time.Time | float64 | int
-}
+type (
+	values  map[string]any
+	Message struct {
+		ID     string
+		Values map[string]interface{}
+	}
+	// get val functions
+	iMessageValue interface {
+		string | int64 | time.Time | float64 | int
+	}
+)
 
 func messageGetValue[T iMessageValue](msgValues values, key string, defaultValue T) T {
 	if v, ok := msgValues[key]; ok {
@@ -98,29 +98,13 @@ func (t *Message) ExecuteTime() time.Time {
 	return messageGetValue(t.Values, "executeTime", time.Now())
 }
 
-type MessageOpt func(msg *Message)
-
-func SetId(id string) MessageOpt {
-	return func(msg *Message) {
-		if id != "" {
-			msg.Values["id"] = id
-		}
-	}
-}
-
-func SetName(name string) MessageOpt {
-	return func(msg *Message) {
-		if name != "" {
-			msg.Values["name"] = name
-		}
-	}
-}
-
-func NewMessage(message []byte, opt ...MessageOpt) *Message {
+func NewMessage(message []byte) *Message {
 	now := time.Now()
+	id := uuid.NewString()
 	msg := Message{
+		ID: id,
 		Values: values{
-			"id":          uuid.NewString(),              // job's id
+			"id":          id,                            // job's id
 			"name":        DefaultOptions.DefaultTopic,   // job's name
 			"topic":       DefaultOptions.DefaultTopic,   // job's topic name
 			"channel":     DefaultOptions.DefaultChannel, // job's channel name
@@ -132,60 +116,30 @@ func NewMessage(message []byte, opt ...MessageOpt) *Message {
 			"executeTime": now,                           // message execute time
 		},
 	}
-	for _, o := range opt {
-		o(&msg)
-	}
+
 	return &msg
 }
 
 type DoConsumer func(*Message) error
 
 func jsonToMessage(dataStr string) (*Message, error) {
-	data := stringx.StringToByte(dataStr)
 
-	jn := json.Json
-	executeTimeStr := jn.Get(data, "executeTime").ToString()
+	// var msg Message
 	msg := Message{
-		Values: values{
-			"id":          jn.Get(data, "id").ToString(),
-			"name":        jn.Get(data, "name").ToString(),
-			"topic":       jn.Get(data, "topic").ToString(),
-			"channel":     jn.Get(data, "channel").ToString(),
-			"maxLen":      jn.Get(data, "maxLen").ToInt64(),
-			"retry":       jn.Get(data, "retry").ToInt(),
-			"priority":    jn.Get(data, "priority").ToFloat64(),
-			"message":     jn.Get(data, "message").ToString(),
-			"addTime":     jn.Get(data, "addTime").ToString(),
-			"executeTime": cast.ToTime(executeTimeStr),
-		},
+		ID:     "",
+		Values: make(map[string]any),
+	}
+	mmsg := make(map[string]any)
+
+	reader := strings.NewReader(dataStr)
+	jn := json.NewDecoder(reader)
+	if err := jn.Decode(&mmsg); err != nil {
+		return nil, err
+	}
+	if v, ok := mmsg["id"]; ok {
+		msg.ID = v.(string)
 	}
 
+	msg.Values = mmsg
 	return &msg, nil
-}
-
-type BqMessage struct {
-	ID     string
-	Values map[string]interface{}
-}
-
-func openMessageMap(msg BqMessage, streamStr string) (message string, id, stream, addTime, topic, channelName string, executeTime time.Time, retry int, maxLen int64, err error) {
-	id = msg.ID
-	stream = streamStr
-
-	bt, err := json.Marshal(msg.Values)
-	if err != nil {
-		return "", "", "", "", "", "", time.Time{}, 0, 0, err
-	}
-
-	topic = json.Json.Get(bt, "topic").ToString()
-	channelName = json.Json.Get(bt, "channel").ToString()
-	maxLen = json.Json.Get(bt, "maxLen").ToInt64()
-	retry = json.Json.Get(bt, "retry").ToInt()
-	message = json.Json.Get(bt, "message").ToString()
-	addTime = json.Json.Get(bt, "addTime").ToString()
-	executeTime = cast.ToTime(json.Json.Get(bt, "executeTime").ToString())
-	if executeTime.IsZero() {
-		executeTime = time.Now()
-	}
-	return
 }

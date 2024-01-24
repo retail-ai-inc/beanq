@@ -163,7 +163,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 		now = time.Now()
 
-		max := cast.ToString(now.UnixMilli() + 10)
+		max := cast.ToString(now.UnixMilli() + 1)
 
 		val, err := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
 			Min:    "0",
@@ -214,6 +214,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 	var zsetKey = MakeZSetKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
+
 		msg, err := jsonToMessage(vv)
 		if err != nil {
 			return err
@@ -240,7 +241,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, map[string]any(msg.Values))
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, msg.Values)
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 

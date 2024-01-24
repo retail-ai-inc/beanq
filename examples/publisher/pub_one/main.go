@@ -50,8 +50,8 @@ func pubOneInfo() {
 		Info string
 		Id   int
 	}{
-		1,
 		"msg------1",
+		1,
 	}
 
 	d, _ := json.Marshal(msg)
