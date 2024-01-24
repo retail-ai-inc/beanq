@@ -52,7 +52,7 @@ func pubDelayInfo() {
 
 	m := make(map[string]any)
 	ntime := time.Now()
-	for i := 0; i < 100000; i++ {
+	for i := 0; i < 10; i++ {
 
 		if time.Now().Sub(ntime).Minutes() >= 1 {
 			break

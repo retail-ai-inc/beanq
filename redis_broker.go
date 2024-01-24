@@ -46,13 +46,13 @@ type (
 	}
 
 	RedisBroker struct {
-		client                redis.UniversalClient
-		done, stop, claimDone chan struct{}
-		scheduleJob           scheduleJobI
-		logJob                logJobI
-		opts                  *Options
-		once                  *sync.Once
-		pool                  *ants.Pool
+		client          redis.UniversalClient
+		done, claimDone chan struct{}
+		scheduleJob     scheduleJobI
+		logJob          logJobI
+		opts            *Options
+		once            *sync.Once
+		pool            *ants.Pool
 	}
 )
 
@@ -75,7 +75,6 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 	return &RedisBroker{
 		client:      client,
 		done:        make(chan struct{}),
-		stop:        make(chan struct{}),
 		claimDone:   make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client),
@@ -181,7 +180,6 @@ func (t *RedisBroker) waitSignal() {
 	case sig := <-sigs:
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
-				close(t.stop)
 				t.done <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.pool.Release()

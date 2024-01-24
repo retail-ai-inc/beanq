@@ -15,22 +15,37 @@ import (
 )
 
 type RedisHandle struct {
-	client         redis.UniversalClient
-	channel, topic string
-	consumer       DoConsumer
-	log            logJobI
+	client           redis.UniversalClient
+	log              logJobI
+	consumer         DoConsumer
+	deadLetterTicker *time.Ticker
+	channel          string
+	topic            string
 }
 
-var result = sync.Pool{New: func() any {
-	return &ConsumerResult{
-		Level:   InfoLevel,
-		Info:    SuccessInfo,
-		RunTime: "",
-	}
-}}
+var (
+	result = sync.Pool{New: func() any {
+		return &ConsumerResult{
+			Level:   InfoLevel,
+			Info:    SuccessInfo,
+			RunTime: "",
+		}
+	}}
+
+	streamArrayPool = sync.Pool{New: func() any {
+		return make([]redis.XStream, 100)
+	}}
+)
 
 func NewRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer) *RedisHandle {
-	return &RedisHandle{client: client, channel: channel, topic: topic, consumer: consumer, log: newLogJob(client)}
+	return &RedisHandle{
+		client:           client,
+		channel:          channel,
+		topic:            topic,
+		consumer:         consumer,
+		log:              newLogJob(client),
+		deadLetterTicker: time.NewTicker(100 * time.Second),
+	}
 }
 
 func (t *RedisHandle) Check(ctx context.Context) error {
@@ -67,12 +82,7 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 		}
 
 		// block XReadGroup to read data
-		streams, err := t.client.XReadGroup(ctx, readGroupArgs).Result()
-
-		if err != nil && err != redis.Nil {
-			logger.New().With("", err).Error("XReadGroup err")
-			continue
-		}
+		streams := t.client.XReadGroup(ctx, readGroupArgs).Val()
 
 		if len(streams) <= 0 {
 			continue
@@ -87,8 +97,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 	streamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, t.channel, t.topic)
 	xAutoClaim := redisx.NewAutoClaimArgs(streamKey, t.channel, Config.DeadLetterIdle, "0-0", 100, t.topic)
 
-	ticker := time.NewTicker(100 * time.Second)
-	defer ticker.Stop()
+	defer t.deadLetterTicker.Stop()
 
 	for {
 		// check state
@@ -101,24 +110,21 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		case <-claimDone:
 			logger.New().Info("--------Claim STOP--------")
 			return nil
-		case <-ticker.C:
+		case <-t.deadLetterTicker.C:
 
 		}
 
-		var streams []redis.XStream
+		streams := streamArrayPool.Get().([]redis.XStream)
 
-		claims, _, err := t.client.XAutoClaim(ctx, xAutoClaim).Result()
-
-		if err != nil && err != redis.Nil {
-			logger.New().Error(err)
-			continue
-		}
+		claims, _ := t.client.XAutoClaim(ctx, xAutoClaim).Val()
 
 		if len(claims) > 0 {
 			streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
 			t.do(ctx, streams)
 		}
-		streams = nil
+		streams = make([]redis.XStream, 100)
+		streamArrayPool.Put(streams)
+
 	}
 
 }
@@ -134,12 +140,12 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		for _, vv := range message {
 			msg, err := parseMapToMessage(vv, stream)
 			if err != nil {
-				logger.New().With("", err).Error("parse json to Message err")
+				logger.New().Error(err)
 				continue
 			}
 			r, err := t.makeLog(ctx, stream, vv.ID, msg)
 			if err != nil {
-				logger.New().With("", err).Error("save log err")
+				logger.New().Error(err)
 			}
 			r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
 			result.Put(r)
@@ -210,10 +216,7 @@ func (t *RedisHandle) makeLog(ctx context.Context, stream, id string, msg *Messa
 func (t *RedisHandle) checkStream(ctx context.Context) error {
 
 	normalStreamKey := MakeStreamKey(Config.Redis.Prefix, t.channel, t.topic)
-	normalStreamResult, err := t.client.XInfoGroups(ctx, normalStreamKey).Result()
-	if err != nil && err.Error() != "ERR no such key" {
-		return err
-	}
+	normalStreamResult := t.client.XInfoGroups(ctx, normalStreamKey).Val()
 
 	if len(normalStreamResult) < 1 {
 		if err := t.client.XGroupCreateMkStream(ctx, normalStreamKey, t.channel, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
@@ -228,15 +231,13 @@ func (t *RedisHandle) checkDeadletterStream(ctx context.Context) error {
 
 	// if dead letter stream don't exist,then create it
 	deadLetterStreamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, t.channel, t.topic)
-	deadLetterStreamResult, err := t.client.XInfoGroups(ctx, deadLetterStreamKey).Result()
-	if err != nil && err.Error() != "ERR no such key" {
-		return err
-	}
+	deadLetterStreamResult := t.client.XInfoGroups(ctx, deadLetterStreamKey).Val()
+
 	if len(deadLetterStreamResult) < 1 {
 		if err := t.client.XGroupCreateMkStream(ctx, deadLetterStreamKey, t.channel, "0").Err(); err != nil {
 			return err
 		}
 	}
-	return err
+	return nil
 
 }

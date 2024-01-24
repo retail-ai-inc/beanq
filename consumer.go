@@ -25,6 +25,7 @@ package beanq
 import (
 	"context"
 	"net/http"
+	_ "net/http/pprof"
 	"strings"
 	"sync"
 
@@ -34,15 +35,16 @@ import (
 
 type ConsumerHandler struct {
 	IHandle
-	Channel, Topic string
-	ConsumerFun    DoConsumer
+	ConsumerFun DoConsumer
+	Channel     string
+	Topic       string
 }
 
 type Consumer struct {
 	broker Broker
 	opts   *Options
-	mu     sync.RWMutex
 	m      []*ConsumerHandler
+	mu     sync.RWMutex
 }
 
 var _ BeanqSub = new(Consumer)
@@ -134,6 +136,9 @@ func (t *Consumer) StartConsumer() {
 
 }
 func (t *Consumer) StartPing() error {
+	go func() {
+		http.ListenAndServe("0.0.0.0:7070", nil)
+	}()
 	go func() {
 		hdl := &http.ServeMux{}
 		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {
