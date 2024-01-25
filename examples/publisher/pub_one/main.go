@@ -47,11 +47,11 @@ func main() {
 func pubOneInfo() {
 	// msg can struct or map
 	msg := struct {
-		Id   int
 		Info string
+		Id   int
 	}{
-		1,
 		"msg------1",
+		1,
 	}
 
 	d, _ := json.Marshal(msg)

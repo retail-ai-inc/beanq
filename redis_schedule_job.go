@@ -45,10 +45,11 @@ type (
 		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
-		client              redis.UniversalClient
-		wg                  *sync.WaitGroup
-		pool                *ants.Pool
-		stop, done, seqDone chan struct{}
+		client                    redis.UniversalClient
+		wg                        *sync.WaitGroup
+		pool                      *ants.Pool
+		stop, done, seqDone       chan struct{}
+		scheduleTicker, seqTicker *time.Ticker
 	}
 )
 
@@ -73,7 +74,16 @@ var (
 )
 
 func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob {
-	return &scheduleJob{client: client, wg: &sync.WaitGroup{}, pool: pool, stop: make(chan struct{}), done: make(chan struct{}), seqDone: make(chan struct{})}
+	return &scheduleJob{
+		client:         client,
+		wg:             &sync.WaitGroup{},
+		pool:           pool,
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
+		seqDone:        make(chan struct{}),
+		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
+		seqTicker:      time.NewTicker(10 * time.Second),
+	}
 
 }
 
@@ -134,8 +144,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	// timeWheel To be implemented
 
-	ticker := time.NewTicker(defaultScheduleJobConfig.consumeTicker)
-	defer ticker.Stop()
+	defer t.scheduleTicker.Stop()
 
 	var (
 		now      time.Time
@@ -149,12 +158,12 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 		case <-t.done:
 			t.pool.Release()
 			return
-		case <-ticker.C:
+		case <-t.scheduleTicker.C:
 		}
 
 		now = time.Now()
 
-		max := cast.ToString(now.UnixMilli() + 10)
+		max := cast.ToString(now.UnixMilli() + 1)
 
 		val, err := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
 			Min:    "0",
@@ -190,10 +199,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 	}
 	key := MakeZSetKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 
-	val, err := t.client.ZRevRangeByScore(ctx, key, zRangeBy).Result()
-	if err != nil && err != redis.Nil {
-		return err
-	}
+	val := t.client.ZRevRangeByScore(ctx, key, zRangeBy).Val()
 
 	if len(val) <= 0 {
 		return nil
@@ -208,6 +214,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 	var zsetKey = MakeZSetKey(Config.Redis.Prefix, consumer.Channel, consumer.Topic)
 
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
+
 		msg, err := jsonToMessage(vv)
 		if err != nil {
 			return err
@@ -234,7 +241,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, map[string]any(msg.Values))
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, msg.Values)
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 
@@ -262,8 +269,7 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 // Autonomous sorting
 func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) {
 
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	defer t.seqTicker.Stop()
 	// sort orderKey by user_name_* get user_name_*   alpha
 
 	key := MakeListKey(Config.Redis.Prefix, handler.Channel, handler.Topic)
@@ -273,7 +279,7 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 		case <-t.seqDone:
 			logger.New().Info("--------Sequential STOP--------")
 			return
-		case <-ticker.C:
+		case <-t.seqTicker.C:
 
 		}
 

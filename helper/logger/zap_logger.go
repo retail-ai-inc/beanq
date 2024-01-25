@@ -17,12 +17,15 @@ type (
 		zapFields []zap.Field
 	}
 	ZapLoggerConfig struct {
-		Filename                    string
-		Level                       zapcore.Level
-		EncoderType                 string
-		MaxSize, MaxAge, MaxBackups int
-		LocalTime, Compress         bool
-		Pre                         string
+		Filename    string
+		EncoderType string
+		Pre         string
+		MaxSize     int
+		MaxAge      int
+		MaxBackups  int
+		Level       zapcore.Level
+		LocalTime   bool
+		Compress    bool
 	}
 )
 

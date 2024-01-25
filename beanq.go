@@ -29,8 +29,8 @@ import (
 
 type (
 	DebugLog struct {
-		On   bool
 		Path string
+		On   bool
 	}
 	Health struct {
 		Port string
@@ -40,8 +40,8 @@ type (
 		Host               string
 		Port               string
 		Password           string
-		Database           int
 		Prefix             string
+		Database           int
 		MaxLen             int64
 		MinIdleConnections int
 		DialTimeout        time.Duration
@@ -50,7 +50,10 @@ type (
 		PoolTimeout        time.Duration
 	}
 	BeanqConfig struct {
-		Driver                   string
+		Health
+		DebugLog
+		Driver string
+		Redis
 		PoolSize                 int
 		JobMaxRetries            int
 		DeadLetterIdle           time.Duration
@@ -58,9 +61,6 @@ type (
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration
 		MinWorkers               int64
-		DebugLog
-		Redis
-		Health
 	}
 )
 

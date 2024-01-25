@@ -32,13 +32,13 @@ type (
 	OptionType int
 
 	Option struct {
-		Priority    float64
-		Retry       int
+		ExecuteTime time.Time
 		Topic       string
 		Channel     string
-		MaxLen      int64
-		ExecuteTime time.Time
 		OrderKey    string
+		Priority    float64
+		Retry       int
+		MaxLen      int64
 	}
 
 	OptionI interface {
@@ -240,27 +240,23 @@ type Result struct {
 }
 
 type Options struct {
-	RedisOptions *redis.Options
-
-	KeepJobInQueue           time.Duration
-	KeepFailedJobsInHistory  time.Duration
+	WorkCount                chan struct{}
+	RedisOptions             *redis.Options
+	DefaultTopic             string
+	DefaultDelayChannel      string
+	DefaultDelayTopic        string
+	OrderKey                 string
+	DefaultChannel           string
+	Prefix                   string
+	PoolSize                 int
+	Priority                 float64
+	JobMaxRetry              int
+	DefaultMaxLen            int64
+	MinWorkers               int64
 	KeepSuccessJobsInHistory time.Duration
-
-	PoolSize    int
-	MinWorkers  int64
-	JobMaxRetry int
-	Prefix      string
-	Priority    float64
-
-	DefaultTopic, DefaultChannel string
-	DefaultMaxLen                int64
-
-	OrderKey string
-
-	DefaultDelayTopic, DefaultDelayChannel string
-
-	RetryTime time.Duration
-	WorkCount chan struct{}
+	KeepFailedJobsInHistory  time.Duration
+	RetryTime                time.Duration
+	KeepJobInQueue           time.Duration
 }
 
 var DefaultOptions = &Options{

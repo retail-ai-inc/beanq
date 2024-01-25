@@ -37,9 +37,9 @@ type (
 		Info() error
 	}
 	device struct {
+		Net    devNet    `json:"net"`
 		Memory devMemory `json:"memory"`
 		Cpu    devCpu    `json:"cpu"`
-		Net    devNet    `json:"net"`
 	}
 )
 

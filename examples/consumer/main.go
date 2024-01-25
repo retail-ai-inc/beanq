@@ -73,7 +73,7 @@ func main() {
 		return nil
 	})
 	// start ping
-	// csm.StartPing()
+	csm.StartPing()
 	// begin to consume information
 	csm.StartConsumer()
 }

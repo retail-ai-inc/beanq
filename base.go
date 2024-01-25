@@ -27,8 +27,6 @@ import (
 	"math/rand"
 	"strings"
 	"time"
-
-	"github.com/go-redis/redis/v8"
 )
 
 func makeKey(keys ...string) string {
@@ -92,25 +90,6 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }
 
-func parseMapToMessage(msg redis.XMessage, stream string) (*Message, error) {
-	message, id, streamStr, addTime, topic, channel, executeTime, retry, maxLen, err := openMessageMap(BqMessage(msg), stream)
-	if err != nil {
-		return nil, err
-	}
-	return &Message{
-		Values: values{
-			"id":          id,
-			"name":        streamStr,
-			"topic":       topic,
-			"channel":     channel,
-			"maxLen":      maxLen,
-			"retry":       retry,
-			"message":     message,
-			"addTime":     addTime,
-			"executeTime": executeTime,
-		},
-	}, nil
-}
 func RetryInfo(f func() error, retry int) error {
 	index := 0
 	errChan := make(chan error, 1)
