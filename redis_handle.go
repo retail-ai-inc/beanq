@@ -123,7 +123,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 			pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
 				Stream:   streamKey,
 				Group:    t.channel,
-				Idle:     100,
+				Idle:     100 * time.Second,
 				Start:    "0-0",
 				End:      "",
 				Count:    100,
@@ -137,7 +137,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				Stream:   streamKey,
 				Group:    t.channel,
 				Consumer: deadLetterStreamKey,
-				MinIdle:  100,
+				MinIdle:  100 * time.Second,
 				Messages: strs,
 			}).Err(); err != nil {
 				logger.New().Error(err)
