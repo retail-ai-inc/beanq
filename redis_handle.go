@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,10 +95,14 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 // Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
 
-	streamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, t.channel, t.topic)
-	xAutoClaim := redisx.NewAutoClaimArgs(streamKey, t.channel, Config.DeadLetterIdle, "0-0", 100, t.topic)
+	streamKey := MakeStreamKey(Config.Redis.Prefix, t.channel, t.topic)
+
+	deadLetterStreamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, t.channel, t.topic)
+	xAutoClaim := redisx.NewAutoClaimArgs(streamKey, t.channel, Config.DeadLetterIdle, "0-0", 100, deadLetterStreamKey)
 
 	defer t.deadLetterTicker.Stop()
+
+	version := t.client.Info(ctx, "server").Val()[24:29]
 
 	for {
 		// check state
@@ -113,15 +118,39 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		case <-t.deadLetterTicker.C:
 
 		}
-
+		// redis v5.0
+		if strings.Compare(version, "6.2") == -1 {
+			pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+				Stream:   streamKey,
+				Group:    t.channel,
+				Idle:     100,
+				Start:    "0-0",
+				End:      "",
+				Count:    100,
+				Consumer: streamKey,
+			}).Val()
+			strs := make([]string, len(pendings))
+			for _, pending := range pendings {
+				strs = append(strs, pending.ID)
+			}
+			if err := t.client.XClaim(ctx, &redis.XClaimArgs{
+				Stream:   streamKey,
+				Group:    t.channel,
+				Consumer: deadLetterStreamKey,
+				MinIdle:  100,
+				Messages: strs,
+			}).Err(); err != nil {
+				logger.New().Error(err)
+			}
+			continue
+		}
+		// need redis v6.2
 		streams := streamArrayPool.Get().([]redis.XStream)
 
-		claims, _ := t.client.XAutoClaim(ctx, xAutoClaim).Val()
-
-		if len(claims) > 0 {
-			streams = append(streams, redis.XStream{Stream: streamKey, Messages: claims})
-			t.do(ctx, streams)
+		if err := t.client.XAutoClaim(ctx, xAutoClaim).Err(); err != nil {
+			logger.New().Error(err)
 		}
+
 		streams = make([]redis.XStream, 100)
 		streamArrayPool.Put(streams)
 
@@ -198,7 +227,7 @@ func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResul
 	sub := r.EndTime.Sub(r.BeginTime)
 
 	r.AddTime = msg.AddTime()
-	
+
 	r.Payload = msg.Payload()
 	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime()
