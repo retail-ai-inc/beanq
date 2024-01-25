@@ -26,10 +26,9 @@ import (
 	"math"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis/v8"
 )
 
 func makeKey(keys ...string) string {
@@ -161,14 +160,8 @@ func jitterBackoff(min, max time.Duration, attempt int) time.Duration {
 	return dura
 }
 
-var rnd = rand.New(rand.NewSource(time.Now().UnixNano()))
-var rndMu sync.Mutex
-
 func randDuration(center time.Duration) time.Duration {
-	rndMu.Lock()
-	defer rndMu.Unlock()
-
 	var ri = int64(center)
-	var jitter = rnd.Int63n(ri)
+	var jitter = rand.Int63n(ri)
 	return time.Duration(math.Abs(float64(ri + jitter)))
 }

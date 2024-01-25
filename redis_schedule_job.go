@@ -28,8 +28,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/panjf2000/ants/v2"
-	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
@@ -113,11 +113,11 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 		_, err := tx.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
 
 			// set value
-			if err := pipeliner.ZAdd(ctx, setKey, redis.Z{Score: priority, Member: bt}).Err(); err != nil {
+			if err := pipeliner.ZAdd(ctx, setKey, &redis.Z{Score: priority, Member: bt}).Err(); err != nil {
 				return err
 			}
 			// set time unit
-			if err := pipeliner.ZAdd(ctx, timeUnitKey, redis.Z{Score: timeUnit, Member: timeUnit}).Err(); err != nil {
+			if err := pipeliner.ZAdd(ctx, timeUnitKey, &redis.Z{Score: timeUnit, Member: timeUnit}).Err(); err != nil {
 				return err
 			}
 			return nil

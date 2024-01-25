@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
@@ -77,7 +77,7 @@ func newLogJob(client redis.UniversalClient) *logJob {
 }
 
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
-	return t.client.SetEx(ctx, key, val, expiration).Err()
+	return t.client.SetEX(ctx, key, val, expiration).Err()
 }
 
 func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
