@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -34,10 +35,7 @@ import (
 
 type (
 	values  map[string]any
-	Message struct {
-		ID     string
-		Values map[string]interface{}
-	}
+	Message redis.XMessage
 	// get val functions
 	iMessageValue interface {
 		string | int64 | time.Time | float64 | int

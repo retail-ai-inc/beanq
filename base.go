@@ -90,7 +90,7 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }
 
-func RetryInfo(f func() error, retry int) error {
+func RetryInfo(f func() error, retry int) (int, error) {
 	index := 0
 	errChan := make(chan error, 1)
 	stop := make(chan struct{}, 1)
@@ -122,7 +122,7 @@ func RetryInfo(f func() error, retry int) error {
 		}
 	}
 	close(stop)
-	return e
+	return index, e
 }
 func jitterBackoff(min, max time.Duration, attempt int) time.Duration {
 	base := float64(min)

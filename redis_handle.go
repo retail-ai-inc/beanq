@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +21,7 @@ type RedisHandle struct {
 	deadLetterTicker *time.Ticker
 	channel          string
 	topic            string
+	pendingIdle      time.Duration
 }
 
 var (
@@ -46,6 +46,7 @@ func NewRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		consumer:         consumer,
 		log:              newLogJob(client),
 		deadLetterTicker: time.NewTicker(100 * time.Second),
+		pendingIdle:      2 * time.Minute,
 	}
 }
 
@@ -98,11 +99,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 	streamKey := MakeStreamKey(Config.Redis.Prefix, t.channel, t.topic)
 
 	deadLetterStreamKey := MakeDeadLetterStreamKey(Config.Redis.Prefix, t.channel, t.topic)
-	xAutoClaim := redisx.NewAutoClaimArgs(streamKey, t.channel, Config.DeadLetterIdle, "0-0", 100, deadLetterStreamKey)
 
 	defer t.deadLetterTicker.Stop()
-
-	version := t.client.Info(ctx, "server").Val()[24:29]
 
 	for {
 		// check state
@@ -118,44 +116,57 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		case <-t.deadLetterTicker.C:
 
 		}
-		// redis v5.0
-		if strings.Compare(version, "6.2") == -1 {
-			pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
-				Stream:   streamKey,
-				Group:    t.channel,
-				Idle:     100 * time.Second,
-				Start:    "0-0",
-				End:      "",
-				Count:    100,
-				Consumer: streamKey,
-			}).Val()
-			strs := make([]string, len(pendings))
-			for _, pending := range pendings {
-				strs = append(strs, pending.ID)
-			}
-			if err := t.client.XClaim(ctx, &redis.XClaimArgs{
-				Stream:   streamKey,
-				Group:    t.channel,
-				Consumer: deadLetterStreamKey,
-				MinIdle:  100 * time.Second,
-				Messages: strs,
-			}).Err(); err != nil {
-				logger.New().Error(err)
-			}
+
+		pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+			Stream: streamKey,
+			Group:  t.channel,
+			Start:  "-",
+			End:    "+",
+			Count:  100,
+		}).Val()
+
+		if len(pendings) <= 0 {
 			continue
 		}
-		// need redis v6.2
-		streams := streamArrayPool.Get().([]redis.XStream)
 
-		if err := t.client.XAutoClaim(ctx, xAutoClaim).Err(); err != nil {
-			logger.New().Error(err)
+		for _, pending := range pendings {
+
+			if pending.Idle < t.pendingIdle {
+				continue
+			}
+
+			// if pending retry count > 20,then add it into dead_letter_stream
+			if pending.RetryCount > 20 {
+				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+				if len(val) <= 0 {
+					continue
+				}
+
+				msg := Message(val[0])
+				msg.Values["pendingRetry"] = pending.RetryCount
+
+				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", Config.Redis.MaxLen, 0, msg.Values)
+				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+					logger.New().Error(err)
+				}
+				if err := t.client.XDel(ctx, streamKey, pending.ID).Err(); err != nil {
+					logger.New().Error(err)
+				}
+			} else {
+				if err := t.client.XClaim(ctx, &redis.XClaimArgs{
+					Stream:   streamKey,
+					Group:    t.channel,
+					Consumer: pending.Consumer,
+					MinIdle:  t.pendingIdle,
+					Messages: []string{pending.ID},
+				}); err != nil {
+					logger.New().Error(err)
+				}
+			}
+
 		}
-
-		streams = make([]redis.XStream, 100)
-		streamArrayPool.Put(streams)
-
+		continue
 	}
-
 }
 
 func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
@@ -202,17 +213,18 @@ func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResul
 	r.BeginTime = time.Now()
 	// if error,then retry to consume
 	nerr := make(chan error, 1)
-	if err := RetryInfo(func() error {
+	retryCount, err := RetryInfo(func() error {
 		defer func() {
 			if ne := recover(); ne != nil {
 				nerr <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 			}
 		}()
 		return t.consumer(msg)
-
-	}, Config.JobMaxRetries); err != nil {
+	}, Config.JobMaxRetries)
+	if err != nil {
 		nerr <- err
 	}
+
 	select {
 	case v := <-nerr:
 		if v != nil {
@@ -228,6 +240,7 @@ func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResul
 
 	r.AddTime = msg.AddTime()
 
+	r.Retry = retryCount
 	r.Payload = msg.Payload()
 	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime()

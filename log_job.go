@@ -45,6 +45,8 @@ type (
 		Info    FlagInfo
 		Payload any
 
+		PendingRetry             int64
+		Retry                    int
 		AddTime                  string
 		ExpireTime               time.Time
 		RunTime                  string
