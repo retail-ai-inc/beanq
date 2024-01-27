@@ -77,7 +77,7 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		done:        make(chan struct{}),
 		claimDone:   make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
-		logJob:      newLogJob(client),
+		logJob:      newLogJob(client, pool),
 		opts:        nil,
 		once:        &sync.Once{},
 		pool:        pool,
