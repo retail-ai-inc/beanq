@@ -124,7 +124,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	for key, consumer := range consumers {
 
 		cs := consumer
-		cs.IHandle = NewRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun)
+		cs.IHandle = NewRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun, t.pool)
 
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {

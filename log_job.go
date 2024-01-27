@@ -98,16 +98,13 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	// default ErrorLevel
 
-	key := strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "fail"), result.Id}, ":")
+	key := strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "fail")}, ":")
 	expiration := opts.KeepFailedJobsInHistory
-
-	score := float64(result.ExpireTime.UnixMilli() + Config.KeepFailedJobsInHistory.Milliseconds())
 
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "success"), result.Id}, ":")
+		key = strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "success")}, ":")
 		expiration = opts.KeepSuccessJobsInHistory
-		score = float64(result.ExpireTime.UnixMilli() + Config.KeepSuccessJobsInHistory.Milliseconds())
 	}
 	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
 
@@ -117,7 +114,7 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 	}
 
 	return t.client.ZAdd(ctx, key, &redis.Z{
-		Score:  score,
+		Score:  float64(-result.ExpireTime.UnixMilli()),
 		Member: b,
 	}).Err()
 

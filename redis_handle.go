@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -38,13 +39,13 @@ var (
 	}}
 )
 
-func NewRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer) *RedisHandle {
+func NewRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
 	return &RedisHandle{
 		client:           client,
 		channel:          channel,
 		topic:            topic,
 		consumer:         consumer,
-		log:              newLogJob(client),
+		log:              newLogJob(client, pool),
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,
 	}
