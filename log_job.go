@@ -30,9 +30,12 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/spf13/cast"
 )
 
 type (
@@ -45,6 +48,8 @@ type (
 		Info    FlagInfo
 		Payload any
 
+		PendingRetry             int64
+		Retry                    int
 		AddTime                  string
 		ExpireTime               time.Time
 		RunTime                  string
@@ -56,11 +61,13 @@ type (
 
 	logJobI interface {
 		saveLog(ctx context.Context, result *ConsumerResult) error
+		expire(ctx context.Context, done <-chan struct{})
 		archive(ctx context.Context) error
 	}
 
 	logJob struct {
 		client redis.UniversalClient
+		pool   *ants.Pool
 	}
 )
 
@@ -72,8 +79,8 @@ const (
 	InfoLevel LevelMsg = "info"
 )
 
-func newLogJob(client redis.UniversalClient) *logJob {
-	return &logJob{client: client}
+func newLogJob(client redis.UniversalClient, pool *ants.Pool) *logJob {
+	return &logJob{client: client, pool: pool}
 }
 
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
@@ -92,21 +99,60 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	// default ErrorLevel
 
-	key := strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "fail"), result.Id}, ":")
+	key := strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "fail")}, ":")
 	expiration := opts.KeepFailedJobsInHistory
 
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "success"), result.Id}, ":")
+		key = strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "success")}, ":")
 		expiration = opts.KeepSuccessJobsInHistory
 	}
+
 	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
 
 	b, err := json.Marshal(result)
 	if err != nil {
 		return fmt.Errorf("JsonMarshalErr:%s,Stack:%+v", err.Error(), stringx.ByteToString(debug.Stack()))
 	}
-	return t.client.Set(ctx, key, b, Config.KeepSuccessJobsInHistory).Err()
+
+	return t.client.ZAdd(ctx, key, &redis.Z{
+		Score:  float64(result.ExpireTime.UnixMilli()),
+		Member: b,
+	}).Err()
+
+}
+
+func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	failKey := MakeLogKey(Config.Redis.Prefix, "fail")
+	successKey := MakeLogKey(Config.Redis.Prefix, "success")
+
+	for {
+		// check state
+		select {
+		case <-ctx.Done():
+			return
+		case <-done:
+			return
+		case <-ticker.C:
+		}
+
+		if err := t.pool.Submit(func() {
+			t.client.ZRemRangeByScore(ctx, failKey, "0", cast.ToString(time.Now().UnixMilli()))
+		}); err != nil {
+			logger.New().Error(err)
+		}
+
+		if err := t.pool.Submit(func() {
+			t.client.ZRemRangeByScore(ctx, successKey, "0", cast.ToString(time.Now().UnixMilli()))
+		}); err != nil {
+			logger.New().Error(err)
+		}
+	}
+
 }
 
 func (t *logJob) archive(ctx context.Context) error {

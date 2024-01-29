@@ -46,13 +46,13 @@ type (
 	}
 
 	RedisBroker struct {
-		client          redis.UniversalClient
-		done, claimDone chan struct{}
-		scheduleJob     scheduleJobI
-		logJob          logJobI
-		opts            *Options
-		once            *sync.Once
-		pool            *ants.Pool
+		client                   redis.UniversalClient
+		done, claimDone, logDone chan struct{}
+		scheduleJob              scheduleJobI
+		logJob                   logJobI
+		opts                     *Options
+		once                     *sync.Once
+		pool                     *ants.Pool
 	}
 )
 
@@ -76,8 +76,9 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		client:      client,
 		done:        make(chan struct{}),
 		claimDone:   make(chan struct{}),
+		logDone:     make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
-		logJob:      newLogJob(client),
+		logJob:      newLogJob(client, pool),
 		opts:        nil,
 		once:        &sync.Once{},
 		pool:        pool,
@@ -124,7 +125,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	for key, consumer := range consumers {
 
 		cs := consumer
-		cs.IHandle = NewRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun)
+		cs.IHandle = NewRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun, t.pool)
 
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
@@ -142,7 +143,11 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		}
 		consumers[key] = nil
 	}
-
+	if err := t.pool.Submit(func() {
+		t.logJob.expire(ctx, t.logDone)
+	}); err != nil {
+		logger.New().Error(err)
+	}
 	logger.New().Info("----START----")
 	// // monitor signal
 	t.waitSignal()
@@ -182,6 +187,7 @@ func (t *RedisBroker) waitSignal() {
 			t.once.Do(func() {
 				t.done <- struct{}{}
 				t.claimDone <- struct{}{}
+				t.logDone <- struct{}{}
 				t.pool.Release()
 				t.scheduleJob.shutDown()
 				_ = t.client.Close()
