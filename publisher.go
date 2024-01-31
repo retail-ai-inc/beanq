@@ -57,7 +57,7 @@ func NewPublisher(config BeanqConfig) *pubClient {
 		if err != nil {
 			logger.New().With("", err).Fatal("goroutine pool error")
 		}
-		Config = config
+		Config.Store(config)
 		if config.Driver == "redis" {
 			beanqPublisher = &pubClient{
 				broker: NewRedisBroker(pool, config),

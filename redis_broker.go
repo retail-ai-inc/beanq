@@ -102,7 +102,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	// normal job
 	if msg.ExecuteTime().Before(time.Now()) {
 
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Redis.MaxLen, 0, map[string]any(msg.Values))
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Load().(BeanqConfig).Redis.MaxLen, 0, map[string]any(msg.Values))
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}

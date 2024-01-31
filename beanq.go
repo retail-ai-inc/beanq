@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 )
 
@@ -64,8 +65,8 @@ type (
 	}
 )
 
-// Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
-var Config BeanqConfig
+// Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
+var Config atomic.Value
 
 type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error

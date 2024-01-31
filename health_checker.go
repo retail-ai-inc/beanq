@@ -42,7 +42,7 @@ func newHealthCheck(client *redis.Client) *healthCheck {
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
 
-	key := MakeHealthKey(Config.Redis.Prefix)
+	key := MakeHealthKey(Config.Load().(BeanqConfig).Redis.Prefix)
 
 	info, err := t.info(ctx)
 	if err != nil {

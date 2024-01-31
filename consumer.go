@@ -82,7 +82,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	if err != nil {
 		logger.New().With("", err).Fatal("goroutine pool error")
 	}
-	Config = config
+	Config.Store(config)
 	if config.Driver == "redis" {
 		beanqConsumer = &Consumer{
 			broker: NewRedisBroker(pool, config),
@@ -147,7 +147,7 @@ func (t *Consumer) StartPing() error {
 			return
 		})
 		srv := &http.Server{
-			Addr:    strings.Join([]string{Config.Health.Host, Config.Health.Port}, ":"),
+			Addr:    strings.Join([]string{Config.Load().(BeanqConfig).Health.Host, Config.Load().(BeanqConfig).Health.Port}, ":"),
 			Handler: hdl,
 		}
 		if err := srv.ListenAndServe(); err != nil {

@@ -99,12 +99,12 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	// default ErrorLevel
 
-	key := strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "fail")}, ":")
+	key := strings.Join([]string{MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "fail")}, ":")
 	expiration := opts.KeepFailedJobsInHistory
 
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = strings.Join([]string{MakeLogKey(Config.Redis.Prefix, "success")}, ":")
+		key = strings.Join([]string{MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "success")}, ":")
 		expiration = opts.KeepSuccessJobsInHistory
 	}
 
@@ -127,8 +127,8 @@ func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	failKey := MakeLogKey(Config.Redis.Prefix, "fail")
-	successKey := MakeLogKey(Config.Redis.Prefix, "success")
+	failKey := MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "fail")
+	successKey := MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "success")
 
 	for {
 		// check state
