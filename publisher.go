@@ -53,6 +53,10 @@ func NewPublisher(config BeanqConfig) *pubClient {
 			opts.PoolSize = config.PoolSize
 		}
 
+		if config.PublishTimeOut <= 0 {
+			config.PublishTimeOut = opts.PublishTimeOut
+		}
+
 		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 		if err != nil {
 			logger.New().With("", err).Fatal("goroutine pool error")

@@ -77,6 +77,9 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	if config.PoolSize != 0 {
 		opts.PoolSize = config.PoolSize
 	}
+	if config.PublishTimeOut <= 0 {
+		config.PublishTimeOut = opts.PublishTimeOut
+	}
 
 	pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
 	if err != nil {
