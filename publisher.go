@@ -103,7 +103,7 @@ func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...O
 
 func (t *pubClient) Publish(msg *Message, option ...OptionI) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), Config.Load().(BeanqConfig).PublishTimeOut)
 	defer cancel()
 	return t.PublishWithContext(ctx, msg, option...)
 }
