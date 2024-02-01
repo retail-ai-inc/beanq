@@ -257,6 +257,7 @@ type Options struct {
 	KeepFailedJobsInHistory  time.Duration
 	RetryTime                time.Duration
 	KeepJobInQueue           time.Duration
+	PublishTimeOut           time.Duration
 }
 
 var DefaultOptions = &Options{
@@ -264,6 +265,7 @@ var DefaultOptions = &Options{
 	KeepJobInQueue:           time.Hour * 24 * 7,
 	KeepFailedJobsInHistory:  time.Hour * 24 * 7,
 	KeepSuccessJobsInHistory: time.Hour * 24 * 7,
+	PublishTimeOut:           10 * time.Second,
 	PoolSize:                 20,
 	MinWorkers:               10,
 	JobMaxRetry:              3,
