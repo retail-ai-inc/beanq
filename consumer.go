@@ -53,43 +53,20 @@ var (
 )
 
 func NewConsumer(config BeanqConfig) *Consumer {
-	opts := DefaultOptions
 
-	if config.KeepJobsInQueue != 0 {
-		opts.KeepJobInQueue = config.KeepJobsInQueue
-	}
-
-	if config.KeepFailedJobsInHistory != 0 {
-		opts.KeepFailedJobsInHistory = config.KeepFailedJobsInHistory
-	}
-
-	if config.KeepSuccessJobsInHistory != 0 {
-		opts.KeepSuccessJobsInHistory = config.KeepSuccessJobsInHistory
-	}
-
-	if config.MinWorkers != 0 {
-		opts.MinWorkers = config.MinWorkers
-	}
-
-	if config.JobMaxRetries != 0 {
-		opts.JobMaxRetry = config.JobMaxRetries
-	}
+	poolSize := DefaultOptions.PoolSize
 	if config.PoolSize != 0 {
-		opts.PoolSize = config.PoolSize
-	}
-	if config.PublishTimeOut <= 0 {
-		config.PublishTimeOut = opts.PublishTimeOut
+		poolSize = config.PoolSize
 	}
 
-	pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
 	if err != nil {
 		logger.New().With("", err).Fatal("goroutine pool error")
 	}
 	Config.Store(config)
 	if config.Driver == "redis" {
 		beanqConsumer = &Consumer{
-			broker: NewRedisBroker(pool, config),
-			opts:   opts,
+			broker: newRedisBroker(pool, config),
 			mu:     sync.RWMutex{},
 		}
 	} else {
@@ -127,7 +104,6 @@ func (t *Consumer) Register(channelName, topicName string, consumerFun DoConsume
 }
 func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
-	ctx = context.WithValue(ctx, "options", t.opts)
 	t.broker.start(ctx, t.m)
 
 }
@@ -139,9 +115,7 @@ func (t *Consumer) StartConsumer() {
 
 }
 func (t *Consumer) StartPing() error {
-	go func() {
-		http.ListenAndServe("0.0.0.0:7070", nil)
-	}()
+
 	go func() {
 		hdl := &http.ServeMux{}
 		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {

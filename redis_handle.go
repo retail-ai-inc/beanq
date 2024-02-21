@@ -23,6 +23,11 @@ type RedisHandle struct {
 	channel          string
 	topic            string
 	pendingIdle      time.Duration
+
+	prefix      string
+	maxLen      int64
+	jobMaxRetry int
+	minWorkers  int64
 }
 
 var (
@@ -39,7 +44,29 @@ var (
 	}}
 )
 
-func NewRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
+func newRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
+
+	bqConfig := Config.Load().(BeanqConfig)
+	prefix := bqConfig.Redis.Prefix
+	if prefix == "" {
+		prefix = DefaultOptions.Prefix
+	}
+
+	maxLen := bqConfig.Redis.MaxLen
+	if maxLen <= 0 {
+		maxLen = DefaultOptions.DefaultMaxLen
+	}
+
+	jobMaxRetry := bqConfig.JobMaxRetries
+	if jobMaxRetry <= 0 {
+		jobMaxRetry = DefaultOptions.JobMaxRetry
+	}
+
+	minWorkers := bqConfig.MinWorkers
+	if minWorkers <= 0 {
+		minWorkers = DefaultOptions.MinWorkers
+	}
+
 	return &RedisHandle{
 		client:           client,
 		channel:          channel,
@@ -48,6 +75,10 @@ func NewRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		log:              newLogJob(client, pool),
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,
+		prefix:           prefix,
+		maxLen:           maxLen,
+		jobMaxRetry:      jobMaxRetry,
+		minWorkers:       minWorkers,
 	}
 }
 
@@ -67,9 +98,8 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 
 	channel := t.channel
 	topic := t.topic
-	count := Config.Load().(BeanqConfig).MinWorkers
-	stream := MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, channel, topic)
-	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, count, 10*time.Second)
+	stream := MakeStreamKey(t.prefix, channel, topic)
+	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minWorkers, 10*time.Second)
 
 	for {
 		// check state
@@ -97,9 +127,9 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 // Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
 
-	streamKey := MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, t.channel, t.topic)
+	streamKey := MakeStreamKey(t.prefix, t.channel, t.topic)
 
-	deadLetterStreamKey := MakeDeadLetterStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, t.channel, t.topic)
+	deadLetterStreamKey := MakeDeadLetterStreamKey(t.prefix, t.channel, t.topic)
 
 	defer t.deadLetterTicker.Stop()
 
@@ -136,8 +166,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				continue
 			}
 
-			// if pending retry count > 20,then add it into dead_letter_stream
-			if pending.RetryCount > 20 {
+			// if pending retry count > 10,then add it into dead_letter_stream
+			if pending.RetryCount > 10 {
 				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
 					continue
@@ -146,7 +176,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				msg := Message(val[0])
 				msg.Values["pendingRetry"] = pending.RetryCount
 
-				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", Config.Load().(BeanqConfig).Redis.MaxLen, 0, msg.Values)
+				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg.Values)
 				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 					logger.New().Error(err)
 				}
@@ -160,7 +190,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 					Consumer: pending.Consumer,
 					MinIdle:  t.pendingIdle,
 					Messages: []string{pending.ID},
-				}); err != nil {
+				}).Err(); err != nil {
 					logger.New().Error(err)
 				}
 			}
@@ -221,7 +251,7 @@ func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResul
 			}
 		}()
 		return t.consumer(msg)
-	}, Config.Load().(BeanqConfig).JobMaxRetries)
+	}, t.jobMaxRetry)
 	if err != nil {
 		nerr <- err
 	}
@@ -258,29 +288,25 @@ func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResul
 // checkStream   if stream not exist,then create it
 func (t *RedisHandle) checkStream(ctx context.Context) error {
 
-	normalStreamKey := MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, t.channel, t.topic)
-	normalStreamResult := t.client.XInfoGroups(ctx, normalStreamKey).Val()
-
-	if len(normalStreamResult) < 1 {
-		if err := t.client.XGroupCreateMkStream(ctx, normalStreamKey, t.channel, "0").Err(); err != nil && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-			return err
-		}
-	}
-	return nil
+	normalStreamKey := MakeStreamKey(t.prefix, t.channel, t.topic)
+	return t.check(ctx, normalStreamKey)
 
 }
 
 func (t *RedisHandle) checkDeadletterStream(ctx context.Context) error {
 
 	// if dead letter stream don't exist,then create it
-	deadLetterStreamKey := MakeDeadLetterStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, t.channel, t.topic)
-	deadLetterStreamResult := t.client.XInfoGroups(ctx, deadLetterStreamKey).Val()
+	deadLetterStreamKey := MakeDeadLetterStreamKey(t.prefix, t.channel, t.topic)
+	return t.check(ctx, deadLetterStreamKey)
 
-	if len(deadLetterStreamResult) < 1 {
-		if err := t.client.XGroupCreateMkStream(ctx, deadLetterStreamKey, t.channel, "0").Err(); err != nil {
+}
+
+func (t *RedisHandle) check(ctx context.Context, streamName string) error {
+	result := t.client.XInfoGroups(ctx, streamName).Val()
+	if len(result) < 1 {
+		if err := t.client.XGroupCreateMkStream(ctx, streamName, t.channel, "0").Err(); err != nil {
 			return err
 		}
 	}
 	return nil
-
 }

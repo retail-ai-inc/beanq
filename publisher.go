@@ -33,8 +33,9 @@ import (
 )
 
 type pubClient struct {
-	broker Broker
-	wg     *sync.WaitGroup
+	broker         Broker
+	wg             *sync.WaitGroup
+	publishTimeOut time.Duration
 }
 
 var _ BeanqPub = new(pubClient)
@@ -49,23 +50,27 @@ func NewPublisher(config BeanqConfig) *pubClient {
 
 	publisherOnce.Do(func() {
 
-		if config.PoolSize != 0 {
-			opts.PoolSize = config.PoolSize
+		poolSize := config.PoolSize
+		if poolSize <= 0 {
+			poolSize = DefaultOptions.PoolSize
 		}
 
-		if config.PublishTimeOut <= 0 {
+		publishTimeOut := config.PublishTimeOut
+		if publishTimeOut <= 0 {
+			publishTimeOut = opts.PublishTimeOut
 			config.PublishTimeOut = opts.PublishTimeOut
 		}
 
-		pool, err := ants.NewPool(opts.PoolSize, ants.WithPreAlloc(true))
+		pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
 		if err != nil {
 			logger.New().With("", err).Fatal("goroutine pool error")
 		}
 		Config.Store(config)
 		if config.Driver == "redis" {
 			beanqPublisher = &pubClient{
-				broker: NewRedisBroker(pool, config),
-				wg:     nil,
+				broker:         newRedisBroker(pool, config),
+				wg:             nil,
+				publishTimeOut: publishTimeOut,
 			}
 		} else {
 			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
@@ -107,7 +112,7 @@ func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...O
 
 func (t *pubClient) Publish(msg *Message, option ...OptionI) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), Config.Load().(BeanqConfig).PublishTimeOut)
+	ctx, cancel := context.WithTimeout(context.Background(), t.publishTimeOut)
 	defer cancel()
 	return t.PublishWithContext(ctx, msg, option...)
 }

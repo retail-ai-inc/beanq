@@ -50,6 +50,9 @@ type (
 		pool                      *ants.Pool
 		stop, done, seqDone       chan struct{}
 		scheduleTicker, seqTicker *time.Ticker
+
+		prefix string
+		maxLen int64
 	}
 )
 
@@ -74,6 +77,14 @@ var (
 )
 
 func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob {
+	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	if prefix == "" {
+		prefix = DefaultOptions.Prefix
+	}
+	maxLen := Config.Load().(BeanqConfig).Redis.MaxLen
+	if maxLen <= 0 {
+		maxLen = DefaultOptions.DefaultMaxLen
+	}
 	return &scheduleJob{
 		client:         client,
 		wg:             &sync.WaitGroup{},
@@ -83,6 +94,8 @@ func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob 
 		seqDone:        make(chan struct{}),
 		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
 		seqTicker:      time.NewTicker(10 * time.Second),
+		prefix:         prefix,
+		maxLen:         maxLen,
 	}
 
 }
@@ -115,8 +128,8 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 	priority = cast.ToFloat64(msgExecuteTime) + priority
 	timeUnit := cast.ToFloat64(msgExecuteTime)
 
-	setKey := MakeZSetKey(Config.Load().(BeanqConfig).Redis.Prefix, opt.Channel, opt.Topic)
-	timeUnitKey := MakeTimeUnit(Config.Load().(BeanqConfig).Redis.Prefix, opt.Channel, opt.Topic)
+	setKey := MakeZSetKey(t.prefix, opt.Channel, opt.Topic)
+	timeUnitKey := MakeTimeUnit(t.prefix, opt.Channel, opt.Topic)
 
 	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
 
@@ -148,7 +161,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	var (
 		now      time.Time
-		timeUnit = MakeTimeUnit(Config.Load().(BeanqConfig).Redis.Prefix, consumer.Channel, consumer.Topic)
+		timeUnit = MakeTimeUnit(t.prefix, consumer.Channel, consumer.Topic)
 	)
 	for {
 		select {
@@ -197,7 +210,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 		Min: defaultScheduleJobConfig.scoreMin,
 		Max: max,
 	}
-	key := MakeZSetKey(Config.Load().(BeanqConfig).Redis.Prefix, consumer.Channel, consumer.Topic)
+	key := MakeZSetKey(t.prefix, consumer.Channel, consumer.Topic)
 
 	val := t.client.ZRevRangeByScore(ctx, key, zRangeBy).Val()
 
@@ -211,7 +224,7 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
-	var zsetKey = MakeZSetKey(Config.Load().(BeanqConfig).Redis.Prefix, consumer.Channel, consumer.Topic)
+	var zsetKey = MakeZSetKey(t.prefix, consumer.Channel, consumer.Topic)
 
 	doTask := func(ctx context.Context, vv string, consumer *ConsumerHandler) error {
 
@@ -241,7 +254,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Load().(BeanqConfig).Redis.MaxLen, 0, msg.Values)
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.Channel(), msg.Topic()), "", "*", t.maxLen, 0, msg.Values)
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 
@@ -255,7 +268,7 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 
 	now := time.Now().UnixMilli()
 
-	key := MakeListKey(Config.Load().(BeanqConfig).Redis.Prefix, opt.Channel, opt.Topic)
+	key := MakeListKey(t.prefix, opt.Channel, opt.Topic)
 
 	valKey := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
 	value := strings.Join([]string{valKey, string(bt)}, ":")
@@ -272,7 +285,7 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 	defer t.seqTicker.Stop()
 	// sort orderKey by user_name_* get user_name_*   alpha
 
-	key := MakeListKey(Config.Load().(BeanqConfig).Redis.Prefix, handler.Channel, handler.Topic)
+	key := MakeListKey(t.prefix, handler.Channel, handler.Topic)
 
 	for {
 		select {
@@ -309,7 +322,7 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic string, vals []string) {
 
 	var msg Message
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, channel, topic), "", "*", Config.Load().(BeanqConfig).Redis.MaxLen, 0, nil)
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, channel, topic), "", "*", t.maxLen, 0, nil)
 	for _, val := range vals {
 
 		strs := strings.SplitN(val, ":", 2)
