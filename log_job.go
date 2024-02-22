@@ -66,8 +66,11 @@ type (
 	}
 
 	logJob struct {
-		client redis.UniversalClient
-		pool   *ants.Pool
+		client            redis.UniversalClient
+		pool              *ants.Pool
+		prefix            string
+		expiration        time.Duration
+		expirationSuccess time.Duration
 	}
 )
 
@@ -80,7 +83,19 @@ const (
 )
 
 func newLogJob(client redis.UniversalClient, pool *ants.Pool) *logJob {
-	return &logJob{client: client, pool: pool}
+	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	if prefix == "" {
+		prefix = DefaultOptions.Prefix
+	}
+	expire := Config.Load().(BeanqConfig).KeepFailedJobsInHistory
+	if expire <= 0 {
+		expire = DefaultOptions.KeepFailedJobsInHistory
+	}
+	expirationSuccess := Config.Load().(BeanqConfig).KeepSuccessJobsInHistory
+	if expirationSuccess <= 0 {
+		expirationSuccess = DefaultOptions.KeepSuccessJobsInHistory
+	}
+	return &logJob{client: client, pool: pool, prefix: prefix, expiration: expire, expirationSuccess: expirationSuccess}
 }
 
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
@@ -88,10 +103,7 @@ func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration t
 }
 
 func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
-	var opts *Options
-	if optsVal, ok := ctx.Value("options").(*Options); ok {
-		opts = optsVal
-	}
+
 	now := time.Now()
 	if result.AddTime == "" {
 		result.AddTime = now.Format(timex.DateTime)
@@ -99,13 +111,13 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 	// default ErrorLevel
 
-	key := strings.Join([]string{MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "fail")}, ":")
-	expiration := opts.KeepFailedJobsInHistory
+	key := strings.Join([]string{MakeLogKey(t.prefix, "fail")}, ":")
+	expiration := t.expiration
 
 	// InfoLevel
 	if result.Level == InfoLevel {
-		key = strings.Join([]string{MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "success")}, ":")
-		expiration = opts.KeepSuccessJobsInHistory
+		key = strings.Join([]string{MakeLogKey(t.prefix, "success")}, ":")
+		expiration = t.expirationSuccess
 	}
 
 	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
@@ -127,8 +139,8 @@ func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	failKey := MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "fail")
-	successKey := MakeLogKey(Config.Load().(BeanqConfig).Redis.Prefix, "success")
+	failKey := MakeLogKey(t.prefix, "fail")
+	successKey := MakeLogKey(t.prefix, "success")
 
 	for {
 		// check state

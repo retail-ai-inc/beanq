@@ -33,16 +33,21 @@ import (
 type (
 	healthCheck struct {
 		client *redis.Client
+		prefix string
 	}
 )
 
 func newHealthCheck(client *redis.Client) *healthCheck {
-	return &healthCheck{client: client}
+	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	if prefix == "" {
+		prefix = DefaultOptions.Prefix
+	}
+	return &healthCheck{client: client, prefix: prefix}
 }
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
 
-	key := MakeHealthKey(Config.Load().(BeanqConfig).Redis.Prefix)
+	key := MakeHealthKey(t.prefix)
 
 	info, err := t.info(ctx)
 	if err != nil {

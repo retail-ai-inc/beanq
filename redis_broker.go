@@ -50,15 +50,16 @@ type (
 		done, claimDone, logDone chan struct{}
 		scheduleJob              scheduleJobI
 		logJob                   logJobI
-		opts                     *Options
 		once                     *sync.Once
 		pool                     *ants.Pool
+		prefix                   string
+		maxLen                   int64
 	}
 )
 
 var _ Broker = (*RedisBroker)(nil)
 
-func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
+func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
@@ -72,6 +73,16 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		MinIdleConns: config.Redis.MinIdleConnections,
 		PoolTimeout:  config.Redis.PoolTimeout,
 	})
+
+	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	if prefix == "" {
+		prefix = DefaultOptions.Prefix
+	}
+	maxLen := Config.Load().(BeanqConfig).Redis.MaxLen
+	if maxLen <= 0 {
+		maxLen = DefaultOptions.DefaultMaxLen
+	}
+
 	return &RedisBroker{
 		client:      client,
 		done:        make(chan struct{}),
@@ -79,9 +90,11 @@ func NewRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		logDone:     make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client, pool),
-		opts:        nil,
-		once:        &sync.Once{},
-		pool:        pool,
+		// opts:        nil,
+		once:   &sync.Once{},
+		pool:   pool,
+		prefix: prefix,
+		maxLen: maxLen,
 	}
 }
 
@@ -102,7 +115,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	// normal job
 	if msg.ExecuteTime().Before(time.Now()) {
 
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(Config.Load().(BeanqConfig).Redis.Prefix, msg.Channel(), msg.Topic()), "", "*", Config.Load().(BeanqConfig).Redis.MaxLen, 0, map[string]any(msg.Values))
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.Channel(), msg.Topic()), "", "*", t.maxLen, 0, msg.Values)
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
@@ -118,14 +131,10 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 
 func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 
-	if opts, ok := ctx.Value("options").(*Options); ok {
-		t.opts = opts
-	}
-
 	for key, consumer := range consumers {
 
 		cs := consumer
-		cs.IHandle = NewRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun, t.pool)
+		cs.IHandle = newRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun, t.pool)
 
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
@@ -149,7 +158,7 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		logger.New().Error(err)
 	}
 	logger.New().Info("----START----")
-	// // monitor signal
+	// monitor signal
 	t.waitSignal()
 }
 
