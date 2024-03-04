@@ -244,7 +244,7 @@ func (t *RedisHandle) makeLog(ctx context.Context, msg *Message) (*ConsumerResul
 	r.BeginTime = time.Now()
 	// if error,then retry to consume
 	nerr := make(chan error, 1)
-	retryCount, err := RetryInfo(func() error {
+	retryCount, err := RetryInfo(ctx, func() error {
 		defer func() {
 			if ne := recover(); ne != nil {
 				nerr <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
