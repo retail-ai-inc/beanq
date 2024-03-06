@@ -23,6 +23,7 @@
 package beanq
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"strings"
@@ -90,7 +91,7 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }
 
-func RetryInfo(f func() error, retry int) (int, error) {
+func RetryInfo(ctx context.Context, f func() error, retry int) (int, error) {
 	index := 0
 	errChan := make(chan error, 1)
 	stop := make(chan struct{}, 1)
@@ -98,6 +99,9 @@ func RetryInfo(f func() error, retry int) (int, error) {
 	go func(timer *time.Timer, err chan error, stop chan struct{}) {
 		for {
 			select {
+			case <-ctx.Done():
+				err <- ctx.Err()
+				return
 			case <-timer.C:
 				e := f()
 				if e == nil || index >= retry {

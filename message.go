@@ -23,6 +23,7 @@
 package beanq
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -118,7 +119,7 @@ func NewMessage(message []byte) *Message {
 	return &msg
 }
 
-type DoConsumer func(*Message) error
+type DoConsumer func(ctx context.Context, msg *Message) error
 
 func jsonToMessage(dataStr string) (*Message, error) {
 

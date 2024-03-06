@@ -62,6 +62,7 @@ type (
 		KeepFailedJobsInHistory  time.Duration
 		KeepSuccessJobsInHistory time.Duration
 		PublishTimeOut           time.Duration
+		ConsumeTimeOut           time.Duration
 		MinWorkers               int64
 	}
 )

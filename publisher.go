@@ -82,6 +82,13 @@ func NewPublisher(config BeanqConfig) *pubClient {
 }
 
 func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
+
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, t.publishTimeOut)
+		defer cancel()
+	}
+
 	opts, err := ComposeOptions(option...)
 	if err != nil {
 		return err

@@ -28,6 +28,7 @@ import (
 	_ "net/http/pprof"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -41,10 +42,11 @@ type ConsumerHandler struct {
 }
 
 type Consumer struct {
-	broker Broker
-	opts   *Options
-	m      []*ConsumerHandler
-	mu     sync.RWMutex
+	broker  Broker
+	opts    *Options
+	m       []*ConsumerHandler
+	mu      sync.RWMutex
+	timeOut time.Duration
 }
 
 var _ BeanqSub = new(Consumer)
@@ -58,6 +60,13 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	if config.PoolSize != 0 {
 		poolSize = config.PoolSize
 	}
+	config.PoolSize = poolSize
+
+	timeOut := DefaultOptions.ConsumeTimeOut
+	if config.ConsumeTimeOut > 0 {
+		timeOut = config.ConsumeTimeOut
+	}
+	config.ConsumeTimeOut = timeOut
 
 	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
 	if err != nil {
@@ -66,8 +75,9 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	Config.Store(config)
 	if config.Driver == "redis" {
 		beanqConsumer = &Consumer{
-			broker: newRedisBroker(pool, config),
-			mu:     sync.RWMutex{},
+			broker:  newRedisBroker(pool, config),
+			mu:      sync.RWMutex{},
+			timeOut: timeOut,
 		}
 	} else {
 		// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
@@ -110,8 +120,7 @@ func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
 func (t *Consumer) StartConsumer() {
 
-	ctx := context.Background()
-	t.StartConsumerWithContext(ctx)
+	t.StartConsumerWithContext(context.Background())
 
 }
 func (t *Consumer) StartPing() error {
