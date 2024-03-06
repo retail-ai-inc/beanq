@@ -60,10 +60,14 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	if config.PoolSize != 0 {
 		poolSize = config.PoolSize
 	}
+	config.PoolSize = poolSize
+
 	timeOut := DefaultOptions.ConsumeTimeOut
 	if config.ConsumeTimeOut > 0 {
 		timeOut = config.ConsumeTimeOut
 	}
+	config.ConsumeTimeOut = timeOut
+
 	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
 	if err != nil {
 		logger.New().With("", err).Fatal("goroutine pool error")
@@ -110,22 +114,13 @@ func (t *Consumer) Register(channelName, topicName string, consumerFun DoConsume
 }
 func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, t.timeOut)
-		defer cancel()
-	}
-
 	t.broker.start(ctx, t.m)
 
 }
 
 func (t *Consumer) StartConsumer() {
 
-	ctx, cancel := context.WithTimeout(context.Background(), t.timeOut)
-	defer cancel()
-	
-	t.StartConsumerWithContext(ctx)
+	t.StartConsumerWithContext(context.Background())
 
 }
 func (t *Consumer) StartPing() error {
