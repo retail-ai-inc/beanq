@@ -177,18 +177,23 @@ func (pri priorityOption) OptType() OptionType {
 func (pri priorityOption) Value() any {
 	return float64(pri)
 }
+
 func OrderKey(name string) OptionI {
 	return orderKeyOption(name)
 }
+
 func (t orderKeyOption) String() string {
 	return "orderKeyOption"
 }
+
 func (t orderKeyOption) OptType() OptionType {
 	return OrderKeyOpt
 }
+
 func (t orderKeyOption) Value() any {
 	return string(t)
 }
+
 func ComposeOptions(options ...OptionI) (Option, error) {
 	res := Option{
 		Priority:    DefaultOptions.Priority,
