@@ -97,6 +97,13 @@ func (t *Message) ExecuteTime() time.Time {
 	return messageGetValue(t.Values, "executeTime", time.Now())
 }
 
+func (t *Message) GetMsgType() string {
+	if v, ok := t.Values["msgType"]; ok {
+		return v.(string)
+	}
+	return "normal"
+}
+
 func NewMessage(message []byte) *Message {
 	now := time.Now()
 	id := uuid.NewString()
@@ -113,6 +120,7 @@ func NewMessage(message []byte) *Message {
 			"message":     stringx.ByteToString(message), // data message
 			"addTime":     now.Format(timex.DateTime),    // The time when the message was added, the default is the current time
 			"executeTime": now,                           // message execute time
+			"msgType":     "normal",
 		},
 	}
 

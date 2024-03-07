@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -48,34 +47,34 @@ func main() {
 	// register consumer
 	csm := beanq.NewConsumer(config)
 	// register normal consumer
-	csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
-		// TODO:logic
-		// like this:
-		// time.Sleep(3 * time.Second) // this is my business.
-		logger.New().With("g2", "ch2").Info(msg.Payload())
-
-		return nil
-	})
+	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
+	// 	// TODO:logic
+	// 	// like this:
+	// 	// time.Sleep(3 * time.Second) // this is my business.
+	// 	logger.New().With("g2", "ch2").Info(msg.Payload())
+	//
+	// 	return nil
+	// })
 	// register delay consumer
 	csm.Register("delay-channel", "delay-topic", func(ctx context.Context, msg *beanq.Message) error {
 
 		// panic("this is a panic")
-		time.Sleep(10 * time.Second)
+		// time.Sleep(25 * time.Second)
 		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload())
 		return nil
 	})
-	csm.Register("delay-channel", "delay-ch2", func(ctx context.Context, msg *beanq.Message) error {
-		logger.New().With("delay-channel", "delay-ch2").Info(msg.Payload())
-		return nil
-	})
-	csm.Register("default-channel", "BatchCartStateTimoutJobHandler", func(ctx context.Context, msg *beanq.Message) error {
-		logger.New().With("default-channel", "BatchCartStateTimoutJobHandler").Info(msg.Payload())
-		return nil
-	})
-	csm.Register("default-channel", "default-topic", func(ctx context.Context, message *beanq.Message) error {
-		logger.New().With("default-channel", "default-topic").Info(message.Payload())
-		return nil
-	})
+	// csm.Register("delay-channel", "delay-ch2", func(ctx context.Context, msg *beanq.Message) error {
+	// 	logger.New().With("delay-channel", "delay-ch2").Info(msg.Payload())
+	// 	return nil
+	// })
+	// csm.Register("default-channel", "BatchCartStateTimoutJobHandler", func(ctx context.Context, msg *beanq.Message) error {
+	// 	logger.New().With("default-channel", "BatchCartStateTimoutJobHandler").Info(msg.Payload())
+	// 	return nil
+	// })
+	// csm.Register("default-channel", "default-topic", func(ctx context.Context, message *beanq.Message) error {
+	// 	logger.New().With("default-channel", "default-topic").Info(message.Payload())
+	// 	return nil
+	// })
 	// start ping
 	csm.StartPing()
 	// begin to consume information

@@ -93,40 +93,26 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 
 func RetryInfo(ctx context.Context, f func() error, retry int) (int, error) {
 	index := 0
-	errChan := make(chan error, 1)
-	stop := make(chan struct{}, 1)
+	timer := time.NewTimer(time.Duration(index) * time.Millisecond)
+	defer timer.Stop()
 
-	go func(timer *time.Timer, err chan error, stop chan struct{}) {
-		for {
-			select {
-			case <-ctx.Done():
-				err <- ctx.Err()
-				return
-			case <-timer.C:
-				e := f()
-				if e == nil || index >= retry {
-					timer.Stop()
-					stop <- struct{}{}
-					err <- e
-					return
-				}
-				index++
-				timer.Reset(jitterBackoff(500*time.Millisecond, time.Second, retry))
+	for {
+		select {
+		case <-ctx.Done():
+			return index, ctx.Err()
+
+		case <-timer.C:
+			e := f()
+			if e != nil {
+				return index, e
 			}
-		}
-	}(time.NewTimer(time.Duration(index)*time.Millisecond), errChan, stop)
-
-	var e error
-
-	select {
-	case <-stop:
-		for e = range errChan {
-			close(errChan)
-			break
+			if e == nil || index >= retry {
+				return index, nil
+			}
+			index++
+			timer.Reset(jitterBackoff(500*time.Millisecond, time.Second, retry))
 		}
 	}
-	close(stop)
-	return index, e
 }
 func jitterBackoff(min, max time.Duration, attempt int) time.Duration {
 	base := float64(min)

@@ -57,6 +57,7 @@ type (
 		EndTime                  time.Time
 		ExecuteTime              time.Time
 		Topic, Channel, Consumer string
+		MsgType                  string
 	}
 
 	logJobI interface {

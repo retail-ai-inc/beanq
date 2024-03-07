@@ -100,16 +100,26 @@ func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	msg.Values["priority"] = opts.Priority
 	msg.Values["maxLen"] = opts.MaxLen
 	msg.Values["executeTime"] = opts.ExecuteTime
+	msg.Values["msgType"] = "normal"
+
+	if opts.ExecuteTime.After(time.Now()) {
+		msg.Values["msgType"] = "delay"
+	}
+	if opts.OrderKey != "" {
+		msg.Values["msgType"] = "sequential"
+	}
 
 	return t.broker.enqueue(ctx, msg, opts)
 }
 
 func (t *pubClient) DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error {
+	msg.Values["msgType"] = "delay"
 	option = append(option, ExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }
 
 func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...OptionI) error {
+	msg.Values["msgType"] = "sequential"
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")
 	}
@@ -118,7 +128,7 @@ func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...O
 }
 
 func (t *pubClient) Publish(msg *Message, option ...OptionI) error {
-
+	msg.Values["msgType"] = "normal"
 	ctx, cancel := context.WithTimeout(context.Background(), t.publishTimeOut)
 	defer cancel()
 	return t.PublishWithContext(ctx, msg, option...)
