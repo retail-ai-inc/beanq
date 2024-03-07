@@ -327,6 +327,7 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) (*ConsumerResul
 	r.ExecuteTime = msg.ExecuteTime()
 	r.Topic = msg.Topic()
 	r.Channel = t.channel
+	r.MsgType = msg.GetMsgType()
 
 	return r, nil
 }
