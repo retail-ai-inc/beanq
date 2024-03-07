@@ -222,19 +222,11 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 			if err := t.pool.Submit(func() {
 				msg := Message(nv)
 
-				r, err := t.execute(ctx, &msg)
-				if err != nil {
-					r.Level = ErrLevel
-					r.Info = FlagInfo(err.Error())
-				}
+				r := t.execute(ctx, &msg)
 
-				// Successfully consumed data, stored in `string`
 				if err := t.log.saveLog(ctx, r); err != nil {
 					logger.New().Error(err)
 				}
-
-				r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-				result.Put(r)
 
 				if err := t.ack(ctx, stream, channel, nv.ID); err != nil {
 					logger.New().Error(err)
@@ -271,56 +263,49 @@ var BeanqCtx = sync.Pool{New: func() any {
 	return BeanqContext{Ctx: ctx, Cancel: cancel}
 }}
 
-func (t *RedisHandle) execute(ctx context.Context, msg *Message) (*ConsumerResult, error) {
+func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
 
 	r := result.Get().(*ConsumerResult)
+	nctx := BeanqCtx.Get().(BeanqContext)
+
+	defer func() {
+		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
+		result.Put(r)
+
+		nctx.Cancel()
+		BeanqCtx.Put(nctx)
+	}()
+
 	r.Id = msg.Id()
 	r.BeginTime = time.Now()
-	// if error,then retry to consume
-	nerr := make(chan error, 1)
 
 	retryCount, err := RetryInfo(ctx, func() error {
-		nctx := BeanqCtx.Get().(BeanqContext)
 
-		defer func() {
-			nctx.Cancel()
-			BeanqCtx.Put(nctx)
+		errCh := make(chan error, 1)
+		_ = t.pool.Submit(func() {
+			defer func() {
+				if ne := recover(); ne != nil {
+					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+				}
+			}()
 
-			if ne := recover(); ne != nil {
-				nerr <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+			if err := t.consumer(nctx.Ctx, msg); err != nil {
+				errCh <- err
 			}
-		}()
-
-		err := make(chan error, 1)
-		if oterr := t.pool.Submit(func() {
-			err <- t.consumer(nctx.Ctx, msg)
-		}); oterr != nil {
-			return oterr
-		}
+			close(errCh)
+		})
 
 		select {
 		case <-nctx.Ctx.Done():
 			return nctx.Ctx.Err()
-		case ferr := <-err:
-			return ferr
+		case e := <-errCh:
+			return e
 		}
 	}, t.jobMaxRetry)
-	if err != nil {
-		nerr <- err
-	}
 
-	select {
-	case v := <-nerr:
-		return r, v
-	default:
-
-	}
 	r.EndTime = time.Now()
-
 	sub := r.EndTime.Sub(r.BeginTime)
-
 	r.AddTime = msg.AddTime()
-
 	r.Retry = retryCount
 	r.Payload = msg.Payload()
 	r.RunTime = sub.String()
@@ -329,7 +314,11 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) (*ConsumerResul
 	r.Channel = t.channel
 	r.MsgType = msg.GetMsgType()
 
-	return r, nil
+	if err != nil {
+		r.Level = ErrLevel
+		r.Info = FlagInfo(err.Error())
+	}
+	return r
 }
 
 // checkStream   if stream not exist,then create it
