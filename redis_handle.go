@@ -173,9 +173,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 			if pending.Idle < t.pendingIdle {
 				continue
 			}
-
-			// if pending retry count > 10,then add it into dead_letter_stream
-			if pending.RetryCount > 10 {
+			// if pending retry count > 5,then add it into dead_letter_stream
+			if pending.RetryCount > 5 {
 				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
 					continue
@@ -183,22 +182,13 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 
 				msg := Message(val[0])
 				msg.Values["pendingRetry"] = pending.RetryCount
+				msg.Values["idle"] = pending.Idle.Seconds()
 
 				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg.Values)
 				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 					logger.New().Error(err)
 				}
-				if err := t.client.XDel(ctx, streamKey, pending.ID).Err(); err != nil {
-					logger.New().Error(err)
-				}
-			} else {
-				if err := t.client.XClaim(ctx, &redis.XClaimArgs{
-					Stream:   streamKey,
-					Group:    t.channel,
-					Consumer: pending.Consumer,
-					MinIdle:  t.pendingIdle,
-					Messages: []string{pending.ID},
-				}).Err(); err != nil {
+				if err := t.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
 			}
