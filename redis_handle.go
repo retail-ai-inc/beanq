@@ -13,6 +13,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"golang.org/x/sync/errgroup"
 )
 
 type RedisHandle struct {
@@ -41,10 +42,6 @@ var (
 			Info:    SuccessInfo,
 			RunTime: "",
 		}
-	}}
-
-	streamArrayPool = sync.Pool{New: func() any {
-		return make([]redis.XStream, 100)
 	}}
 )
 
@@ -200,6 +197,9 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 
 func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
+	errGroup := new(errgroup.Group)
+	errGroup.SetLimit(2)
+
 	channel := t.channel
 	for key, v := range streams {
 
@@ -214,13 +214,16 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
 				r := t.execute(ctx, &msg)
 
-				if err := t.log.saveLog(ctx, r); err != nil {
+				errGroup.Go(func() error {
+					return t.ack(ctx, stream, channel, nv.ID)
+				})
+				errGroup.Go(func() error {
+					return t.log.saveLog(ctx, r)
+				})
+				if err := errGroup.Wait(); err != nil {
 					logger.New().Error(err)
 				}
 
-				if err := t.ack(ctx, stream, channel, nv.ID); err != nil {
-					logger.New().Error(err)
-				}
 				t.wg.Done()
 			}); err != nil {
 				logger.New().Error(err)
@@ -242,28 +245,21 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-type BeanqContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
-var BeanqCtx = sync.Pool{New: func() any {
-	timeOut := Config.Load().(BeanqConfig).ConsumeTimeOut
-	ctx, cancel := context.WithTimeout(context.Background(), timeOut)
-	return BeanqContext{Ctx: ctx, Cancel: cancel}
-}}
-
 func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
 
 	r := result.Get().(*ConsumerResult)
-	nctx := BeanqCtx.Get().(BeanqContext)
+	var (
+		cancel context.CancelFunc
+		nctx   context.Context
+	)
+
+	nctx, cancel = context.WithTimeout(context.Background(), t.timeOut)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
 		result.Put(r)
 
-		nctx.Cancel()
-		BeanqCtx.Put(nctx)
+		cancel()
 	}()
 
 	r.Id = msg.Id()
@@ -279,15 +275,15 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 				}
 			}()
 
-			if err := t.consumer(nctx.Ctx, msg); err != nil {
+			if err := t.consumer(nctx, msg); err != nil {
 				errCh <- err
 			}
 			close(errCh)
 		})
 
 		select {
-		case <-nctx.Ctx.Done():
-			return nctx.Ctx.Err()
+		case <-nctx.Done():
+			return nctx.Err()
 		case e := <-errCh:
 			return e
 		}
