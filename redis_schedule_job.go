@@ -161,7 +161,9 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	var (
 		now      time.Time
-		timeUnit = MakeTimeUnit(t.prefix, consumer.Channel, consumer.Topic)
+		timeUnit        = MakeTimeUnit(t.prefix, consumer.Channel, consumer.Topic)
+		scoreMin string = "0"
+		scoreMax string
 	)
 	for {
 		select {
@@ -176,11 +178,11 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 		now = time.Now()
 
-		max := cast.ToString(now.UnixMilli() + 1)
+		scoreMax = cast.ToString(now.UnixMilli() + 1)
 
 		val, err := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-			Min:    "0",
-			Max:    max,
+			Min:    scoreMin,
+			Max:    scoreMax,
 			Offset: 0,
 			Count:  1,
 		}).Result()
@@ -190,14 +192,15 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 		}
 
 		if len(val) <= 0 {
+			scoreMin = scoreMax
 			continue
 		}
-
+		scoreMin = val[0]
 		if err := t.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
 			logger.New().With("", err).Error("zrem err")
 		}
 
-		if err := t.doConsume(ctx, max, consumer); err != nil {
+		if err := t.doConsume(ctx, scoreMax, consumer); err != nil {
 			logger.New().With("", err).Error("consume err")
 			// continue
 		}
