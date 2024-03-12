@@ -34,6 +34,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/spf13/cast"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -225,6 +226,12 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 	return nil
 }
 
+var scheduleGroup = sync.Pool{New: func() any {
+	group := new(errgroup.Group)
+	group.SetLimit(2)
+	return group
+}}
+
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
 	var zsetKey = MakeZSetKey(t.prefix, consumer.Channel, consumer.Topic)
@@ -236,14 +243,17 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 			return err
 		}
 
-		if err := t.sendToStream(ctx, msg); err != nil {
+		group := scheduleGroup.Get().(*errgroup.Group)
+		group.Go(func() error {
+			return t.sendToStream(ctx, msg)
+		})
+		group.Go(func() error {
+			return t.client.ZRem(ctx, zsetKey, vv).Err()
+		})
+		if err := group.Wait(); err != nil {
 			return err
 		}
-
-		// Delete data from `zset`
-		if err := t.client.ZRem(ctx, zsetKey, vv).Err(); err != nil {
-			return err
-		}
+		scheduleGroup.Put(group)
 		return nil
 	}
 	// begin to execute consumer's datas

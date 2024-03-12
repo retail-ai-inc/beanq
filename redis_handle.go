@@ -195,10 +195,13 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 	}
 }
 
-func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
+var groupPool = sync.Pool{New: func() any {
+	group := new(errgroup.Group)
+	group.SetLimit(2)
+	return group
+}}
 
-	errGroup := new(errgroup.Group)
-	errGroup.SetLimit(2)
+func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
 	channel := t.channel
 	for key, v := range streams {
@@ -214,15 +217,17 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
 				r := t.execute(ctx, &msg)
 
-				errGroup.Go(func() error {
+				group := groupPool.Get().(*errgroup.Group)
+				group.Go(func() error {
 					return t.ack(ctx, stream, channel, nv.ID)
 				})
-				errGroup.Go(func() error {
+				group.Go(func() error {
 					return t.log.saveLog(ctx, r)
 				})
-				if err := errGroup.Wait(); err != nil {
+				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
+				groupPool.Put(group)
 
 				t.wg.Done()
 			}); err != nil {
