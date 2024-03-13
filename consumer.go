@@ -56,11 +56,11 @@ var (
 
 func NewConsumer(config BeanqConfig) *Consumer {
 
-	poolSize := DefaultOptions.WorkPoolSize
-	if config.WorkPoolSize != 0 {
-		poolSize = config.WorkPoolSize
+	poolSize := DefaultOptions.WorkerPoolSize
+	if config.WorkerPoolSize != 0 {
+		poolSize = config.WorkerPoolSize
 	}
-	config.WorkPoolSize = poolSize
+	config.WorkerPoolSize = poolSize
 
 	timeOut := DefaultOptions.ConsumeTimeOut
 	if config.ConsumeTimeOut > 0 {

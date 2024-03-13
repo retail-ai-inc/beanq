@@ -253,7 +253,7 @@ type Options struct {
 	OrderKey                 string
 	DefaultChannel           string
 	Prefix                   string
-	WorkPoolSize             int
+	WorkerPoolSize           int
 	Priority                 float64
 	JobMaxRetry              int
 	DefaultMaxLen            int64
@@ -273,7 +273,7 @@ var DefaultOptions = &Options{
 	KeepSuccessJobsInHistory: time.Hour * 24 * 7,
 	PublishTimeOut:           10 * time.Second,
 	ConsumeTimeOut:           20 * time.Second,
-	WorkPoolSize:             20,
+	WorkerPoolSize:           20,
 	MinWorkers:               10,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
