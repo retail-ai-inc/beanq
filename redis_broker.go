@@ -73,8 +73,12 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 		PoolSize:     config.Redis.PoolSize,
 		MinIdleConns: config.Redis.MinIdleConnections,
 		PoolTimeout:  config.Redis.PoolTimeout,
+		PoolFIFO:     true,
 	})
 
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		logger.New().Fatal(err.Error())
+	}
 	prefix := config.Redis.Prefix
 	if prefix == "" {
 		prefix = DefaultOptions.Prefix
