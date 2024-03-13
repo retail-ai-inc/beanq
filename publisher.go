@@ -50,9 +50,9 @@ func NewPublisher(config BeanqConfig) *pubClient {
 
 	publisherOnce.Do(func() {
 
-		poolSize := config.PoolSize
+		poolSize := config.WorkPoolSize
 		if poolSize <= 0 {
-			poolSize = DefaultOptions.PoolSize
+			poolSize = DefaultOptions.WorkPoolSize
 		}
 
 		publishTimeOut := config.PublishTimeOut

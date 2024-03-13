@@ -30,40 +30,41 @@ import (
 
 type (
 	DebugLog struct {
-		Path string
-		On   bool
+		Path string `json:"path"`
+		On   bool   `json:"on"`
 	}
 	Health struct {
-		Port string
-		Host string
+		Port string `json:"port"`
+		Host string `json:"host"`
 	}
 	Redis struct {
-		Host               string
-		Port               string
-		Password           string
-		Prefix             string
-		Database           int
-		MaxLen             int64
-		MinIdleConnections int
-		DialTimeout        time.Duration
-		ReadTimeout        time.Duration
-		WriteTimeout       time.Duration
-		PoolTimeout        time.Duration
+		Host               string        `json:"host"`
+		Port               string        `json:"port"`
+		Password           string        `json:"password"`
+		Prefix             string        `json:"prefix"`
+		Database           int           `json:"database"`
+		MaxLen             int64         `json:"maxLen"`
+		MinIdleConnections int           `json:"minIdleConnections"`
+		DialTimeout        time.Duration `json:"dialTimeout"`
+		ReadTimeout        time.Duration `json:"readTimeout"`
+		WriteTimeout       time.Duration `json:"writeTimeout"`
+		PoolTimeout        time.Duration `json:"poolTimeout"`
+		MaxRetries         int           `json:"maxRetries"`
+		PoolSize           int           `json:"poolSize"`
 	}
 	BeanqConfig struct {
-		Health
-		DebugLog
-		Driver string
-		Redis
-		PoolSize                 int
-		JobMaxRetries            int
-		DeadLetterIdle           time.Duration
-		KeepJobsInQueue          time.Duration
-		KeepFailedJobsInHistory  time.Duration
-		KeepSuccessJobsInHistory time.Duration
-		PublishTimeOut           time.Duration
-		ConsumeTimeOut           time.Duration
-		MinWorkers               int64
+		Health                   Health        `json:"health"`
+		DebugLog                 DebugLog      `json:"debugLog"`
+		Driver                   string        `json:"driver"`
+		Redis                    Redis         `json:"redis"`
+		WorkPoolSize             int           `json:"workPoolSize"`
+		JobMaxRetries            int           `json:"jobMaxRetries"`
+		DeadLetterIdle           time.Duration `json:"deadLetterIdle"`
+		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
+		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
+		PublishTimeOut           time.Duration `json:"publishTimeOut"`
+		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
+		MinWorkers               int64         `json:"minWorkers"`
 	}
 )
 

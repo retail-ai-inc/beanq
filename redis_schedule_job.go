@@ -33,6 +33,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
@@ -284,7 +285,7 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 	key := MakeListKey(t.prefix, opt.Channel, opt.Topic)
 
 	valKey := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
-	value := strings.Join([]string{valKey, string(bt)}, ":")
+	value := strings.Join([]string{valKey, stringx.ByteToString(bt)}, ":")
 
 	if err := t.client.LPush(ctx, key, value).Err(); err != nil {
 		return err
@@ -346,7 +347,7 @@ func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic stri
 		if len(strs) < 2 {
 			continue
 		}
-		if err := json.Unmarshal([]byte(strs[1]), &msg); err != nil {
+		if err := json.Unmarshal(stringx.StringToByte(strs[1]), &msg); err != nil {
 			logger.New().Error(err)
 		}
 		xAddArgs.Values = map[string]any(msg.Values)

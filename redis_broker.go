@@ -65,11 +65,11 @@ func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
 		DB:           config.Redis.Database,
-		MaxRetries:   config.JobMaxRetries,
+		MaxRetries:   config.Redis.MaxRetries,
 		DialTimeout:  config.Redis.DialTimeout,
 		ReadTimeout:  config.Redis.ReadTimeout,
 		WriteTimeout: config.Redis.WriteTimeout,
-		PoolSize:     config.PoolSize,
+		PoolSize:     config.Redis.PoolSize,
 		MinIdleConns: config.Redis.MinIdleConnections,
 		PoolTimeout:  config.Redis.PoolTimeout,
 	})
@@ -90,11 +90,10 @@ func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		logDone:     make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client, pool),
-		// opts:        nil,
-		once:   &sync.Once{},
-		pool:   pool,
-		prefix: prefix,
-		maxLen: maxLen,
+		once:        &sync.Once{},
+		pool:        pool,
+		prefix:      prefix,
+		maxLen:      maxLen,
 	}
 }
 
