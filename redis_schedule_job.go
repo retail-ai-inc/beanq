@@ -244,10 +244,10 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		}
 
 		group := scheduleGroup.Get().(*errgroup.Group)
-		group.Go(func() error {
+		group.TryGo(func() error {
 			return t.sendToStream(ctx, msg)
 		})
-		group.Go(func() error {
+		group.TryGo(func() error {
 			return t.client.ZRem(ctx, zsetKey, vv).Err()
 		})
 		if err := group.Wait(); err != nil {

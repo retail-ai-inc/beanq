@@ -218,10 +218,10 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 				r := t.execute(ctx, &msg)
 
 				group := groupPool.Get().(*errgroup.Group)
-				group.Go(func() error {
+				group.TryGo(func() error {
 					return t.ack(ctx, stream, channel, nv.ID)
 				})
-				group.Go(func() error {
+				group.TryGo(func() error {
 					return t.log.saveLog(ctx, r)
 				})
 				if err := group.Wait(); err != nil {
