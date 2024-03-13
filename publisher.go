@@ -50,9 +50,9 @@ func NewPublisher(config BeanqConfig) *pubClient {
 
 	publisherOnce.Do(func() {
 
-		poolSize := config.WorkerPoolSize
+		poolSize := config.ConsumerPoolSize
 		if poolSize <= 0 {
-			poolSize = DefaultOptions.WorkerPoolSize
+			poolSize = DefaultOptions.ConsumerPoolSize
 		}
 
 		publishTimeOut := config.PublishTimeOut
@@ -68,7 +68,7 @@ func NewPublisher(config BeanqConfig) *pubClient {
 		Config.Store(config)
 		if config.Driver == "redis" {
 			beanqPublisher = &pubClient{
-				broker:         newRedisBroker(pool, config),
+				broker:         newRedisBroker(pool),
 				wg:             nil,
 				publishTimeOut: publishTimeOut,
 			}

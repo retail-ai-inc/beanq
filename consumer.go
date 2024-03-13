@@ -56,11 +56,11 @@ var (
 
 func NewConsumer(config BeanqConfig) *Consumer {
 
-	poolSize := DefaultOptions.WorkerPoolSize
-	if config.WorkerPoolSize != 0 {
-		poolSize = config.WorkerPoolSize
+	poolSize := DefaultOptions.ConsumerPoolSize
+	if config.ConsumerPoolSize != 0 {
+		poolSize = config.ConsumerPoolSize
 	}
-	config.WorkerPoolSize = poolSize
+	config.ConsumerPoolSize = poolSize
 
 	timeOut := DefaultOptions.ConsumeTimeOut
 	if config.ConsumeTimeOut > 0 {
@@ -75,7 +75,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	Config.Store(config)
 	if config.Driver == "redis" {
 		beanqConsumer = &Consumer{
-			broker:  newRedisBroker(pool, config),
+			broker:  newRedisBroker(pool),
 			mu:      sync.RWMutex{},
 			timeOut: timeOut,
 		}

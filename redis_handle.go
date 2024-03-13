@@ -255,10 +255,10 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 	r := result.Get().(*ConsumerResult)
 	var (
 		cancel context.CancelFunc
-		nctx   context.Context
 	)
-
-	nctx, cancel = context.WithTimeout(context.Background(), t.timeOut)
+	if _, ok := ctx.Deadline(); !ok {
+		ctx, cancel = context.WithTimeout(ctx, t.timeOut)
+	}
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
@@ -279,16 +279,20 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 				}
 			}()
+			select {
+			case <-ctx.Done():
+				errCh <- ctx.Err()
+				return
+			default:
 
-			if err := t.consumer(nctx, msg); err != nil {
+			}
+			if err := t.consumer(ctx, msg); err != nil {
 				errCh <- err
 			}
 			close(errCh)
 		})
 
 		select {
-		case <-nctx.Done():
-			return nctx.Err()
 		case e := <-errCh:
 			return e
 		}

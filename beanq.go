@@ -57,7 +57,7 @@ type (
 		DebugLog                 DebugLog      `json:"debugLog"`
 		Driver                   string        `json:"driver"`
 		Redis                    Redis         `json:"redis"`
-		WorkerPoolSize           int           `json:"workerPoolSize"`
+		ConsumerPoolSize         int           `json:"consumerPoolSize"`
 		JobMaxRetries            int           `json:"jobMaxRetries"`
 		DeadLetterIdle           time.Duration `json:"deadLetterIdle"`
 		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`

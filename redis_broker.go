@@ -59,8 +59,9 @@ type (
 
 var _ Broker = (*RedisBroker)(nil)
 
-func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
+func newRedisBroker(pool *ants.Pool) *RedisBroker {
 
+	config := Config.Load().(BeanqConfig)
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
@@ -74,11 +75,11 @@ func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		PoolTimeout:  config.Redis.PoolTimeout,
 	})
 
-	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	prefix := config.Redis.Prefix
 	if prefix == "" {
 		prefix = DefaultOptions.Prefix
 	}
-	maxLen := Config.Load().(BeanqConfig).Redis.MaxLen
+	maxLen := config.Redis.MaxLen
 	if maxLen <= 0 {
 		maxLen = DefaultOptions.DefaultMaxLen
 	}
