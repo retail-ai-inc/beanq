@@ -32,18 +32,10 @@ type RedisHandle struct {
 	timeOut     time.Duration
 	pool        *ants.Pool
 
-	wg sync.WaitGroup
+	wg           *sync.WaitGroup
+	result       *sync.Pool
+	errGroupPool *sync.Pool
 }
-
-var (
-	result = sync.Pool{New: func() any {
-		return &ConsumerResult{
-			Level:   InfoLevel,
-			Info:    SuccessInfo,
-			RunTime: "",
-		}
-	}}
-)
 
 func newRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
 
@@ -83,7 +75,19 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		minWorkers:       minWorkers,
 		timeOut:          timeOut,
 		pool:             pool,
-		wg:               sync.WaitGroup{},
+		wg:               new(sync.WaitGroup),
+		result: &sync.Pool{New: func() any {
+			return &ConsumerResult{
+				Level:   InfoLevel,
+				Info:    SuccessInfo,
+				RunTime: "",
+			}
+		}},
+		errGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
 	}
 }
 
@@ -195,12 +199,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 	}
 }
 
-var groupPool = sync.Pool{New: func() any {
-	group := new(errgroup.Group)
-	group.SetLimit(2)
-	return group
-}}
-
 func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
 	channel := t.channel
@@ -217,7 +215,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
 				r := t.execute(ctx, &msg)
 
-				group := groupPool.Get().(*errgroup.Group)
+				group := t.errGroupPool.Get().(*errgroup.Group)
 				group.TryGo(func() error {
 					return t.ack(ctx, stream, channel, nv.ID)
 				})
@@ -227,7 +225,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
-				groupPool.Put(group)
+				t.errGroupPool.Put(group)
 
 				t.wg.Done()
 			}); err != nil {
@@ -252,7 +250,7 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
 
-	r := result.Get().(*ConsumerResult)
+	r := t.result.Get().(*ConsumerResult)
 	var (
 		cancel context.CancelFunc
 	)
@@ -262,7 +260,7 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-		result.Put(r)
+		t.result.Put(r)
 
 		cancel()
 	}()

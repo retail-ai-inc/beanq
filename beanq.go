@@ -82,7 +82,7 @@ type BeanqSub interface {
 	Register(channek, topic string, consumerFun DoConsumer)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
-	StartPing() error
+	ping()
 }
 type IHandle interface {
 	Check(ctx context.Context) error

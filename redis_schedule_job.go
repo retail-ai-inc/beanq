@@ -53,8 +53,9 @@ type (
 		stop, done, seqDone       chan struct{}
 		scheduleTicker, seqTicker *time.Ticker
 
-		prefix string
-		maxLen int64
+		prefix               string
+		maxLen               int64
+		scheduleErrGroupPool *sync.Pool
 	}
 )
 
@@ -98,6 +99,11 @@ func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob 
 		seqTicker:      time.NewTicker(10 * time.Second),
 		prefix:         prefix,
 		maxLen:         maxLen,
+		scheduleErrGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
 	}
 
 }
@@ -227,12 +233,6 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer *Consu
 	return nil
 }
 
-var scheduleGroup = sync.Pool{New: func() any {
-	group := new(errgroup.Group)
-	group.SetLimit(2)
-	return group
-}}
-
 func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer *ConsumerHandler) {
 
 	var zsetKey = MakeZSetKey(t.prefix, consumer.Channel, consumer.Topic)
@@ -244,7 +244,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 			return err
 		}
 
-		group := scheduleGroup.Get().(*errgroup.Group)
+		group := t.scheduleErrGroupPool.Get().(*errgroup.Group)
 		group.TryGo(func() error {
 			return t.sendToStream(ctx, msg)
 		})
@@ -254,7 +254,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 		if err := group.Wait(); err != nil {
 			return err
 		}
-		scheduleGroup.Put(group)
+		t.scheduleErrGroupPool.Put(group)
 		return nil
 	}
 	// begin to execute consumer's datas

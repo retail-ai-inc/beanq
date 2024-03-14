@@ -120,26 +120,36 @@ func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
 func (t *Consumer) StartConsumer() {
 
+	t.ping()
 	t.StartConsumerWithContext(context.Background())
 
 }
-func (t *Consumer) StartPing() error {
+func (t *Consumer) ping() {
 
 	go func() {
 		hdl := &http.ServeMux{}
 		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {
 			writer.WriteHeader(http.StatusOK)
-			writer.Write([]byte("Beanq 🚀  pong"))
+			_, _ = writer.Write([]byte("Beanq 🚀  pong"))
 			return
 		})
+		host := "0.0.0.0"
+		port := "7777"
+		health := Config.Load().(BeanqConfig).Health
+
+		if health.Host != "" {
+			host = health.Host
+		}
+		if health.Port != "" {
+			port = health.Port
+		}
 		srv := &http.Server{
-			Addr:    strings.Join([]string{Config.Load().(BeanqConfig).Health.Host, Config.Load().(BeanqConfig).Health.Port}, ":"),
+			Addr:    strings.Join([]string{host, port}, ":"),
 			Handler: hdl,
 		}
+		logger.New().Info("Start Ping On:", host, ":", port)
 		if err := srv.ListenAndServe(); err != nil {
-			logger.New().With("", err).Error("ping server error")
+			logger.New().Fatal(err)
 		}
 	}()
-
-	return nil
 }
