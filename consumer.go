@@ -45,7 +45,7 @@ type Consumer struct {
 	broker  Broker
 	opts    *Options
 	m       []*ConsumerHandler
-	mu      sync.RWMutex
+	mu      *sync.RWMutex
 	timeOut time.Duration
 }
 
@@ -76,7 +76,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	if config.Driver == "redis" {
 		beanqConsumer = &Consumer{
 			broker:  newRedisBroker(pool),
-			mu:      sync.RWMutex{},
+			mu:      new(sync.RWMutex),
 			timeOut: timeOut,
 		}
 	} else {

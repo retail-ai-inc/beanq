@@ -350,7 +350,7 @@ func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic stri
 		if err := json.Unmarshal(stringx.StringToByte(strs[1]), &msg); err != nil {
 			logger.New().Error(err)
 		}
-		xAddArgs.Values = map[string]any(msg.Values)
+		xAddArgs.Values = msg.Values
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			logger.New().Error(err)
 		}
