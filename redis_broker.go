@@ -201,9 +201,9 @@ func (t *RedisBroker) waitSignal() {
 				t.done <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.logDone <- struct{}{}
-				t.pool.Release()
 				t.scheduleJob.shutDown()
 				_ = t.client.Close()
+				t.pool.Release()
 			})
 		}
 	}
