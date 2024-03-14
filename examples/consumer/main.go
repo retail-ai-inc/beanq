@@ -75,7 +75,7 @@ func main() {
 	// 	logger.New().With("default-channel", "default-topic").Info(message.Payload())
 	// 	return nil
 	// })
-	// start ping
+
 	// begin to consume information
 	csm.StartConsumer()
 }
