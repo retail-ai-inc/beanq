@@ -64,7 +64,7 @@ type (
 		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
 		PublishTimeOut           time.Duration `json:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
-		MinWorkers               int64         `json:"minWorkers"`
+		MinConsumers             int64         `json:"minConsumers"`
 	}
 )
 

@@ -25,12 +25,12 @@ type RedisHandle struct {
 	topic            string
 	pendingIdle      time.Duration
 
-	prefix      string
-	maxLen      int64
-	jobMaxRetry int
-	minWorkers  int64
-	timeOut     time.Duration
-	pool        *ants.Pool
+	prefix       string
+	maxLen       int64
+	jobMaxRetry  int
+	minConsumers int64
+	timeOut      time.Duration
+	pool         *ants.Pool
 
 	wg           *sync.WaitGroup
 	result       *sync.Pool
@@ -55,9 +55,9 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		jobMaxRetry = DefaultOptions.JobMaxRetry
 	}
 
-	minWorkers := bqConfig.MinWorkers
-	if minWorkers <= 0 {
-		minWorkers = DefaultOptions.MinWorkers
+	minConsumers := bqConfig.MinConsumers
+	if minConsumers <= 0 {
+		minConsumers = DefaultOptions.MinConsumers
 	}
 	timeOut := bqConfig.ConsumeTimeOut
 
@@ -72,7 +72,7 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		prefix:           prefix,
 		maxLen:           maxLen,
 		jobMaxRetry:      jobMaxRetry,
-		minWorkers:       minWorkers,
+		minConsumers:     minConsumers,
 		timeOut:          timeOut,
 		pool:             pool,
 		wg:               new(sync.WaitGroup),
@@ -108,7 +108,7 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 	channel := t.channel
 	topic := t.topic
 	stream := MakeStreamKey(t.prefix, channel, topic)
-	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minWorkers, 10*time.Second)
+	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
 		// check state

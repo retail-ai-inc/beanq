@@ -257,7 +257,7 @@ type Options struct {
 	Priority                 float64
 	JobMaxRetry              int
 	DefaultMaxLen            int64
-	MinWorkers               int64
+	MinConsumers             int64
 	KeepSuccessJobsInHistory time.Duration
 	KeepFailedJobsInHistory  time.Duration
 	RetryTime                time.Duration
@@ -272,7 +272,7 @@ var DefaultOptions = &Options{
 	PublishTimeOut:           10 * time.Second,
 	ConsumeTimeOut:           20 * time.Second,
 	ConsumerPoolSize:         20,
-	MinWorkers:               10,
+	MinConsumers:             10,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
 
