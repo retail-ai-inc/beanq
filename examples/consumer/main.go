@@ -59,7 +59,7 @@ func main() {
 	csm.Register("delay-channel", "delay-topic", func(ctx context.Context, msg *beanq.Message) error {
 
 		// panic("this is a panic")
-		// time.Sleep(25 * time.Second)
+		// time.Sleep(20 * time.Second)
 		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload())
 		return nil
 	})

@@ -24,10 +24,14 @@ package beanq
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
+	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 )
 
 func makeKey(keys ...string) string {
@@ -87,6 +91,7 @@ func MakeLogKey(prefix, resultType string) string {
 func MakeHealthKey(prefix string) string {
 	return makeKey(prefix, "health_checker")
 }
+
 func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }
@@ -94,21 +99,39 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 func RetryInfo(ctx context.Context, f func() error, retry int) (int, error) {
 	index := 0
 	timer := time.NewTimer(time.Duration(index) * time.Millisecond)
-	defer timer.Stop()
-
+	defer func() {
+		timer.Stop()
+	}()
+	errCh := make(chan error, 1)
 	for {
+
+		select {
+		case <-timer.C:
+		}
+
+		go func() {
+			defer func() {
+				if ne := recover(); ne != nil {
+					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+					return
+				}
+			}()
+			errCh <- f()
+			close(errCh)
+			return
+		}()
+
 		select {
 		case <-ctx.Done():
 			return index, ctx.Err()
-
-		case <-timer.C:
-			e := f()
-			if e != nil {
-				return index, e
-			}
-			if e == nil || index >= retry {
+		case err := <-errCh:
+			if err == nil {
 				return index, nil
 			}
+			if index >= retry {
+				return index, err
+			}
+
 			index++
 			timer.Reset(jitterBackoff(500*time.Millisecond, time.Second, retry))
 		}

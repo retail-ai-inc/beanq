@@ -3,8 +3,6 @@ package beanq
 import (
 	"context"
 	"errors"
-	"fmt"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -12,7 +10,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -138,8 +135,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 
 	streamKey := MakeStreamKey(t.prefix, t.channel, t.topic)
 
-	deadLetterStreamKey := MakeDeadLetterStreamKey(t.prefix, t.channel, t.topic)
-
 	defer t.deadLetterTicker.Stop()
 
 	for {
@@ -185,10 +180,28 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				msg.Values["pendingRetry"] = pending.RetryCount
 				msg.Values["idle"] = pending.Idle.Seconds()
 
-				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg.Values)
-				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+				r := t.result.Get().(*ConsumerResult)
+				r.Id = msg.Id()
+				r.BeginTime = msg.ExecuteTime()
+
+				r.EndTime = time.Now()
+				sub := r.EndTime.Sub(r.BeginTime)
+				r.AddTime = msg.AddTime()
+				r.Retry = msg.Retry()
+				r.Payload = msg.Payload()
+				r.RunTime = sub.String()
+				r.ExecuteTime = msg.ExecuteTime()
+				r.Topic = msg.Topic()
+				r.Channel = t.channel
+				r.MsgType = msg.GetMsgType()
+
+				r.Level = ErrLevel
+				r.Info = "too long pending"
+
+				if err := t.log.saveLog(ctx, r); err != nil {
 					logger.New().Error(err)
 				}
+
 				if err := t.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
@@ -227,11 +240,10 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 				}
 				t.errGroupPool.Put(group)
 
-				t.wg.Done()
+				defer t.wg.Done()
 			}); err != nil {
 				logger.New().Error(err)
 			}
-
 		}
 		streams[key] = redis.XStream{}
 	}
@@ -251,66 +263,39 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
 
 	r := t.result.Get().(*ConsumerResult)
-	var (
-		cancel context.CancelFunc
-	)
-	if _, ok := ctx.Deadline(); !ok {
-		ctx, cancel = context.WithTimeout(ctx, t.timeOut)
-	}
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, t.timeOut)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
 		t.result.Put(r)
-
 		cancel()
 	}()
 
 	r.Id = msg.Id()
 	r.BeginTime = time.Now()
-
-	retryCount, err := RetryInfo(ctx, func() error {
-
-		errCh := make(chan error, 1)
-		_ = t.pool.Submit(func() {
-			defer func() {
-				if ne := recover(); ne != nil {
-					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
-				}
-			}()
-			select {
-			case <-ctx.Done():
-				errCh <- ctx.Err()
-				return
-			default:
-
-			}
-			if err := t.consumer(ctx, msg); err != nil {
-				errCh <- err
-			}
-			close(errCh)
-		})
-
-		select {
-		case e := <-errCh:
-			return e
-		}
-	}, t.jobMaxRetry)
-
-	r.EndTime = time.Now()
-	sub := r.EndTime.Sub(r.BeginTime)
 	r.AddTime = msg.AddTime()
-	r.Retry = retryCount
 	r.Payload = msg.Payload()
-	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime()
 	r.Topic = msg.Topic()
 	r.Channel = t.channel
 	r.MsgType = msg.GetMsgType()
 
+	retryCount, err := RetryInfo(ctx, func() error {
+		return t.consumer(ctx, msg)
+	}, t.jobMaxRetry)
+
+	r.EndTime = time.Now()
+	sub := r.EndTime.Sub(r.BeginTime)
+	r.RunTime = sub.String()
+	r.Retry = retryCount
+
 	if err != nil {
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}
+
 	return r
 }
 
