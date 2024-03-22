@@ -3,8 +3,6 @@ package beanq
 import (
 	"context"
 	"errors"
-	"fmt"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -12,7 +10,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"golang.org/x/sync/errgroup"
 )
 
 type RedisHandle struct {
@@ -24,29 +22,17 @@ type RedisHandle struct {
 	topic            string
 	pendingIdle      time.Duration
 
-	prefix      string
-	maxLen      int64
-	jobMaxRetry int
-	minWorkers  int64
-	timeOut     time.Duration
-	pool        *ants.Pool
+	prefix       string
+	maxLen       int64
+	jobMaxRetry  int
+	minConsumers int64
+	timeOut      time.Duration
+	pool         *ants.Pool
 
-	wg sync.WaitGroup
+	wg           *sync.WaitGroup
+	result       *sync.Pool
+	errGroupPool *sync.Pool
 }
-
-var (
-	result = sync.Pool{New: func() any {
-		return &ConsumerResult{
-			Level:   InfoLevel,
-			Info:    SuccessInfo,
-			RunTime: "",
-		}
-	}}
-
-	streamArrayPool = sync.Pool{New: func() any {
-		return make([]redis.XStream, 100)
-	}}
-)
 
 func newRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
 
@@ -66,9 +52,9 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		jobMaxRetry = DefaultOptions.JobMaxRetry
 	}
 
-	minWorkers := bqConfig.MinWorkers
-	if minWorkers <= 0 {
-		minWorkers = DefaultOptions.MinWorkers
+	minConsumers := bqConfig.MinConsumers
+	if minConsumers <= 0 {
+		minConsumers = DefaultOptions.MinConsumers
 	}
 	timeOut := bqConfig.ConsumeTimeOut
 
@@ -83,10 +69,22 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		prefix:           prefix,
 		maxLen:           maxLen,
 		jobMaxRetry:      jobMaxRetry,
-		minWorkers:       minWorkers,
+		minConsumers:     minConsumers,
 		timeOut:          timeOut,
 		pool:             pool,
-		wg:               sync.WaitGroup{},
+		wg:               new(sync.WaitGroup),
+		result: &sync.Pool{New: func() any {
+			return &ConsumerResult{
+				Level:   InfoLevel,
+				Info:    SuccessInfo,
+				RunTime: "",
+			}
+		}},
+		errGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
 	}
 }
 
@@ -107,7 +105,7 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 	channel := t.channel
 	topic := t.topic
 	stream := MakeStreamKey(t.prefix, channel, topic)
-	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minWorkers, 10*time.Second)
+	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
 		// check state
@@ -136,8 +134,6 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
 
 	streamKey := MakeStreamKey(t.prefix, t.channel, t.topic)
-
-	deadLetterStreamKey := MakeDeadLetterStreamKey(t.prefix, t.channel, t.topic)
 
 	defer t.deadLetterTicker.Stop()
 
@@ -173,9 +169,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 			if pending.Idle < t.pendingIdle {
 				continue
 			}
-
-			// if pending retry count > 10,then add it into dead_letter_stream
-			if pending.RetryCount > 10 {
+			// if pending retry count > 5,then add it into dead_letter_stream
+			if pending.RetryCount > 5 {
 				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
 					continue
@@ -183,22 +178,31 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 
 				msg := Message(val[0])
 				msg.Values["pendingRetry"] = pending.RetryCount
+				msg.Values["idle"] = pending.Idle.Seconds()
 
-				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg.Values)
-				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+				r := t.result.Get().(*ConsumerResult)
+				r.Id = msg.Id()
+				r.BeginTime = msg.ExecuteTime()
+
+				r.EndTime = time.Now()
+				sub := r.EndTime.Sub(r.BeginTime)
+				r.AddTime = msg.AddTime()
+				r.Retry = msg.Retry()
+				r.Payload = msg.Payload()
+				r.RunTime = sub.String()
+				r.ExecuteTime = msg.ExecuteTime()
+				r.Topic = msg.Topic()
+				r.Channel = t.channel
+				r.MsgType = msg.GetMsgType()
+
+				r.Level = ErrLevel
+				r.Info = "too long pending"
+
+				if err := t.log.saveLog(ctx, r); err != nil {
 					logger.New().Error(err)
 				}
-				if err := t.client.XDel(ctx, streamKey, pending.ID).Err(); err != nil {
-					logger.New().Error(err)
-				}
-			} else {
-				if err := t.client.XClaim(ctx, &redis.XClaimArgs{
-					Stream:   streamKey,
-					Group:    t.channel,
-					Consumer: pending.Consumer,
-					MinIdle:  t.pendingIdle,
-					Messages: []string{pending.ID},
-				}).Err(); err != nil {
+
+				if err := t.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
 			}
@@ -224,18 +228,22 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 
 				r := t.execute(ctx, &msg)
 
-				if err := t.log.saveLog(ctx, r); err != nil {
+				group := t.errGroupPool.Get().(*errgroup.Group)
+				group.TryGo(func() error {
+					return t.ack(ctx, stream, channel, nv.ID)
+				})
+				group.TryGo(func() error {
+					return t.log.saveLog(ctx, r)
+				})
+				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
+				t.errGroupPool.Put(group)
 
-				if err := t.ack(ctx, stream, channel, nv.ID); err != nil {
-					logger.New().Error(err)
-				}
-				t.wg.Done()
+				defer t.wg.Done()
 			}); err != nil {
 				logger.New().Error(err)
 			}
-
 		}
 		streams[key] = redis.XStream{}
 	}
@@ -252,72 +260,42 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-type BeanqContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
-var BeanqCtx = sync.Pool{New: func() any {
-	timeOut := Config.Load().(BeanqConfig).ConsumeTimeOut
-	ctx, cancel := context.WithTimeout(context.Background(), timeOut)
-	return BeanqContext{Ctx: ctx, Cancel: cancel}
-}}
-
 func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
 
-	r := result.Get().(*ConsumerResult)
-	nctx := BeanqCtx.Get().(BeanqContext)
+	r := t.result.Get().(*ConsumerResult)
+
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, t.timeOut)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-		result.Put(r)
-
-		nctx.Cancel()
-		BeanqCtx.Put(nctx)
+		t.result.Put(r)
+		cancel()
 	}()
 
 	r.Id = msg.Id()
 	r.BeginTime = time.Now()
-
-	retryCount, err := RetryInfo(ctx, func() error {
-
-		errCh := make(chan error, 1)
-		_ = t.pool.Submit(func() {
-			defer func() {
-				if ne := recover(); ne != nil {
-					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
-				}
-			}()
-
-			if err := t.consumer(nctx.Ctx, msg); err != nil {
-				errCh <- err
-			}
-			close(errCh)
-		})
-
-		select {
-		case <-nctx.Ctx.Done():
-			return nctx.Ctx.Err()
-		case e := <-errCh:
-			return e
-		}
-	}, t.jobMaxRetry)
-
-	r.EndTime = time.Now()
-	sub := r.EndTime.Sub(r.BeginTime)
 	r.AddTime = msg.AddTime()
-	r.Retry = retryCount
 	r.Payload = msg.Payload()
-	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime()
 	r.Topic = msg.Topic()
 	r.Channel = t.channel
 	r.MsgType = msg.GetMsgType()
 
+	retryCount, err := RetryInfo(ctx, func() error {
+		return t.consumer(ctx, msg)
+	}, t.jobMaxRetry)
+
+	r.EndTime = time.Now()
+	sub := r.EndTime.Sub(r.BeginTime)
+	r.RunTime = sub.String()
+	r.Retry = retryCount
+
 	if err != nil {
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}
+
 	return r
 }
 

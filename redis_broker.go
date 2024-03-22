@@ -59,26 +59,31 @@ type (
 
 var _ Broker = (*RedisBroker)(nil)
 
-func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
+func newRedisBroker(pool *ants.Pool) *RedisBroker {
 
+	config := Config.Load().(BeanqConfig)
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
 		DB:           config.Redis.Database,
-		MaxRetries:   config.JobMaxRetries,
+		MaxRetries:   config.Redis.MaxRetries,
 		DialTimeout:  config.Redis.DialTimeout,
 		ReadTimeout:  config.Redis.ReadTimeout,
 		WriteTimeout: config.Redis.WriteTimeout,
-		PoolSize:     config.PoolSize,
+		PoolSize:     config.Redis.PoolSize,
 		MinIdleConns: config.Redis.MinIdleConnections,
 		PoolTimeout:  config.Redis.PoolTimeout,
+		PoolFIFO:     true,
 	})
 
-	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		logger.New().Fatal(err.Error())
+	}
+	prefix := config.Redis.Prefix
 	if prefix == "" {
 		prefix = DefaultOptions.Prefix
 	}
-	maxLen := Config.Load().(BeanqConfig).Redis.MaxLen
+	maxLen := config.Redis.MaxLen
 	if maxLen <= 0 {
 		maxLen = DefaultOptions.DefaultMaxLen
 	}
@@ -90,11 +95,10 @@ func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
 		logDone:     make(chan struct{}),
 		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client, pool),
-		// opts:        nil,
-		once:   &sync.Once{},
-		pool:   pool,
-		prefix: prefix,
-		maxLen: maxLen,
+		once:        &sync.Once{},
+		pool:        pool,
+		prefix:      prefix,
+		maxLen:      maxLen,
 	}
 }
 
@@ -197,9 +201,9 @@ func (t *RedisBroker) waitSignal() {
 				t.done <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.logDone <- struct{}{}
-				t.pool.Release()
 				t.scheduleJob.shutDown()
 				_ = t.client.Close()
+				t.pool.Release()
 			})
 		}
 	}

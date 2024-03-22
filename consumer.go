@@ -45,7 +45,7 @@ type Consumer struct {
 	broker  Broker
 	opts    *Options
 	m       []*ConsumerHandler
-	mu      sync.RWMutex
+	mu      *sync.RWMutex
 	timeOut time.Duration
 }
 
@@ -56,11 +56,11 @@ var (
 
 func NewConsumer(config BeanqConfig) *Consumer {
 
-	poolSize := DefaultOptions.PoolSize
-	if config.PoolSize != 0 {
-		poolSize = config.PoolSize
+	poolSize := DefaultOptions.ConsumerPoolSize
+	if config.ConsumerPoolSize != 0 {
+		poolSize = config.ConsumerPoolSize
 	}
-	config.PoolSize = poolSize
+	config.ConsumerPoolSize = poolSize
 
 	timeOut := DefaultOptions.ConsumeTimeOut
 	if config.ConsumeTimeOut > 0 {
@@ -75,8 +75,8 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	Config.Store(config)
 	if config.Driver == "redis" {
 		beanqConsumer = &Consumer{
-			broker:  newRedisBroker(pool, config),
-			mu:      sync.RWMutex{},
+			broker:  newRedisBroker(pool),
+			mu:      new(sync.RWMutex),
 			timeOut: timeOut,
 		}
 	} else {
@@ -120,26 +120,32 @@ func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
 func (t *Consumer) StartConsumer() {
 
+	t.ping()
 	t.StartConsumerWithContext(context.Background())
 
 }
-func (t *Consumer) StartPing() error {
+func (t *Consumer) ping() {
 
+	health := Config.Load().(BeanqConfig).Health
+	if health.Host == "" || health.Port == "" {
+		return
+	}
+	
 	go func() {
 		hdl := &http.ServeMux{}
 		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {
 			writer.WriteHeader(http.StatusOK)
-			writer.Write([]byte("Beanq 🚀  pong"))
+			_, _ = writer.Write([]byte("Beanq 🚀  pong"))
 			return
 		})
+
 		srv := &http.Server{
-			Addr:    strings.Join([]string{Config.Load().(BeanqConfig).Health.Host, Config.Load().(BeanqConfig).Health.Port}, ":"),
+			Addr:    strings.Join([]string{health.Host, health.Port}, ":"),
 			Handler: hdl,
 		}
+		logger.New().Info("Start Ping On:", health.Host, ":", health.Port)
 		if err := srv.ListenAndServe(); err != nil {
-			logger.New().With("", err).Error("ping server error")
+			logger.New().Fatal(err)
 		}
 	}()
-
-	return nil
 }

@@ -33,7 +33,9 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/spf13/cast"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -51,8 +53,9 @@ type (
 		stop, done, seqDone       chan struct{}
 		scheduleTicker, seqTicker *time.Ticker
 
-		prefix string
-		maxLen int64
+		prefix               string
+		maxLen               int64
+		scheduleErrGroupPool *sync.Pool
 	}
 )
 
@@ -96,6 +99,11 @@ func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob 
 		seqTicker:      time.NewTicker(10 * time.Second),
 		prefix:         prefix,
 		maxLen:         maxLen,
+		scheduleErrGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
 	}
 
 }
@@ -161,7 +169,9 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 	var (
 		now      time.Time
-		timeUnit = MakeTimeUnit(t.prefix, consumer.Channel, consumer.Topic)
+		timeUnit        = MakeTimeUnit(t.prefix, consumer.Channel, consumer.Topic)
+		scoreMin string = "0"
+		scoreMax string
 	)
 	for {
 		select {
@@ -176,11 +186,11 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 
 		now = time.Now()
 
-		max := cast.ToString(now.UnixMilli() + 1)
+		scoreMax = cast.ToString(now.UnixMilli() + 1)
 
 		val, err := t.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-			Min:    "0",
-			Max:    max,
+			Min:    scoreMin,
+			Max:    scoreMax,
 			Offset: 0,
 			Count:  1,
 		}).Result()
@@ -190,14 +200,15 @@ func (t *scheduleJob) consume(ctx context.Context, consumer *ConsumerHandler) {
 		}
 
 		if len(val) <= 0 {
+			scoreMin = scoreMax
 			continue
 		}
-
+		scoreMin = val[0]
 		if err := t.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
 			logger.New().With("", err).Error("zrem err")
 		}
 
-		if err := t.doConsume(ctx, max, consumer); err != nil {
+		if err := t.doConsume(ctx, scoreMax, consumer); err != nil {
 			logger.New().With("", err).Error("consume err")
 			// continue
 		}
@@ -233,14 +244,17 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 			return err
 		}
 
-		if err := t.sendToStream(ctx, msg); err != nil {
+		group := t.scheduleErrGroupPool.Get().(*errgroup.Group)
+		group.TryGo(func() error {
+			return t.sendToStream(ctx, msg)
+		})
+		group.TryGo(func() error {
+			return t.client.ZRem(ctx, zsetKey, vv).Err()
+		})
+		if err := group.Wait(); err != nil {
 			return err
 		}
-
-		// Delete data from `zset`
-		if err := t.client.ZRem(ctx, zsetKey, vv).Err(); err != nil {
-			return err
-		}
+		t.scheduleErrGroupPool.Put(group)
 		return nil
 	}
 	// begin to execute consumer's datas
@@ -271,7 +285,7 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 	key := MakeListKey(t.prefix, opt.Channel, opt.Topic)
 
 	valKey := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
-	value := strings.Join([]string{valKey, string(bt)}, ":")
+	value := strings.Join([]string{valKey, stringx.ByteToString(bt)}, ":")
 
 	if err := t.client.LPush(ctx, key, value).Err(); err != nil {
 		return err
@@ -333,10 +347,10 @@ func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic stri
 		if len(strs) < 2 {
 			continue
 		}
-		if err := json.Unmarshal([]byte(strs[1]), &msg); err != nil {
+		if err := json.Unmarshal(stringx.StringToByte(strs[1]), &msg); err != nil {
 			logger.New().Error(err)
 		}
-		xAddArgs.Values = map[string]any(msg.Values)
+		xAddArgs.Values = msg.Values
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			logger.New().Error(err)
 		}
