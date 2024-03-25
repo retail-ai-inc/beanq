@@ -113,9 +113,12 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	}
 
 	// normal job
-	if msg.ExecuteTime().Before(time.Now()) {
-
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.Channel(), msg.Topic()), "", "*", t.maxLen, 0, msg.Values)
+	if msg.ExecuteTime.Before(time.Now()) {
+		nmsg, err := messageToMap(msg)
+		if err != nil {
+			return err
+		}
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}

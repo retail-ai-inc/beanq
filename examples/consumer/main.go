@@ -60,7 +60,7 @@ func main() {
 
 		// panic("this is a panic")
 		// time.Sleep(25 * time.Second)
-		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload())
+		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload)
 		return nil
 	})
 	// csm.Register("delay-channel", "delay-ch2", func(ctx context.Context, msg *beanq.Message) error {
