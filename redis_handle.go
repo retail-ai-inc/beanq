@@ -181,7 +181,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 					continue
 				}
 				val := vals[0]
-				msg := xMessageToStruct(&val)
+				msg := messageToStruct(val)
 				msg.PendingRetry = pending.RetryCount
 				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg)
 				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
@@ -219,8 +219,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		for _, vv := range message {
 			nv := vv
 			if err := t.pool.Submit(func() {
-				msg := xMessageToStruct(&nv)
-				r := t.execute(ctx, msg)
+				r := t.execute(ctx, &nv)
 
 				if err := t.log.saveLog(ctx, r); err != nil {
 					logger.New().Error(err)
@@ -261,7 +260,7 @@ var BeanqCtx = sync.Pool{New: func() any {
 	return BeanqContext{Ctx: ctx, Cancel: cancel}
 }}
 
-func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
+func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
 
 	r := result.Get().(*ConsumerResult)
 	nctx := BeanqCtx.Get().(BeanqContext)
@@ -273,6 +272,8 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 		nctx.Cancel()
 		BeanqCtx.Put(nctx)
 	}()
+
+	msg := messageToStruct(message)
 
 	r.Id = msg.Id
 	r.BeginTime = time.Now()
@@ -290,8 +291,8 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 			if err := t.consumer(nctx.Ctx, msg); err != nil {
 				errCh <- err
 			}
-			close(errCh)
 		})
+		close(errCh)
 
 		select {
 		case <-nctx.Ctx.Done():
@@ -306,6 +307,7 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 	r.AddTime = msg.AddTime
 	r.Retry = retryCount
 	r.Payload = msg.Payload
+	r.Priority = msg.Priority
 	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime
 	r.Topic = msg.TopicName

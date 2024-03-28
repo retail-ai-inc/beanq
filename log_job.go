@@ -50,6 +50,7 @@ type (
 
 		PendingRetry             int64
 		Retry                    int
+		Priority                 float64
 		AddTime                  string
 		ExpireTime               time.Time
 		RunTime                  string

@@ -23,7 +23,6 @@
 package beanq
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"time"
@@ -70,13 +69,34 @@ func NewMessage(message []byte) *Message {
 
 type DoConsumer func(ctx context.Context, msg *Message) error
 
-func xMessageToStruct(message *redis.XMessage) *Message {
-	msg := new(Message)
-	msg.Id = message.ID
-	values := message.Values
+// If possible, more data type judgments need to be added
+func messageToStruct(message any) *Message {
 
-	for key, val := range values {
+	msg := new(Message)
+	switch message.(type) {
+	case *redis.XMessage:
+		xmsg := message.(*redis.XMessage)
+		mapToMessage(xmsg.Values, msg)
+		msg.Id = xmsg.ID
+	case map[string]any:
+		mapToMessage(message.(map[string]any), msg)
+	}
+	return msg
+
+}
+
+// Customized function
+func mapToMessage(data map[string]any, msg *Message) {
+
+	now := time.Now()
+	msg.ExecuteTime = now
+	for key, val := range data {
 		switch key {
+		case "id":
+			if v, ok := val.(string); ok {
+				msg.Id = v
+			}
+
 		case "topicName":
 			if v, ok := val.(string); ok {
 				msg.TopicName = v
@@ -107,7 +127,11 @@ func xMessageToStruct(message *redis.XMessage) *Message {
 			}
 		case "executeTime":
 			if v, ok := val.(time.Time); ok {
-				msg.ExecuteTime = v
+				if v.IsZero() {
+					msg.ExecuteTime = now
+				} else {
+					msg.ExecuteTime = v
+				}
 			}
 		case "msgType":
 			if v, ok := val.(string); ok {
@@ -115,22 +139,27 @@ func xMessageToStruct(message *redis.XMessage) *Message {
 			}
 		}
 	}
-	return msg
 }
 
-func messageToMap(message *Message) (map[string]any, error) {
+// Customized function
+func messageToMap(message *Message) map[string]any {
+
 	m := make(map[string]any)
-	b, err := json.Marshal(message)
-	if err != nil {
-		return nil, err
-	}
-	d := json.NewDecoder(bytes.NewBuffer(b))
-	if err := d.Decode(&m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	m["id"] = message.Id
+	m["topicName"] = message.TopicName
+	m["channelName"] = message.ChannelName
+	m["maxLen"] = message.MaxLen
+	m["retry"] = message.Retry
+	m["priority"] = message.Priority
+	m["payload"] = message.Payload
+	m["addTime"] = message.AddTime
+	m["executeTime"] = message.ExecuteTime
+	m["msgType"] = message.MsgType
+	return m
+
 }
 
+// Customized function
 func jsonToMessage(dataStr string) (*Message, error) {
 
 	msg := new(Message)

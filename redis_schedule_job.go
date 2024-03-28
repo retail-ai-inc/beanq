@@ -253,10 +253,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 }
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
-	mmsg, err := messageToMap(msg)
-	if err != nil {
-		return err
-	}
+	mmsg := messageToMap(msg)
 	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, mmsg)
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
