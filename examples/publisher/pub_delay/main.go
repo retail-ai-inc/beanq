@@ -52,7 +52,7 @@ func pubDelayInfo() {
 
 	m := make(map[string]any)
 	ntime := time.Now()
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10; i++ {
 
 		if time.Now().Sub(ntime).Minutes() >= 1 {
 			break
@@ -80,7 +80,7 @@ func pubDelayInfo() {
 		// fmt.Println(delayT)
 		// continue
 		if err := pub.DelayPublish(msg, delayT, beanq.Topic("delay-topic"), beanq.Channel("delay-channel"), beanq.Priority(float64(y))); err != nil {
-			log.Fatalln(err)
+			log.Println(err)
 		}
 		// if err := pub.Publish(msg, beanq.Topic("delay-ch2"), beanq.Channel("delay-channel")); err != nil {
 		// 	log.Fatalln(err)

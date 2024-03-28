@@ -176,15 +176,14 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 
 			// if pending retry count > 10,then add it into dead_letter_stream
 			if pending.RetryCount > 10 {
-				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
-				if len(val) <= 0 {
+				vals := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+				if len(vals) <= 0 {
 					continue
 				}
-
-				msg := Message(val[0])
-				msg.Values["pendingRetry"] = pending.RetryCount
-
-				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg.Values)
+				val := vals[0]
+				msg := messageToStruct(val)
+				msg.PendingRetry = pending.RetryCount
+				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg)
 				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 					logger.New().Error(err)
 				}
@@ -220,9 +219,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		for _, vv := range message {
 			nv := vv
 			if err := t.pool.Submit(func() {
-				msg := Message(nv)
-
-				r := t.execute(ctx, &msg)
+				r := t.execute(ctx, &nv)
 
 				if err := t.log.saveLog(ctx, r); err != nil {
 					logger.New().Error(err)
@@ -263,7 +260,7 @@ var BeanqCtx = sync.Pool{New: func() any {
 	return BeanqContext{Ctx: ctx, Cancel: cancel}
 }}
 
-func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
+func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
 
 	r := result.Get().(*ConsumerResult)
 	nctx := BeanqCtx.Get().(BeanqContext)
@@ -276,7 +273,9 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 		BeanqCtx.Put(nctx)
 	}()
 
-	r.Id = msg.Id()
+	msg := messageToStruct(message)
+
+	r.Id = msg.Id
 	r.BeginTime = time.Now()
 
 	retryCount, err := RetryInfo(ctx, func() error {
@@ -292,8 +291,8 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 			if err := t.consumer(nctx.Ctx, msg); err != nil {
 				errCh <- err
 			}
-			close(errCh)
 		})
+		close(errCh)
 
 		select {
 		case <-nctx.Ctx.Done():
@@ -305,14 +304,15 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 
 	r.EndTime = time.Now()
 	sub := r.EndTime.Sub(r.BeginTime)
-	r.AddTime = msg.AddTime()
+	r.AddTime = msg.AddTime
 	r.Retry = retryCount
-	r.Payload = msg.Payload()
+	r.Payload = msg.Payload
+	r.Priority = msg.Priority
 	r.RunTime = sub.String()
-	r.ExecuteTime = msg.ExecuteTime()
-	r.Topic = msg.Topic()
+	r.ExecuteTime = msg.ExecuteTime
+	r.Topic = msg.TopicName
 	r.Channel = t.channel
-	r.MsgType = msg.GetMsgType()
+	r.MsgType = msg.MsgType
 
 	if err != nil {
 		r.Level = ErrLevel

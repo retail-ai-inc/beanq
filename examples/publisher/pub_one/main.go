@@ -59,9 +59,10 @@ func pubOneInfo() {
 	bmsg := beanq.NewMessage(d)
 	config := initCnf()
 	pub := beanq.NewPublisher(config)
+
 	err := pub.Publish(bmsg, beanq.Topic("ch2"), beanq.Channel("g2"))
 	if err != nil {
-
+		fmt.Println(err)
 	}
 	defer pub.Close()
 
