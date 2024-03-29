@@ -32,6 +32,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/spf13/cast"
 )
 
 type (
@@ -53,6 +54,7 @@ type (
 func NewMessage(message []byte) *Message {
 	now := time.Now()
 	id := uuid.NewString()
+	
 	return &Message{
 		Id:          id,
 		TopicName:   DefaultOptions.DefaultTopic,
@@ -114,9 +116,7 @@ func mapToMessage(data map[string]any, msg *Message) {
 				msg.Retry = v
 			}
 		case "priority":
-			if v, ok := val.(float64); ok {
-				msg.Priority = v
-			}
+			msg.Priority = cast.ToFloat64(val)
 		case "payload":
 			if v, ok := val.(string); ok {
 				msg.Payload = v
