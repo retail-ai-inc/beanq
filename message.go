@@ -32,121 +32,142 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/spf13/cast"
 )
 
 type (
-	values  map[string]any
-	Message redis.XMessage
-	// get val functions
-	iMessageValue interface {
-		string | int64 | time.Time | float64 | int
+	Message struct {
+		Id           string    `json:"id"`
+		TopicName    string    `json:"topicName"`
+		ChannelName  string    `json:"channelName"`
+		MaxLen       int64     `json:"maxLen"`
+		Retry        int       `json:"retry"`
+		PendingRetry int64     `json:"pendingRetry"`
+		Priority     float64   `json:"priority"`
+		Payload      string    `json:"payload"`
+		AddTime      string    `json:"addTime"`
+		ExecuteTime  time.Time `json:"executeTime"`
+		MsgType      string    `json:"msgType"`
 	}
 )
-
-func messageGetValue[T iMessageValue](msgValues values, key string, defaultValue T) T {
-	if v, ok := msgValues[key]; ok {
-		if value, ok := v.(T); ok {
-			return value
-		}
-	}
-	return defaultValue
-}
-
-func (t *Message) Id() string {
-	return messageGetValue(t.Values, "id", "")
-}
-
-func (t *Message) Name() string {
-	return messageGetValue(t.Values, "name", "")
-}
-
-func (t *Message) Topic() string {
-	return messageGetValue(t.Values, "topic", "")
-}
-
-func (t *Message) Channel() string {
-	return messageGetValue(t.Values, "channel", "")
-}
-
-func (t *Message) MaxLen() int64 {
-	return messageGetValue(t.Values, "maxLen", int64(0))
-}
-
-func (t *Message) Retry() int {
-	return messageGetValue(t.Values, "retry", 0)
-}
-
-func (t *Message) Priority() float64 {
-	return messageGetValue(t.Values, "priority", float64(0))
-}
-
-func (t *Message) Payload() string {
-	if v, ok := t.Values["message"]; ok {
-		if payload, ok := v.(string); ok {
-			return payload
-		}
-	}
-	return ""
-}
-
-func (t *Message) AddTime() string {
-	return messageGetValue(t.Values, "addTime", "")
-}
-
-func (t *Message) ExecuteTime() time.Time {
-	return messageGetValue(t.Values, "executeTime", time.Now())
-}
-
-func (t *Message) GetMsgType() string {
-	if v, ok := t.Values["msgType"]; ok {
-		return v.(string)
-	}
-	return "normal"
-}
 
 func NewMessage(message []byte) *Message {
 	now := time.Now()
 	id := uuid.NewString()
-	msg := Message{
-		ID: id,
-		Values: values{
-			"id":          id,                            // job's id
-			"name":        DefaultOptions.DefaultTopic,   // job's name
-			"topic":       DefaultOptions.DefaultTopic,   // job's topic name
-			"channel":     DefaultOptions.DefaultChannel, // job's channel name
-			"maxLen":      DefaultOptions.DefaultMaxLen,  // upper limit `stream`
-			"retry":       DefaultOptions.JobMaxRetry,    // retry count
-			"priority":    1,                             // attribute priority;0-10;The larger the value, the earlier the execution
-			"message":     stringx.ByteToString(message), // data message
-			"addTime":     now.Format(timex.DateTime),    // The time when the message was added, the default is the current time
-			"executeTime": now,                           // message execute time
-			"msgType":     "normal",
-		},
+	
+	return &Message{
+		Id:          id,
+		TopicName:   DefaultOptions.DefaultTopic,
+		ChannelName: DefaultOptions.DefaultChannel,
+		MaxLen:      DefaultOptions.DefaultMaxLen,
+		Retry:       DefaultOptions.JobMaxRetry,
+		Priority:    0,
+		Payload:     stringx.ByteToString(message),
+		AddTime:     now.Format(timex.DateTime),
+		ExecuteTime: now,
+		MsgType:     "normal",
 	}
-
-	return &msg
 }
 
 type DoConsumer func(ctx context.Context, msg *Message) error
 
+// If possible, more data type judgments need to be added
+func messageToStruct(message any) *Message {
+
+	msg := new(Message)
+	switch message.(type) {
+	case *redis.XMessage:
+		xmsg := message.(*redis.XMessage)
+		mapToMessage(xmsg.Values, msg)
+		msg.Id = xmsg.ID
+	case map[string]any:
+		mapToMessage(message.(map[string]any), msg)
+	}
+	return msg
+
+}
+
+// Customized function
+func mapToMessage(data map[string]any, msg *Message) {
+
+	now := time.Now()
+	msg.ExecuteTime = now
+	for key, val := range data {
+		switch key {
+		case "id":
+			if v, ok := val.(string); ok {
+				msg.Id = v
+			}
+
+		case "topicName":
+			if v, ok := val.(string); ok {
+				msg.TopicName = v
+			}
+		case "channelName":
+			if v, ok := val.(string); ok {
+				msg.ChannelName = v
+			}
+		case "maxLen":
+			if v, ok := val.(int64); ok {
+				msg.MaxLen = v
+			}
+		case "retry":
+			if v, ok := val.(int); ok {
+				msg.Retry = v
+			}
+		case "priority":
+			msg.Priority = cast.ToFloat64(val)
+		case "payload":
+			if v, ok := val.(string); ok {
+				msg.Payload = v
+			}
+		case "addTime":
+			if v, ok := val.(string); ok {
+				msg.AddTime = v
+			}
+		case "executeTime":
+			if v, ok := val.(time.Time); ok {
+				if v.IsZero() {
+					msg.ExecuteTime = now
+				} else {
+					msg.ExecuteTime = v
+				}
+			}
+		case "msgType":
+			if v, ok := val.(string); ok {
+				msg.MsgType = v
+			}
+		}
+	}
+}
+
+// Customized function
+func messageToMap(message *Message) map[string]any {
+
+	m := make(map[string]any)
+	m["id"] = message.Id
+	m["topicName"] = message.TopicName
+	m["channelName"] = message.ChannelName
+	m["maxLen"] = message.MaxLen
+	m["retry"] = message.Retry
+	m["priority"] = message.Priority
+	m["payload"] = message.Payload
+	m["addTime"] = message.AddTime
+	m["executeTime"] = message.ExecuteTime
+	m["msgType"] = message.MsgType
+	return m
+
+}
+
+// Customized function
 func jsonToMessage(dataStr string) (*Message, error) {
 
-	// var msg Message
-	msg := Message{
-		ID:     "",
-		Values: make(map[string]any),
-	}
-	mmsg := make(map[string]any)
-
+	msg := new(Message)
 	reader := strings.NewReader(dataStr)
 	jn := json.NewDecoder(reader)
-	if err := jn.Decode(&mmsg); err != nil {
+	if err := jn.Decode(msg); err != nil {
 		return nil, err
 	}
-	if v, ok := mmsg["id"]; ok {
-		msg.ID = v.(string)
-	}
 
-	msg.Values = mmsg
-	return &msg, nil
+	return msg, nil
 }

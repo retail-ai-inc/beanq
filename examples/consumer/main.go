@@ -56,22 +56,22 @@ func main() {
 	// 	return nil
 	// })
 	// register delay consumer
-	csm.Register("delay-channel", "delay-topic", func(ctx context.Context, msg *beanq.Message) error {
+	csm.Subscribe("delay-channel", "delay-topic", func(ctx context.Context, msg *beanq.Message) error {
 
 		// panic("this is a panic")
-		// time.Sleep(20 * time.Second)
-		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload())
+		// time.Sleep(25 * time.Second)
+		logger.New().With("delay-channel", "delay-topic").Info(msg.Payload)
 		return nil
 	})
-	// csm.Register("delay-channel", "delay-ch2", func(ctx context.Context, msg *beanq.Message) error {
+	// csm.Subscribe("delay-channel", "delay-ch2", func(ctx context.Context, msg *beanq.Message) error {
 	// 	logger.New().With("delay-channel", "delay-ch2").Info(msg.Payload())
 	// 	return nil
 	// })
-	// csm.Register("default-channel", "BatchCartStateTimoutJobHandler", func(ctx context.Context, msg *beanq.Message) error {
+	// csm.Subscribe("default-channel", "BatchCartStateTimoutJobHandler", func(ctx context.Context, msg *beanq.Message) error {
 	// 	logger.New().With("default-channel", "BatchCartStateTimoutJobHandler").Info(msg.Payload())
 	// 	return nil
 	// })
-	// csm.Register("default-channel", "default-topic", func(ctx context.Context, message *beanq.Message) error {
+	// csm.Subscribe("default-channel", "default-topic", func(ctx context.Context, message *beanq.Message) error {
 	// 	logger.New().With("default-channel", "default-topic").Info(message.Payload())
 	// 	return nil
 	// })

@@ -126,11 +126,11 @@ func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) erro
 
 func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) error {
 
-	bt, err := json.Marshal(msg.Values)
+	bt, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	msgExecuteTime := msg.ExecuteTime().UnixMilli()
+	msgExecuteTime := msg.ExecuteTime.UnixMilli()
 
 	priority := opt.Priority / 1e3
 	priority = cast.ToFloat64(msgExecuteTime) + priority
@@ -267,8 +267,8 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 }
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
-
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.Channel(), msg.Topic()), "", "*", t.maxLen, 0, msg.Values)
+	mmsg := messageToMap(msg)
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, mmsg)
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 
@@ -335,7 +335,7 @@ func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) 
 
 func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic string, vals []string) {
 
-	var msg Message
+	m := make(map[string]any)
 	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, channel, topic), "", "*", t.maxLen, 0, nil)
 	for _, val := range vals {
 
@@ -347,10 +347,13 @@ func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic stri
 		if len(strs) < 2 {
 			continue
 		}
-		if err := json.Unmarshal(stringx.StringToByte(strs[1]), &msg); err != nil {
+
+		m = nil
+		if err := json.Unmarshal([]byte(strs[1]), &m); err != nil {
 			logger.New().Error(err)
 		}
-		xAddArgs.Values = msg.Values
+		xAddArgs.Values = m
+
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			logger.New().Error(err)
 		}

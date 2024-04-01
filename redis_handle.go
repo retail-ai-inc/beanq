@@ -3,6 +3,8 @@ package beanq
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -169,31 +172,30 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 			if pending.Idle < t.pendingIdle {
 				continue
 			}
-			// if pending retry count > 5,then add it into dead_letter_stream
-			if pending.RetryCount > 5 {
-				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
-				if len(val) <= 0 {
+
+			// if pending retry count > 10,then add it into dead_letter_stream
+			if pending.RetryCount > 10 {
+				vals := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+				if len(vals) <= 0 {
 					continue
 				}
-
-				msg := Message(val[0])
-				msg.Values["pendingRetry"] = pending.RetryCount
-				msg.Values["idle"] = pending.Idle.Seconds()
-
+				val := vals[0]
+				msg := messageToStruct(val)
+				msg.PendingRetry = pending.RetryCount
 				r := t.result.Get().(*ConsumerResult)
-				r.Id = msg.Id()
-				r.BeginTime = msg.ExecuteTime()
+				r.Id = msg.Id
+				r.BeginTime = msg.ExecuteTime
 
 				r.EndTime = time.Now()
 				sub := r.EndTime.Sub(r.BeginTime)
-				r.AddTime = msg.AddTime()
-				r.Retry = msg.Retry()
-				r.Payload = msg.Payload()
+				r.AddTime = msg.AddTime
+				r.Retry = msg.Retry
+				r.Payload = msg.Payload
 				r.RunTime = sub.String()
-				r.ExecuteTime = msg.ExecuteTime()
-				r.Topic = msg.Topic()
+				r.ExecuteTime = msg.ExecuteTime
+				r.Topic = msg.TopicName
 				r.Channel = t.channel
-				r.MsgType = msg.GetMsgType()
+				r.MsgType = msg.MsgType
 
 				r.Level = ErrLevel
 				r.Info = "too long pending"
@@ -202,7 +204,17 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 					logger.New().Error(err)
 				}
 
-				if err := t.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
+				if err := t.client.XDel(ctx, streamKey, pending.ID).Err(); err != nil {
+					logger.New().Error(err)
+				}
+			} else {
+				if err := t.client.XClaim(ctx, &redis.XClaimArgs{
+					Stream:   streamKey,
+					Group:    t.channel,
+					Consumer: pending.Consumer,
+					MinIdle:  t.pendingIdle,
+					Messages: []string{pending.ID},
+				}).Err(); err != nil {
 					logger.New().Error(err)
 				}
 			}
@@ -224,9 +236,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		for _, vv := range message {
 			nv := vv
 			if err := t.pool.Submit(func() {
-				msg := Message(nv)
-
-				r := t.execute(ctx, &msg)
+				r := t.execute(ctx, &nv)
 
 				group := t.errGroupPool.Get().(*errgroup.Group)
 				group.TryGo(func() error {
@@ -260,7 +270,12 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult {
+type BeanqContext struct {
+	Ctx    context.Context
+	Cancel context.CancelFunc
+}
+
+func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
 
 	r := t.result.Get().(*ConsumerResult)
 
@@ -273,29 +288,50 @@ func (t *RedisHandle) execute(ctx context.Context, msg *Message) *ConsumerResult
 		cancel()
 	}()
 
-	r.Id = msg.Id()
+	msg := messageToStruct(message)
+
+	r.Id = msg.Id
 	r.BeginTime = time.Now()
-	r.AddTime = msg.AddTime()
-	r.Payload = msg.Payload()
-	r.ExecuteTime = msg.ExecuteTime()
-	r.Topic = msg.Topic()
-	r.Channel = t.channel
-	r.MsgType = msg.GetMsgType()
 
 	retryCount, err := RetryInfo(ctx, func() error {
-		return t.consumer(ctx, msg)
+
+		errCh := make(chan error, 1)
+		_ = t.pool.Submit(func() {
+			defer func() {
+				if ne := recover(); ne != nil {
+					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+				}
+			}()
+
+			if err := t.consumer(ctx, msg); err != nil {
+				errCh <- err
+			}
+		})
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case e := <-errCh:
+			return e
+		}
 	}, t.jobMaxRetry)
 
 	r.EndTime = time.Now()
 	sub := r.EndTime.Sub(r.BeginTime)
-	r.RunTime = sub.String()
+	r.AddTime = msg.AddTime
 	r.Retry = retryCount
+	r.Payload = msg.Payload
+	r.Priority = msg.Priority
+	r.RunTime = sub.String()
+	r.ExecuteTime = msg.ExecuteTime
+	r.Topic = msg.TopicName
+	r.Channel = t.channel
+	r.MsgType = msg.MsgType
 
 	if err != nil {
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}
-
 	return r
 }
 
