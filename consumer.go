@@ -87,8 +87,8 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	return beanqConsumer
 }
 
-// Register
-// Register the channel and topic to be consumed
+// Subscribe
+// Subscribe the channel and topic to be consumed
 //
 //	@Description:
 //
@@ -96,7 +96,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param channel
 //	@param topic
 //	@param consumerFun
-func (t *Consumer) Register(channelName, topicName string, consumerFun DoConsumer) {
+func (t *Consumer) Subscribe(channelName, topicName string, consumerFun DoConsumer) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
