@@ -172,16 +172,17 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 			if pending.Idle < t.pendingIdle {
 				continue
 			}
-
-			// if pending retry count > 10,then add it into dead_letter_stream
-			if pending.RetryCount > 10 {
-				vals := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
-				if len(vals) <= 0 {
+			// if pending retry count > 5,then add it into dead_letter_stream
+			if pending.RetryCount > 5 {
+				val := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+				if len(val) <= 0 {
 					continue
 				}
-				val := vals[0]
-				msg := messageToStruct(val)
-				msg.PendingRetry = pending.RetryCount
+
+				msg := messageToStruct(val[0])
+				// msg.Values["pendingRetry"] = pending.RetryCount
+				// msg.Values["idle"] = pending.Idle.Seconds()
+
 				r := t.result.Get().(*ConsumerResult)
 				r.Id = msg.Id
 				r.BeginTime = msg.ExecuteTime
@@ -204,17 +205,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 					logger.New().Error(err)
 				}
 
-				if err := t.client.XDel(ctx, streamKey, pending.ID).Err(); err != nil {
-					logger.New().Error(err)
-				}
-			} else {
-				if err := t.client.XClaim(ctx, &redis.XClaimArgs{
-					Stream:   streamKey,
-					Group:    t.channel,
-					Consumer: pending.Consumer,
-					MinIdle:  t.pendingIdle,
-					Messages: []string{pending.ID},
-				}).Err(); err != nil {
+				if err := t.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
 			}
@@ -270,17 +261,12 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-type BeanqContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
 
 	r := t.result.Get().(*ConsumerResult)
 
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, t.timeOut)
+	// var cancel context.CancelFunc
+	ctx, cancel := context.WithTimeout(context.Background(), t.timeOut)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
@@ -307,9 +293,11 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 				errCh <- err
 			}
 		})
+		close(errCh)
 
 		select {
 		case <-ctx.Done():
+			fmt.Printf("-----%+v \n", ctx.Err())
 			return ctx.Err()
 		case e := <-errCh:
 			return e

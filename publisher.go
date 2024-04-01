@@ -111,13 +111,13 @@ func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	return t.broker.enqueue(ctx, msg, opts)
 }
 
-func (t *pubClient) DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error {
+func (t *pubClient) PublishWithDelay(msg *Message, delayTime time.Time, option ...OptionI) error {
 	msg.MsgType = "delay"
 	option = append(option, ExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }
 
-func (t *pubClient) SequentialPublish(msg *Message, orderKey string, option ...OptionI) error {
+func (t *pubClient) PublishInSequence(msg *Message, orderKey string, option ...OptionI) error {
 	msg.MsgType = "sequential"
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")

@@ -47,14 +47,14 @@ type (
 		Payload      string    `json:"payload"`
 		AddTime      string    `json:"addTime"`
 		ExecuteTime  time.Time `json:"executeTime"`
-		MsgType      string    `json:"msgType"`
+		MsgType      string    `json:"msgType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
 
 func NewMessage(message []byte) *Message {
 	now := time.Now()
 	id := uuid.NewString()
-	
+
 	return &Message{
 		Id:          id,
 		TopicName:   DefaultOptions.DefaultTopic,
