@@ -78,7 +78,7 @@ type BeanqPub interface {
 }
 
 type BeanqSub interface {
-	Register(channek, topic string, consumerFun DoConsumer)
+	Subscribe(channek, topic string, consumerFun DoConsumer)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	StartPing() error
