@@ -12,6 +12,7 @@ require (
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/viper v1.18.2
 	go.uber.org/zap v1.27.0
+	golang.org/x/net v0.19.0
 	golang.org/x/sync v0.5.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )

@@ -96,9 +96,6 @@ func (t *RedisHandle) Check(ctx context.Context) error {
 	if err := t.checkStream(ctx); err != nil {
 		return err
 	}
-	if err := t.checkDeadletterStream(ctx); err != nil {
-		return err
-	}
 	return nil
 
 }
