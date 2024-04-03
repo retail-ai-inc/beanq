@@ -36,6 +36,11 @@ type pubClient struct {
 	broker         Broker
 	wg             *sync.WaitGroup
 	publishTimeOut time.Duration
+	channelName    string
+	topicName      string
+	maxLen         int64
+	retry          int
+	priority       float64
 }
 
 var _ BeanqPub = new(pubClient)
@@ -71,6 +76,11 @@ func NewPublisher(config BeanqConfig) *pubClient {
 				broker:         newRedisBroker(pool),
 				wg:             nil,
 				publishTimeOut: publishTimeOut,
+				channelName:    DefaultOptions.DefaultChannel,
+				topicName:      DefaultOptions.DefaultTopic,
+				maxLen:         DefaultOptions.DefaultMaxLen,
+				retry:          DefaultOptions.JobMaxRetry,
+				priority:       DefaultOptions.Priority,
 			}
 		} else {
 			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
@@ -81,7 +91,54 @@ func NewPublisher(config BeanqConfig) *pubClient {
 	return beanqPublisher
 }
 
+func (t *pubClient) Channel(name string) *pubClient {
+	if name != "" {
+		t.channelName = name
+	}
+	return t
+}
+
+func (t *pubClient) Topic(name string) *pubClient {
+	if name != "" {
+		t.topicName = name
+	}
+	return t
+}
+
+func (t *pubClient) MaxLen(maxLen int64) *pubClient {
+	if maxLen > 0 {
+		t.maxLen = maxLen
+	}
+	return t
+}
+
+func (t *pubClient) Retry(retry int) *pubClient {
+	if retry > 0 {
+		t.retry = retry
+	}
+	return t
+}
+
+func (t *pubClient) Priority(priority float64) *pubClient {
+	if priority > 0 {
+		t.priority = priority
+	}
+	return t
+}
+
+func (t *pubClient) reset() {
+	t.channelName = DefaultOptions.DefaultChannel
+	t.topicName = DefaultOptions.DefaultTopic
+	t.retry = DefaultOptions.JobMaxRetry
+	t.priority = DefaultOptions.Priority
+	t.maxLen = DefaultOptions.DefaultMaxLen
+}
+
 func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
+
+	defer func() {
+		t.reset()
+	}()
 
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
@@ -93,11 +150,11 @@ func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	if err != nil {
 		return err
 	}
-	msg.TopicName = opts.Topic
-	msg.ChannelName = opts.Channel
-	msg.Retry = opts.Retry
-	msg.Priority = opts.Priority
-	msg.MaxLen = opts.MaxLen
+	msg.TopicName = t.topicName
+	msg.ChannelName = t.channelName
+	msg.Retry = t.retry
+	msg.Priority = t.priority
+	msg.MaxLen = t.maxLen
 	msg.ExecuteTime = opts.ExecuteTime
 	msg.MsgType = "normal"
 
