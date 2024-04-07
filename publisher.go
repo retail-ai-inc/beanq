@@ -132,8 +132,12 @@ func (t *PubClient) Retry(retry int) *PubClient {
 }
 
 func (t *PubClient) Priority(priority float64) *PubClient {
-	if priority > 0 {
-		t.priority = priority
+
+	if priority > 1000 {
+		t.priority = 999
+	}
+	if priority <= 0 {
+		t.priority = 0
 	}
 	return t
 }

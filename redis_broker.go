@@ -36,6 +36,7 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/spf13/cast"
 )
 
 type (
@@ -102,7 +103,33 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	}
 }
 
+func (t *RedisBroker) makeUniqueId(ctx context.Context) (string, error) {
+
+	now := time.Now().UnixMilli()
+	val, _ := t.client.Get(ctx, redisx.AUTO_INCREMENT_KEY).Int()
+	if val == 0 || val == 999 {
+		if err := t.client.Set(ctx, redisx.AUTO_INCREMENT_KEY, 0, 0).Err(); err != nil {
+			return "", err
+		}
+	}
+
+	valString := cast.ToString(val)
+	valString = strings.Join([]string{strings.Repeat("0", 3-len(valString)), valString}, "")
+
+	id := strings.Join([]string{cast.ToString(now), valString}, "")
+	return id, nil
+}
+
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
+
+	id, err := t.makeUniqueId(ctx)
+	if err != nil {
+		return err
+	}
+	msg.Id = id
+	if err := t.client.Incr(ctx, redisx.AUTO_INCREMENT_KEY).Err(); err != nil {
+		return err
+	}
 
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")

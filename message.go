@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
@@ -53,10 +52,8 @@ type (
 
 func NewMessage(message []byte) *Message {
 	now := time.Now()
-	id := uuid.NewString()
 
 	return &Message{
-		Id:          id,
 		TopicName:   DefaultOptions.DefaultTopic,
 		ChannelName: DefaultOptions.DefaultChannel,
 		MaxLen:      DefaultOptions.DefaultMaxLen,
@@ -79,7 +76,6 @@ func messageToStruct(message any) *Message {
 	case *redis.XMessage:
 		xmsg := message.(*redis.XMessage)
 		mapToMessage(xmsg.Values, msg)
-		msg.Id = xmsg.ID
 	case map[string]any:
 		mapToMessage(message.(map[string]any), msg)
 	}

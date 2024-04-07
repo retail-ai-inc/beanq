@@ -136,8 +136,8 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 	priority = cast.ToFloat64(msgExecuteTime) + priority
 	timeUnit := cast.ToFloat64(msgExecuteTime)
 
-	setKey := MakeZSetKey(t.prefix, opt.Channel, opt.Topic)
-	timeUnitKey := MakeTimeUnit(t.prefix, opt.Channel, opt.Topic)
+	setKey := MakeZSetKey(t.prefix, msg.ChannelName, msg.TopicName)
+	timeUnitKey := MakeTimeUnit(t.prefix, msg.ChannelName, msg.TopicName)
 
 	err = t.client.Watch(ctx, func(tx *redis.Tx) error {
 
