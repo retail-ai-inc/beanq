@@ -32,25 +32,37 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
-type pubClient struct {
-	broker         Broker
-	wg             *sync.WaitGroup
-	publishTimeOut time.Duration
-	channelName    string
-	topicName      string
-	maxLen         int64
-	retry          int
-	priority       float64
-}
+type (
+	MoodType int
 
-var _ BeanqPub = new(pubClient)
+	PubClient struct {
+		broker         Broker
+		wg             *sync.WaitGroup
+		publishTimeOut time.Duration
+		channelName    string
+		topicName      string
+		maxLen         int64
+		retry          int
+		priority       float64
+		mood           MoodType
+	}
+)
+
+const (
+	_ MoodType = iota
+	NORMAL
+	DELAY
+	SEQUENTIAL
+)
+
+var _ BeanqPub = (*PubClient)(nil)
 
 var (
 	publisherOnce  sync.Once
-	beanqPublisher *pubClient
+	beanqPublisher *PubClient
 )
 
-func NewPublisher(config BeanqConfig) *pubClient {
+func NewPublisher(config BeanqConfig) *PubClient {
 	opts := DefaultOptions
 
 	publisherOnce.Do(func() {
@@ -72,7 +84,7 @@ func NewPublisher(config BeanqConfig) *pubClient {
 		}
 		Config.Store(config)
 		if config.Driver == "redis" {
-			beanqPublisher = &pubClient{
+			beanqPublisher = &PubClient{
 				broker:         newRedisBroker(pool),
 				wg:             nil,
 				publishTimeOut: publishTimeOut,
@@ -91,42 +103,42 @@ func NewPublisher(config BeanqConfig) *pubClient {
 	return beanqPublisher
 }
 
-func (t *pubClient) Channel(name string) *pubClient {
+func (t *PubClient) Channel(name string) *PubClient {
 	if name != "" {
 		t.channelName = name
 	}
 	return t
 }
 
-func (t *pubClient) Topic(name string) *pubClient {
+func (t *PubClient) Topic(name string) *PubClient {
 	if name != "" {
 		t.topicName = name
 	}
 	return t
 }
 
-func (t *pubClient) MaxLen(maxLen int64) *pubClient {
+func (t *PubClient) MaxLen(maxLen int64) *PubClient {
 	if maxLen > 0 {
 		t.maxLen = maxLen
 	}
 	return t
 }
 
-func (t *pubClient) Retry(retry int) *pubClient {
+func (t *PubClient) Retry(retry int) *PubClient {
 	if retry > 0 {
 		t.retry = retry
 	}
 	return t
 }
 
-func (t *pubClient) Priority(priority float64) *pubClient {
+func (t *PubClient) Priority(priority float64) *PubClient {
 	if priority > 0 {
 		t.priority = priority
 	}
 	return t
 }
 
-func (t *pubClient) reset() {
+func (t *PubClient) reset() {
 	t.channelName = DefaultOptions.DefaultChannel
 	t.topicName = DefaultOptions.DefaultTopic
 	t.retry = DefaultOptions.JobMaxRetry
@@ -134,7 +146,7 @@ func (t *pubClient) reset() {
 	t.maxLen = DefaultOptions.DefaultMaxLen
 }
 
-func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
+func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
 
 	defer func() {
 		t.reset()
@@ -168,13 +180,13 @@ func (t *pubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	return t.broker.enqueue(ctx, msg, opts)
 }
 
-func (t *pubClient) PublishWithDelay(msg *Message, delayTime time.Time, option ...OptionI) error {
+func (t *PubClient) PublishWithDelay(msg *Message, delayTime time.Time, option ...OptionI) error {
 	msg.MsgType = "delay"
 	option = append(option, ExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }
 
-func (t *pubClient) PublishInSequence(msg *Message, orderKey string, option ...OptionI) error {
+func (t *PubClient) PublishInSequence(msg *Message, orderKey string, option ...OptionI) error {
 	msg.MsgType = "sequential"
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")
@@ -183,13 +195,13 @@ func (t *pubClient) PublishInSequence(msg *Message, orderKey string, option ...O
 	return t.Publish(msg, option...)
 }
 
-func (t *pubClient) Publish(msg *Message, option ...OptionI) error {
+func (t *PubClient) Publish(msg *Message, option ...OptionI) error {
 	msg.MsgType = "normal"
 	ctx, cancel := context.WithTimeout(context.Background(), t.publishTimeOut)
 	defer cancel()
 	return t.PublishWithContext(ctx, msg, option...)
 }
 
-func (t *pubClient) Close() error {
+func (t *PubClient) Close() error {
 	return t.broker.close()
 }

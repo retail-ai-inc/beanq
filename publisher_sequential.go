@@ -7,9 +7,14 @@ import (
 
 type (
 	Sequential struct {
-		lock    *sync.RWMutex
-		orderBy string
-		data    map[string]Message
+		lock        *sync.RWMutex
+		orderBy     string
+		data        map[string]Message
+		channelName string
+		topicName   string
+		maxLen      int64
+		retry       int
+		priority    float64
 	}
 
 	ISequential interface {
@@ -21,10 +26,16 @@ type (
 var _ ISequential = (*Sequential)(nil)
 
 func newSequential() *Sequential {
+
 	return &Sequential{
-		lock:    new(sync.RWMutex),
-		data:    make(map[string]Message, 5),
-		orderBy: "asc",
+		lock:        new(sync.RWMutex),
+		data:        make(map[string]Message, 5),
+		orderBy:     "asc",
+		channelName: DefaultOptions.DefaultChannel,
+		topicName:   DefaultOptions.DefaultTopic,
+		maxLen:      DefaultOptions.DefaultMaxLen,
+		retry:       DefaultOptions.JobMaxRetry,
+		priority:    DefaultOptions.Priority,
 	}
 }
 
@@ -52,8 +63,4 @@ func (t *Sequential) Sort() []Message {
 	}
 	return data
 
-}
-
-func (t *Sequential) Publish() {
-	// business
 }
