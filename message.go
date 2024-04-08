@@ -23,7 +23,6 @@
 package beanq
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -66,7 +65,10 @@ func NewMessage(message []byte) *Message {
 	}
 }
 
-type DoConsumer func(ctx context.Context, msg *Message) error
+type RunSubscribe interface {
+	Run(message *Message) error
+	Error(err error)
+}
 
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {

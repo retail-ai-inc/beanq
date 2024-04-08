@@ -79,7 +79,7 @@ type BeanqPub interface {
 }
 
 type BeanqSub interface {
-	Subscribe(channek, topic string, consumerFun DoConsumer)
+	Subscribe(channel, topic string, subscribe RunSubscribe)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	ping()

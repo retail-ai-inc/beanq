@@ -36,9 +36,9 @@ import (
 
 type ConsumerHandler struct {
 	IHandle
-	ConsumerFun DoConsumer
-	Channel     string
-	Topic       string
+	Channel string
+	Topic   string
+	run     RunSubscribe
 }
 
 type Consumer struct {
@@ -49,7 +49,7 @@ type Consumer struct {
 	timeOut time.Duration
 }
 
-var _ BeanqSub = new(Consumer)
+var _ BeanqSub = (*Consumer)(nil)
 var (
 	beanqConsumer *Consumer
 )
@@ -96,7 +96,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param channel
 //	@param topic
 //	@param consumerFun
-func (t *Consumer) Subscribe(channelName, topicName string, consumerFun DoConsumer) {
+func (t *Consumer) Subscribe(channelName, topicName string, subscribe RunSubscribe) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
@@ -107,9 +107,9 @@ func (t *Consumer) Subscribe(channelName, topicName string, consumerFun DoConsum
 	}
 
 	t.m = append(t.m, &ConsumerHandler{
-		Channel:     channelName,
-		Topic:       topicName,
-		ConsumerFun: consumerFun,
+		Channel: channelName,
+		Topic:   topicName,
+		run:     subscribe,
 	})
 }
 func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
@@ -130,7 +130,7 @@ func (t *Consumer) ping() {
 	if health.Host == "" || health.Port == "" {
 		return
 	}
-	
+
 	go func() {
 		hdl := &http.ServeMux{}
 		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {

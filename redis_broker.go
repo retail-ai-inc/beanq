@@ -106,9 +106,10 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 func (t *RedisBroker) makeUniqueId(ctx context.Context) (string, error) {
 
 	now := time.Now().UnixMilli()
-	val, _ := t.client.Get(ctx, redisx.AUTO_INCREMENT_KEY).Int()
+	key := strings.Join([]string{t.prefix, redisx.AUTO_INCREMENT_KEY}, ":")
+	val, _ := t.client.Get(ctx, key).Int()
 	if val == 0 || val == 999 {
-		if err := t.client.Set(ctx, redisx.AUTO_INCREMENT_KEY, 0, 0).Err(); err != nil {
+		if err := t.client.Set(ctx, key, 0, 0).Err(); err != nil {
 			return "", err
 		}
 	}
@@ -126,8 +127,9 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	if err != nil {
 		return err
 	}
+	key := strings.Join([]string{t.prefix, redisx.AUTO_INCREMENT_KEY}, ":")
 	msg.Id = id
-	if err := t.client.Incr(ctx, redisx.AUTO_INCREMENT_KEY).Err(); err != nil {
+	if err := t.client.Incr(ctx, key).Err(); err != nil {
 		return err
 	}
 
@@ -165,10 +167,10 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	for key, consumer := range consumers {
 
 		cs := consumer
-		cs.IHandle = newRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun, t.pool)
-
+		cs.IHandle = newRedisHandle(t.client, cs.Channel, cs.Topic, cs.run, t.pool)
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
+
 			logger.New().With("", err).Error("worker err")
 		}
 

@@ -19,7 +19,7 @@ import (
 type RedisHandle struct {
 	client           redis.UniversalClient
 	log              logJobI
-	consumer         DoConsumer
+	run              RunSubscribe
 	deadLetterTicker *time.Ticker
 	channel          string
 	topic            string
@@ -37,7 +37,7 @@ type RedisHandle struct {
 	errGroupPool *sync.Pool
 }
 
-func newRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
+func newRedisHandle(client redis.UniversalClient, channel, topic string, run RunSubscribe, pool *ants.Pool) *RedisHandle {
 
 	bqConfig := Config.Load().(BeanqConfig)
 	prefix := bqConfig.Redis.Prefix
@@ -65,7 +65,7 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, consume
 		client:           client,
 		channel:          channel,
 		topic:            topic,
-		consumer:         consumer,
+		run:              run,
 		log:              newLogJob(client, pool),
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,
@@ -285,16 +285,15 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 				}
 			}()
-
-			if err := t.consumer(ctx, msg); err != nil {
+			if err := t.run.Run(msg); err != nil {
 				errCh <- err
 			}
 		})
-		close(errCh)
 
 		select {
 		case <-ctx.Done():
 			fmt.Printf("-----%+v \n", ctx.Err())
+			<-errCh
 			return ctx.Err()
 		case e := <-errCh:
 			return e
@@ -314,6 +313,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.MsgType = msg.MsgType
 
 	if err != nil {
+		t.run.Error(err)
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}
