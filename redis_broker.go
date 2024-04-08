@@ -36,7 +36,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/spf13/cast"
 )
 
 type (
@@ -103,35 +102,7 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	}
 }
 
-func (t *RedisBroker) makeUniqueId(ctx context.Context) (string, error) {
-
-	now := time.Now().UnixMilli()
-	key := strings.Join([]string{t.prefix, redisx.AUTO_INCREMENT_KEY}, ":")
-	val, _ := t.client.Get(ctx, key).Int()
-	if val == 0 || val == 999 {
-		if err := t.client.Set(ctx, key, 0, 0).Err(); err != nil {
-			return "", err
-		}
-	}
-
-	valString := cast.ToString(val)
-	valString = strings.Join([]string{strings.Repeat("0", 3-len(valString)), valString}, "")
-
-	id := strings.Join([]string{cast.ToString(now), valString}, "")
-	return id, nil
-}
-
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
-
-	id, err := t.makeUniqueId(ctx)
-	if err != nil {
-		return err
-	}
-	key := strings.Join([]string{t.prefix, redisx.AUTO_INCREMENT_KEY}, ":")
-	msg.Id = id
-	if err := t.client.Incr(ctx, key).Err(); err != nil {
-		return err
-	}
 
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")

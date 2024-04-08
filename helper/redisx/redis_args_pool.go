@@ -7,10 +7,6 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-const (
-	AUTO_INCREMENT_KEY = "auto-increment-counter"
-)
-
 var redisXAddArgsPool = &sync.Pool{New: func() any {
 	return &redis.XAddArgs{
 		Stream:     "",

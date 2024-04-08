@@ -74,7 +74,8 @@ var Config atomic.Value
 type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error
 	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
-	PublishWithDelay(msg *Message, delayTime time.Time, option ...OptionI) error
+	PublishWithDelay(msg *Message, delayTime time.Duration, option ...OptionI) error
+	PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error
 	PublishInSequence(msg *Message, orderKey string, option ...OptionI) error
 }
 

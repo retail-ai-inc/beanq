@@ -184,8 +184,15 @@ func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	return t.broker.enqueue(ctx, msg, opts)
 }
 
-func (t *PubClient) PublishWithDelay(msg *Message, delayTime time.Time, option ...OptionI) error {
+func (t *PubClient) PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error {
 	msg.MsgType = "delay"
+	option = append(option, ExecuteTime(delay))
+	return t.Publish(msg, option...)
+}
+
+func (t *PubClient) PublishWithDelay(msg *Message, delay time.Duration, option ...OptionI) error {
+	msg.MsgType = "delay"
+	delayTime := time.Now().Add(delay)
 	option = append(option, ExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }

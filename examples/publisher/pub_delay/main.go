@@ -51,7 +51,7 @@ func pubDelayInfo() {
 	pub := beanq.NewPublisher(config)
 
 	m := make(map[string]any)
-	ntime := time.Now()
+	ntime := 0 * time.Second
 	for i := 0; i < 10; i++ {
 
 		// if time.Now().Sub(ntime).Minutes() >= 1 {
@@ -64,7 +64,7 @@ func pubDelayInfo() {
 		b, _ := json.Marshal(m)
 
 		msg := beanq.NewMessage(b)
-		delayT := ntime.Add(10 * time.Second)
+		delayT := 10 * time.Second
 		if i == 2 {
 			delayT = ntime
 		}
@@ -74,7 +74,7 @@ func pubDelayInfo() {
 		}
 		if i == 3 {
 			y = 10
-			delayT = ntime.Add(35 * time.Second)
+			delayT = 35 * time.Second
 
 		}
 		// fmt.Println(delayT)

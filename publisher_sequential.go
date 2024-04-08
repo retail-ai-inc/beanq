@@ -40,9 +40,9 @@ func newSequential() *Sequential {
 }
 
 func (t *Sequential) In(orderKey string, message Message) *Sequential {
-	t.lock.RLock()
+	t.lock.Lock()
 	t.data[orderKey] = message
-	t.lock.RUnlock()
+	t.lock.Unlock()
 	return t
 }
 
