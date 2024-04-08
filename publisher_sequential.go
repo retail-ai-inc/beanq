@@ -7,7 +7,7 @@ import (
 
 type (
 	Sequential struct {
-		lock        *sync.RWMutex
+		lock        sync.RWMutex
 		orderBy     string
 		data        map[string]Message
 		channelName string
@@ -28,7 +28,7 @@ var _ ISequential = (*Sequential)(nil)
 func newSequential() *Sequential {
 
 	return &Sequential{
-		lock:        new(sync.RWMutex),
+		lock:        sync.RWMutex{},
 		data:        make(map[string]Message, 5),
 		orderBy:     "asc",
 		channelName: DefaultOptions.DefaultChannel,

@@ -224,7 +224,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		for _, vv := range message {
 			nv := vv
 			if err := t.pool.Submit(func() {
-				r := t.execute(ctx, &nv)
+				r := t.execute(&nv)
 
 				group := t.errGroupPool.Get().(*errgroup.Group)
 				group.TryGo(func() error {
@@ -258,7 +258,7 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
+func (t *RedisHandle) execute(message *redis.XMessage) *ConsumerResult {
 
 	r := t.result.Get().(*ConsumerResult)
 
@@ -285,15 +285,14 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 				}
 			}()
-			if err := t.run.Run(msg); err != nil {
+			if err := t.run.Run(ctx, msg); err != nil {
 				errCh <- err
 			}
+			close(errCh)
 		})
 
 		select {
 		case <-ctx.Done():
-			fmt.Printf("-----%+v \n", ctx.Err())
-			<-errCh
 			return ctx.Err()
 		case e := <-errCh:
 			return e

@@ -30,7 +30,9 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/rs/xid"
 	"github.com/spf13/cast"
+	"golang.org/x/net/context"
 )
 
 type (
@@ -66,7 +68,7 @@ func NewMessage(message []byte) *Message {
 }
 
 type RunSubscribe interface {
-	Run(message *Message) error
+	Run(ctx context.Context, message *Message) error
 	Error(err error)
 }
 
@@ -90,6 +92,8 @@ func mapToMessage(data map[string]any, msg *Message) {
 
 	now := time.Now()
 	msg.ExecuteTime = now
+	guid := xid.NewWithTime(now)
+	msg.Id = guid.String()
 	for key, val := range data {
 		switch key {
 		case "id":

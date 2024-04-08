@@ -11,6 +11,7 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -42,22 +43,23 @@ func initCnf() beanq.BeanqConfig {
 	return bqConfig
 }
 
-type run struct {
+type delayRun struct {
 }
 
-func (t *run) Run(msg *beanq.Message) error {
+func (t *delayRun) Run(ctx context.Context, msg *beanq.Message) error {
+	// time.Sleep(30 * time.Second)
 	logger.New().With("delay-channel", "delay-topic").Info(msg.Payload)
 	return nil
 }
 
-func (t *run) Error(err error) {
+func (t *delayRun) Error(err error) {
 	fmt.Printf("-----------------%+v \n", err)
 }
 
 type defaultRun struct {
 }
 
-func (t *defaultRun) Run(message *beanq.Message) error {
+func (t *defaultRun) Run(ctx context.Context, message *beanq.Message) error {
 	logger.New().With("default-channel", "default-topic").Info(message.Payload)
 	return nil
 }
@@ -80,7 +82,7 @@ func main() {
 	// 	return nil
 	// })
 	// register delay consumer
-	csm.Subscribe("delay-channel", "delay-topic", &run{})
+	csm.Subscribe("delay-channel", "delay-topic", &delayRun{})
 	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 
 	// begin to consume information

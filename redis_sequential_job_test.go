@@ -3,9 +3,16 @@ package beanq
 import (
 	"fmt"
 	"testing"
+	"time"
+
+	"github.com/rs/xid"
 )
 
 func TestSeq(t *testing.T) {
+
+	guid := xid.NewWithTime(time.Now())
+	fmt.Printf("%+v \n", guid.String())
+	return
 
 	seq := newSequential()
 
