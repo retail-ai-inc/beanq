@@ -1,40 +1,39 @@
 package beanq
 
 import (
-	"fmt"
-	"sync"
+	"os"
+	"os/signal"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-redis/redis/v8"
 )
 
 func TestSeq(t *testing.T) {
-
-	var wait sync.WaitGroup
-	seq := newSequential()
-
-	wait.Add(3)
-	// for example
-	// 3:reduce stock
+	client := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:        []string{strings.Join([]string{"localhost", "6379"}, ":")},
+		Password:     "secret",
+		DB:           0,
+		MaxRetries:   2,
+		DialTimeout:  time.Second * 5,
+		ReadTimeout:  time.Second * 4,
+		WriteTimeout: time.Second * 3,
+		PoolSize:     30,
+		MinIdleConns: 10,
+		PoolTimeout:  time.Second * 4,
+		PoolFIFO:     true,
+	})
+	seq := newSequentialJob(client)
 	go func() {
-		msg1 := NewMessage([]byte("aa"))
-
-		seq.In("3", *msg1)
-		defer wait.Done()
+		seq.watch()
 	}()
-	// 1:create order
-	go func() {
-		msg2 := NewMessage([]byte("dd"))
-		seq.In("1", *msg2)
-		defer wait.Done()
-	}()
-	// 2:pay status
-	go func() {
-		msg3 := NewMessage([]byte("cc"))
-		seq.In("2", *msg3)
-		seq.In("2", *msg3)
-		defer wait.Done()
-	}()
-	wait.Wait()
-	data := seq.Sort()
-
-	fmt.Printf("%+v \n", data)
+	for i := 0; i < 5; i++ {
+		go func() {
+			seq.consume()
+		}()
+	}
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt)
+	<-ch
 }

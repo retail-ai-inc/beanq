@@ -53,8 +53,10 @@ type (
 
 func NewMessage(message []byte) *Message {
 	now := time.Now()
+	guid := xid.NewWithTime(now)
 
 	return &Message{
+		Id:          guid.String(),
 		TopicName:   DefaultOptions.DefaultTopic,
 		ChannelName: DefaultOptions.DefaultChannel,
 		MaxLen:      DefaultOptions.DefaultMaxLen,
@@ -92,8 +94,6 @@ func mapToMessage(data map[string]any, msg *Message) {
 
 	now := time.Now()
 	msg.ExecuteTime = now
-	guid := xid.NewWithTime(now)
-	msg.Id = guid.String()
 	for key, val := range data {
 		switch key {
 		case "id":
