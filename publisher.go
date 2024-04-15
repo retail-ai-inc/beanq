@@ -27,9 +27,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/panjf2000/ants/v2"
-	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type (
@@ -78,25 +75,16 @@ func NewPublisher(config BeanqConfig) *PubClient {
 			config.PublishTimeOut = opts.PublishTimeOut
 		}
 
-		pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
-		if err != nil {
-			logger.New().With("", err).Fatal("goroutine pool error")
-		}
 		Config.Store(config)
-		if config.Broker == "redis" {
-			beanqPublisher = &PubClient{
-				broker:         newRedisBroker(pool),
-				wg:             nil,
-				publishTimeOut: publishTimeOut,
-				channelName:    DefaultOptions.DefaultChannel,
-				topicName:      DefaultOptions.DefaultTopic,
-				maxLen:         DefaultOptions.DefaultMaxLen,
-				retry:          DefaultOptions.JobMaxRetry,
-				priority:       DefaultOptions.Priority,
-			}
-		} else {
-			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
-			beanqPublisher = nil
+		beanqPublisher = &PubClient{
+			broker:         NewBroker(config),
+			wg:             nil,
+			publishTimeOut: publishTimeOut,
+			channelName:    DefaultOptions.DefaultChannel,
+			topicName:      DefaultOptions.DefaultTopic,
+			maxLen:         DefaultOptions.DefaultMaxLen,
+			retry:          DefaultOptions.JobMaxRetry,
+			priority:       DefaultOptions.Priority,
 		}
 	})
 

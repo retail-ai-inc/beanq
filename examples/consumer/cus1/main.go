@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	_ "net/http/pprof"
@@ -11,7 +12,6 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -83,7 +83,17 @@ func main() {
 	// 	return nil
 	// })
 	// register delay consumer
-	csm.Subscribe("delay-channel", "delay-topic", &delayRun{})
+	csm.Subscribe("delay-channel", "delay-topic", map[string]func(ctx context.Context, data any) error{
+		"handle": func(ctx context.Context, data any) error {
+			return nil
+		},
+		"cancel": func(ctx context.Context, data any) error {
+			return nil
+		},
+		"error": func(ctx context.Context, error any) error {
+			return nil
+		},
+	})
 	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 
 	csm.StartConsumer()

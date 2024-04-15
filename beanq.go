@@ -82,8 +82,8 @@ type BeanqPub interface {
 
 // subscribe
 type BeanqSub interface {
-	Subscribe(channel, topic string, subscribe RunSubscribe)
-	SubscribeSequential(channel, topic string, consumer ISequentialConsumer)
+	Subscribe(channel, topic string, subscribe ConsumerFunc)
+	SubscribeSequential(channel, topic string, consumer ConsumerFunc)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	ping()
@@ -91,6 +91,8 @@ type BeanqSub interface {
 
 // consumer ,after broker
 type IHandle interface {
+	Channel() string
+	Topic() string
 	Check(ctx context.Context) error
 	Work(ctx context.Context, done <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
