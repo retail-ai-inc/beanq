@@ -55,7 +55,7 @@ type (
 	BeanqConfig struct {
 		Health                   Health        `json:"health"`
 		DebugLog                 DebugLog      `json:"debugLog"`
-		Driver                   string        `json:"driver"`
+		Broker                   string        `json:"broker"`
 		Redis                    Redis         `json:"redis"`
 		ConsumerPoolSize         int           `json:"consumerPoolSize"`
 		JobMaxRetries            int           `json:"jobMaxRetries"`
@@ -71,6 +71,7 @@ type (
 // Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config atomic.Value
 
+// publisher
 type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error
 	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
@@ -79,14 +80,30 @@ type BeanqPub interface {
 	PublishInSequence(msg *Message, orderKey string, option ...OptionI) error
 }
 
+// subscribe
 type BeanqSub interface {
 	Subscribe(channel, topic string, subscribe RunSubscribe)
+	SubscribeSequential(channel, topic string, consumer ISequentialConsumer)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	ping()
 }
+
+// consumer ,after broker
 type IHandle interface {
 	Check(ctx context.Context) error
 	Work(ctx context.Context, done <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
+}
+
+type RunSubscribe interface {
+	Run(ctx context.Context, message *Message) error
+	Error(err error)
+}
+
+// sequential consumer
+type ISequentialConsumer interface {
+	Run(message *Message) error
+	Cancel(message *Message) error
+	Error(err error)
 }

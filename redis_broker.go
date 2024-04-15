@@ -49,7 +49,7 @@ type (
 		client                   redis.UniversalClient
 		done, claimDone, logDone chan struct{}
 		scheduleJob              scheduleJobI
-		logJob                   logJobI
+		logJob                   ILogJob
 		once                     *sync.Once
 		pool                     *ants.Pool
 		prefix                   string

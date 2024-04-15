@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,8 +19,8 @@ import (
 
 type RedisHandle struct {
 	client           redis.UniversalClient
-	log              logJobI
-	run              RunSubscribe
+	log              ILogJob
+	run              any
 	deadLetterTicker *time.Ticker
 	channel          string
 	topic            string
@@ -32,12 +33,14 @@ type RedisHandle struct {
 	timeOut      time.Duration
 	pool         *ants.Pool
 
-	wg           *sync.WaitGroup
-	result       *sync.Pool
-	errGroupPool *sync.Pool
+	wg                  *sync.WaitGroup
+	result              *sync.Pool
+	errGroupPool        *sync.Pool
+	once                sync.Once
+	normalDone, seqDone chan struct{}
 }
 
-func newRedisHandle(client redis.UniversalClient, channel, topic string, run RunSubscribe, pool *ants.Pool) *RedisHandle {
+func newRedisHandle(client redis.UniversalClient, channel, topic string, run any, pool *ants.Pool) *RedisHandle {
 
 	bqConfig := Config.Load().(BeanqConfig)
 	prefix := bqConfig.Redis.Prefix
@@ -88,6 +91,9 @@ func newRedisHandle(client redis.UniversalClient, channel, topic string, run Run
 			group.SetLimit(2)
 			return group
 		}},
+		once:       sync.Once{},
+		normalDone: make(chan struct{}, 1),
+		seqDone:    make(chan struct{}, 1),
 	}
 }
 
@@ -101,6 +107,22 @@ func (t *RedisHandle) Check(ctx context.Context) error {
 }
 
 func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
+
+	switch t.run.(type) {
+	case RunSubscribe:
+		t.runSubscribe(ctx, done)
+	case ISequentialConsumer:
+		t.runSequentialSubscribe(ctx, done)
+	}
+
+}
+
+func (t *RedisHandle) close() {
+	t.normalDone <- struct{}{}
+	t.seqDone <- struct{}{}
+}
+
+func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 
 	channel := t.channel
 	topic := t.topic
@@ -127,6 +149,138 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 			continue
 		}
 		t.do(ctx, streams)
+	}
+}
+
+func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
+
+	stream := MakeStreamKey(t.prefix, t.channel, t.topic)
+	key := strings.Join([]string{t.prefix, t.channel, t.topic, "seq_id"}, ":")
+
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
+
+	ticker := time.NewTicker(time.Second)
+
+	result := t.result.Get().(*ConsumerResult)
+
+	group := t.errGroupPool.Get().(*errgroup.Group)
+
+	keyExDuration := 20 * time.Second
+
+	nctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+
+	defer func() {
+		ticker.Stop()
+		cancel()
+		result = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
+	}()
+
+	for {
+		select {
+		case <-done:
+			t.close()
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+
+			err := t.client.Watch(ctx, func(tx *redis.Tx) error {
+				if tx.Get(ctx, key).Val() == "" {
+					if err := tx.SetEX(ctx, key, 1, keyExDuration).Err(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}, key)
+			if err != nil {
+				continue
+			}
+			cmd := t.client.XReadGroup(ctx, readGroupArgs)
+			vals := cmd.Val()
+			if len(vals) <= 0 {
+				t.client.SetEX(ctx, key, "", keyExDuration)
+				continue
+			}
+
+			stream := vals[0].Stream
+			for _, v := range vals[0].Messages {
+				nv := v
+				message := messageToStruct(nv.Values)
+
+				result.Id = message.Id
+				result.BeginTime = time.Now()
+
+				retry, err := RetryInfo(ctx, func() error {
+					errCh := make(chan error, 1)
+					_ = t.pool.Submit(func() {
+						defer func() {
+							if ne := recover(); ne != nil {
+								errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+								return
+							}
+						}()
+
+						if err := t.run.(ISequentialConsumer).Run(message); err != nil {
+							errCh <- err
+							return
+						}
+						if err := t.run.(ISequentialConsumer).Cancel(message); err != nil {
+							errCh <- err
+							return
+						}
+						t.once.Do(func() {
+							close(errCh)
+						})
+					})
+					t.client.SetEX(ctx, key, "", keyExDuration)
+					select {
+					case <-nctx.Done():
+						return nctx.Err()
+					case e := <-errCh:
+						return e
+					}
+				}, t.jobMaxRetry)
+
+				result.EndTime = time.Now()
+				sub := result.EndTime.Sub(result.BeginTime)
+				result.AddTime = message.AddTime
+				result.Retry = retry
+				result.Payload = message.Payload
+				result.Priority = message.Priority
+				result.RunTime = sub.String()
+				result.ExecuteTime = message.ExecuteTime
+				result.Topic = message.TopicName
+				result.Channel = t.channel
+				result.MsgType = message.MsgType
+				if err != nil {
+					t.run.(ISequentialConsumer).Error(err)
+					result.Level = ErrLevel
+					result.Info = FlagInfo(err.Error())
+				}
+
+				group.TryGo(func() error {
+					// `stream` confirmation message
+					if err := t.client.XAck(ctx, stream, t.channel, nv.ID).Err(); err != nil {
+						return err
+					}
+					// delete data from `stream`
+					if err := t.client.XDel(ctx, stream, nv.ID).Err(); err != nil {
+						return err
+					}
+					return nil
+				})
+				group.TryGo(func() error {
+					return t.log.saveLog(ctx, result)
+				})
+				if err := group.Wait(); err != nil {
+					t.client.SetEX(ctx, key, "", keyExDuration)
+					logger.New().Error(err)
+				}
+				t.errGroupPool.Put(group)
+
+			}
+			t.client.SetEX(ctx, key, "", keyExDuration)
+		}
 	}
 }
 
@@ -224,7 +378,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		for _, vv := range message {
 			nv := vv
 			if err := t.pool.Submit(func() {
-				r := t.execute(&nv)
+				r := t.execute(ctx, &nv)
 
 				group := t.errGroupPool.Get().(*errgroup.Group)
 				group.TryGo(func() error {
@@ -258,12 +412,12 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 }
 
-func (t *RedisHandle) execute(message *redis.XMessage) *ConsumerResult {
+func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
 
 	r := t.result.Get().(*ConsumerResult)
 
 	// var cancel context.CancelFunc
-	ctx, cancel := context.WithTimeout(context.Background(), t.timeOut)
+	nctx, cancel := context.WithTimeout(context.Background(), t.timeOut)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
@@ -276,7 +430,7 @@ func (t *RedisHandle) execute(message *redis.XMessage) *ConsumerResult {
 	r.Id = msg.Id
 	r.BeginTime = time.Now()
 
-	retryCount, err := RetryInfo(ctx, func() error {
+	retryCount, err := RetryInfo(nctx, func() error {
 
 		errCh := make(chan error, 1)
 		_ = t.pool.Submit(func() {
@@ -285,14 +439,17 @@ func (t *RedisHandle) execute(message *redis.XMessage) *ConsumerResult {
 					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
 				}
 			}()
-			if err := t.run.Run(ctx, msg); err != nil {
+			if err := t.run.(RunSubscribe).Run(nctx, msg); err != nil {
 				errCh <- err
 			}
-			close(errCh)
+			t.once.Do(func() {
+				close(errCh)
+			})
 		})
 
 		select {
 		case <-ctx.Done():
+			fmt.Printf("+++++:%+v \n", ctx.Err())
 			return ctx.Err()
 		case e := <-errCh:
 			return e
@@ -312,7 +469,7 @@ func (t *RedisHandle) execute(message *redis.XMessage) *ConsumerResult {
 	r.MsgType = msg.MsgType
 
 	if err != nil {
-		t.run.Error(err)
+		t.run.(RunSubscribe).Error(err)
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}

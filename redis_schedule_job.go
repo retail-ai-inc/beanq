@@ -50,7 +50,7 @@ type (
 		client                    redis.UniversalClient
 		wg                        *sync.WaitGroup
 		pool                      *ants.Pool
-		stop, done, seqDone       chan struct{}
+		stop, done                chan struct{}
 		scheduleTicker, seqTicker *time.Ticker
 
 		prefix               string
@@ -94,7 +94,6 @@ func newScheduleJob(pool *ants.Pool, client redis.UniversalClient) *scheduleJob 
 		pool:           pool,
 		stop:           make(chan struct{}),
 		done:           make(chan struct{}),
-		seqDone:        make(chan struct{}),
 		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
 		seqTicker:      time.NewTicker(10 * time.Second),
 		prefix:         prefix,
@@ -116,11 +115,6 @@ func (t *scheduleJob) start(ctx context.Context, consumer *ConsumerHandler) erro
 		return err
 	}
 
-	if err := t.pool.Submit(func() {
-		t.consumeSeq(ctx, consumer)
-	}); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -272,7 +266,6 @@ func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 	return t.client.XAdd(ctx, xAddArgs).Err()
 }
 
-// can order consume
 func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, opt Option) error {
 
 	bt, err := json.Marshal(message)
@@ -293,75 +286,6 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 	return nil
 }
 
-// Autonomous sorting
-func (t *scheduleJob) consumeSeq(ctx context.Context, handler *ConsumerHandler) {
-
-	defer t.seqTicker.Stop()
-	// sort orderKey by user_name_* get user_name_*   alpha
-
-	key := MakeListKey(t.prefix, handler.Channel, handler.Topic)
-
-	for {
-		select {
-		case <-t.seqDone:
-			logger.New().Info("--------Sequential STOP--------")
-			return
-		case <-t.seqTicker.C:
-
-		}
-
-		// sort will cause Performance issues
-		cmd := t.client.Sort(ctx, key, &redis.Sort{
-			By: "",
-			// Offset: 0,
-			// Count:  0,
-			Get:   nil,
-			Order: "DESC",
-			Alpha: true,
-		})
-
-		if err := cmd.Err(); err != nil {
-			logger.New().With("", err).Error("sort error")
-			continue
-		}
-
-		vals := cmd.Val()
-
-		if len(vals) > 0 {
-			t.doConsumeSeq(ctx, key, handler.Channel, handler.Topic, vals)
-		}
-	}
-}
-
-func (t *scheduleJob) doConsumeSeq(ctx context.Context, key, channel, topic string, vals []string) {
-
-	m := make(map[string]any)
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, channel, topic), "", "*", t.maxLen, 0, nil)
-	for _, val := range vals {
-
-		strs := strings.SplitN(val, ":", 2)
-		if err := t.client.LRem(ctx, key, 1, val).Err(); err != nil {
-			logger.New().Error(err)
-		}
-
-		if len(strs) < 2 {
-			continue
-		}
-
-		m = nil
-		if err := json.Unmarshal([]byte(strs[1]), &m); err != nil {
-			logger.New().Error(err)
-		}
-		xAddArgs.Values = m
-
-		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
-			logger.New().Error(err)
-		}
-	}
-
-}
-
 func (t *scheduleJob) shutDown() {
 	t.done <- struct{}{}
-	t.seqDone <- struct{}{}
 }

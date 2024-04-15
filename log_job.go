@@ -61,7 +61,7 @@ type (
 		MsgType                  string
 	}
 
-	logJobI interface {
+	ILogJob interface {
 		saveLog(ctx context.Context, result *ConsumerResult) error
 		expire(ctx context.Context, done <-chan struct{})
 		archive(ctx context.Context) error

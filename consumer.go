@@ -38,7 +38,7 @@ type ConsumerHandler struct {
 	IHandle
 	Channel string
 	Topic   string
-	run     RunSubscribe
+	run     any
 }
 
 type Consumer struct {
@@ -73,7 +73,7 @@ func NewConsumer(config BeanqConfig) *Consumer {
 		logger.New().With("", err).Fatal("goroutine pool error")
 	}
 	Config.Store(config)
-	if config.Driver == "redis" {
+	if config.Broker == "redis" {
 		beanqConsumer = &Consumer{
 			broker:  newRedisBroker(pool),
 			mu:      new(sync.RWMutex),
@@ -112,6 +112,24 @@ func (t *Consumer) Subscribe(channelName, topicName string, subscribe RunSubscri
 		run:     subscribe,
 	})
 }
+
+func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer ISequentialConsumer) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if channelName == "" {
+		channelName = DefaultOptions.DefaultChannel
+	}
+	if topicName == "" {
+		topicName = DefaultOptions.DefaultTopic
+	}
+
+	t.m = append(t.m, &ConsumerHandler{
+		Channel: channelName,
+		Topic:   topicName,
+		run:     consumer,
+	})
+}
+
 func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 
 	t.broker.start(ctx, t.m)

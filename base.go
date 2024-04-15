@@ -111,6 +111,7 @@ func doTimeout(ctx context.Context, f func() error) error {
 
 	select {
 	case <-ctx.Done():
+		fmt.Printf("retry2:%+v \n", ctx.Err())
 		return ctx.Err()
 	case err := <-errCh:
 		return err
@@ -129,6 +130,7 @@ func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error
 		select {
 		case <-time.After(waitTime):
 		case <-ctx.Done():
+			fmt.Printf("retry1:%+v \n", ctx.Err())
 			return i, ctx.Err()
 		}
 	}

@@ -32,7 +32,6 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
 	"github.com/spf13/cast"
-	"golang.org/x/net/context"
 )
 
 type (
@@ -67,11 +66,6 @@ func NewMessage(message []byte) *Message {
 		ExecuteTime: now,
 		MsgType:     "normal",
 	}
-}
-
-type RunSubscribe interface {
-	Run(ctx context.Context, message *Message) error
-	Error(err error)
 }
 
 // If possible, more data type judgments need to be added
