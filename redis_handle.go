@@ -193,11 +193,11 @@ func (t *RedisHandle) RunSequentialSubscribe(ctx context.Context, done <-chan st
 				retry, err := RetryInfo(nctx, func() error {
 
 					if err := t.run.(ISequentialConsumer).Run(message); err != nil {
-						return err
+						if err := t.run.(ISequentialConsumer).Cancel(message); err != nil {
+							return err
+						}
 					}
-					if err := t.run.(ISequentialConsumer).Cancel(message); err != nil {
-						return err
-					}
+
 					return nil
 				}, t.jobMaxRetry)
 
@@ -211,7 +211,7 @@ func (t *RedisHandle) RunSequentialSubscribe(ctx context.Context, done <-chan st
 				result.ExecuteTime = message.ExecuteTime
 				result.Topic = message.TopicName
 				result.Channel = t.channel
-				result.MsgType = message.MsgType
+				result.MoodType = message.MoodType
 				if err != nil {
 					t.run.(ISequentialConsumer).Error(err)
 					result.Level = ErrLevel
@@ -307,7 +307,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				r.ExecuteTime = msg.ExecuteTime
 				r.Topic = msg.TopicName
 				r.Channel = t.channel
-				r.MsgType = msg.MsgType
+				r.MoodType = msg.MoodType
 
 				r.Level = ErrLevel
 				r.Info = "too long pending"
@@ -404,7 +404,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.ExecuteTime = msg.ExecuteTime
 	r.Topic = msg.TopicName
 	r.Channel = t.channel
-	r.MsgType = msg.MsgType
+	r.MoodType = msg.MoodType
 
 	if err != nil {
 		t.run.(RunSubscribe).Error(err)

@@ -46,7 +46,7 @@ type (
 		Payload      string    `json:"payload"`
 		AddTime      string    `json:"addTime"`
 		ExecuteTime  time.Time `json:"executeTime"`
-		MsgType      string    `json:"msgType"` // 3 types of message: `normal`, `delay`, `sequential`
+		MoodType     string    `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
 
@@ -64,7 +64,7 @@ func NewMessage(message []byte) *Message {
 		Payload:     stringx.ByteToString(message),
 		AddTime:     now.Format(timex.DateTime),
 		ExecuteTime: now,
-		MsgType:     "normal",
+		MoodType:    "normal",
 	}
 }
 
@@ -129,9 +129,9 @@ func mapToMessage(data map[string]any, msg *Message) {
 					msg.ExecuteTime = v
 				}
 			}
-		case "msgType":
+		case "moodType":
 			if v, ok := val.(string); ok {
-				msg.MsgType = v
+				msg.MoodType = v
 			}
 		}
 	}
@@ -150,7 +150,7 @@ func messageToMap(message *Message) map[string]any {
 	m["payload"] = message.Payload
 	m["addTime"] = message.AddTime
 	m["executeTime"] = message.ExecuteTime
-	m["msgType"] = message.MsgType
+	m["moodType"] = message.MoodType
 	return m
 
 }

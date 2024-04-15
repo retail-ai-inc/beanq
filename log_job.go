@@ -58,7 +58,7 @@ type (
 		EndTime                  time.Time
 		ExecuteTime              time.Time
 		Topic, Channel, Consumer string
-		MsgType                  string
+		MoodType                 string
 	}
 
 	ILogJob interface {
