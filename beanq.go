@@ -92,7 +92,8 @@ type BeanqSub interface {
 // consumer ,after broker
 type IHandle interface {
 	Check(ctx context.Context) error
-	Work(ctx context.Context, done <-chan struct{})
+	RunSubscribe(ctx context.Context, done <-chan struct{})
+	RunSequentialSubscribe(ctx context.Context, done <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
 }
 

@@ -48,6 +48,7 @@ type delayRun struct {
 
 func (t *delayRun) Run(ctx context.Context, msg *beanq.Message) error {
 	// time.Sleep(30 * time.Second)
+	// panic("has panic")
 	logger.New().With("delay-channel", "delay-topic").Info(msg.Payload)
 	return nil
 }

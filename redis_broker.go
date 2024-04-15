@@ -46,14 +46,14 @@ type (
 	}
 
 	RedisBroker struct {
-		client                   redis.UniversalClient
-		done, claimDone, logDone chan struct{}
-		scheduleJob              scheduleJobI
-		logJob                   ILogJob
-		once                     *sync.Once
-		pool                     *ants.Pool
-		prefix                   string
-		maxLen                   int64
+		client                            redis.UniversalClient
+		done, seqDone, claimDone, logDone chan struct{}
+		scheduleJob                       scheduleJobI
+		logJob                            ILogJob
+		once                              *sync.Once
+		pool                              *ants.Pool
+		prefix                            string
+		maxLen                            int64
 	}
 )
 
@@ -90,9 +90,10 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 
 	return &RedisBroker{
 		client:      client,
-		done:        make(chan struct{}),
-		claimDone:   make(chan struct{}),
-		logDone:     make(chan struct{}),
+		done:        make(chan struct{}, 1),
+		seqDone:     make(chan struct{}, 1),
+		claimDone:   make(chan struct{}, 1),
+		logDone:     make(chan struct{}, 1),
 		scheduleJob: newScheduleJob(pool, client),
 		logJob:      newLogJob(client, pool),
 		once:        &sync.Once{},
@@ -171,10 +172,21 @@ func (t *RedisBroker) worker(ctx context.Context, handle *ConsumerHandler) error
 	if err := handle.Check(ctx); err != nil {
 		return err
 	}
-	if err := t.pool.Submit(func() {
-		handle.Work(ctx, t.done)
-	}); err != nil {
-		return err
+
+	switch handle.run.(type) {
+	case RunSubscribe:
+		if err := t.pool.Submit(func() {
+			handle.RunSubscribe(ctx, t.done)
+		}); err != nil {
+			return err
+		}
+
+	case ISequentialConsumer:
+		if err := t.pool.Submit(func() {
+			handle.RunSequentialSubscribe(ctx, t.seqDone)
+		}); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -199,6 +211,7 @@ func (t *RedisBroker) waitSignal() {
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
 				t.done <- struct{}{}
+				t.seqDone <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.logDone <- struct{}{}
 				t.scheduleJob.shutDown()

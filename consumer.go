@@ -97,23 +97,14 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param topic
 //	@param consumerFun
 func (t *Consumer) Subscribe(channelName, topicName string, subscribe RunSubscribe) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if channelName == "" {
-		channelName = DefaultOptions.DefaultChannel
-	}
-	if topicName == "" {
-		topicName = DefaultOptions.DefaultTopic
-	}
-
-	t.m = append(t.m, &ConsumerHandler{
-		Channel: channelName,
-		Topic:   topicName,
-		run:     subscribe,
-	})
+	t.subscribe(channelName, topicName, subscribe)
 }
 
 func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer ISequentialConsumer) {
+	t.subscribe(channelName, topicName, consumer)
+}
+
+func (t *Consumer) subscribe(channelName, topicName string, runner interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
@@ -126,7 +117,7 @@ func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer I
 	t.m = append(t.m, &ConsumerHandler{
 		Channel: channelName,
 		Topic:   topicName,
-		run:     consumer,
+		run:     runner,
 	})
 }
 

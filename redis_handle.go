@@ -3,8 +3,6 @@ package beanq
 import (
 	"context"
 	"errors"
-	"fmt"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -13,7 +11,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -106,23 +103,7 @@ func (t *RedisHandle) Check(ctx context.Context) error {
 
 }
 
-func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
-
-	switch t.run.(type) {
-	case RunSubscribe:
-		t.runSubscribe(ctx, done)
-	case ISequentialConsumer:
-		t.runSequentialSubscribe(ctx, done)
-	}
-
-}
-
-func (t *RedisHandle) close() {
-	t.normalDone <- struct{}{}
-	t.seqDone <- struct{}{}
-}
-
-func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
+func (t *RedisHandle) RunSubscribe(ctx context.Context, done <-chan struct{}) {
 
 	channel := t.channel
 	topic := t.topic
@@ -152,7 +133,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 	}
 }
 
-func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
+func (t *RedisHandle) RunSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
 
 	stream := MakeStreamKey(t.prefix, t.channel, t.topic)
 	key := strings.Join([]string{t.prefix, t.channel, t.topic, "seq_id"}, ":")
@@ -174,11 +155,10 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 		cancel()
 		result = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
 	}()
-
 	for {
 		select {
 		case <-done:
-			t.close()
+			logger.New().Info("--------Sequential Task STOP--------")
 			return
 		case <-ctx.Done():
 			return
@@ -210,35 +190,15 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				result.Id = message.Id
 				result.BeginTime = time.Now()
 
-				retry, err := RetryInfo(ctx, func() error {
-					errCh := make(chan error, 1)
-					_ = t.pool.Submit(func() {
-						defer func() {
-							if ne := recover(); ne != nil {
-								errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
-								return
-							}
-						}()
+				retry, err := RetryInfo(nctx, func() error {
 
-						if err := t.run.(ISequentialConsumer).Run(message); err != nil {
-							errCh <- err
-							return
-						}
-						if err := t.run.(ISequentialConsumer).Cancel(message); err != nil {
-							errCh <- err
-							return
-						}
-						t.once.Do(func() {
-							close(errCh)
-						})
-					})
-					t.client.SetEX(ctx, key, "", keyExDuration)
-					select {
-					case <-nctx.Done():
-						return nctx.Err()
-					case e := <-errCh:
-						return e
+					if err := t.run.(ISequentialConsumer).Run(message); err != nil {
+						return err
 					}
+					if err := t.run.(ISequentialConsumer).Cancel(message); err != nil {
+						return err
+					}
+					return nil
 				}, t.jobMaxRetry)
 
 				result.EndTime = time.Now()
@@ -431,29 +391,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.BeginTime = time.Now()
 
 	retryCount, err := RetryInfo(nctx, func() error {
-
-		errCh := make(chan error, 1)
-		_ = t.pool.Submit(func() {
-			defer func() {
-				if ne := recover(); ne != nil {
-					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
-				}
-			}()
-			if err := t.run.(RunSubscribe).Run(nctx, msg); err != nil {
-				errCh <- err
-			}
-			t.once.Do(func() {
-				close(errCh)
-			})
-		})
-
-		select {
-		case <-ctx.Done():
-			fmt.Printf("+++++:%+v \n", ctx.Err())
-			return ctx.Err()
-		case e := <-errCh:
-			return e
-		}
+		return t.run.(RunSubscribe).Run(nctx, msg)
 	}, t.jobMaxRetry)
 
 	r.EndTime = time.Now()
