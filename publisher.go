@@ -54,41 +54,32 @@ const (
 
 var _ BeanqPub = (*PubClient)(nil)
 
-var (
-	publisherOnce  sync.Once
-	beanqPublisher *PubClient
-)
-
 func NewPublisher(config BeanqConfig) *PubClient {
 	opts := DefaultOptions
 
-	publisherOnce.Do(func() {
+	poolSize := config.ConsumerPoolSize
+	if poolSize <= 0 {
+		poolSize = DefaultOptions.ConsumerPoolSize
+	}
 
-		poolSize := config.ConsumerPoolSize
-		if poolSize <= 0 {
-			poolSize = DefaultOptions.ConsumerPoolSize
-		}
+	publishTimeOut := config.PublishTimeOut
+	if publishTimeOut <= 0 {
+		publishTimeOut = opts.PublishTimeOut
+		config.PublishTimeOut = opts.PublishTimeOut
+	}
 
-		publishTimeOut := config.PublishTimeOut
-		if publishTimeOut <= 0 {
-			publishTimeOut = opts.PublishTimeOut
-			config.PublishTimeOut = opts.PublishTimeOut
-		}
+	Config.Store(config)
 
-		Config.Store(config)
-		beanqPublisher = &PubClient{
-			broker:         NewBroker(config),
-			wg:             nil,
-			publishTimeOut: publishTimeOut,
-			channelName:    DefaultOptions.DefaultChannel,
-			topicName:      DefaultOptions.DefaultTopic,
-			maxLen:         DefaultOptions.DefaultMaxLen,
-			retry:          DefaultOptions.JobMaxRetry,
-			priority:       DefaultOptions.Priority,
-		}
-	})
-
-	return beanqPublisher
+	return &PubClient{
+		broker:         NewBroker(config),
+		wg:             nil,
+		publishTimeOut: publishTimeOut,
+		channelName:    DefaultOptions.DefaultChannel,
+		topicName:      DefaultOptions.DefaultTopic,
+		maxLen:         DefaultOptions.DefaultMaxLen,
+		retry:          DefaultOptions.JobMaxRetry,
+		priority:       DefaultOptions.Priority,
+	}
 }
 
 func (t *PubClient) Channel(name string) *PubClient {

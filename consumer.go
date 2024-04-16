@@ -118,6 +118,7 @@ func (t *Consumer) StartConsumer() {
 
 func (t *Consumer) ping() {
 	health := Config.Load().(BeanqConfig).Health
+
 	if health.Host == "" || health.Port == "" {
 		return
 	}

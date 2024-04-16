@@ -138,7 +138,6 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
-
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
 	}
@@ -229,15 +228,12 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 }
 
 func (t *RedisBroker) startConsuming(ctx context.Context) {
-
 	for key, cs := range t.consumerHandlers {
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
-
 			logger.New().With("", err).Error("worker err")
 		}
 
-		//
 		if err := t.scheduleJob.start(ctx, cs); err != nil {
 			logger.New().With("", err).Error("schedule job err")
 		}
@@ -259,7 +255,6 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
-
 	if err := handle.Check(ctx); err != nil {
 		return err
 	}

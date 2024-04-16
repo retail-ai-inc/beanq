@@ -45,12 +45,10 @@ type RedisHandle struct {
 }
 
 func (t *RedisHandle) Check(ctx context.Context) error {
-
 	if err := t.checkStream(ctx); err != nil {
 		return err
 	}
 	return nil
-
 }
 
 func (t *RedisHandle) Channel() string {
@@ -62,7 +60,6 @@ func (t *RedisHandle) Topic() string {
 }
 
 func (t *RedisHandle) Process(ctx context.Context, done <-chan struct{}) {
-
 	switch t.subscribeType {
 	case normalSubscribe:
 		t.runSubscribe(ctx, done)
@@ -77,7 +74,6 @@ func (t *RedisHandle) close() {
 }
 
 func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
-
 	channel := t.channel
 	topic := t.topic
 	stream := MakeStreamKey(t.broker.prefix, channel, topic)
@@ -107,8 +103,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 }
 
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
-
 	stream := MakeStreamKey(t.broker.prefix, t.channel, t.topic)
+
 	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_id"}, ":")
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
@@ -137,7 +133,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				if tx.Get(ctx, key).Val() == "" {
 					if err := tx.SetEX(ctx, key, 1, keyExDuration).Err(); err != nil {
@@ -238,11 +233,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 	}
 }
 
-// Please refer to http://www.redis.cn/commands/xclaim.html
+// DeadLetter Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
-
 	streamKey := MakeStreamKey(t.broker.prefix, t.channel, t.topic)
-
 	defer t.deadLetterTicker.Stop()
 
 	for {
@@ -273,7 +266,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		}
 
 		for _, pending := range pendings {
-
 			if pending.Idle < t.pendingIdle {
 				continue
 			}
@@ -321,7 +313,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 }
 
 func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
-
 	channel := t.channel
 	for key, v := range streams {
 
@@ -357,7 +348,6 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 }
 
 func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...string) error {
-
 	// `stream` confirmation message
 	err := t.broker.client.XAck(ctx, stream, channel, ids...).Err()
 	// delete data from `stream`
@@ -367,7 +357,6 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 }
 
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
-
 	r := t.result.Get().(*ConsumerResult)
 
 	// var cancel context.CancelFunc
@@ -385,7 +374,6 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.BeginTime = time.Now()
 
 	retryCount, err := RetryInfo(nctx, func() error {
-
 		errCh := make(chan error, 1)
 		_ = t.broker.pool.Submit(func() {
 			defer func() {
