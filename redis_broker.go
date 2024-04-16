@@ -34,20 +34,12 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/panjf2000/ants/v2"
-	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"golang.org/x/sync/errgroup"
 )
 
 type (
-	Broker interface {
-		enqueue(ctx context.Context, msg *Message, options Option) error
-		close() error
-		startConsuming(ctx context.Context)
-		addConsumer(subscribeType subscribeType, channel, topic string, run ConsumerFunc)
-	}
-
 	RedisBroker struct {
 		client                   redis.UniversalClient
 		done, claimDone, logDone chan struct{}
@@ -59,37 +51,7 @@ type (
 		prefix                   string
 		maxLen                   int64
 	}
-	ConsumerCallbackType uint8
 )
-
-const (
-	ConsumerHandle ConsumerCallbackType = iota + 1
-	ConsumerError
-	ConsumerCancel
-)
-
-type ConsumerFunc map[ConsumerCallbackType]func(ctx context.Context, data any) error
-
-func (c ConsumerFunc) Handle(ctx context.Context, message *Message) error {
-	if h, ok := c[ConsumerHandle]; ok {
-		return h(ctx, message)
-	}
-	return errors.New("missing handle function")
-}
-
-func (c ConsumerFunc) Cancel(ctx context.Context, message *Message) error {
-	if h, ok := c[ConsumerCancel]; ok {
-		return h(ctx, message)
-	}
-	return nil
-}
-
-func (c ConsumerFunc) Error(ctx context.Context, err error) error {
-	if h, ok := c[ConsumerError]; ok {
-		return h(ctx, err)
-	}
-	return nil
-}
 
 var _ Broker = (*RedisBroker)(nil)
 
