@@ -34,6 +34,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/panjf2000/ants/v2"
+	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"golang.org/x/sync/errgroup"
@@ -66,7 +67,7 @@ func (c ConsumerFunc) Handle(ctx context.Context, message *Message) error {
 	if h, ok := c["handle"]; ok {
 		return h(ctx, message)
 	}
-	return nil
+	return errors.New("missing handle function")
 }
 
 func (c ConsumerFunc) Cancel(ctx context.Context, message *Message) error {
