@@ -71,7 +71,7 @@ type (
 // Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config atomic.Value
 
-// publisher
+// BeanqPub publisher
 type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error
 	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
@@ -80,7 +80,7 @@ type BeanqPub interface {
 	PublishInSequence(msg *Message, orderKey string, option ...OptionI) error
 }
 
-// subscribe
+// BeanqSub subscribe
 type BeanqSub interface {
 	Subscribe(channel, topic string, subscribe ConsumerFunc)
 	SubscribeSequential(channel, topic string, consumer ConsumerFunc)
@@ -89,23 +89,11 @@ type BeanqSub interface {
 	ping()
 }
 
-// consumer ,after broker
+// IHandle consumer ,after broker
 type IHandle interface {
 	Channel() string
 	Topic() string
 	Check(ctx context.Context) error
-	Work(ctx context.Context, done <-chan struct{})
+	Process(ctx context.Context, done <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
-}
-
-type RunSubscribe interface {
-	Run(ctx context.Context, message *Message) error
-	Error(err error)
-}
-
-// sequential consumer
-type ISequentialConsumer interface {
-	Run(message *Message) error
-	Cancel(message *Message) error
-	Error(err error)
 }

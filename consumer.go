@@ -49,7 +49,6 @@ var (
 )
 
 func NewConsumer(config BeanqConfig) *Consumer {
-
 	poolSize := DefaultOptions.ConsumerPoolSize
 	if config.ConsumerPoolSize != 0 {
 		poolSize = config.ConsumerPoolSize
@@ -82,19 +81,14 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param topic
 //	@param consumerFun
 func (t *Consumer) Subscribe(channelName, topicName string, subscribe ConsumerFunc) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if channelName == "" {
-		channelName = DefaultOptions.DefaultChannel
-	}
-	if topicName == "" {
-		topicName = DefaultOptions.DefaultTopic
-	}
-
-	t.broker.addConsumer(NormalSubscribe, channelName, topicName, subscribe)
+	t.subscribe(normalSubscribe, channelName, topicName, subscribe)
 }
 
 func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer ConsumerFunc) {
+	t.subscribe(sequentialSubscribe, channelName, topicName, consumer)
+}
+
+func (t *Consumer) subscribe(subType subscribeType, channelName, topicName string, subscribe ConsumerFunc) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
@@ -104,7 +98,7 @@ func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer C
 		topicName = DefaultOptions.DefaultTopic
 	}
 
-	t.broker.addConsumer(SequentialSubscribe, channelName, topicName, consumer)
+	t.broker.addConsumer(subType, channelName, topicName, subscribe)
 }
 
 func (t *Consumer) WithErrorCallBack(callbacks ...ErrorCallback) *Consumer {
@@ -118,13 +112,11 @@ func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
 }
 
 func (t *Consumer) StartConsumer() {
-
 	t.ping()
 	t.StartConsumerWithContext(context.Background())
-
 }
-func (t *Consumer) ping() {
 
+func (t *Consumer) ping() {
 	health := Config.Load().(BeanqConfig).Health
 	if health.Host == "" || health.Port == "" {
 		return

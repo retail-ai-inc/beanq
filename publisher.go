@@ -120,7 +120,6 @@ func (t *PubClient) Retry(retry int) *PubClient {
 }
 
 func (t *PubClient) Priority(priority float64) *PubClient {
-
 	if priority > 1000 {
 		t.priority = 999
 	}
@@ -139,7 +138,6 @@ func (t *PubClient) reset() {
 }
 
 func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
-
 	defer func() {
 		t.reset()
 	}()
@@ -160,33 +158,33 @@ func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	msg.Priority = t.priority
 	msg.MaxLen = t.maxLen
 	msg.ExecuteTime = opts.ExecuteTime
-	msg.MsgType = "normal"
+	msg.MoodType = "normal"
 
 	if opts.ExecuteTime.After(time.Now()) {
-		msg.MsgType = "delay"
+		msg.MoodType = "delay"
 	}
 	if opts.OrderKey != "" {
-		msg.MsgType = "sequential"
+		msg.MoodType = "sequential"
 	}
 
 	return t.broker.enqueue(ctx, msg, opts)
 }
 
 func (t *PubClient) PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error {
-	msg.MsgType = "delay"
+	msg.MoodType = "delay"
 	option = append(option, ExecuteTime(delay))
 	return t.Publish(msg, option...)
 }
 
 func (t *PubClient) PublishWithDelay(msg *Message, delay time.Duration, option ...OptionI) error {
-	msg.MsgType = "delay"
+	msg.MoodType = "delay"
 	delayTime := time.Now().Add(delay)
 	option = append(option, ExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }
 
 func (t *PubClient) PublishInSequence(msg *Message, orderKey string, option ...OptionI) error {
-	msg.MsgType = "sequential"
+	msg.MoodType = "sequential"
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")
 	}
@@ -195,7 +193,7 @@ func (t *PubClient) PublishInSequence(msg *Message, orderKey string, option ...O
 }
 
 func (t *PubClient) Publish(msg *Message, option ...OptionI) error {
-	msg.MsgType = "normal"
+	msg.MoodType = "normal"
 	ctx, cancel := context.WithTimeout(context.Background(), t.publishTimeOut)
 	defer cancel()
 	return t.PublishWithContext(ctx, msg, option...)

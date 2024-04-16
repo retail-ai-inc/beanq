@@ -16,11 +16,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type SubscribeType int
+type subscribeType int
 
 const (
-	NormalSubscribe SubscribeType = iota + 1
-	SequentialSubscribe
+	normalSubscribe subscribeType = iota + 1
+	sequentialSubscribe
 )
 
 type RedisHandle struct {
@@ -30,7 +30,7 @@ type RedisHandle struct {
 	channel          string
 	topic            string
 	pendingIdle      time.Duration
-	subscribeType    SubscribeType
+	subscribeType    subscribeType
 	errorCallbacks   []ErrorCallback
 
 	jobMaxRetry  int
@@ -61,12 +61,12 @@ func (t *RedisHandle) Topic() string {
 	return t.topic
 }
 
-func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
+func (t *RedisHandle) Process(ctx context.Context, done <-chan struct{}) {
 
 	switch t.subscribeType {
-	case NormalSubscribe:
+	case normalSubscribe:
 		t.runSubscribe(ctx, done)
-	case SequentialSubscribe:
+	case sequentialSubscribe:
 		t.runSequentialSubscribe(ctx, done)
 	}
 }
@@ -205,7 +205,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				result.ExecuteTime = message.ExecuteTime
 				result.Topic = message.TopicName
 				result.Channel = t.channel
-				result.MsgType = message.MsgType
+				result.MoodType = message.MoodType
 				if err != nil {
 					_ = t.run.Error(ctx, err)
 					result.Level = ErrLevel
@@ -301,7 +301,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				r.ExecuteTime = msg.ExecuteTime
 				r.Topic = msg.TopicName
 				r.Channel = t.channel
-				r.MsgType = msg.MsgType
+				r.MoodType = msg.MoodType
 
 				r.Level = ErrLevel
 				r.Info = "too long pending"
@@ -420,7 +420,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.ExecuteTime = msg.ExecuteTime
 	r.Topic = msg.TopicName
 	r.Channel = t.channel
-	r.MsgType = msg.MsgType
+	r.MoodType = msg.MoodType
 
 	if err != nil {
 		_ = t.run.Error(nctx, err)

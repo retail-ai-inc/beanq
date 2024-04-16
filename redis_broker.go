@@ -45,7 +45,7 @@ type (
 		enqueue(ctx context.Context, msg *Message, options Option) error
 		close() error
 		startConsuming(ctx context.Context)
-		addConsumer(subscribeType SubscribeType, channel, topic string, run ConsumerFunc)
+		addConsumer(subscribeType subscribeType, channel, topic string, run ConsumerFunc)
 	}
 
 	RedisBroker struct {
@@ -59,26 +59,33 @@ type (
 		prefix                   string
 		maxLen                   int64
 	}
+	ConsumerCallbackType uint8
 )
 
-type ConsumerFunc map[string]func(ctx context.Context, data any) error
+const (
+	ConsumerHandle ConsumerCallbackType = iota + 1
+	ConsumerError
+	ConsumerCancel
+)
+
+type ConsumerFunc map[ConsumerCallbackType]func(ctx context.Context, data any) error
 
 func (c ConsumerFunc) Handle(ctx context.Context, message *Message) error {
-	if h, ok := c["handle"]; ok {
+	if h, ok := c[ConsumerHandle]; ok {
 		return h(ctx, message)
 	}
 	return errors.New("missing handle function")
 }
 
 func (c ConsumerFunc) Cancel(ctx context.Context, message *Message) error {
-	if h, ok := c["cancel"]; ok {
+	if h, ok := c[ConsumerCancel]; ok {
 		return h(ctx, message)
 	}
 	return nil
 }
 
 func (c ConsumerFunc) Error(ctx context.Context, err error) error {
-	if h, ok := c["error"]; ok {
+	if h, ok := c[ConsumerError]; ok {
 		return h(ctx, err)
 	}
 	return nil
@@ -160,7 +167,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	return nil
 }
 
-func (t *RedisBroker) addConsumer(subType SubscribeType, channel, topic string, run ConsumerFunc) {
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, run ConsumerFunc) {
 	bqConfig := Config.Load().(BeanqConfig)
 	jobMaxRetry := bqConfig.JobMaxRetries
 	if jobMaxRetry <= 0 {
@@ -257,7 +264,7 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 		return err
 	}
 	if err := t.pool.Submit(func() {
-		handle.Work(ctx, t.done)
+		handle.Process(ctx, t.done)
 	}); err != nil {
 		return err
 	}
