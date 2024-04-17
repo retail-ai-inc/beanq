@@ -27,9 +27,6 @@ import (
 	"errors"
 	"sync"
 	"time"
-
-	"github.com/panjf2000/ants/v2"
-	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type (
@@ -57,50 +54,32 @@ const (
 
 var _ BeanqPub = (*PubClient)(nil)
 
-var (
-	publisherOnce  sync.Once
-	beanqPublisher *PubClient
-)
-
 func NewPublisher(config BeanqConfig) *PubClient {
 	opts := DefaultOptions
 
-	publisherOnce.Do(func() {
+	poolSize := config.ConsumerPoolSize
+	if poolSize <= 0 {
+		poolSize = DefaultOptions.ConsumerPoolSize
+	}
 
-		poolSize := config.ConsumerPoolSize
-		if poolSize <= 0 {
-			poolSize = DefaultOptions.ConsumerPoolSize
-		}
+	publishTimeOut := config.PublishTimeOut
+	if publishTimeOut <= 0 {
+		publishTimeOut = opts.PublishTimeOut
+		config.PublishTimeOut = opts.PublishTimeOut
+	}
 
-		publishTimeOut := config.PublishTimeOut
-		if publishTimeOut <= 0 {
-			publishTimeOut = opts.PublishTimeOut
-			config.PublishTimeOut = opts.PublishTimeOut
-		}
+	Config.Store(config)
 
-		pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
-		if err != nil {
-			logger.New().With("", err).Fatal("goroutine pool error")
-		}
-		Config.Store(config)
-		if config.Broker == "redis" {
-			beanqPublisher = &PubClient{
-				broker:         newRedisBroker(pool),
-				wg:             nil,
-				publishTimeOut: publishTimeOut,
-				channelName:    DefaultOptions.DefaultChannel,
-				topicName:      DefaultOptions.DefaultTopic,
-				maxLen:         DefaultOptions.DefaultMaxLen,
-				retry:          DefaultOptions.JobMaxRetry,
-				priority:       DefaultOptions.Priority,
-			}
-		} else {
-			// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
-			beanqPublisher = nil
-		}
-	})
-
-	return beanqPublisher
+	return &PubClient{
+		broker:         NewBroker(config),
+		wg:             nil,
+		publishTimeOut: publishTimeOut,
+		channelName:    DefaultOptions.DefaultChannel,
+		topicName:      DefaultOptions.DefaultTopic,
+		maxLen:         DefaultOptions.DefaultMaxLen,
+		retry:          DefaultOptions.JobMaxRetry,
+		priority:       DefaultOptions.Priority,
+	}
 }
 
 func (t *PubClient) Channel(name string) *PubClient {
@@ -132,7 +111,6 @@ func (t *PubClient) Retry(retry int) *PubClient {
 }
 
 func (t *PubClient) Priority(priority float64) *PubClient {
-
 	if priority > 1000 {
 		t.priority = 999
 	}
@@ -151,7 +129,6 @@ func (t *PubClient) reset() {
 }
 
 func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
-
 	defer func() {
 		t.reset()
 	}()

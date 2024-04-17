@@ -47,7 +47,6 @@ func (t *Sequential) In(orderKey string, message Message) *Sequential {
 }
 
 func (t *Sequential) Sort() []Message {
-
 	d := t.data
 	length := len(d)
 

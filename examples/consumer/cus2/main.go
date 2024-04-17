@@ -43,30 +43,6 @@ func initCnf() beanq.BeanqConfig {
 	return bqConfig
 }
 
-type delayRun struct {
-}
-
-func (t *delayRun) Run(ctx context.Context, msg *beanq.Message) error {
-	// time.Sleep(30 * time.Second)
-	logger.New().With("delay-channel", "delay-topic").Info(msg.Payload)
-	return nil
-}
-
-func (t *delayRun) Error(err error) {
-	fmt.Printf("-----------------%+v \n", err)
-}
-
-type defaultRun struct {
-}
-
-func (t *defaultRun) Run(ctx context.Context, message *beanq.Message) error {
-	logger.New().With("default-channel", "default-topic").Info(message.Payload)
-	return nil
-}
-func (t *defaultRun) Error(err error) {
-	fmt.Printf("+++++++%+v \n", err)
-}
-
 func main() {
 
 	// register consumer
@@ -83,7 +59,20 @@ func main() {
 	// 	return nil
 	// })
 	// register delay consumer
-	csm.Subscribe("delay-channel", "delay-topic", &delayRun{})
+	csm.Subscribe("delay-channel", "delay-topic", beanq.ConsumerFunc{
+		beanq.ConsumerHandle: func(ctx context.Context, data any) error {
+			message := data.(*beanq.Message)
+			logger.New().With("default-channel", "default-topic").Info(message.Payload)
+			return nil
+		},
+		beanq.ConsumerCancel: func(ctx context.Context, data any) error {
+			return nil
+		},
+		beanq.ConsumerError: func(ctx context.Context, err any) error {
+			fmt.Printf("+++++++%+v \n", err)
+			return nil
+		},
+	})
 	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 	// begin to consume information
 	csm.StartConsumer()

@@ -30,23 +30,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
-type ConsumerHandler struct {
-	IHandle
-	Channel string
-	Topic   string
-	run     any
-}
+type ErrorCallback func(msg *Message, err error) error
 
 type Consumer struct {
-	broker  Broker
-	opts    *Options
-	m       []*ConsumerHandler
-	mu      *sync.RWMutex
-	timeOut time.Duration
+	broker         Broker
+	opts           *Options
+	mu             *sync.RWMutex
+	timeOut        time.Duration
+	errorCallbacks []ErrorCallback
 }
 
 var _ BeanqSub = (*Consumer)(nil)
@@ -55,7 +49,6 @@ var (
 )
 
 func NewConsumer(config BeanqConfig) *Consumer {
-
 	poolSize := DefaultOptions.ConsumerPoolSize
 	if config.ConsumerPoolSize != 0 {
 		poolSize = config.ConsumerPoolSize
@@ -68,20 +61,11 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	}
 	config.ConsumeTimeOut = timeOut
 
-	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
-	if err != nil {
-		logger.New().With("", err).Fatal("goroutine pool error")
-	}
 	Config.Store(config)
-	if config.Broker == "redis" {
-		beanqConsumer = &Consumer{
-			broker:  newRedisBroker(pool),
-			mu:      new(sync.RWMutex),
-			timeOut: timeOut,
-		}
-	} else {
-		// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
-		beanqConsumer = nil
+	beanqConsumer = &Consumer{
+		broker:  NewBroker(config),
+		mu:      new(sync.RWMutex),
+		timeOut: timeOut,
 	}
 
 	return beanqConsumer
@@ -96,15 +80,15 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param channel
 //	@param topic
 //	@param consumerFun
-func (t *Consumer) Subscribe(channelName, topicName string, subscribe RunSubscribe) {
-	t.subscribe(channelName, topicName, subscribe)
+func (t *Consumer) Subscribe(channelName, topicName string, subscribe ConsumerFunc) {
+	t.subscribe(normalSubscribe, channelName, topicName, subscribe)
 }
 
-func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer ISequentialConsumer) {
-	t.subscribe(channelName, topicName, consumer)
+func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer ConsumerFunc) {
+	t.subscribe(sequentialSubscribe, channelName, topicName, consumer)
 }
 
-func (t *Consumer) subscribe(channelName, topicName string, runner interface{}) {
+func (t *Consumer) subscribe(subType subscribeType, channelName, topicName string, subscribe ConsumerFunc) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
@@ -114,28 +98,27 @@ func (t *Consumer) subscribe(channelName, topicName string, runner interface{}) 
 		topicName = DefaultOptions.DefaultTopic
 	}
 
-	t.m = append(t.m, &ConsumerHandler{
-		Channel: channelName,
-		Topic:   topicName,
-		run:     runner,
-	})
+	t.broker.addConsumer(subType, channelName, topicName, subscribe)
+}
+
+func (t *Consumer) WithErrorCallBack(callbacks ...ErrorCallback) *Consumer {
+	clone := *t
+	clone.errorCallbacks = append(t.errorCallbacks, callbacks...)
+	return &clone
 }
 
 func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
-
-	t.broker.start(ctx, t.m)
-
+	t.broker.startConsuming(ctx)
 }
 
 func (t *Consumer) StartConsumer() {
-
 	t.ping()
 	t.StartConsumerWithContext(context.Background())
-
 }
-func (t *Consumer) ping() {
 
+func (t *Consumer) ping() {
 	health := Config.Load().(BeanqConfig).Health
+
 	if health.Host == "" || health.Port == "" {
 		return
 	}
