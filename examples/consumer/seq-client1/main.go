@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -74,7 +76,16 @@ func main() {
 	// })
 	// register delay consumer
 
-	csm.SubscribeSequential("delay-channel", "order-topic", &seqCustomer{})
+	csm.SubscribeSequential("delay-channel", "order-topic", beanq.ConsumerFunc{
+		beanq.ConsumerHandle: func(ctx context.Context, data any) error {
+			time.Sleep(10 * time.Second)
+			fmt.Printf("result:%+v \n", data)
+			return nil
+		},
+		beanq.ConsumerCancel: func(ctx context.Context, data any) error {
+			return nil
+		},
+	})
 	// begin to consume information
 	csm.StartConsumer()
 

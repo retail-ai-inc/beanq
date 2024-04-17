@@ -7,6 +7,7 @@ require (
 	github.com/json-iterator/go v1.1.12
 	github.com/labstack/gommon v0.4.2
 	github.com/panjf2000/ants/v2 v2.9.0
+	github.com/pkg/errors v0.9.1
 	github.com/rs/xid v1.5.0
 	github.com/shirou/gopsutil/v3 v3.23.3
 	github.com/spf13/cast v1.6.0

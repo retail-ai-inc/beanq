@@ -63,14 +63,14 @@ func main() {
 	csm.Subscribe("delay-channel", "delay-topic", beanq.ConsumerFunc{
 		beanq.ConsumerHandle: func(ctx context.Context, data any) error {
 			message := data.(*beanq.Message)
-			logger.New().With("default-channel", "default-topic").Info(message.Payload)
+			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
 			return nil
 		},
 		beanq.ConsumerCancel: func(ctx context.Context, data any) error {
 			return nil
 		},
 		beanq.ConsumerError: func(ctx context.Context, err any) error {
-			fmt.Printf("+++++++%+v \n", err)
+			fmt.Printf("result:%+v \n", err)
 			return nil
 		},
 	})

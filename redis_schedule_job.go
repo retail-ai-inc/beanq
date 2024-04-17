@@ -146,25 +146,31 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 		now = time.Now()
 
 		scoreMax = cast.ToString(now.UnixMilli() + 1)
+		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+				Min:    scoreMin,
+				Max:    scoreMax,
+				Offset: 0,
+				Count:  1,
+			}).Result()
 
-		val, err := t.broker.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-			Min:    scoreMin,
-			Max:    scoreMax,
-			Offset: 0,
-			Count:  1,
-		}).Result()
+			if err != nil {
+				return err
+			}
 
+			if len(val) <= 0 {
+				scoreMin = scoreMax
+			} else {
+				scoreMin = val[0]
+				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, timeUnit)
 		if err != nil {
-			logger.New().With("", err).Error("consume err")
-		}
-
-		if len(val) <= 0 {
-			scoreMin = scoreMax
+			logger.New().Error(err)
 			continue
-		}
-		scoreMin = val[0]
-		if err := t.broker.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
-			logger.New().With("", err).Error("zrem err")
 		}
 
 		if err := t.doConsume(ctx, scoreMax, consumer); err != nil {

@@ -94,6 +94,6 @@ type IHandle interface {
 	Channel() string
 	Topic() string
 	Check(ctx context.Context) error
-	Process(ctx context.Context, done <-chan struct{})
+	Process(ctx context.Context, mainDone, seqDone <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
 }

@@ -41,15 +41,16 @@ import (
 
 type (
 	RedisBroker struct {
-		client                   redis.UniversalClient
-		done, claimDone, logDone chan struct{}
-		scheduleJob              scheduleJobI
-		consumerHandlers         []IHandle
-		logJob                   ILogJob
-		once                     *sync.Once
-		pool                     *ants.Pool
-		prefix                   string
-		maxLen                   int64
+		client                            redis.UniversalClient
+		done, seqDone, claimDone, logDone chan struct{}
+		scheduleJob                       scheduleJobI
+		consumerHandlers                  []IHandle
+		logJob                            ILogJob
+		once                              *sync.Once
+		pool                              *ants.Pool
+		prefix                            string
+		maxLen                            int64
+		config                            BeanqConfig
 	}
 )
 
@@ -78,21 +79,26 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	if prefix == "" {
 		prefix = DefaultOptions.Prefix
 	}
+	config.Redis.Prefix = prefix
+
 	maxLen := config.Redis.MaxLen
 	if maxLen <= 0 {
 		maxLen = DefaultOptions.DefaultMaxLen
 	}
+	config.Redis.MaxLen = maxLen
 
 	broker := &RedisBroker{
 		client:    client,
-		done:      make(chan struct{}),
-		claimDone: make(chan struct{}),
-		logDone:   make(chan struct{}),
+		done:      make(chan struct{}, 1),
+		seqDone:   make(chan struct{}, 1),
+		claimDone: make(chan struct{}, 1),
+		logDone:   make(chan struct{}, 1),
 		logJob:    newLogJob(client, pool),
 		once:      &sync.Once{},
 		pool:      pool,
 		prefix:    prefix,
 		maxLen:    maxLen,
+		config:    config,
 	}
 	broker.scheduleJob = broker.newScheduleJob()
 
@@ -129,7 +135,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 }
 
 func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, run ConsumerFunc) {
-	bqConfig := Config.Load().(BeanqConfig)
+
+	bqConfig := t.config
 	jobMaxRetry := bqConfig.JobMaxRetries
 	if jobMaxRetry <= 0 {
 		jobMaxRetry = DefaultOptions.JobMaxRetry
@@ -165,9 +172,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 			group.SetLimit(2)
 			return group
 		}},
-		once:       sync.Once{},
-		normalDone: make(chan struct{}, 1),
-		seqDone:    make(chan struct{}, 1),
+		once: sync.Once{},
 	}
 	t.consumerHandlers = append(t.consumerHandlers, handler)
 }
@@ -221,7 +226,7 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 		return err
 	}
 	if err := t.pool.Submit(func() {
-		handle.Process(ctx, t.done)
+		handle.Process(ctx, t.done, t.seqDone)
 	}); err != nil {
 		return err
 	}
@@ -248,6 +253,7 @@ func (t *RedisBroker) waitSignal() {
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
 				t.done <- struct{}{}
+				t.seqDone <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.logDone <- struct{}{}
 				t.scheduleJob.shutDown()
