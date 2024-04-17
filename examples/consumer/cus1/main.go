@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	_ "net/http/pprof"
@@ -11,7 +12,6 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -20,6 +20,7 @@ var (
 )
 
 func initCnf() beanq.BeanqConfig {
+
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
