@@ -3,7 +3,7 @@ package beanq
 import (
 	"context"
 	"errors"
-	"strings"
+	"math"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -25,11 +25,12 @@ func (t *RedisUnique) Add(ctx context.Context, key, member string) (bool, error)
 		if errors.Is(err, redis.Nil) {
 			now := time.Now().Unix()
 			incr = float64(now) + 0.001
+			return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
 		}
-	} else {
-		incr = 0.001
-		b = true
+		return b, err
 	}
+	incr = 0.001
+	b = true
 	return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
 
 }
@@ -58,14 +59,15 @@ func (t *RedisUnique) Delete(ctx context.Context, key string) error {
 
 			for _, v := range val {
 
-				arr := strings.Split(cast.ToString(v.Score), ".")
-				expTime := cast.ToTime(cast.ToInt(arr[0]))
+				floor := math.Floor(v.Score)
+				frac := v.Score - floor
+				expTime := cast.ToTime(cast.ToInt(floor))
 
 				if time.Since(expTime).Seconds() >= 3600*2 {
 					t.client.ZRem(ctx, key, v.Member)
 					continue
 				}
-				if time.Since(expTime).Seconds() >= 60*30 && cast.ToInt(arr[1])*1000 <= 2 {
+				if time.Since(expTime).Seconds() >= 60*30 && frac*1000 <= 2 {
 					t.client.ZRem(ctx, key, v.Member)
 					continue
 				}
