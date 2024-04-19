@@ -44,6 +44,7 @@ type (
 		client                            redis.UniversalClient
 		done, seqDone, claimDone, logDone chan struct{}
 		scheduleJob                       scheduleJobI
+		policy                            VolatileLFU
 		consumerHandlers                  []IHandle
 		logJob                            ILogJob
 		once                              *sync.Once
@@ -99,6 +100,7 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 		prefix:    prefix,
 		maxLen:    maxLen,
 		config:    config,
+		policy:    &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
 	}
 	broker.scheduleJob = broker.newScheduleJob()
 
@@ -108,6 +110,13 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
+	}
+	b, err := t.policy.Add(ctx, strings.Join([]string{t.prefix, "policy"}, ":"), msg.Id)
+	if b {
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 
 	// Sequential job

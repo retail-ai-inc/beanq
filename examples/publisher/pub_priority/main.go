@@ -55,7 +55,7 @@ func pubMoreAndPriorityInfo() {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
-		msg := beanq.NewMessage(b)
+		msg := beanq.NewMessage("", b)
 		delayT := time.Now().Add(10 * time.Second)
 
 		if i == 3 {

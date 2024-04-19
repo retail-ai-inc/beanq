@@ -1,0 +1,73 @@
+package beanq
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/spf13/cast"
+)
+
+type RedisUnique struct {
+	client redis.UniversalClient
+	ticker *time.Ticker
+}
+
+func (t *RedisUnique) Add(ctx context.Context, key, member string) (bool, error) {
+
+	incr := 0.000
+	b := false
+	err := t.client.ZRank(ctx, key, member).Err()
+
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			now := time.Now().Unix()
+			incr = float64(now) + 0.001
+		}
+	} else {
+		incr = 0.001
+		b = true
+	}
+	return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+
+}
+
+func (t *RedisUnique) Delete(ctx context.Context, key string) error {
+
+	defer func() {
+		t.ticker.Stop()
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.ticker.C:
+
+			cmd := t.client.ZRangeByScoreWithScores(ctx, key, &redis.ZRangeBy{
+				Min:    "-inf",
+				Max:    "+inf",
+				Offset: 0,
+				Count:  100,
+			})
+			val := cmd.Val()
+			if len(val) <= 0 {
+				continue
+			}
+
+			for _, v := range val {
+
+				arr := strings.Split(cast.ToString(v.Score), ".")
+				expTime := cast.ToTime(cast.ToInt(arr[0]))
+
+				if time.Since(expTime).Seconds() >= 3600*2 {
+					t.client.ZRem(ctx, key, v.Member)
+				}
+				if time.Since(expTime).Seconds() >= 60*30 && cast.ToInt(arr[1])*1000 <= 2 {
+					t.client.ZRem(ctx, key, v.Member)
+				}
+			}
+		}
+	}
+}

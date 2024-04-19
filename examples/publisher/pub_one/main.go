@@ -56,7 +56,7 @@ func pubOneInfo() {
 
 	d, _ := json.Marshal(msg)
 	// get message
-	bmsg := beanq.NewMessage(d)
+	bmsg := beanq.NewMessage("", d)
 	config := initCnf()
 	pub := beanq.NewPublisher(config)
 	err := pub.Channel("aa").Topic("bb").Publish(bmsg)

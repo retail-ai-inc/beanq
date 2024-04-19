@@ -50,12 +50,16 @@ type (
 	}
 )
 
-func NewMessage(message []byte) *Message {
+func NewMessage(msgId string, message []byte) *Message {
+
 	now := time.Now()
-	guid := xid.NewWithTime(now)
+	if msgId == "" {
+		guid := xid.NewWithTime(now)
+		msgId = guid.String()
+	}
 
 	return &Message{
-		Id:          guid.String(),
+		Id:          msgId,
 		TopicName:   DefaultOptions.DefaultTopic,
 		ChannelName: DefaultOptions.DefaultChannel,
 		MaxLen:      DefaultOptions.DefaultMaxLen,

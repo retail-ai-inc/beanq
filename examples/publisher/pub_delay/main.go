@@ -63,7 +63,7 @@ func pubDelayInfo() {
 
 		b, _ := json.Marshal(m)
 
-		msg := beanq.NewMessage(b)
+		msg := beanq.NewMessage("11", b)
 		delayT := 10 * time.Second
 		if i == 2 {
 			delayT = ntime

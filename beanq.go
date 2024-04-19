@@ -97,3 +97,9 @@ type IHandle interface {
 	Process(ctx context.Context, mainDone, seqDone <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
 }
+
+// VolatileLFU
+type VolatileLFU interface {
+	Add(ctx context.Context, key, member string) (bool, error)
+	Delete(ctx context.Context, key string) error
+}
