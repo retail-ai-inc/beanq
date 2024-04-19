@@ -63,9 +63,11 @@ func (t *RedisUnique) Delete(ctx context.Context, key string) error {
 
 				if time.Since(expTime).Seconds() >= 3600*2 {
 					t.client.ZRem(ctx, key, v.Member)
+					continue
 				}
 				if time.Since(expTime).Seconds() >= 60*30 && cast.ToInt(arr[1])*1000 <= 2 {
 					t.client.ZRem(ctx, key, v.Member)
+					continue
 				}
 			}
 		}
