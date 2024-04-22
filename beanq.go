@@ -101,5 +101,5 @@ type IHandle interface {
 // VolatileLFU
 type VolatileLFU interface {
 	Add(ctx context.Context, key, member string) (bool, error)
-	Delete(ctx context.Context, key string) error
+	Delete(ctx context.Context, key string, done <-chan struct{})
 }

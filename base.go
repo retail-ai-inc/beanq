@@ -96,6 +96,10 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }
 
+func MakeFilter(prefix string) string {
+	return makeKey(prefix, "filter")
+}
+
 func doTimeout(ctx context.Context, f func() error) error {
 	errCh := make(chan error, 1)
 	go func() {

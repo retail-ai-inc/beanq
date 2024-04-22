@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/cast"
 )
 
@@ -25,9 +26,8 @@ func (t *RedisUnique) Add(ctx context.Context, key, member string) (bool, error)
 		if errors.Is(err, redis.Nil) {
 			now := time.Now().Unix()
 			incr = float64(now) + 0.001
-			return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
 		}
-		return b, err
+		return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
 	}
 	incr = 0.001
 	b = true
@@ -35,7 +35,7 @@ func (t *RedisUnique) Add(ctx context.Context, key, member string) (bool, error)
 
 }
 
-func (t *RedisUnique) Delete(ctx context.Context, key string) error {
+func (t *RedisUnique) Delete(ctx context.Context, key string, done <-chan struct{}) {
 
 	defer func() {
 		t.ticker.Stop()
@@ -43,7 +43,11 @@ func (t *RedisUnique) Delete(ctx context.Context, key string) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			logger.New().Info("--------Obsolete Task STOP--------")
+			return
+		case <-done:
+			logger.New().Info("--------Obsolete Task STOP--------")
+			return
 		case <-t.ticker.C:
 
 			cmd := t.client.ZRangeByScoreWithScores(ctx, key, &redis.ZRangeBy{

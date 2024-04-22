@@ -41,17 +41,17 @@ import (
 
 type (
 	RedisBroker struct {
-		client                            redis.UniversalClient
-		done, seqDone, claimDone, logDone chan struct{}
-		scheduleJob                       scheduleJobI
-		policy                            VolatileLFU
-		consumerHandlers                  []IHandle
-		logJob                            ILogJob
-		once                              *sync.Once
-		pool                              *ants.Pool
-		prefix                            string
-		maxLen                            int64
-		config                            BeanqConfig
+		client                                          redis.UniversalClient
+		done, seqDone, obsoleteDone, claimDone, logDone chan struct{}
+		scheduleJob                                     scheduleJobI
+		filter                                          VolatileLFU
+		consumerHandlers                                []IHandle
+		logJob                                          ILogJob
+		once                                            *sync.Once
+		pool                                            *ants.Pool
+		prefix                                          string
+		maxLen                                          int64
+		config                                          BeanqConfig
 	}
 )
 
@@ -89,18 +89,19 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	config.Redis.MaxLen = maxLen
 
 	broker := &RedisBroker{
-		client:    client,
-		done:      make(chan struct{}, 1),
-		seqDone:   make(chan struct{}, 1),
-		claimDone: make(chan struct{}, 1),
-		logDone:   make(chan struct{}, 1),
-		logJob:    newLogJob(client, pool),
-		once:      &sync.Once{},
-		pool:      pool,
-		prefix:    prefix,
-		maxLen:    maxLen,
-		config:    config,
-		policy:    &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
+		client:       client,
+		done:         make(chan struct{}, 1),
+		seqDone:      make(chan struct{}, 1),
+		obsoleteDone: make(chan struct{}, 1),
+		claimDone:    make(chan struct{}, 1),
+		logDone:      make(chan struct{}, 1),
+		logJob:       newLogJob(client, pool),
+		once:         &sync.Once{},
+		pool:         pool,
+		prefix:       prefix,
+		maxLen:       maxLen,
+		config:       config,
+		filter:       &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
 	}
 	broker.scheduleJob = broker.newScheduleJob()
 
@@ -111,7 +112,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
 	}
-	b, err := t.policy.Add(ctx, strings.Join([]string{t.prefix, "policy"}, ":"), msg.Id)
+	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 	if b {
 		return nil
 	}
@@ -225,6 +226,11 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	}); err != nil {
 		logger.New().Error(err)
 	}
+	if err := t.pool.Submit(func() {
+		t.filter.Delete(ctx, MakeFilter(t.prefix), t.obsoleteDone)
+	}); err != nil {
+		logger.New().Error(err)
+	}
 	logger.New().Info("----START----")
 	// monitor signal
 	t.waitSignal()
@@ -263,6 +269,7 @@ func (t *RedisBroker) waitSignal() {
 			t.once.Do(func() {
 				t.done <- struct{}{}
 				t.seqDone <- struct{}{}
+				t.obsoleteDone <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.logDone <- struct{}{}
 				t.scheduleJob.shutDown()
