@@ -78,8 +78,7 @@ func main() {
 
 	csm.SubscribeSequential("delay-channel", "order-topic", beanq.ConsumerFunc{
 		beanq.ConsumerHandle: func(ctx context.Context, data any) error {
-			time.Sleep(10 * time.Second)
-			fmt.Printf("result:%+v \n", data)
+			fmt.Printf("result:%+v,time:%+v \n", data, time.Now())
 			return nil
 		},
 		beanq.ConsumerCancel: func(ctx context.Context, data any) error {

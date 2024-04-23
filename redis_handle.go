@@ -108,11 +108,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 	keyExDuration := 20 * time.Second
 
-	nctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-
 	defer func() {
 		ticker.Stop()
-		cancel()
 		result = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
 	}()
 
@@ -135,6 +132,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 			if err != nil {
 				continue
 			}
+
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
@@ -150,7 +148,10 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				result.Id = message.Id
 				result.BeginTime = time.Now()
 
-				retry, err := RetryInfo(ctx, func() error {
+				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
+
+				retry, err := RetryInfo(nctx, func() error {
+
 					if err := t.run.Handle(nctx, message); err != nil {
 						return t.run.Cancel(nctx, message)
 					}
@@ -173,7 +174,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					result.Level = ErrLevel
 					result.Info = FlagInfo(err.Error())
 				}
-
+				cancel()
 				group.TryGo(func() error {
 					// `stream` confirmation message
 					if err := t.broker.client.XAck(ctx, stream, t.channel, nv.ID).Err(); err != nil {
@@ -325,9 +326,10 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
 	r := t.result.Get().(*ConsumerResult)
-
 	// var cancel context.CancelFunc
-	nctx, cancel := context.WithTimeout(context.Background(), t.timeOut)
+	msg := messageToStruct(message)
+
+	nctx, cancel := context.WithTimeout(context.Background(), msg.TimeToRun)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
@@ -335,12 +337,10 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 		cancel()
 	}()
 
-	msg := messageToStruct(message)
-
 	r.Id = msg.Id
 	r.BeginTime = time.Now()
 
-	retryCount, err := RetryInfo(ctx, func() error {
+	retryCount, err := RetryInfo(nctx, func() error {
 		return t.run.Handle(nctx, msg)
 	}, t.jobMaxRetry)
 

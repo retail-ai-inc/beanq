@@ -258,6 +258,7 @@ type Options struct {
 	JobMaxRetry              int
 	DefaultMaxLen            int64
 	MinConsumers             int64
+	TimeToRun                time.Duration
 	KeepSuccessJobsInHistory time.Duration
 	KeepFailedJobsInHistory  time.Duration
 	RetryTime                time.Duration
@@ -273,6 +274,7 @@ var DefaultOptions = &Options{
 	ConsumeTimeOut:           20 * time.Second,
 	ConsumerPoolSize:         20,
 	MinConsumers:             10,
+	TimeToRun:                3600 * time.Second,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
 
@@ -287,5 +289,6 @@ var DefaultOptions = &Options{
 	DefaultDelayChannel: "default-delay-channel",
 
 	RetryTime: 800 * time.Millisecond,
+
 	WorkCount: make(chan struct{}, 20),
 }

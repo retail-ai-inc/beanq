@@ -41,6 +41,7 @@ type (
 		maxLen         int64
 		retry          int
 		priority       float64
+		timeToRun      time.Duration
 		mood           MoodType
 	}
 )
@@ -79,6 +80,7 @@ func NewPublisher(config BeanqConfig) *PubClient {
 		maxLen:         DefaultOptions.DefaultMaxLen,
 		retry:          DefaultOptions.JobMaxRetry,
 		priority:       DefaultOptions.Priority,
+		timeToRun:      DefaultOptions.TimeToRun,
 	}
 }
 
@@ -120,12 +122,18 @@ func (t *PubClient) Priority(priority float64) *PubClient {
 	return t
 }
 
+func (t *PubClient) TimeToRun(duration time.Duration) *PubClient {
+	t.timeToRun = duration
+	return t
+}
+
 func (t *PubClient) reset() {
 	t.channelName = DefaultOptions.DefaultChannel
 	t.topicName = DefaultOptions.DefaultTopic
 	t.retry = DefaultOptions.JobMaxRetry
 	t.priority = DefaultOptions.Priority
 	t.maxLen = DefaultOptions.DefaultMaxLen
+	t.timeToRun = DefaultOptions.TimeToRun
 }
 
 func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
@@ -149,6 +157,7 @@ func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	msg.Priority = t.priority
 	msg.MaxLen = t.maxLen
 	msg.ExecuteTime = opts.ExecuteTime
+	msg.TimeToRun = t.timeToRun
 	msg.MoodType = "normal"
 
 	if opts.ExecuteTime.After(time.Now()) {

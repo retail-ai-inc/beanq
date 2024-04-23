@@ -63,20 +63,21 @@ func pubDelayInfo() {
 
 		b, _ := json.Marshal(m)
 
-		msg := beanq.NewMessage("11", b)
-		delayT := 10 * time.Second
-		if i == 2 {
-			delayT = ntime
-		}
-
-		if i == 4 {
-			y = 8
-		}
-		if i == 3 {
-			y = 10
-			delayT = 35 * time.Second
-
-		}
+		msg := beanq.NewMessage("", b)
+		delayT := ntime
+		// delayT := 10 * time.Second
+		// if i == 2 {
+		// 	delayT = ntime
+		// }
+		//
+		// if i == 4 {
+		// 	y = 8
+		// }
+		// if i == 3 {
+		// 	y = 10
+		// 	delayT = 35 * time.Second
+		//
+		// }
 		// fmt.Println(delayT)
 		// continue
 		if err := pub.Channel("delay-channel").Topic("order-topic").PublishWithDelay(msg, delayT, beanq.Priority(float64(y))); err != nil {
