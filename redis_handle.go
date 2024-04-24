@@ -67,7 +67,7 @@ func (t *RedisHandle) Process(ctx context.Context, done, seqDone <-chan struct{}
 func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 	channel := t.channel
 	topic := t.topic
-	stream := MakeStreamKey(t.broker.prefix, channel, topic)
+	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, channel, topic)
 	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
@@ -94,7 +94,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 }
 
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
-	stream := MakeStreamKey(t.broker.prefix, t.channel, t.topic)
+	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
 	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_id"}, ":")
 
@@ -203,7 +203,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 // DeadLetter Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
-	streamKey := MakeStreamKey(t.broker.prefix, t.channel, t.topic)
+	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	defer t.deadLetterTicker.Stop()
 
 	for {
@@ -340,7 +340,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.Id = msg.Id
 	r.BeginTime = time.Now()
 
-	retryCount, err := RetryInfo(nctx, func() error {
+	retryCount, err := RetryInfo(ctx, func() error {
 		return t.run.Handle(nctx, msg)
 	}, t.jobMaxRetry)
 
@@ -367,7 +367,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 // checkStream   if stream not exist,then create it
 func (t *RedisHandle) checkStream(ctx context.Context) error {
 
-	normalStreamKey := MakeStreamKey(t.broker.prefix, t.channel, t.topic)
+	normalStreamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	return t.check(ctx, normalStreamKey)
 
 }

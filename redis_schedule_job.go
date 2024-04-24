@@ -233,7 +233,11 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 	mmsg := messageToMap(msg)
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.broker.prefix, msg.ChannelName, msg.TopicName), "", "*", t.broker.maxLen, 0, mmsg)
+	subType := normalSubscribe
+	if msg.MoodType == "sequential" {
+		subType = sequentialSubscribe
+	}
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(subType, t.broker.prefix, msg.ChannelName, msg.TopicName), "", "*", t.broker.maxLen, 0, mmsg)
 	return t.broker.client.XAdd(ctx, xAddArgs).Err()
 }
 

@@ -85,6 +85,12 @@ func main() {
 			return nil
 		},
 	})
+	csm.Subscribe("delay-channel", "order-topic", beanq.ConsumerFunc{
+		beanq.ConsumerHandle: func(ctx context.Context, data any) error {
+			fmt.Printf("result:%+v,time:%+v \n", data, time.Now())
+			return nil
+		},
+	})
 	// begin to consume information
 	csm.StartConsumer()
 

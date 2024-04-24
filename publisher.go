@@ -30,8 +30,6 @@ import (
 )
 
 type (
-	MoodType int
-
 	PubClient struct {
 		broker         Broker
 		wg             *sync.WaitGroup
@@ -43,15 +41,13 @@ type (
 		priority       float64
 		timeToRun      time.Duration
 		executeTime    time.Time
-		mood           MoodType
 	}
 )
 
 const (
-	_ MoodType = iota
-	NORMAL
-	DELAY
-	SEQUENTIAL
+	NORMAL     = "normal"
+	DELAY      = "delay"
+	SEQUENTIAL = "sequential"
 )
 
 var _ BeanqPub = (*PubClient)(nil)
@@ -166,33 +162,33 @@ func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	msg.MaxLen = t.maxLen
 	msg.ExecuteTime = opts.ExecuteTime
 	msg.TimeToRun = t.timeToRun
-	msg.MoodType = "normal"
+	msg.MoodType = NORMAL
 
 	if opts.ExecuteTime.After(time.Now()) {
-		msg.MoodType = "delay"
+		msg.MoodType = DELAY
 	}
 	if opts.OrderKey != "" {
-		msg.MoodType = "sequential"
+		msg.MoodType = SEQUENTIAL
 	}
 
 	return t.broker.enqueue(ctx, msg, opts)
 }
 
 func (t *PubClient) PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error {
-	msg.MoodType = "delay"
+	msg.MoodType = DELAY
 	option = append(option, WithExecuteTime(delay))
 	return t.Publish(msg, option...)
 }
 
 func (t *PubClient) PublishWithDelay(msg *Message, delay time.Duration, option ...OptionI) error {
-	msg.MoodType = "delay"
+	msg.MoodType = DELAY
 	delayTime := time.Now().Add(delay)
 	option = append(option, WithExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }
 
 func (t *PubClient) PublishInSequence(msg *Message, orderKey string, option ...OptionI) error {
-	msg.MoodType = "sequential"
+	msg.MoodType = SEQUENTIAL
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")
 	}
@@ -201,7 +197,7 @@ func (t *PubClient) PublishInSequence(msg *Message, orderKey string, option ...O
 }
 
 func (t *PubClient) Publish(msg *Message, option ...OptionI) error {
-	msg.MoodType = "normal"
+	msg.MoodType = NORMAL
 	ctx, cancel := context.WithTimeout(context.Background(), t.publishTimeOut)
 	defer cancel()
 	return t.PublishWithContext(ctx, msg, option...)
