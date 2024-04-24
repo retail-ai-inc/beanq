@@ -2,10 +2,10 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/panjf2000/ants/v2"
-	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
@@ -14,7 +14,7 @@ type (
 		enqueue(ctx context.Context, msg *Message, options Option) error
 		close() error
 		startConsuming(ctx context.Context)
-		addConsumer(subscribeType subscribeType, channel, topic string, run ConsumerFunc)
+		addConsumer(subscribeType subscribeType, channel, topic string, run IConsumeHandle)
 	}
 )
 
@@ -45,34 +45,42 @@ func NewBroker(config BeanqConfig) Broker {
 }
 
 // consumer...
+
 type (
-	ConsumerCallbackType uint8
-	ConsumerFunc         map[ConsumerCallbackType]func(ctx context.Context, data any) error
+	IConsumeHandle interface {
+		Handle(ctx context.Context, message *Message) error
+	}
+	IConsumeCancel interface {
+		Cancel(ctx context.Context, message *Message) error
+	}
+	IConsumeError interface {
+		Error(ctx context.Context, err error)
+	}
+)
+type (
+	DefaultHandle struct {
+		DoHandle func(ctx context.Context, message *Message) error
+		DoCancel func(ctx context.Context, message *Message) error
+		DoError  func(ctx context.Context, err error)
+	}
 )
 
-const (
-	ConsumerHandle ConsumerCallbackType = iota + 1
-	ConsumerError
-	ConsumerCancel
-)
-
-func (c ConsumerFunc) Handle(ctx context.Context, message *Message) error {
-	if h, ok := c[ConsumerHandle]; ok {
-		return h(ctx, message)
+func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
+	if c.DoHandle != nil {
+		return c.DoHandle(ctx, message)
 	}
 	return errors.New("missing handle function")
 }
 
-func (c ConsumerFunc) Cancel(ctx context.Context, message *Message) error {
-	if h, ok := c[ConsumerCancel]; ok {
-		return h(ctx, message)
+func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {
+	if c.DoCancel != nil {
+		return c.DoCancel(ctx, message)
 	}
 	return nil
 }
 
-func (c ConsumerFunc) Error(ctx context.Context, err error) error {
-	if h, ok := c[ConsumerError]; ok {
-		return h(ctx, err)
+func (c DefaultHandle) Error(ctx context.Context, err error) {
+	if c.DoError != nil {
+		c.DoError(ctx, err)
 	}
-	return nil
 }

@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
@@ -243,22 +241,10 @@ func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 
 func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, opt Option) error {
 
-	bt, err := json.Marshal(message)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UnixMilli()
-
-	key := MakeListKey(t.broker.prefix, opt.Channel, opt.Topic)
-
-	valKey := strings.Join([]string{opt.OrderKey, cast.ToString(now)}, "_")
-	value := strings.Join([]string{valKey, stringx.ByteToString(bt)}, ":")
-
-	if err := t.broker.client.LPush(ctx, key, value).Err(); err != nil {
-		return err
-	}
-	return nil
+	nmsg := messageToMap(message)
+	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.ChannelName, message.TopicName), "", "*", message.MaxLen, 0, nmsg)
+	return t.broker.client.XAdd(ctx, args).Err()
+	
 }
 
 func (t *scheduleJob) shutDown() {
