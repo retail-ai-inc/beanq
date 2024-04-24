@@ -45,17 +45,17 @@ func initCnf() beanq.BeanqConfig {
 }
 
 type seqCustomer struct {
+	a string
 }
 
-func (t *seqCustomer) Run(message *beanq.Message) error {
-	time.Sleep(5 * time.Second)
+func (t *seqCustomer) Handle(ctx context.Context, message *beanq.Message) error {
 	logger.New().Info(message)
 	return nil
 }
-func (t *seqCustomer) Cancel(message *beanq.Message) error {
+func (t *seqCustomer) Cancel(ctx context.Context, message *beanq.Message) error {
 	return nil
 }
-func (t *seqCustomer) Error(err error) {
+func (t *seqCustomer) Error(ctx context.Context, err error) {
 
 }
 
@@ -75,15 +75,17 @@ func main() {
 	// 	return nil
 	// })
 	// register delay consumer
-
-	csm.SubscribeSequential("delay-channel", "order-topic", beanq.ConsumerFunc{
-		beanq.ConsumerHandle: func(ctx context.Context, data any) error {
-			time.Sleep(10 * time.Second)
-			fmt.Printf("result:%+v \n", data)
+	// csm.SubscribeSequential("", "", &seqCustomer{})
+	csm.SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
+		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+			fmt.Printf("result:%+v,time:%+v \n", message, time.Now())
 			return nil
 		},
-		beanq.ConsumerCancel: func(ctx context.Context, data any) error {
+		DoCancel: func(ctx context.Context, message *beanq.Message) error {
 			return nil
+		},
+		DoError: func(ctx context.Context, err error) {
+
 		},
 	})
 	// begin to consume information

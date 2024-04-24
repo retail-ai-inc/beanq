@@ -63,14 +63,18 @@ func MakeZSetKey(prefix, channel, topic string) string {
 }
 
 // MakeStreamKey create key for type stream
-func MakeStreamKey(prefix, channel, topic string) string {
+func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string {
 	if channel == "" {
 		channel = DefaultOptions.DefaultChannel
 	}
 	if topic == "" {
 		topic = DefaultOptions.DefaultTopic
 	}
-	return makeKey(prefix, channel, topic, "stream")
+	stream := "normal_stream"
+	if subType == sequentialSubscribe {
+		stream = "sequential_stream"
+	}
+	return makeKey(prefix, channel, topic, stream)
 }
 
 // MakeDeadLetterStreamKey create key for type stream,mainly dead letter

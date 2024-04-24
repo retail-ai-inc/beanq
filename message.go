@@ -36,17 +36,18 @@ import (
 
 type (
 	Message struct {
-		Id           string    `json:"id"`
-		TopicName    string    `json:"topicName"`
-		ChannelName  string    `json:"channelName"`
-		MaxLen       int64     `json:"maxLen"`
-		Retry        int       `json:"retry"`
-		PendingRetry int64     `json:"pendingRetry"`
-		Priority     float64   `json:"priority"`
-		Payload      string    `json:"payload"`
-		AddTime      string    `json:"addTime"`
-		ExecuteTime  time.Time `json:"executeTime"`
-		MoodType     string    `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
+		Id           string        `json:"id"`
+		TopicName    string        `json:"topicName"`
+		ChannelName  string        `json:"channelName"`
+		MaxLen       int64         `json:"maxLen"`
+		Retry        int           `json:"retry"`
+		PendingRetry int64         `json:"pendingRetry"`
+		Priority     float64       `json:"priority"`
+		Payload      string        `json:"payload"`
+		AddTime      string        `json:"addTime"`
+		ExecuteTime  time.Time     `json:"executeTime"`
+		TimeToRun    time.Duration `json:"timeToRun"`
+		MoodType     string        `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
 

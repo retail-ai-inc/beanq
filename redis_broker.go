@@ -131,7 +131,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	// normal job
 	if msg.ExecuteTime.Before(time.Now()) {
 		nmsg := messageToMap(msg)
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
@@ -144,7 +144,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	return nil
 }
 
-func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, run ConsumerFunc) {
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, run IConsumeHandle) {
 
 	bqConfig := t.config
 	jobMaxRetry := bqConfig.JobMaxRetries
