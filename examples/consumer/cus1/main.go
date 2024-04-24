@@ -62,8 +62,8 @@ func main() {
 	// register delay consumer
 	csm.Subscribe("delay-channel", "delay-topic",
 		beanq.NewConsumerCallback().
-			AddHandler(func(ctx context.Context, data *beanq.Message) error {
-				logger.New().With("delay-channel", "delay-topic").Info(data.Payload)
+			AddHandler(func(ctx context.Context, message *beanq.Message) error {
+				logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
 				return nil
 			}).
 			AddCancelHandler(func(ctx context.Context, data *beanq.Message) error {
