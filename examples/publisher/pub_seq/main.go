@@ -55,7 +55,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		pub.PublishInSequence(msg, "aaa---"+cast.ToString(i), beanq.Channel("delay-channel"), beanq.Topic("delay-ch2"))
+		pub.PublishInSequence(msg, "aaa---"+cast.ToString(i), beanq.WithChannel("delay-channel"), beanq.WithTopic("delay-ch2"))
 	}
 
 }

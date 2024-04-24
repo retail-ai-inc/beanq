@@ -61,7 +61,7 @@ func pubMoreAndPriorityInfo() {
 		if i == 3 {
 			y = 10
 		}
-		if err := pub.PublishWithDelay(msg, delayT, beanq.Topic("delay-topic"), beanq.Channel("delay-channel"), beanq.Priority(y)); err != nil {
+		if err := pub.PublishAtTime(msg, delayT, beanq.WithTopic("delay-topic"), beanq.WithChannel("delay-channel"), beanq.WithPriority(y)); err != nil {
 			log.Fatalln(err)
 		}
 	}

@@ -42,6 +42,7 @@ type (
 		retry          int
 		priority       float64
 		timeToRun      time.Duration
+		executeTime    time.Time
 		mood           MoodType
 	}
 )
@@ -81,6 +82,7 @@ func NewPublisher(config BeanqConfig) *PubClient {
 		retry:          DefaultOptions.JobMaxRetry,
 		priority:       DefaultOptions.Priority,
 		timeToRun:      DefaultOptions.TimeToRun,
+		executeTime:    time.Now(),
 	}
 }
 
@@ -127,6 +129,11 @@ func (t *PubClient) TimeToRun(duration time.Duration) *PubClient {
 	return t
 }
 
+func (t *PubClient) ExecuteTime(time2 time.Time) *PubClient {
+	t.executeTime = time2
+	return t
+}
+
 func (t *PubClient) reset() {
 	t.channelName = DefaultOptions.DefaultChannel
 	t.topicName = DefaultOptions.DefaultTopic
@@ -134,6 +141,7 @@ func (t *PubClient) reset() {
 	t.priority = DefaultOptions.Priority
 	t.maxLen = DefaultOptions.DefaultMaxLen
 	t.timeToRun = DefaultOptions.TimeToRun
+	t.executeTime = time.Now()
 }
 
 func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error {
@@ -172,14 +180,14 @@ func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option
 
 func (t *PubClient) PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error {
 	msg.MoodType = "delay"
-	option = append(option, ExecuteTime(delay))
+	option = append(option, WithExecuteTime(delay))
 	return t.Publish(msg, option...)
 }
 
 func (t *PubClient) PublishWithDelay(msg *Message, delay time.Duration, option ...OptionI) error {
 	msg.MoodType = "delay"
 	delayTime := time.Now().Add(delay)
-	option = append(option, ExecuteTime(delayTime))
+	option = append(option, WithExecuteTime(delayTime))
 	return t.Publish(msg, option...)
 }
 
@@ -188,7 +196,7 @@ func (t *PubClient) PublishInSequence(msg *Message, orderKey string, option ...O
 	if orderKey == "" {
 		return errors.New("orderKey can't be empty")
 	}
-	option = append(option, OrderKey(orderKey))
+	option = append(option, WithOrderKey(orderKey))
 	return t.Publish(msg, option...)
 }
 

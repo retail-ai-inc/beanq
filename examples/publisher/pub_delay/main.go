@@ -80,7 +80,7 @@ func pubDelayInfo() {
 		// }
 		// fmt.Println(delayT)
 		// continue
-		if err := pub.Channel("delay-channel").Topic("order-topic").PublishWithDelay(msg, delayT, beanq.Priority(float64(y))); err != nil {
+		if err := pub.Channel("delay-channel").Topic("order-topic").PublishWithDelay(msg, delayT, beanq.WithPriority(float64(y))); err != nil {
 			log.Println(err)
 		}
 		// if err := pub.Publish(msg, beanq.Topic("delay-ch2"), beanq.Channel("delay-channel")); err != nil {
