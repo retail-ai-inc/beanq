@@ -80,15 +80,15 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param channel
 //	@param topic
 //	@param consumerFun
-func (t *Consumer) Subscribe(channelName, topicName string, subscribe ConsumerFunc) {
-	t.subscribe(normalSubscribe, channelName, topicName, subscribe)
+func (t *Consumer) Subscribe(channelName, topicName string, handler Handler) {
+	t.subscribe(normalSubscribe, channelName, topicName, handler)
 }
 
-func (t *Consumer) SubscribeSequential(channelName, topicName string, consumer ConsumerFunc) {
-	t.subscribe(sequentialSubscribe, channelName, topicName, consumer)
+func (t *Consumer) SubscribeSequential(channelName, topicName string, handler Handler) {
+	t.subscribe(sequentialSubscribe, channelName, topicName, handler)
 }
 
-func (t *Consumer) subscribe(subType subscribeType, channelName, topicName string, subscribe ConsumerFunc) {
+func (t *Consumer) subscribe(subType subscribeType, channelName, topicName string, handler Handler) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
@@ -98,7 +98,7 @@ func (t *Consumer) subscribe(subType subscribeType, channelName, topicName strin
 		topicName = DefaultOptions.DefaultTopic
 	}
 
-	t.broker.addConsumer(subType, channelName, topicName, subscribe)
+	t.broker.addConsumer(subType, channelName, topicName, handler)
 }
 
 func (t *Consumer) WithErrorCallBack(callbacks ...ErrorCallback) *Consumer {

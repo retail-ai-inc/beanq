@@ -14,7 +14,7 @@ type (
 		enqueue(ctx context.Context, msg *Message, options Option) error
 		close() error
 		startConsuming(ctx context.Context)
-		addConsumer(subscribeType subscribeType, channel, topic string, run ConsumerFunc)
+		addConsumer(subscribeType subscribeType, channel, topic string, run Handler)
 	}
 )
 
@@ -44,35 +44,60 @@ func NewBroker(config BeanqConfig) Broker {
 	return broker
 }
 
-// consumer...
+// consumer ...
 type (
-	ConsumerCallbackType uint8
-	ConsumerFunc         map[ConsumerCallbackType]func(ctx context.Context, data any) error
+	Handler interface {
+		Handle(ctx context.Context, message *Message) error
+	}
+	Cancel interface {
+		Cancel(ctx context.Context, message *Message) error
+	}
+	Error interface {
+		Error(ctx context.Context, err error) error
+	}
+	ConsumerCallback struct {
+		handler       func(ctx context.Context, message *Message) error
+		cancelHandler func(ctx context.Context, message *Message) error
+		errorHandler  func(ctx context.Context, err error) error
+	}
 )
 
-const (
-	ConsumerHandle ConsumerCallbackType = iota + 1
-	ConsumerError
-	ConsumerCancel
-)
-
-func (c ConsumerFunc) Handle(ctx context.Context, message *Message) error {
-	if h, ok := c[ConsumerHandle]; ok {
-		return h(ctx, message)
-	}
-	return errors.New("missing handle function")
+func NewConsumerCallback() *ConsumerCallback {
+	return &ConsumerCallback{}
 }
 
-func (c ConsumerFunc) Cancel(ctx context.Context, message *Message) error {
-	if h, ok := c[ConsumerCancel]; ok {
-		return h(ctx, message)
-	}
-	return nil
+func (c *ConsumerCallback) AddHandler(handler func(ctx context.Context, message *Message) error) *ConsumerCallback {
+	c.handler = handler
+	return c
 }
 
-func (c ConsumerFunc) Error(ctx context.Context, err error) error {
-	if h, ok := c[ConsumerError]; ok {
-		return h(ctx, err)
+func (c *ConsumerCallback) AddCancelHandler(cancel func(ctx context.Context, message *Message) error) *ConsumerCallback {
+	c.cancelHandler = cancel
+	return c
+}
+
+func (c *ConsumerCallback) AddErrorHandler(error func(ctx context.Context, err error) error) *ConsumerCallback {
+	c.errorHandler = error
+	return c
+}
+
+func (c *ConsumerCallback) Handle(ctx context.Context, message *Message) error {
+	if c.handler == nil {
+		return errors.New("missing handle function")
 	}
-	return nil
+	return c.handler(ctx, message)
+}
+
+func (c *ConsumerCallback) Cancel(ctx context.Context, message *Message) error {
+	if c.cancelHandler == nil {
+		return nil
+	}
+	return c.cancelHandler(ctx, message)
+}
+
+func (c *ConsumerCallback) Error(ctx context.Context, err error) error {
+	if c.errorHandler == nil {
+		return nil
+	}
+	return c.errorHandler(ctx, err)
 }

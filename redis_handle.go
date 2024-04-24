@@ -22,7 +22,7 @@ const (
 
 type RedisHandle struct {
 	broker           *RedisBroker
-	run              ConsumerFunc
+	run              Handler
 	deadLetterTicker *time.Ticker
 	channel          string
 	topic            string
@@ -152,7 +152,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 				retry, err := RetryInfo(ctx, func() error {
 					if err := t.run.Handle(nctx, message); err != nil {
-						return t.run.Cancel(nctx, message)
+						if c, ok := t.run.(Cancel); ok {
+							return c.Cancel(nctx, message)
+						}
 					}
 					return nil
 				}, t.jobMaxRetry)
@@ -169,7 +171,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				result.Channel = t.channel
 				result.MoodType = message.MoodType
 				if err != nil {
-					_ = t.run.Error(nctx, err)
+					if e, ok := t.run.(Error); ok {
+						_ = e.Error(nctx, err)
+					}
 					result.Level = ErrLevel
 					result.Info = FlagInfo(err.Error())
 				}
@@ -357,7 +361,9 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.MoodType = msg.MoodType
 
 	if err != nil {
-		_ = t.run.Error(nctx, err)
+		if e, ok := t.run.(Error); ok {
+			_ = e.Error(nctx, err)
+		}
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}
