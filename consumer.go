@@ -84,8 +84,8 @@ func (t *Consumer) Subscribe(channelName, topicName string, subscribe IConsumeHa
 	t.subscribe(normalSubscribe, channelName, topicName, subscribe)
 }
 
-func (t *Consumer) SubscribeSequential(channelName, topicName string, consumerFunc IConsumeHandle) {
-	t.subscribe(sequentialSubscribe, channelName, topicName, consumerFunc)
+func (t *Consumer) SubscribeSequential(channelName, topicName string, subscribe IConsumeHandle) {
+	t.subscribe(sequentialSubscribe, channelName, topicName, subscribe)
 }
 
 func (t *Consumer) subscribe(subType subscribeType, channelName, topicName string, subscribe IConsumeHandle) {

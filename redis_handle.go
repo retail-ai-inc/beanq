@@ -22,7 +22,7 @@ const (
 
 type RedisHandle struct {
 	broker           *RedisBroker
-	run              IConsumeHandle
+	subscribe        IConsumeHandle
 	deadLetterTicker *time.Ticker
 	channel          string
 	topic            string
@@ -152,8 +152,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 				retry, err := RetryInfo(nctx, func() error {
 
-					if err := t.run.Handle(nctx, message); err != nil {
-						if h, ok := t.run.(IConsumeCancel); ok {
+					if err := t.subscribe.Handle(nctx, message); err != nil {
+						if h, ok := t.subscribe.(IConsumeCancel); ok {
 							return h.Cancel(nctx, message)
 						}
 					}
@@ -172,7 +172,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				result.Channel = t.channel
 				result.MoodType = message.MoodType
 				if err != nil {
-					if h, ok := t.run.(IConsumeError); ok {
+					if h, ok := t.subscribe.(IConsumeError); ok {
 						h.Error(nctx, err)
 					}
 					result.Level = ErrLevel
@@ -345,7 +345,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.BeginTime = time.Now()
 
 	retryCount, err := RetryInfo(ctx, func() error {
-		return t.run.Handle(nctx, msg)
+		return t.subscribe.Handle(nctx, msg)
 	}, t.jobMaxRetry)
 
 	r.EndTime = time.Now()
@@ -361,7 +361,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.MoodType = msg.MoodType
 
 	if err != nil {
-		if h, ok := t.run.(IConsumeError); ok {
+		if h, ok := t.subscribe.(IConsumeError); ok {
 			h.Error(nctx, err)
 		}
 		r.Level = ErrLevel

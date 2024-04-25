@@ -144,7 +144,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	return nil
 }
 
-func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, run IConsumeHandle) {
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
 
 	bqConfig := t.config
 	jobMaxRetry := bqConfig.JobMaxRetries
@@ -162,7 +162,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		broker:           t,
 		channel:          channel,
 		topic:            topic,
-		run:              run,
+		run:              subscribe,
 		subscribeType:    subType,
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,

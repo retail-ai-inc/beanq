@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/panjf2000/ants/v2"
@@ -14,7 +13,7 @@ type (
 		enqueue(ctx context.Context, msg *Message, options Option) error
 		close() error
 		startConsuming(ctx context.Context)
-		addConsumer(subscribeType subscribeType, channel, topic string, run IConsumeHandle)
+		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle)
 	}
 )
 
@@ -69,7 +68,7 @@ func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {
 		return c.DoHandle(ctx, message)
 	}
-	return errors.New("missing handle function")
+	return nil
 }
 
 func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {

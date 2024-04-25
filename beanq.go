@@ -83,7 +83,7 @@ type BeanqPub interface {
 // BeanqSub subscribe
 type BeanqSub interface {
 	Subscribe(channel, topic string, subscribe IConsumeHandle)
-	SubscribeSequential(channel, topic string, consumer IConsumeHandle)
+	SubscribeSequential(channel, topic string, subscribe IConsumeHandle)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
 	ping()
