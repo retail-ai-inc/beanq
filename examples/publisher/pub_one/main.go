@@ -60,7 +60,6 @@ func pubOneInfo() {
 	config := initCnf()
 	pub := beanq.NewPublisher(config)
 	err := pub.Channel("aa").Topic("bb").Publish(bmsg)
-	pub.Channel("cc").Publish(bmsg)
 	// err := pub.Publish(bmsg, beanq.Topic("ch2"), beanq.Channel("g2"))
 	if err != nil {
 		fmt.Println(err)

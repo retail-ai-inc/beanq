@@ -54,10 +54,6 @@ func pubDelayInfo() {
 	ntime := 0 * time.Second
 	for i := 0; i < 10; i++ {
 
-		// if time.Now().Sub(ntime).Minutes() >= 1 {
-		// 	break
-		// }
-
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 
@@ -88,6 +84,5 @@ func pubDelayInfo() {
 		// }
 		// pub.Publish(task, beanq.Topic("ch2"), beanq.Channel("g2"))
 	}
-	// pub.Publish(beanq.NewMessage([]byte("aaa")), beanq.Channel("channel1"), beanq.Topic("topic1"))
 	defer pub.Close()
 }

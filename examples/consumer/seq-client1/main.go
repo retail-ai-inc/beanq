@@ -76,6 +76,14 @@ func main() {
 	// })
 	// register delay consumer
 	// csm.SubscribeSequential("", "", &seqCustomer{})
+	csm.Subscribe("delay-channel", "order-topic", beanq.DefaultHandle{
+		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+			fmt.Printf("normal result:%+v \n", message)
+			return nil
+		},
+		DoCancel: nil,
+		DoError:  nil,
+	})
 	csm.SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			fmt.Printf("result:%+v,time:%+v \n", message, time.Now())
