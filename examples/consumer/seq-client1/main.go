@@ -65,25 +65,9 @@ func main() {
 
 	config := initCnf()
 	csm := beanq.NewConsumer(config)
-	// register normal consumer
-	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
-	// 	// TODO:logic
-	// 	// like this:
-	// 	// time.Sleep(3 * time.Second) // this is my business.
-	// 	logger.New().With("g2", "ch2").Info(msg.Payload())
-	//
-	// 	return nil
-	// })
-	// register delay consumer
+
+	// register sequential consumer
 	// csm.SubscribeSequential("", "", &seqCustomer{})
-	csm.Subscribe("delay-channel", "order-topic", beanq.DefaultHandle{
-		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			fmt.Printf("normal result:%+v \n", message)
-			return nil
-		},
-		DoCancel: nil,
-		DoError:  nil,
-	})
 	csm.SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			fmt.Printf("result:%+v,time:%+v \n", message, time.Now())

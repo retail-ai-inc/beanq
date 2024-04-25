@@ -115,7 +115,7 @@ func (t *PubClient) Priority(priority float64) *PubClient {
 		t.priority = 999
 	}
 	if priority <= 0 {
-		t.priority = 0
+		t.priority = DefaultOptions.Priority
 	}
 	return t
 }
@@ -154,6 +154,9 @@ func (t *PubClient) PublishWithContext(ctx context.Context, msg *Message, option
 	opts, err := ComposeOptions(option...)
 	if err != nil {
 		return err
+	}
+	if opts.Priority > 0 {
+		t.priority = opts.Priority
 	}
 	msg.TopicName = t.topicName
 	msg.ChannelName = t.channelName

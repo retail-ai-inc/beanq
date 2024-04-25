@@ -50,12 +50,10 @@ func main() {
 	for i := 0; i < 5; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-		msg := beanq.NewMessage("", b)
+		msg := beanq.NewMessage("11", b)
 		if err := pub.Channel("delay-channel").Topic("order-topic").PublishInSequence(msg, "aaa"+cast.ToString(i)); err != nil {
 			log.Fatalln(err)
 		}
-
-		// pub.PublishInSequence(msg, "aaa---"+cast.ToString(i), beanq.WithChannel("delay-channel"), beanq.WithTopic("delay-ch2"))
 	}
 
 }

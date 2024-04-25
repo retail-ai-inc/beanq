@@ -45,19 +45,9 @@ func initCnf() beanq.BeanqConfig {
 
 func main() {
 
-	// register consumer
-
 	config := initCnf()
 	csm := beanq.NewConsumer(config)
-	// register normal consumer
-	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
-	// 	// TODO:logic
-	// 	// like this:
-	// 	// time.Sleep(3 * time.Second) // this is my business.
-	// 	logger.New().With("g2", "ch2").Info(msg.Payload())
-	//
-	// 	return nil
-	// })
+
 	// register delay consumer
 	csm.Subscribe("delay-channel", "delay-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
@@ -72,7 +62,6 @@ func main() {
 			return
 		},
 	})
-	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 	// begin to consume information
 	csm.StartConsumer()
 
