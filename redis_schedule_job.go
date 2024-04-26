@@ -176,6 +176,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 		}
 
 		if len(val) <= 0 {
+			t.broker.client.Del(ctx, lazyKey)
 			scoreMin = scoreMax
 		} else {
 			scoreMin = val[0]
