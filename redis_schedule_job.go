@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -125,10 +126,12 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 	defer t.scheduleTicker.Stop()
 
 	var (
-		now      time.Time
-		timeUnit        = MakeTimeUnit(t.broker.prefix, consumer.Channel(), consumer.Topic())
-		scoreMin string = "0"
-		scoreMax string
+		now           time.Time
+		timeUnit      = MakeTimeUnit(t.broker.prefix, consumer.Channel(), consumer.Topic())
+		scoreMin      = "0"
+		scoreMax      string
+		lazyKey       = strings.Join([]string{t.broker.prefix, consumer.Channel(), consumer.Topic(), "lock_lazy"}, ":")
+		keyExDuration = 20 * time.Second
 	)
 	for {
 		select {
@@ -144,34 +147,47 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 		now = time.Now()
 
 		scoreMax = cast.ToString(now.UnixMilli() + 1)
-		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-				Min:    scoreMin,
-				Max:    scoreMax,
-				Offset: 0,
-				Count:  1,
-			}).Result()
-
-			if err != nil {
-				return err
-			}
-
-			if len(val) <= 0 {
-				scoreMin = scoreMax
-			} else {
-				scoreMin = val[0]
-				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+		if err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+			if tx.Get(ctx, lazyKey).Val() == "" {
+				if err := tx.SetEX(ctx, lazyKey, 1, keyExDuration).Err(); err != nil {
 					return err
 				}
 			}
 			return nil
-		}, timeUnit)
+		}, lazyKey); err != nil {
+			logger.New().Error(err)
+			continue
+		}
+		if t.broker.client.Get(ctx, lazyKey).Val() != "1" {
+			continue
+		}
+
+		val, err := t.broker.client.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+			Min:    scoreMin,
+			Max:    scoreMax,
+			Offset: 0,
+			Count:  1,
+		}).Result()
+
 		if err != nil {
+			t.broker.client.Del(ctx, lazyKey)
 			logger.New().Error(err)
 			continue
 		}
 
+		if len(val) <= 0 {
+			scoreMin = scoreMax
+		} else {
+			scoreMin = val[0]
+			if err := t.broker.client.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+				t.broker.client.Del(ctx, lazyKey)
+				logger.New().Error(err)
+				continue
+			}
+		}
+
 		if err := t.doConsume(ctx, scoreMax, consumer); err != nil {
+			t.broker.client.Del(ctx, lazyKey)
 			logger.New().With("", err).Error("consume err")
 			// continue
 		}
@@ -244,7 +260,7 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 	nmsg := messageToMap(message)
 	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.ChannelName, message.TopicName), "", "*", message.MaxLen, 0, nmsg)
 	return t.broker.client.XAdd(ctx, args).Err()
-	
+
 }
 
 func (t *scheduleJob) shutDown() {

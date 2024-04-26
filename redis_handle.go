@@ -96,7 +96,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
-	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_id"}, ":")
+	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "lock_seq"}, ":")
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
 
@@ -132,11 +132,13 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 			if err != nil {
 				continue
 			}
-
+			if t.broker.client.Get(ctx, key).Val() != "1" {
+				continue
+			}
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
-				t.broker.client.SetEX(ctx, key, "", keyExDuration)
+				t.broker.client.Del(ctx, key)
 				continue
 			}
 
@@ -194,13 +196,13 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					return t.broker.logJob.saveLog(ctx, result)
 				})
 				if err := group.Wait(); err != nil {
-					t.broker.client.SetEX(ctx, key, "", keyExDuration)
+					t.broker.client.Del(ctx, key)
 					logger.New().Error(err)
 				}
 				t.errGroupPool.Put(group)
 
 			}
-			t.broker.client.SetEX(ctx, key, "", keyExDuration)
+			t.broker.client.Del(ctx, key)
 		}
 	}
 }
