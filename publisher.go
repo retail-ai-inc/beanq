@@ -25,6 +25,7 @@ package beanq
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -87,6 +88,41 @@ func (t *PubClient) Channel(name string) *PubClient {
 		t.channelName = name
 	}
 	return t
+}
+
+func (t *PubClient) Wait(ctx context.Context, id string) (msg *Message, err error) {
+	pollIntervalBase := time.Millisecond
+	maxInterval := 500 * time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > maxInterval {
+			pollIntervalBase = maxInterval
+		}
+		return interval
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+	for {
+		if msg, err := t.PullAcknowledgement(ctx, id); err != nil {
+			return msg, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			// pull the data from global
+			timer.Reset(nextPollInterval())
+		}
+	}
+}
+
+func (t *PubClient) PullAcknowledgement(ctx context.Context, id string) (msg *Message, err error) {
+	// pull data from somewhere by id
+	return
 }
 
 func (t *PubClient) Topic(name string) *PubClient {
