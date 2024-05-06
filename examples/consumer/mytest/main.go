@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -8,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/retail-ai-inc/beanq"
-	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/spf13/viper"
 )
 
@@ -40,33 +40,22 @@ func initCnf() beanq.BeanqConfig {
 	})
 	return bqConfig
 }
+
 func main() {
-	pubOneInfo()
-}
 
-func pubOneInfo() {
-	// msg can struct or map
-	msg := struct {
-		Info string
-		Id   int
-	}{
-		"msg------1",
-		1,
-	}
-
-	d, _ := json.Marshal(msg)
-	// get message
-	bmsg := beanq.NewMessage("", d)
 	config := initCnf()
-	pub := beanq.NewPublisher(config)
-	err := pub.Channel("").Topic("").Publish(bmsg)
-	// pub.Channel("cc").Publish(bmsg)
-	// err := pub.Publish(bmsg, beanq.Topic("ch2"), beanq.Channel("g2"))
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer pub.Close()
+	client := beanq.New(&config)
+	ctx := context.Background()
+	// client.Channel("").Topic("").Payload([]byte("aaaaa")).PublishAtTime(ctx, time.Now().Add(10*time.Second))
 
-	// publish information
-	fmt.Printf("SendMsgs：%+v \n", bmsg)
+	client.Channel("").Topic("").Subscribe(ctx, beanq.DefaultHandle{
+		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+			fmt.Println(message)
+			return nil
+		},
+		DoCancel: nil,
+		DoError:  nil,
+	})
+	client.Wait(ctx)
+
 }

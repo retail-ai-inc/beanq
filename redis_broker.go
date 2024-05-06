@@ -51,14 +51,12 @@ type (
 		pool                                            *ants.Pool
 		prefix                                          string
 		maxLen                                          int64
-		config                                          BeanqConfig
+		config                                          *BeanqConfig
 	}
 )
 
-var _ Broker = (*RedisBroker)(nil)
+func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
-func newRedisBroker(pool *ants.Pool) *RedisBroker {
-	config := Config.Load().(BeanqConfig)
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
@@ -76,17 +74,6 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		logger.New().Fatal(err.Error())
 	}
-	prefix := config.Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
-	}
-	config.Redis.Prefix = prefix
-
-	maxLen := config.Redis.MaxLen
-	if maxLen <= 0 {
-		maxLen = DefaultOptions.DefaultMaxLen
-	}
-	config.Redis.MaxLen = maxLen
 
 	broker := &RedisBroker{
 		client:       client,
@@ -95,11 +82,11 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 		obsoleteDone: make(chan struct{}, 1),
 		claimDone:    make(chan struct{}, 1),
 		logDone:      make(chan struct{}, 1),
-		logJob:       newLogJob(client, pool),
+		logJob:       newLogJob(config, client, pool),
 		once:         &sync.Once{},
 		pool:         pool,
-		prefix:       prefix,
-		maxLen:       maxLen,
+		prefix:       config.Redis.Prefix,
+		maxLen:       config.Redis.MaxLen,
 		config:       config,
 		filter:       &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
 	}
@@ -147,28 +134,17 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
 
 	bqConfig := t.config
-	jobMaxRetry := bqConfig.JobMaxRetries
-	if jobMaxRetry <= 0 {
-		jobMaxRetry = DefaultOptions.JobMaxRetry
-	}
-
-	minConsumers := bqConfig.MinConsumers
-	if minConsumers <= 0 {
-		minConsumers = DefaultOptions.MinConsumers
-	}
-	timeOut := bqConfig.ConsumeTimeOut
-
 	handler := &RedisHandle{
 		broker:           t,
 		channel:          channel,
 		topic:            topic,
-		run:              subscribe,
+		subscribe:        subscribe,
 		subscribeType:    subType,
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,
-		jobMaxRetry:      jobMaxRetry,
-		minConsumers:     minConsumers,
-		timeOut:          timeOut,
+		jobMaxRetry:      bqConfig.JobMaxRetries,
+		minConsumers:     bqConfig.MinConsumers,
+		timeOut:          bqConfig.ConsumeTimeOut,
 		wg:               new(sync.WaitGroup),
 		result: &sync.Pool{New: func() any {
 			return &ConsumerResult{

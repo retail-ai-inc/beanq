@@ -9,21 +9,23 @@ import (
 )
 
 type (
-	Broker interface {
+	IBroker interface {
 		enqueue(ctx context.Context, msg *Message, options Option) error
 		close() error
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle)
+		deadLetter(ctx context.Context, handle IHandle) error
 	}
 )
 
 var (
-	broker     *RedisBroker
+	broker     IBroker
 	brokerOnce sync.Once
 )
 
 // NewBroker ...
-func NewBroker(config BeanqConfig) Broker {
+func NewBroker(config *BeanqConfig) IBroker {
+
 	brokerOnce.Do(
 		func() {
 			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true))
@@ -33,9 +35,9 @@ func NewBroker(config BeanqConfig) Broker {
 
 			switch config.Broker {
 			case "redis":
-				broker = newRedisBroker(pool)
+				broker = newRedisBroker(config, pool)
 			default:
-				logger.New().With("", err).Panic("not support broker type:", config.Broker)
+				logger.New().Panic("not support broker type:", config.Broker)
 			}
 		},
 	)

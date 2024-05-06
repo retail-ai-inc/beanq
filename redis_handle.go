@@ -28,7 +28,7 @@ type RedisHandle struct {
 	topic            string
 	pendingIdle      time.Duration
 	subscribeType    subscribeType
-	errorCallbacks   []ErrorCallback
+	// errorCallbacks   []ErrorCallback
 
 	jobMaxRetry  int
 	minConsumers int64

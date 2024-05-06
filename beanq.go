@@ -52,6 +52,16 @@ type (
 		MaxRetries         int           `json:"maxRetries"`
 		PoolSize           int           `json:"poolSize"`
 	}
+	Queue struct {
+		Topic        string
+		DelayChannel string
+		DelayTopic   string
+		orderKey     string
+		Channel      string
+		MaxLen       int64
+		Priority     float64
+		TimeToRun    time.Duration
+	}
 	BeanqConfig struct {
 		Health                   Health        `json:"health"`
 		DebugLog                 DebugLog      `json:"debugLog"`
@@ -65,11 +75,58 @@ type (
 		PublishTimeOut           time.Duration `json:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
 		MinConsumers             int64         `json:"minConsumers"`
+		Queue
 	}
 )
 
 // Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config atomic.Value
+
+func (t *BeanqConfig) init() *BeanqConfig {
+	if t.ConsumerPoolSize == 0 {
+		t.ConsumerPoolSize = DefaultOptions.ConsumerPoolSize
+	}
+	if t.JobMaxRetries == 0 {
+		t.JobMaxRetries = DefaultOptions.JobMaxRetry
+	}
+	if t.DeadLetterIdle == 0 {
+
+	}
+	if t.KeepSuccessJobsInHistory == 0 {
+		t.KeepSuccessJobsInHistory = DefaultOptions.KeepSuccessJobsInHistory
+	}
+	if t.KeepFailedJobsInHistory == 0 {
+		t.KeepFailedJobsInHistory = DefaultOptions.KeepFailedJobsInHistory
+	}
+	if t.PublishTimeOut == 0 {
+		t.PublishTimeOut = DefaultOptions.PublishTimeOut
+	}
+	if t.ConsumeTimeOut == 0 {
+		t.ConsumeTimeOut = DefaultOptions.ConsumeTimeOut
+	}
+	if t.MinConsumers == 0 {
+		t.MinConsumers = DefaultOptions.MinConsumers
+	}
+	if t.Channel == "" {
+		t.Channel = DefaultOptions.DefaultDelayChannel
+	}
+	if t.Topic == "" {
+		t.Topic = DefaultOptions.DefaultDelayTopic
+	}
+	if t.DelayChannel == "" {
+		t.DelayChannel = DefaultOptions.DefaultDelayChannel
+	}
+	if t.DelayTopic == "" {
+		t.DelayTopic = DefaultOptions.DefaultDelayTopic
+	}
+	if t.MaxLen == 0 {
+		t.MaxLen = DefaultOptions.DefaultMaxLen
+	}
+	if t.TimeToRun == 0 {
+		t.TimeToRun = DefaultOptions.TimeToRun
+	}
+	return t
+}
 
 // BeanqPub publisher
 type BeanqPub interface {

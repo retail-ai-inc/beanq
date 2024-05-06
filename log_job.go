@@ -84,20 +84,14 @@ const (
 	InfoLevel LevelMsg = "info"
 )
 
-func newLogJob(client redis.UniversalClient, pool *ants.Pool) *logJob {
-	prefix := Config.Load().(BeanqConfig).Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
+func newLogJob(config *BeanqConfig, client redis.UniversalClient, pool *ants.Pool) *logJob {
+	return &logJob{
+		client:            client,
+		pool:              pool,
+		prefix:            config.Redis.Prefix,
+		expiration:        config.KeepFailedJobsInHistory,
+		expirationSuccess: config.KeepSuccessJobsInHistory,
 	}
-	expire := Config.Load().(BeanqConfig).KeepFailedJobsInHistory
-	if expire <= 0 {
-		expire = DefaultOptions.KeepFailedJobsInHistory
-	}
-	expirationSuccess := Config.Load().(BeanqConfig).KeepSuccessJobsInHistory
-	if expirationSuccess <= 0 {
-		expirationSuccess = DefaultOptions.KeepSuccessJobsInHistory
-	}
-	return &logJob{client: client, pool: pool, prefix: prefix, expiration: expire, expirationSuccess: expirationSuccess}
 }
 
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
