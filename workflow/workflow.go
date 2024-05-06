@@ -1,10 +1,10 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 
 	"github.com/retail-ai-inc/beanq"
-	"golang.org/x/net/context"
 )
 
 type handler struct {
