@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -95,10 +94,8 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
-	if msg == nil {
-		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
-	}
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
+
 	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 	if b {
 		return nil
@@ -108,8 +105,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	}
 
 	// Sequential job
-	if opts.OrderKey != "" {
-		if err := t.scheduleJob.sequentialEnqueue(ctx, msg, opts); err != nil {
+	if msg.MoodType == SEQUENTIAL {
+		if err := t.scheduleJob.sequentialEnqueue(ctx, msg); err != nil {
 			return err
 		}
 		return nil
@@ -125,7 +122,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 		return nil
 	}
 	// delay job
-	if err := t.scheduleJob.enqueue(ctx, msg, opts); err != nil {
+	if err := t.scheduleJob.enqueue(ctx, msg); err != nil {
 		return err
 	}
 	return nil

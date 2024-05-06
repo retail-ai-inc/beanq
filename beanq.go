@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 )
 
@@ -79,9 +78,6 @@ type (
 	}
 )
 
-// Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
-var Config atomic.Value
-
 func (t *BeanqConfig) init() *BeanqConfig {
 	if t.ConsumerPoolSize == 0 {
 		t.ConsumerPoolSize = DefaultOptions.ConsumerPoolSize
@@ -126,24 +122,6 @@ func (t *BeanqConfig) init() *BeanqConfig {
 		t.TimeToRun = DefaultOptions.TimeToRun
 	}
 	return t
-}
-
-// BeanqPub publisher
-type BeanqPub interface {
-	Publish(msg *Message, option ...OptionI) error
-	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
-	PublishWithDelay(msg *Message, delayTime time.Duration, option ...OptionI) error
-	PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error
-	PublishInSequence(msg *Message, orderKey string, option ...OptionI) error
-}
-
-// BeanqSub subscribe
-type BeanqSub interface {
-	Subscribe(channel, topic string, subscribe IConsumeHandle)
-	SubscribeSequential(channel, topic string, subscribe IConsumeHandle)
-	StartConsumer()
-	StartConsumerWithContext(ctx context.Context)
-	ping()
 }
 
 // IHandle consumer ,after broker

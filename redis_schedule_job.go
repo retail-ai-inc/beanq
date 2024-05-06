@@ -38,8 +38,8 @@ import (
 type (
 	scheduleJobI interface {
 		start(ctx context.Context, consumer IHandle) error
-		enqueue(ctx context.Context, msg *Message, option Option) error
-		sequentialEnqueue(ctx context.Context, message *Message, option Option) error
+		enqueue(ctx context.Context, msg *Message) error
+		sequentialEnqueue(ctx context.Context, message *Message) error
 		shutDown()
 		sendToStream(ctx context.Context, msg *Message) error
 	}
@@ -83,7 +83,7 @@ func (t *scheduleJob) start(ctx context.Context, consumer IHandle) error {
 	return nil
 }
 
-func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) error {
+func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 
 	bt, err := json.Marshal(msg)
 	if err != nil {
@@ -91,7 +91,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message, opt Option) err
 	}
 	msgExecuteTime := msg.ExecuteTime.UnixMilli()
 
-	priority := opt.Priority / 1e3
+	priority := msg.Priority / 1e3
 	priority = cast.ToFloat64(msgExecuteTime) + priority
 	timeUnit := cast.ToFloat64(msgExecuteTime)
 
@@ -239,12 +239,12 @@ func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 	return t.broker.client.XAdd(ctx, xAddArgs).Err()
 }
 
-func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, opt Option) error {
+func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message) error {
 
 	nmsg := messageToMap(message)
 	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.ChannelName, message.TopicName), "", "*", message.MaxLen, 0, nmsg)
 	return t.broker.client.XAdd(ctx, args).Err()
-	
+
 }
 
 func (t *scheduleJob) shutDown() {

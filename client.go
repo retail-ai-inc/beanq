@@ -132,7 +132,7 @@ func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 	if cmd, ok := cmd.(*Publish); ok {
 		t.message.ExecuteTime = cmd.executeTime
 		t.message.MoodType = cmd.moodType
-		return t.broker.enqueue(ctx, t.message, Option{})
+		return t.broker.enqueue(ctx, t.message)
 	}
 	if cmd, ok := cmd.(*Subscribe); ok {
 		t.broker.addConsumer(cmd.subscribeType, t.message.ChannelName, t.message.TopicName, cmd.handle)
@@ -142,6 +142,10 @@ func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 
 func (t *Client) Wait(ctx context.Context) {
 	t.broker.startConsuming(ctx)
+}
+
+func (t *Client) ping() {
+
 }
 
 func (t cmdAble) Publish(ctx context.Context) {

@@ -10,7 +10,7 @@ import (
 
 type (
 	IBroker interface {
-		enqueue(ctx context.Context, msg *Message, options Option) error
+		enqueue(ctx context.Context, msg *Message) error
 		close() error
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle)

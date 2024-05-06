@@ -38,11 +38,12 @@ type (
 )
 
 func newHealthCheck(client *redis.Client) *healthCheck {
-	prefix := Config.Load().(BeanqConfig).Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
-	}
-	return &healthCheck{client: client, prefix: prefix}
+	// prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	// if prefix == "" {
+	// 	prefix = DefaultOptions.Prefix
+	// }
+	// return &healthCheck{client: client, prefix: prefix}
+	return nil
 }
 
 func (t *healthCheck) start(ctx context.Context) (err error) {
