@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
+	"golang.org/x/net/context"
 )
 
 var (
@@ -17,7 +18,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -38,24 +39,21 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
 func main() {
 
 	config := initCnf()
-	pub := beanq.NewPublisher(config)
+	pub := beanq.New(config)
 
 	m := make(map[string]any)
-
+	ctx := context.Background()
 	for i := 0; i < 5; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-		msg := beanq.NewMessage("", b)
-		if err := pub.Channel("delay-channel").Topic("order-topic").PublishInSequence(msg, "aaa"+cast.ToString(i)); err != nil {
-			log.Fatalln(err)
-		}
 
-		// pub.PublishInSequence(msg, "aaa---"+cast.ToString(i), beanq.WithChannel("delay-channel"), beanq.WithTopic("delay-ch2"))
+		pub.Channel("delay-channel").Topic("order-topic").Payload(b).PublishInSequential(ctx)
+
 	}
 
 }

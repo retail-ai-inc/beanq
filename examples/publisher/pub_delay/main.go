@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -18,7 +19,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -39,7 +40,7 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
 func main() {
 	runtime.GOMAXPROCS(2)
@@ -48,10 +49,12 @@ func main() {
 
 func pubDelayInfo() {
 	config := initCnf()
-	pub := beanq.NewPublisher(config)
+	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	ntime := 0 * time.Second
+	ctx := context.Background()
+	now := time.Now()
+	delayT := now
 	for i := 0; i < 10; i++ {
 
 		// if time.Now().Sub(ntime).Minutes() >= 1 {
@@ -63,11 +66,8 @@ func pubDelayInfo() {
 
 		b, _ := json.Marshal(m)
 
-		msg := beanq.NewMessage("", b)
-		delayT := ntime
-		// delayT := 10 * time.Second
 		if i == 2 {
-			delayT = ntime
+			delayT = now
 		}
 
 		if i == 4 {
@@ -75,19 +75,12 @@ func pubDelayInfo() {
 		}
 		if i == 3 {
 			y = 10
-			delayT = 35 * time.Second
+			delayT = now.Add(35 * time.Second)
 
 		}
-		// fmt.Println(delayT)
 		// continue
-		if err := pub.Channel("delay-channel").Topic("order-topic").PublishWithDelay(msg, delayT, beanq.WithPriority(float64(y))); err != nil {
-			log.Println(err)
-		}
-		// if err := pub.Publish(msg, beanq.Topic("delay-ch2"), beanq.Channel("delay-channel")); err != nil {
-		// 	log.Fatalln(err)
-		// }
-		// pub.Publish(task, beanq.Topic("ch2"), beanq.Channel("g2"))
+		pub.Channel("delay-channel").Topic("order-topic").Payload(b).Priority(float64(y)).PublishAtTime(ctx, delayT)
+
 	}
-	// pub.Publish(beanq.NewMessage([]byte("aaa")), beanq.Channel("channel1"), beanq.Topic("topic1"))
-	defer pub.Close()
+
 }

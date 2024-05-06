@@ -33,6 +33,14 @@ import (
 	"github.com/rs/xid"
 )
 
+// subscribe type
+type subscribeType int
+
+const (
+	normalSubscribe subscribeType = iota + 1
+	sequentialSubscribe
+)
+
 // message type
 const (
 	NORMAL     = "normal"
@@ -127,7 +135,7 @@ func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 		return t.broker.enqueue(ctx, t.message, Option{})
 	}
 	if cmd, ok := cmd.(*Subscribe); ok {
-		t.broker.addConsumer(1, t.message.ChannelName, t.message.TopicName, cmd.handle)
+		t.broker.addConsumer(cmd.subscribeType, t.message.ChannelName, t.message.TopicName, cmd.handle)
 	}
 	return nil
 }
@@ -170,8 +178,9 @@ func (t cmdAble) PublishInSequential(ctx context.Context) {
 
 func (t cmdAble) Subscribe(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {
 	cmd := &Subscribe{
-		moodType: NORMAL,
-		handle:   handle,
+		moodType:      NORMAL,
+		handle:        handle,
+		subscribeType: normalSubscribe,
 	}
 	if err := t(ctx, cmd); err != nil {
 		logger.New().Error(err)
@@ -182,8 +191,9 @@ func (t cmdAble) Subscribe(ctx context.Context, handle IConsumeHandle) IBaseSubs
 
 func (t cmdAble) SubscribeDelay(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {
 	cmd := &Subscribe{
-		moodType: DELAY,
-		handle:   handle,
+		moodType:      DELAY,
+		handle:        handle,
+		subscribeType: normalSubscribe,
 	}
 	if err := t(ctx, cmd); err != nil {
 		logger.New().Error(err)
@@ -194,8 +204,9 @@ func (t cmdAble) SubscribeDelay(ctx context.Context, handle IConsumeHandle) IBas
 
 func (t cmdAble) SubscribeSequential(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {
 	cmd := &Subscribe{
-		moodType: SEQUENTIAL,
-		handle:   handle,
+		moodType:      SEQUENTIAL,
+		handle:        handle,
+		subscribeType: sequentialSubscribe,
 	}
 	if err := t(ctx, cmd); err != nil {
 		logger.New().Error(err)
@@ -215,6 +226,7 @@ type (
 	// Subscribe command:subscribe
 	Subscribe struct {
 		moodType string
+		subscribeType
 		IBaseSubscribeCmd
 		broker IBroker
 		handle IConsumeHandle
@@ -244,6 +256,7 @@ func (t *Subscribe) init(broker IBroker) *Subscribe {
 	return t
 }
 
+// Run will to be implemented
 func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
 }

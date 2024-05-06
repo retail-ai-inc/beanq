@@ -28,9 +28,6 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/json"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
-	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/rs/xid"
 	"github.com/spf13/cast"
 )
 
@@ -50,28 +47,6 @@ type (
 		MoodType     string        `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
-
-func NewMessage(msgId string, message []byte) *Message {
-
-	now := time.Now()
-	if msgId == "" {
-		guid := xid.NewWithTime(now)
-		msgId = guid.String()
-	}
-
-	return &Message{
-		Id:          msgId,
-		TopicName:   DefaultOptions.DefaultTopic,
-		ChannelName: DefaultOptions.DefaultChannel,
-		MaxLen:      DefaultOptions.DefaultMaxLen,
-		Retry:       DefaultOptions.JobMaxRetry,
-		Priority:    0,
-		Payload:     stringx.ByteToString(message),
-		AddTime:     now.Format(timex.DateTime),
-		ExecuteTime: now,
-		MoodType:    "normal",
-	}
-}
 
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {

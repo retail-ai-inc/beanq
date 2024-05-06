@@ -13,13 +13,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type subscribeType int
-
-const (
-	normalSubscribe subscribeType = iota + 1
-	sequentialSubscribe
-)
-
 type RedisHandle struct {
 	broker           *RedisBroker
 	subscribe        IConsumeHandle
