@@ -78,7 +78,7 @@ type (
 	}
 )
 
-func (t *BeanqConfig) init() *BeanqConfig {
+func (t *BeanqConfig) init() {
 	if t.ConsumerPoolSize == 0 {
 		t.ConsumerPoolSize = DefaultOptions.ConsumerPoolSize
 	}
@@ -121,7 +121,6 @@ func (t *BeanqConfig) init() *BeanqConfig {
 	if t.TimeToRun == 0 {
 		t.TimeToRun = DefaultOptions.TimeToRun
 	}
-	return t
 }
 
 // IHandle consumer ,after broker

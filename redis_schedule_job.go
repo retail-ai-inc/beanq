@@ -84,7 +84,7 @@ func (t *scheduleJob) start(ctx context.Context, consumer IHandle) error {
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
-
+	
 	bt, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -95,8 +95,8 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 	priority = cast.ToFloat64(msgExecuteTime) + priority
 	timeUnit := cast.ToFloat64(msgExecuteTime)
 
-	setKey := MakeZSetKey(t.broker.prefix, msg.ChannelName, msg.TopicName)
-	timeUnitKey := MakeTimeUnit(t.broker.prefix, msg.ChannelName, msg.TopicName)
+	setKey := MakeZSetKey(t.broker.prefix, msg.Channel, msg.Topic)
+	timeUnitKey := MakeTimeUnit(t.broker.prefix, msg.Channel, msg.Topic)
 
 	err = t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 
@@ -232,17 +232,17 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 	mmsg := messageToMap(msg)
 	subType := normalSubscribe
-	if msg.MoodType == "sequential" {
+	if msg.MoodType == string(SEQUENTIAL) {
 		subType = sequentialSubscribe
 	}
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(subType, t.broker.prefix, msg.ChannelName, msg.TopicName), "", "*", t.broker.maxLen, 0, mmsg)
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(subType, t.broker.prefix, msg.Channel, msg.Topic), "", "*", t.broker.maxLen, 0, mmsg)
 	return t.broker.client.XAdd(ctx, xAddArgs).Err()
 }
 
 func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message) error {
 
 	nmsg := messageToMap(message)
-	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.ChannelName, message.TopicName), "", "*", message.MaxLen, 0, nmsg)
+	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.Channel, message.Topic), "", "*", message.MaxLen, 0, nmsg)
 	return t.broker.client.XAdd(ctx, args).Err()
 
 }

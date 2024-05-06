@@ -30,6 +30,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
 )
 
@@ -42,10 +43,12 @@ const (
 )
 
 // message type
+type moodType string
+
 const (
-	NORMAL     = "normal"
-	DELAY      = "delay"
-	SEQUENTIAL = "sequential"
+	NORMAL     moodType = "normal"
+	DELAY      moodType = "delay"
+	SEQUENTIAL moodType = "sequential"
 )
 
 type (
@@ -74,16 +77,13 @@ func New(config *BeanqConfig) *Client {
 	config.init()
 
 	client := &Client{}
-	now := time.Now()
 	client.message = &Message{
-		TopicName:   config.Topic,
-		ChannelName: config.Channel,
-		MaxLen:      config.MaxLen,
-		Retry:       config.JobMaxRetries,
-		Priority:    config.Priority,
-		AddTime:     now.Format("2006-01-02 15:04:05"),
-		ExecuteTime: now,
-		TimeToRun:   config.TimeToRun,
+		Topic:     config.Topic,
+		Channel:   config.Channel,
+		MaxLen:    config.MaxLen,
+		Retry:     config.JobMaxRetries,
+		Priority:  config.Priority,
+		TimeToRun: config.TimeToRun,
 	}
 	client.cmdAble = client.process
 	client.broker = NewBroker(config)
@@ -96,12 +96,12 @@ func (t *Client) SetId(id string) *Client {
 }
 
 func (t *Client) Channel(name string) *Client {
-	t.message.ChannelName = name
+	t.message.Channel = name
 	return t
 }
 
 func (t *Client) Topic(name string) *Client {
-	t.message.TopicName = name
+	t.message.Topic = name
 	return t
 }
 
@@ -125,17 +125,27 @@ func (t *Client) Payload(payload []byte) *Client {
 
 func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 
+	defer func() {
+		t.message = &Message{
+			Topic:   DefaultOptions.DefaultTopic,
+			Channel: DefaultOptions.DefaultChannel,
+		}
+	}()
+
 	if err := cmd.filter(t.message); err != nil {
 		return err
 	}
 
 	if cmd, ok := cmd.(*Publish); ok {
 		t.message.ExecuteTime = cmd.executeTime
-		t.message.MoodType = cmd.moodType
+		t.message.AddTime = cmd.executeTime.Format(timex.DateTime)
+		t.message.MoodType = string(cmd.moodType)
+
+		// store message
 		return t.broker.enqueue(ctx, t.message)
 	}
 	if cmd, ok := cmd.(*Subscribe); ok {
-		t.broker.addConsumer(cmd.subscribeType, t.message.ChannelName, t.message.TopicName, cmd.handle)
+		t.broker.addConsumer(cmd.subscribeType, t.message.Channel, t.message.Topic, cmd.handle)
 	}
 	return nil
 }
@@ -222,14 +232,14 @@ func (t cmdAble) SubscribeSequential(ctx context.Context, handle IConsumeHandle)
 type (
 	// Publish command:publish
 	Publish struct {
-		moodType    string
+		moodType    moodType
 		executeTime time.Time
 		isUnique    bool
 		IBaseCmd
 	}
 	// Subscribe command:subscribe
 	Subscribe struct {
-		moodType string
+		moodType moodType
 		subscribeType
 		IBaseSubscribeCmd
 		broker IBroker

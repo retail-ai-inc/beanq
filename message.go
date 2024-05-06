@@ -34,8 +34,8 @@ import (
 type (
 	Message struct {
 		Id           string        `json:"id"`
-		TopicName    string        `json:"topicName"`
-		ChannelName  string        `json:"channelName"`
+		Topic        string        `json:"topic"`
+		Channel      string        `json:"channel"`
 		MaxLen       int64         `json:"maxLen"`
 		Retry        int           `json:"retry"`
 		PendingRetry int64         `json:"pendingRetry"`
@@ -77,11 +77,11 @@ func mapToMessage(data map[string]any, msg *Message) {
 
 		case "topicName":
 			if v, ok := val.(string); ok {
-				msg.TopicName = v
+				msg.Topic = v
 			}
 		case "channelName":
 			if v, ok := val.(string); ok {
-				msg.ChannelName = v
+				msg.Channel = v
 			}
 		case "maxLen":
 			if v, ok := val.(int64); ok {
@@ -122,8 +122,8 @@ func messageToMap(message *Message) map[string]any {
 
 	m := make(map[string]any)
 	m["id"] = message.Id
-	m["topicName"] = message.TopicName
-	m["channelName"] = message.ChannelName
+	m["topicName"] = message.Topic
+	m["channelName"] = message.Channel
 	m["maxLen"] = message.MaxLen
 	m["retry"] = message.Retry
 	m["priority"] = message.Priority

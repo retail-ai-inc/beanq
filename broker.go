@@ -15,6 +15,7 @@ type (
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle)
 		deadLetter(ctx context.Context, handle IHandle) error
+		check(ctx context.Context, subType subscribeType, channel, topic string) error
 	}
 )
 

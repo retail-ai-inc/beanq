@@ -24,8 +24,6 @@ package beanq
 
 import (
 	"time"
-
-	"github.com/go-redis/redis/v8"
 )
 
 type Result struct {
@@ -35,7 +33,6 @@ type Result struct {
 
 type Options struct {
 	WorkCount                chan struct{}
-	RedisOptions             *redis.Options
 	DefaultTopic             string
 	DefaultDelayChannel      string
 	DefaultDelayTopic        string
