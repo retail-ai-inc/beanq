@@ -30,61 +30,76 @@ import (
 
 type (
 	DebugLog struct {
-		Path string
-		On   bool
+		Path string `json:"path"`
+		On   bool   `json:"on"`
 	}
 	Health struct {
-		Port string
-		Host string
+		Port string `json:"port"`
+		Host string `json:"host"`
 	}
 	Redis struct {
-		Host               string
-		Port               string
-		Password           string
-		Prefix             string
-		Database           int
-		MaxLen             int64
-		MinIdleConnections int
-		DialTimeout        time.Duration
-		ReadTimeout        time.Duration
-		WriteTimeout       time.Duration
-		PoolTimeout        time.Duration
+		Host               string        `json:"host"`
+		Port               string        `json:"port"`
+		Password           string        `json:"password"`
+		Prefix             string        `json:"prefix"`
+		Database           int           `json:"database"`
+		MaxLen             int64         `json:"maxLen"`
+		MinIdleConnections int           `json:"minIdleConnections"`
+		DialTimeout        time.Duration `json:"dialTimeout"`
+		ReadTimeout        time.Duration `json:"readTimeout"`
+		WriteTimeout       time.Duration `json:"writeTimeout"`
+		PoolTimeout        time.Duration `json:"poolTimeout"`
+		MaxRetries         int           `json:"maxRetries"`
+		PoolSize           int           `json:"poolSize"`
 	}
 	BeanqConfig struct {
-		Health
-		DebugLog
-		Driver string
-		Redis
-		PoolSize                 int
-		JobMaxRetries            int
-		DeadLetterIdle           time.Duration
-		KeepJobsInQueue          time.Duration
-		KeepFailedJobsInHistory  time.Duration
-		KeepSuccessJobsInHistory time.Duration
-		PublishTimeOut           time.Duration
-		ConsumeTimeOut           time.Duration
-		MinWorkers               int64
+		Health                   Health        `json:"health"`
+		DebugLog                 DebugLog      `json:"debugLog"`
+		Broker                   string        `json:"broker"`
+		Redis                    Redis         `json:"redis"`
+		ConsumerPoolSize         int           `json:"consumerPoolSize"`
+		JobMaxRetries            int           `json:"jobMaxRetries"`
+		DeadLetterIdle           time.Duration `json:"deadLetterIdle"`
+		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
+		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
+		PublishTimeOut           time.Duration `json:"publishTimeOut"`
+		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
+		MinConsumers             int64         `json:"minConsumers"`
 	}
 )
 
 // Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
 var Config atomic.Value
 
+// BeanqPub publisher
 type BeanqPub interface {
 	Publish(msg *Message, option ...OptionI) error
 	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
-	DelayPublish(msg *Message, delayTime time.Time, option ...OptionI) error
-	SequentialPublish(msg *Message, orderKey string, option ...OptionI) error
+	PublishWithDelay(msg *Message, delayTime time.Duration, option ...OptionI) error
+	PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error
+	PublishInSequence(msg *Message, orderKey string, option ...OptionI) error
 }
 
+// BeanqSub subscribe
 type BeanqSub interface {
-	Subscribe(channek, topic string, consumerFun DoConsumer)
+	Subscribe(channel, topic string, subscribe IConsumeHandle)
+	SubscribeSequential(channel, topic string, subscribe IConsumeHandle)
 	StartConsumer()
 	StartConsumerWithContext(ctx context.Context)
-	StartPing() error
+	ping()
 }
+
+// IHandle consumer ,after broker
 type IHandle interface {
+	Channel() string
+	Topic() string
 	Check(ctx context.Context) error
-	Work(ctx context.Context, done <-chan struct{})
+	Process(ctx context.Context, mainDone, seqDone <-chan struct{})
 	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
+}
+
+// VolatileLFU
+type VolatileLFU interface {
+	Add(ctx context.Context, key, member string) (bool, error)
+	Delete(ctx context.Context, key string, done <-chan struct{})
 }

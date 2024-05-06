@@ -30,37 +30,30 @@ import (
 	"sync"
 	"time"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
-type ConsumerHandler struct {
-	IHandle
-	ConsumerFun DoConsumer
-	Channel     string
-	Topic       string
-}
+type ErrorCallback func(msg *Message, err error) error
 
 type Consumer struct {
-	broker  Broker
-	opts    *Options
-	m       []*ConsumerHandler
-	mu      sync.RWMutex
-	timeOut time.Duration
+	broker         Broker
+	opts           *Options
+	mu             *sync.RWMutex
+	timeOut        time.Duration
+	errorCallbacks []ErrorCallback
 }
 
-var _ BeanqSub = new(Consumer)
+var _ BeanqSub = (*Consumer)(nil)
 var (
 	beanqConsumer *Consumer
 )
 
 func NewConsumer(config BeanqConfig) *Consumer {
-
-	poolSize := DefaultOptions.PoolSize
-	if config.PoolSize != 0 {
-		poolSize = config.PoolSize
+	poolSize := DefaultOptions.ConsumerPoolSize
+	if config.ConsumerPoolSize != 0 {
+		poolSize = config.ConsumerPoolSize
 	}
-	config.PoolSize = poolSize
+	config.ConsumerPoolSize = poolSize
 
 	timeOut := DefaultOptions.ConsumeTimeOut
 	if config.ConsumeTimeOut > 0 {
@@ -68,20 +61,11 @@ func NewConsumer(config BeanqConfig) *Consumer {
 	}
 	config.ConsumeTimeOut = timeOut
 
-	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
-	if err != nil {
-		logger.New().With("", err).Fatal("goroutine pool error")
-	}
 	Config.Store(config)
-	if config.Driver == "redis" {
-		beanqConsumer = &Consumer{
-			broker:  newRedisBroker(pool, config),
-			mu:      sync.RWMutex{},
-			timeOut: timeOut,
-		}
-	} else {
-		// Currently beanq is only supporting `redis` driver other than that return `nil` beanq client.
-		beanqConsumer = nil
+	beanqConsumer = &Consumer{
+		broker:  NewBroker(config),
+		mu:      new(sync.RWMutex),
+		timeOut: timeOut,
 	}
 
 	return beanqConsumer
@@ -96,7 +80,15 @@ func NewConsumer(config BeanqConfig) *Consumer {
 //	@param channel
 //	@param topic
 //	@param consumerFun
-func (t *Consumer) Subscribe(channelName, topicName string, consumerFun DoConsumer) {
+func (t *Consumer) Subscribe(channelName, topicName string, subscribe IConsumeHandle) {
+	t.subscribe(normalSubscribe, channelName, topicName, subscribe)
+}
+
+func (t *Consumer) SubscribeSequential(channelName, topicName string, subscribe IConsumeHandle) {
+	t.subscribe(sequentialSubscribe, channelName, topicName, subscribe)
+}
+
+func (t *Consumer) subscribe(subType subscribeType, channelName, topicName string, subscribe IConsumeHandle) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if channelName == "" {
@@ -106,40 +98,46 @@ func (t *Consumer) Subscribe(channelName, topicName string, consumerFun DoConsum
 		topicName = DefaultOptions.DefaultTopic
 	}
 
-	t.m = append(t.m, &ConsumerHandler{
-		Channel:     channelName,
-		Topic:       topicName,
-		ConsumerFun: consumerFun,
-	})
+	t.broker.addConsumer(subType, channelName, topicName, subscribe)
 }
+
+func (t *Consumer) WithErrorCallBack(callbacks ...ErrorCallback) *Consumer {
+	clone := *t
+	clone.errorCallbacks = append(t.errorCallbacks, callbacks...)
+	return &clone
+}
+
 func (t *Consumer) StartConsumerWithContext(ctx context.Context) {
-
-	t.broker.start(ctx, t.m)
-
+	t.broker.startConsuming(ctx)
 }
 
 func (t *Consumer) StartConsumer() {
-
+	t.ping()
 	t.StartConsumerWithContext(context.Background())
-
 }
-func (t *Consumer) StartPing() error {
+
+func (t *Consumer) ping() {
+	health := Config.Load().(BeanqConfig).Health
+
+	if health.Host == "" || health.Port == "" {
+		return
+	}
 
 	go func() {
 		hdl := &http.ServeMux{}
 		hdl.HandleFunc("/ping", func(writer http.ResponseWriter, request *http.Request) {
 			writer.WriteHeader(http.StatusOK)
-			writer.Write([]byte("Beanq 🚀  pong"))
+			_, _ = writer.Write([]byte("Beanq 🚀  pong"))
 			return
 		})
+
 		srv := &http.Server{
-			Addr:    strings.Join([]string{Config.Load().(BeanqConfig).Health.Host, Config.Load().(BeanqConfig).Health.Port}, ":"),
+			Addr:    strings.Join([]string{health.Host, health.Port}, ":"),
 			Handler: hdl,
 		}
+		logger.New().Info("Start Ping On:", health.Host, ":", health.Port)
 		if err := srv.ListenAndServe(); err != nil {
-			logger.New().With("", err).Error("ping server error")
+			logger.New().Fatal(err)
 		}
 	}()
-
-	return nil
 }

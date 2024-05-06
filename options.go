@@ -67,7 +67,7 @@ const (
 	OrderKeyOpt
 )
 
-func Topic(name string) OptionI {
+func WithTopic(name string) OptionI {
 	return topicOption(name)
 }
 
@@ -83,7 +83,7 @@ func (t topicOption) Value() any {
 	return string(t)
 }
 
-func Retry(retries int) OptionI {
+func WithRetry(retries int) OptionI {
 	if retries < 0 {
 		retries = 0
 	}
@@ -102,7 +102,7 @@ func (retry retryOption) Value() any {
 	return int(retry)
 }
 
-func Channel(name string) OptionI {
+func WithChannel(name string) OptionI {
 	return channelOption(name)
 }
 
@@ -118,7 +118,7 @@ func (t channelOption) Value() any {
 	return string(t)
 }
 
-func MaxLen(maxLen int) OptionI {
+func WithMaxLen(maxLen int) OptionI {
 	if maxLen < 0 {
 		maxLen = 1000
 	}
@@ -137,7 +137,7 @@ func (ml maxLenOption) Value() any {
 	return int(ml)
 }
 
-func ExecuteTime(unixTime time.Time) OptionI {
+func WithExecuteTime(unixTime time.Time) OptionI {
 	if unixTime.IsZero() {
 		unixTime = time.Now()
 	}
@@ -156,7 +156,7 @@ func (et executeTime) Value() any {
 	return time.Time(et)
 }
 
-func Priority(priority float64) OptionI {
+func WithPriority(priority float64) OptionI {
 	if priority > 1000 {
 		priority = 999
 	}
@@ -178,7 +178,7 @@ func (pri priorityOption) Value() any {
 	return float64(pri)
 }
 
-func OrderKey(name string) OptionI {
+func WithOrderKey(name string) OptionI {
 	return orderKeyOption(name)
 }
 
@@ -253,28 +253,28 @@ type Options struct {
 	OrderKey                 string
 	DefaultChannel           string
 	Prefix                   string
-	PoolSize                 int
+	ConsumerPoolSize         int
 	Priority                 float64
 	JobMaxRetry              int
 	DefaultMaxLen            int64
-	MinWorkers               int64
+	MinConsumers             int64
+	TimeToRun                time.Duration
 	KeepSuccessJobsInHistory time.Duration
 	KeepFailedJobsInHistory  time.Duration
 	RetryTime                time.Duration
-	KeepJobInQueue           time.Duration
 	PublishTimeOut           time.Duration
 	ConsumeTimeOut           time.Duration
 }
 
 var DefaultOptions = &Options{
 
-	KeepJobInQueue:           time.Hour * 24 * 7,
 	KeepFailedJobsInHistory:  time.Hour * 24 * 7,
 	KeepSuccessJobsInHistory: time.Hour * 24 * 7,
 	PublishTimeOut:           10 * time.Second,
 	ConsumeTimeOut:           20 * time.Second,
-	PoolSize:                 20,
-	MinWorkers:               10,
+	ConsumerPoolSize:         20,
+	MinConsumers:             10,
+	TimeToRun:                3600 * time.Second,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
 
@@ -289,5 +289,6 @@ var DefaultOptions = &Options{
 	DefaultDelayChannel: "default-delay-channel",
 
 	RetryTime: 800 * time.Millisecond,
+
 	WorkCount: make(chan struct{}, 20),
 }

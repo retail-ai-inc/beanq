@@ -3,111 +3,72 @@ package beanq
 import (
 	"context"
 	"errors"
-	"fmt"
-	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"golang.org/x/sync/errgroup"
+)
+
+type subscribeType int
+
+const (
+	normalSubscribe subscribeType = iota + 1
+	sequentialSubscribe
 )
 
 type RedisHandle struct {
-	client           redis.UniversalClient
-	log              logJobI
-	consumer         DoConsumer
+	broker           *RedisBroker
+	subscribe        IConsumeHandle
 	deadLetterTicker *time.Ticker
 	channel          string
 	topic            string
 	pendingIdle      time.Duration
+	subscribeType    subscribeType
+	errorCallbacks   []ErrorCallback
 
-	prefix      string
-	maxLen      int64
-	jobMaxRetry int
-	minWorkers  int64
-	timeOut     time.Duration
-	pool        *ants.Pool
+	jobMaxRetry  int
+	minConsumers int64
+	timeOut      time.Duration
 
-	wg sync.WaitGroup
-}
-
-var (
-	result = sync.Pool{New: func() any {
-		return &ConsumerResult{
-			Level:   InfoLevel,
-			Info:    SuccessInfo,
-			RunTime: "",
-		}
-	}}
-
-	streamArrayPool = sync.Pool{New: func() any {
-		return make([]redis.XStream, 100)
-	}}
-)
-
-func newRedisHandle(client redis.UniversalClient, channel, topic string, consumer DoConsumer, pool *ants.Pool) *RedisHandle {
-
-	bqConfig := Config.Load().(BeanqConfig)
-	prefix := bqConfig.Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
-	}
-
-	maxLen := bqConfig.Redis.MaxLen
-	if maxLen <= 0 {
-		maxLen = DefaultOptions.DefaultMaxLen
-	}
-
-	jobMaxRetry := bqConfig.JobMaxRetries
-	if jobMaxRetry <= 0 {
-		jobMaxRetry = DefaultOptions.JobMaxRetry
-	}
-
-	minWorkers := bqConfig.MinWorkers
-	if minWorkers <= 0 {
-		minWorkers = DefaultOptions.MinWorkers
-	}
-	timeOut := bqConfig.ConsumeTimeOut
-
-	return &RedisHandle{
-		client:           client,
-		channel:          channel,
-		topic:            topic,
-		consumer:         consumer,
-		log:              newLogJob(client, pool),
-		deadLetterTicker: time.NewTicker(100 * time.Second),
-		pendingIdle:      2 * time.Minute,
-		prefix:           prefix,
-		maxLen:           maxLen,
-		jobMaxRetry:      jobMaxRetry,
-		minWorkers:       minWorkers,
-		timeOut:          timeOut,
-		pool:             pool,
-		wg:               sync.WaitGroup{},
-	}
+	wg           *sync.WaitGroup
+	result       *sync.Pool
+	errGroupPool *sync.Pool
+	once         sync.Once
 }
 
 func (t *RedisHandle) Check(ctx context.Context) error {
-
 	if err := t.checkStream(ctx); err != nil {
 		return err
 	}
-	if err := t.checkDeadletterStream(ctx); err != nil {
-		return err
-	}
 	return nil
-
 }
 
-func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
+func (t *RedisHandle) Channel() string {
+	return t.channel
+}
 
+func (t *RedisHandle) Topic() string {
+	return t.topic
+}
+
+func (t *RedisHandle) Process(ctx context.Context, done, seqDone <-chan struct{}) {
+	switch t.subscribeType {
+	case normalSubscribe:
+		t.runSubscribe(ctx, done)
+	case sequentialSubscribe:
+		t.runSequentialSubscribe(ctx, seqDone)
+	}
+}
+
+func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 	channel := t.channel
 	topic := t.topic
-	stream := MakeStreamKey(t.prefix, channel, topic)
-	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minWorkers, 10*time.Second)
+	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, channel, topic)
+	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
 		// check state
@@ -123,7 +84,7 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 		}
 
 		// block XReadGroup to read data
-		streams := t.client.XReadGroup(ctx, readGroupArgs).Val()
+		streams := t.broker.client.XReadGroup(ctx, readGroupArgs).Val()
 
 		if len(streams) <= 0 {
 			continue
@@ -132,13 +93,121 @@ func (t *RedisHandle) Work(ctx context.Context, done <-chan struct{}) {
 	}
 }
 
-// Please refer to http://www.redis.cn/commands/xclaim.html
+func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
+	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+
+	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_id"}, ":")
+
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
+
+	ticker := time.NewTicker(time.Second)
+
+	result := t.result.Get().(*ConsumerResult)
+
+	group := t.errGroupPool.Get().(*errgroup.Group)
+
+	keyExDuration := 20 * time.Second
+
+	defer func() {
+		ticker.Stop()
+		result = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
+	}()
+
+	for {
+		select {
+		case <-done:
+			logger.New().Info("--------Sequential Task STOP--------")
+			return
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+				if tx.Get(ctx, key).Val() == "" {
+					if err := tx.SetEX(ctx, key, 1, keyExDuration).Err(); err != nil {
+						return err
+					}
+				}
+				return nil
+			}, key)
+			if err != nil {
+				continue
+			}
+
+			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
+			vals := cmd.Val()
+			if len(vals) <= 0 {
+				t.broker.client.SetEX(ctx, key, "", keyExDuration)
+				continue
+			}
+
+			stream := vals[0].Stream
+			for _, v := range vals[0].Messages {
+				nv := v
+				message := messageToStruct(nv.Values)
+
+				result.Id = message.Id
+				result.BeginTime = time.Now()
+
+				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
+
+				retry, err := RetryInfo(nctx, func() error {
+
+					if err := t.subscribe.Handle(nctx, message); err != nil {
+						if h, ok := t.subscribe.(IConsumeCancel); ok {
+							return h.Cancel(nctx, message)
+						}
+					}
+					return nil
+				}, t.jobMaxRetry)
+
+				result.EndTime = time.Now()
+				sub := result.EndTime.Sub(result.BeginTime)
+				result.AddTime = message.AddTime
+				result.Retry = retry
+				result.Payload = message.Payload
+				result.Priority = message.Priority
+				result.RunTime = sub.String()
+				result.ExecuteTime = message.ExecuteTime
+				result.Topic = message.TopicName
+				result.Channel = t.channel
+				result.MoodType = message.MoodType
+				if err != nil {
+					if h, ok := t.subscribe.(IConsumeError); ok {
+						h.Error(nctx, err)
+					}
+					result.Level = ErrLevel
+					result.Info = FlagInfo(err.Error())
+				}
+				cancel()
+				group.TryGo(func() error {
+					// `stream` confirmation message
+					if err := t.broker.client.XAck(ctx, stream, t.channel, nv.ID).Err(); err != nil {
+						return err
+					}
+					// delete data from `stream`
+					if err := t.broker.client.XDel(ctx, stream, nv.ID).Err(); err != nil {
+						return err
+					}
+					return nil
+				})
+				group.TryGo(func() error {
+					return t.broker.logJob.saveLog(ctx, result)
+				})
+				if err := group.Wait(); err != nil {
+					t.broker.client.SetEX(ctx, key, "", keyExDuration)
+					logger.New().Error(err)
+				}
+				t.errGroupPool.Put(group)
+
+			}
+			t.broker.client.SetEX(ctx, key, "", keyExDuration)
+		}
+	}
+}
+
+// DeadLetter Please refer to http://www.redis.cn/commands/xclaim.html
 func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
-
-	streamKey := MakeStreamKey(t.prefix, t.channel, t.topic)
-
-	deadLetterStreamKey := MakeDeadLetterStreamKey(t.prefix, t.channel, t.topic)
-
+	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	defer t.deadLetterTicker.Stop()
 
 	for {
@@ -156,7 +225,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 
 		}
 
-		pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+		pendings := t.broker.client.XPendingExt(ctx, &redis.XPendingExtArgs{
 			Stream: streamKey,
 			Group:  t.channel,
 			Start:  "-",
@@ -169,35 +238,43 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		}
 
 		for _, pending := range pendings {
-
 			if pending.Idle < t.pendingIdle {
 				continue
 			}
-
-			// if pending retry count > 10,then add it into dead_letter_stream
-			if pending.RetryCount > 10 {
-				vals := t.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
-				if len(vals) <= 0 {
+			// if pending retry count > 5,then add it into dead_letter_stream
+			if pending.RetryCount > 5 {
+				val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+				if len(val) <= 0 {
 					continue
 				}
-				val := vals[0]
-				msg := messageToStruct(val)
-				msg.PendingRetry = pending.RetryCount
-				xAddArgs := redisx.NewZAddArgs(deadLetterStreamKey, "", "*", t.maxLen, 0, msg)
-				if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+
+				msg := messageToStruct(val[0])
+				// msg.Values["pendingRetry"] = pending.RetryCount
+				// msg.Values["idle"] = pending.Idle.Seconds()
+
+				r := t.result.Get().(*ConsumerResult)
+				r.Id = msg.Id
+				r.BeginTime = msg.ExecuteTime
+
+				r.EndTime = time.Now()
+				sub := r.EndTime.Sub(r.BeginTime)
+				r.AddTime = msg.AddTime
+				r.Retry = msg.Retry
+				r.Payload = msg.Payload
+				r.RunTime = sub.String()
+				r.ExecuteTime = msg.ExecuteTime
+				r.Topic = msg.TopicName
+				r.Channel = t.channel
+				r.MoodType = msg.MoodType
+
+				r.Level = ErrLevel
+				r.Info = "too long pending"
+
+				if err := t.broker.logJob.saveLog(ctx, r); err != nil {
 					logger.New().Error(err)
 				}
-				if err := t.client.XDel(ctx, streamKey, pending.ID).Err(); err != nil {
-					logger.New().Error(err)
-				}
-			} else {
-				if err := t.client.XClaim(ctx, &redis.XClaimArgs{
-					Stream:   streamKey,
-					Group:    t.channel,
-					Consumer: pending.Consumer,
-					MinIdle:  t.pendingIdle,
-					Messages: []string{pending.ID},
-				}).Err(); err != nil {
+
+				if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
 			}
@@ -208,7 +285,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 }
 
 func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
-
 	channel := t.channel
 	for key, v := range streams {
 
@@ -218,21 +294,25 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 		t.wg.Add(len(v.Messages))
 		for _, vv := range message {
 			nv := vv
-			if err := t.pool.Submit(func() {
+			if err := t.broker.pool.Submit(func() {
 				r := t.execute(ctx, &nv)
 
-				if err := t.log.saveLog(ctx, r); err != nil {
+				group := t.errGroupPool.Get().(*errgroup.Group)
+				group.TryGo(func() error {
+					return t.ack(ctx, stream, channel, nv.ID)
+				})
+				group.TryGo(func() error {
+					return t.broker.logJob.saveLog(ctx, r)
+				})
+				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
+				t.errGroupPool.Put(group)
 
-				if err := t.ack(ctx, stream, channel, nv.ID); err != nil {
-					logger.New().Error(err)
-				}
-				t.wg.Done()
+				defer t.wg.Done()
 			}); err != nil {
 				logger.New().Error(err)
 			}
-
 		}
 		streams[key] = redis.XStream{}
 	}
@@ -240,66 +320,32 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 }
 
 func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...string) error {
-
 	// `stream` confirmation message
-	err := t.client.XAck(ctx, stream, channel, ids...).Err()
+	err := t.broker.client.XAck(ctx, stream, channel, ids...).Err()
 	// delete data from `stream`
-	err = t.client.XDel(ctx, stream, ids...).Err()
+	err = t.broker.client.XDel(ctx, stream, ids...).Err()
 	return err
 
 }
 
-type BeanqContext struct {
-	Ctx    context.Context
-	Cancel context.CancelFunc
-}
-
-var BeanqCtx = sync.Pool{New: func() any {
-	timeOut := Config.Load().(BeanqConfig).ConsumeTimeOut
-	ctx, cancel := context.WithTimeout(context.Background(), timeOut)
-	return BeanqContext{Ctx: ctx, Cancel: cancel}
-}}
-
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
+	r := t.result.Get().(*ConsumerResult)
+	// var cancel context.CancelFunc
+	msg := messageToStruct(message)
 
-	r := result.Get().(*ConsumerResult)
-	nctx := BeanqCtx.Get().(BeanqContext)
+	nctx, cancel := context.WithTimeout(context.Background(), msg.TimeToRun)
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-		result.Put(r)
-
-		nctx.Cancel()
-		BeanqCtx.Put(nctx)
+		t.result.Put(r)
+		cancel()
 	}()
-
-	msg := messageToStruct(message)
 
 	r.Id = msg.Id
 	r.BeginTime = time.Now()
 
 	retryCount, err := RetryInfo(ctx, func() error {
-
-		errCh := make(chan error, 1)
-		_ = t.pool.Submit(func() {
-			defer func() {
-				if ne := recover(); ne != nil {
-					errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
-				}
-			}()
-
-			if err := t.consumer(nctx.Ctx, msg); err != nil {
-				errCh <- err
-			}
-		})
-		close(errCh)
-
-		select {
-		case <-nctx.Ctx.Done():
-			return nctx.Ctx.Err()
-		case e := <-errCh:
-			return e
-		}
+		return t.subscribe.Handle(nctx, msg)
 	}, t.jobMaxRetry)
 
 	r.EndTime = time.Now()
@@ -312,9 +358,12 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.ExecuteTime = msg.ExecuteTime
 	r.Topic = msg.TopicName
 	r.Channel = t.channel
-	r.MsgType = msg.MsgType
+	r.MoodType = msg.MoodType
 
 	if err != nil {
+		if h, ok := t.subscribe.(IConsumeError); ok {
+			h.Error(nctx, err)
+		}
 		r.Level = ErrLevel
 		r.Info = FlagInfo(err.Error())
 	}
@@ -324,7 +373,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 // checkStream   if stream not exist,then create it
 func (t *RedisHandle) checkStream(ctx context.Context) error {
 
-	normalStreamKey := MakeStreamKey(t.prefix, t.channel, t.topic)
+	normalStreamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	return t.check(ctx, normalStreamKey)
 
 }
@@ -332,15 +381,15 @@ func (t *RedisHandle) checkStream(ctx context.Context) error {
 func (t *RedisHandle) checkDeadletterStream(ctx context.Context) error {
 
 	// if dead letter stream don't exist,then create it
-	deadLetterStreamKey := MakeDeadLetterStreamKey(t.prefix, t.channel, t.topic)
+	deadLetterStreamKey := MakeDeadLetterStreamKey(t.broker.prefix, t.channel, t.topic)
 	return t.check(ctx, deadLetterStreamKey)
 
 }
 
 func (t *RedisHandle) check(ctx context.Context, streamName string) error {
-	result := t.client.XInfoGroups(ctx, streamName).Val()
+	result := t.broker.client.XInfoGroups(ctx, streamName).Val()
 	if len(result) < 1 {
-		if err := t.client.XGroupCreateMkStream(ctx, streamName, t.channel, "0").Err(); err != nil {
+		if err := t.broker.client.XGroupCreateMkStream(ctx, streamName, t.channel, "0").Err(); err != nil {
 			return err
 		}
 	}

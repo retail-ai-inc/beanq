@@ -24,10 +24,14 @@ package beanq
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"math/rand"
+	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/helper/stringx"
 )
 
 func makeKey(keys ...string) string {
@@ -59,14 +63,18 @@ func MakeZSetKey(prefix, channel, topic string) string {
 }
 
 // MakeStreamKey create key for type stream
-func MakeStreamKey(prefix, channel, topic string) string {
+func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string {
 	if channel == "" {
 		channel = DefaultOptions.DefaultChannel
 	}
 	if topic == "" {
 		topic = DefaultOptions.DefaultTopic
 	}
-	return makeKey(prefix, channel, topic, "stream")
+	stream := "normal_stream"
+	if subType == sequentialSubscribe {
+		stream = "sequential_stream"
+	}
+	return makeKey(prefix, channel, topic, stream)
 }
 
 // MakeDeadLetterStreamKey create key for type stream,mainly dead letter
@@ -87,33 +95,54 @@ func MakeLogKey(prefix, resultType string) string {
 func MakeHealthKey(prefix string) string {
 	return makeKey(prefix, "health_checker")
 }
+
 func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }
 
-func RetryInfo(ctx context.Context, f func() error, retry int) (int, error) {
-	index := 0
-	timer := time.NewTimer(time.Duration(index) * time.Millisecond)
-	defer timer.Stop()
+func MakeFilter(prefix string) string {
+	return makeKey(prefix, "filter")
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return index, ctx.Err()
+func doTimeout(ctx context.Context, f func() error) error {
+	errCh := make(chan error, 1)
+	go func() {
+		defer func() {
+			if ne := recover(); ne != nil {
+				errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+				return
+			}
+		}()
+		errCh <- f()
+		return
+	}()
 
-		case <-timer.C:
-			e := f()
-			if e != nil {
-				return index, e
-			}
-			if e == nil || index >= retry {
-				return index, nil
-			}
-			index++
-			timer.Reset(jitterBackoff(500*time.Millisecond, time.Second, retry))
-		}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errCh:
+		return err
 	}
 }
+
+func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error) {
+
+	for i = 0; i < retry; i++ {
+		err = doTimeout(ctx, f)
+		if err == nil {
+			return
+		}
+
+		waitTime := jitterBackoff(500*time.Millisecond, time.Second, i)
+		select {
+		case <-time.After(waitTime):
+		case <-ctx.Done():
+			return i, ctx.Err()
+		}
+	}
+	return
+}
+
 func jitterBackoff(min, max time.Duration, attempt int) time.Duration {
 	base := float64(min)
 	capLevel := float64(max)

@@ -23,40 +23,44 @@
 package beanq
 
 import (
-	"context"
 	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/google/uuid"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/rs/xid"
 	"github.com/spf13/cast"
 )
 
 type (
 	Message struct {
-		Id           string    `json:"id"`
-		TopicName    string    `json:"topicName"`
-		ChannelName  string    `json:"channelName"`
-		MaxLen       int64     `json:"maxLen"`
-		Retry        int       `json:"retry"`
-		PendingRetry int64     `json:"pendingRetry"`
-		Priority     float64   `json:"priority"`
-		Payload      string    `json:"payload"`
-		AddTime      string    `json:"addTime"`
-		ExecuteTime  time.Time `json:"executeTime"`
-		MsgType      string    `json:"msgType"`
+		Id           string        `json:"id"`
+		TopicName    string        `json:"topicName"`
+		ChannelName  string        `json:"channelName"`
+		MaxLen       int64         `json:"maxLen"`
+		Retry        int           `json:"retry"`
+		PendingRetry int64         `json:"pendingRetry"`
+		Priority     float64       `json:"priority"`
+		Payload      string        `json:"payload"`
+		AddTime      string        `json:"addTime"`
+		ExecuteTime  time.Time     `json:"executeTime"`
+		TimeToRun    time.Duration `json:"timeToRun"`
+		MoodType     string        `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
 
-func NewMessage(message []byte) *Message {
+func NewMessage(msgId string, message []byte) *Message {
+
 	now := time.Now()
-	id := uuid.NewString()
-	
+	if msgId == "" {
+		guid := xid.NewWithTime(now)
+		msgId = guid.String()
+	}
+
 	return &Message{
-		Id:          id,
+		Id:          msgId,
 		TopicName:   DefaultOptions.DefaultTopic,
 		ChannelName: DefaultOptions.DefaultChannel,
 		MaxLen:      DefaultOptions.DefaultMaxLen,
@@ -65,11 +69,9 @@ func NewMessage(message []byte) *Message {
 		Payload:     stringx.ByteToString(message),
 		AddTime:     now.Format(timex.DateTime),
 		ExecuteTime: now,
-		MsgType:     "normal",
+		MoodType:    "normal",
 	}
 }
-
-type DoConsumer func(ctx context.Context, msg *Message) error
 
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {
@@ -79,7 +81,6 @@ func messageToStruct(message any) *Message {
 	case *redis.XMessage:
 		xmsg := message.(*redis.XMessage)
 		mapToMessage(xmsg.Values, msg)
-		msg.Id = xmsg.ID
 	case map[string]any:
 		mapToMessage(message.(map[string]any), msg)
 	}
@@ -133,9 +134,9 @@ func mapToMessage(data map[string]any, msg *Message) {
 					msg.ExecuteTime = v
 				}
 			}
-		case "msgType":
+		case "moodType":
 			if v, ok := val.(string); ok {
-				msg.MsgType = v
+				msg.MoodType = v
 			}
 		}
 	}
@@ -154,7 +155,7 @@ func messageToMap(message *Message) map[string]any {
 	m["payload"] = message.Payload
 	m["addTime"] = message.AddTime
 	m["executeTime"] = message.ExecuteTime
-	m["msgType"] = message.MsgType
+	m["moodType"] = message.MoodType
 	return m
 
 }

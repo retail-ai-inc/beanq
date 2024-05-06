@@ -7,7 +7,7 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-var redisXAddArgsPool = sync.Pool{New: func() any {
+var redisXAddArgsPool = &sync.Pool{New: func() any {
 	return &redis.XAddArgs{
 		Stream:     "",
 		NoMkStream: false,
@@ -45,7 +45,7 @@ func NewZAddArgs(stream, minId, Id string, maxLen, Limit int64, vals any) *redis
 	return args
 }
 
-var redisXReadGroupArgsPool = sync.Pool{New: func() any {
+var redisXReadGroupArgsPool = &sync.Pool{New: func() any {
 	return &redis.XReadGroupArgs{
 		Group:    "",
 		Consumer: "",
@@ -78,7 +78,7 @@ func NewReadGroupArgs(group, consumer string, streams []string, count int64, blo
 	return args
 }
 
-var xAutoClaimPool = sync.Pool{New: func() any {
+var xAutoClaimPool = &sync.Pool{New: func() any {
 	return &redis.XAutoClaimArgs{
 		Stream:   "",
 		Group:    "",

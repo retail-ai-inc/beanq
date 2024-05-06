@@ -36,72 +36,88 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
-	Broker interface {
-		enqueue(ctx context.Context, msg *Message, options Option) error
-		close() error
-		start(ctx context.Context, consumers []*ConsumerHandler)
-	}
-
 	RedisBroker struct {
-		client                   redis.UniversalClient
-		done, claimDone, logDone chan struct{}
-		scheduleJob              scheduleJobI
-		logJob                   logJobI
-		once                     *sync.Once
-		pool                     *ants.Pool
-		prefix                   string
-		maxLen                   int64
+		client                                          redis.UniversalClient
+		done, seqDone, obsoleteDone, claimDone, logDone chan struct{}
+		scheduleJob                                     scheduleJobI
+		filter                                          VolatileLFU
+		consumerHandlers                                []IHandle
+		logJob                                          ILogJob
+		once                                            *sync.Once
+		pool                                            *ants.Pool
+		prefix                                          string
+		maxLen                                          int64
+		config                                          BeanqConfig
 	}
 )
 
 var _ Broker = (*RedisBroker)(nil)
 
-func newRedisBroker(pool *ants.Pool, config BeanqConfig) *RedisBroker {
-
+func newRedisBroker(pool *ants.Pool) *RedisBroker {
+	config := Config.Load().(BeanqConfig)
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
 		DB:           config.Redis.Database,
-		MaxRetries:   config.JobMaxRetries,
+		MaxRetries:   config.Redis.MaxRetries,
 		DialTimeout:  config.Redis.DialTimeout,
 		ReadTimeout:  config.Redis.ReadTimeout,
 		WriteTimeout: config.Redis.WriteTimeout,
-		PoolSize:     config.PoolSize,
+		PoolSize:     config.Redis.PoolSize,
 		MinIdleConns: config.Redis.MinIdleConnections,
 		PoolTimeout:  config.Redis.PoolTimeout,
+		PoolFIFO:     true,
 	})
 
-	prefix := Config.Load().(BeanqConfig).Redis.Prefix
+	if err := client.Ping(context.Background()).Err(); err != nil {
+		logger.New().Fatal(err.Error())
+	}
+	prefix := config.Redis.Prefix
 	if prefix == "" {
 		prefix = DefaultOptions.Prefix
 	}
-	maxLen := Config.Load().(BeanqConfig).Redis.MaxLen
+	config.Redis.Prefix = prefix
+
+	maxLen := config.Redis.MaxLen
 	if maxLen <= 0 {
 		maxLen = DefaultOptions.DefaultMaxLen
 	}
+	config.Redis.MaxLen = maxLen
 
-	return &RedisBroker{
-		client:      client,
-		done:        make(chan struct{}),
-		claimDone:   make(chan struct{}),
-		logDone:     make(chan struct{}),
-		scheduleJob: newScheduleJob(pool, client),
-		logJob:      newLogJob(client, pool),
-		// opts:        nil,
-		once:   &sync.Once{},
-		pool:   pool,
-		prefix: prefix,
-		maxLen: maxLen,
+	broker := &RedisBroker{
+		client:       client,
+		done:         make(chan struct{}, 1),
+		seqDone:      make(chan struct{}, 1),
+		obsoleteDone: make(chan struct{}, 1),
+		claimDone:    make(chan struct{}, 1),
+		logDone:      make(chan struct{}, 1),
+		logJob:       newLogJob(client, pool),
+		once:         &sync.Once{},
+		pool:         pool,
+		prefix:       prefix,
+		maxLen:       maxLen,
+		config:       config,
+		filter:       &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
 	}
+	broker.scheduleJob = broker.newScheduleJob()
+
+	return broker
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
-
 	if msg == nil {
 		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
+	}
+	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
+	if b {
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 
 	// Sequential job
@@ -115,7 +131,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	// normal job
 	if msg.ExecuteTime.Before(time.Now()) {
 		nmsg := messageToMap(msg)
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
@@ -126,22 +142,75 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 		return err
 	}
 	return nil
+}
+
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
+
+	bqConfig := t.config
+	jobMaxRetry := bqConfig.JobMaxRetries
+	if jobMaxRetry <= 0 {
+		jobMaxRetry = DefaultOptions.JobMaxRetry
+	}
+
+	minConsumers := bqConfig.MinConsumers
+	if minConsumers <= 0 {
+		minConsumers = DefaultOptions.MinConsumers
+	}
+	timeOut := bqConfig.ConsumeTimeOut
+
+	handler := &RedisHandle{
+		broker:           t,
+		channel:          channel,
+		topic:            topic,
+		run:              subscribe,
+		subscribeType:    subType,
+		deadLetterTicker: time.NewTicker(100 * time.Second),
+		pendingIdle:      2 * time.Minute,
+		jobMaxRetry:      jobMaxRetry,
+		minConsumers:     minConsumers,
+		timeOut:          timeOut,
+		wg:               new(sync.WaitGroup),
+		result: &sync.Pool{New: func() any {
+			return &ConsumerResult{
+				Level:   InfoLevel,
+				Info:    SuccessInfo,
+				RunTime: "",
+			}
+		}},
+		errGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
+		once: sync.Once{},
+	}
+	t.consumerHandlers = append(t.consumerHandlers, handler)
+}
+
+func (t *RedisBroker) newScheduleJob() *scheduleJob {
+	return &scheduleJob{
+		broker:         t,
+		wg:             &sync.WaitGroup{},
+		stop:           make(chan struct{}),
+		done:           make(chan struct{}),
+		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
+		seqTicker:      time.NewTicker(10 * time.Second),
+		scheduleErrGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
+	}
 
 }
 
-func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
-
-	for key, consumer := range consumers {
-
-		cs := consumer
-		cs.IHandle = newRedisHandle(t.client, cs.Channel, cs.Topic, cs.ConsumerFun, t.pool)
-
+func (t *RedisBroker) startConsuming(ctx context.Context) {
+	for key, cs := range t.consumerHandlers {
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
 			logger.New().With("", err).Error("worker err")
 		}
 
-		//
 		if err := t.scheduleJob.start(ctx, cs); err != nil {
 			logger.New().With("", err).Error("schedule job err")
 		}
@@ -150,10 +219,15 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 		if err := t.deadLetter(ctx, cs); err != nil {
 			logger.New().With("", err).Error("claim job err")
 		}
-		consumers[key] = nil
+		t.consumerHandlers[key] = nil
 	}
 	if err := t.pool.Submit(func() {
 		t.logJob.expire(ctx, t.logDone)
+	}); err != nil {
+		logger.New().Error(err)
+	}
+	if err := t.pool.Submit(func() {
+		t.filter.Delete(ctx, MakeFilter(t.prefix), t.obsoleteDone)
 	}); err != nil {
 		logger.New().Error(err)
 	}
@@ -162,13 +236,12 @@ func (t *RedisBroker) start(ctx context.Context, consumers []*ConsumerHandler) {
 	t.waitSignal()
 }
 
-func (t *RedisBroker) worker(ctx context.Context, handle *ConsumerHandler) error {
-
+func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 	if err := handle.Check(ctx); err != nil {
 		return err
 	}
 	if err := t.pool.Submit(func() {
-		handle.Work(ctx, t.done)
+		handle.Process(ctx, t.done, t.seqDone)
 	}); err != nil {
 		return err
 	}
@@ -176,7 +249,7 @@ func (t *RedisBroker) worker(ctx context.Context, handle *ConsumerHandler) error
 	return nil
 }
 
-func (t *RedisBroker) deadLetter(ctx context.Context, handle *ConsumerHandler) error {
+func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 
 	return t.pool.Submit(func() {
 		if err := handle.DeadLetter(ctx, t.claimDone); err != nil {
@@ -195,11 +268,13 @@ func (t *RedisBroker) waitSignal() {
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
 				t.done <- struct{}{}
+				t.seqDone <- struct{}{}
+				t.obsoleteDone <- struct{}{}
 				t.claimDone <- struct{}{}
 				t.logDone <- struct{}{}
-				t.pool.Release()
 				t.scheduleJob.shutDown()
 				_ = t.client.Close()
+				t.pool.Release()
 			})
 		}
 	}
