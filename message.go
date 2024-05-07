@@ -48,6 +48,17 @@ type (
 	}
 )
 
+var defaultMessage *Message = &Message{
+	Topic:     DefaultOptions.DefaultTopic,
+	Channel:   DefaultOptions.DefaultChannel,
+	Payload:   "",
+	MaxLen:    DefaultOptions.DefaultMaxLen,
+	Retry:     DefaultOptions.JobMaxRetry,
+	Priority:  DefaultOptions.Priority,
+	TimeToRun: DefaultOptions.TimeToRun,
+	MoodType:  string(NORMAL),
+}
+
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {
 

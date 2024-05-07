@@ -52,11 +52,11 @@ const (
 )
 
 type (
-	// BaseCmd public method
+	// IBaseCmd BaseCmd public method
 	IBaseCmd interface {
 		filter(message *Message) error
 	}
-	// BaseSubscribeCmd subscribe method
+	// IBaseSubscribeCmd BaseSubscribeCmd subscribe method
 	IBaseSubscribeCmd interface {
 		IBaseCmd
 		init(broker IBroker) *Subscribe
@@ -126,10 +126,7 @@ func (t *Client) Payload(payload []byte) *Client {
 func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 
 	defer func() {
-		t.message = &Message{
-			Topic:   DefaultOptions.DefaultTopic,
-			Channel: DefaultOptions.DefaultChannel,
-		}
+		t.message = defaultMessage
 	}()
 
 	if err := cmd.filter(t.message); err != nil {
@@ -158,36 +155,36 @@ func (t *Client) ping() {
 
 }
 
-func (t cmdAble) Publish(ctx context.Context) {
+func (t cmdAble) Publish(ctx context.Context) error {
 	cmd := &Publish{
 		moodType:    NORMAL,
 		executeTime: time.Now(),
 	}
 	if err := t(ctx, cmd); err != nil {
-		logger.New().Error(err)
+		return err
 	}
-	return
+	return nil
 }
 
-func (t cmdAble) PublishAtTime(ctx context.Context, atTime time.Time) {
+func (t cmdAble) PublishAtTime(ctx context.Context, atTime time.Time) error {
 	cmd := &Publish{
 		moodType:    DELAY,
 		executeTime: atTime,
 	}
 	if err := t(ctx, cmd); err != nil {
-		logger.New().Error(err)
+		return err
 	}
-	return
+	return nil
 }
 
-func (t cmdAble) PublishInSequential(ctx context.Context) {
+func (t cmdAble) PublishInSequential(ctx context.Context) error {
 	cmd := &Publish{
 		moodType: SEQUENTIAL,
 	}
 	if err := t(ctx, cmd); err != nil {
-		logger.New().Error(err)
+		return err
 	}
-	return
+	return nil
 }
 
 func (t cmdAble) Subscribe(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {

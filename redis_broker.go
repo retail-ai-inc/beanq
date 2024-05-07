@@ -106,10 +106,12 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 
 	// Sequential job
 	if msg.MoodType == string(SEQUENTIAL) {
-		if err := t.scheduleJob.sequentialEnqueue(ctx, msg); err != nil {
-			return err
-		}
-		return nil
+
+		mmsg := messageToMap(msg)
+
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, mmsg)
+		return t.client.XAdd(ctx, xAddArgs).Err()
+
 	}
 
 	// normal job
@@ -207,19 +209,6 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	logger.New().Info("----START----")
 	// monitor signal
 	t.waitSignal()
-}
-
-func (t *RedisBroker) check(ctx context.Context, subType subscribeType, channel, topic string) error {
-
-	normalStreamKey := MakeStreamKey(subType, t.prefix, channel, topic)
-
-	result := t.client.XInfoGroups(ctx, normalStreamKey).Val()
-	if len(result) < 1 {
-		if err := t.client.XGroupCreateMkStream(ctx, normalStreamKey, channel, "0").Err(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {

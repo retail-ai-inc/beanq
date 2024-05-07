@@ -40,6 +40,7 @@ func initCnf() *beanq.BeanqConfig {
 	})
 	return &bqConfig
 }
+
 func main() {
 	pubOneInfo()
 }
@@ -59,5 +60,6 @@ func pubOneInfo() {
 	pub := beanq.New(config)
 	ctx := context.Background()
 	pub.Channel("").Topic("").Payload(d).Publish(ctx)
+	pub.Topic("aa").Payload(d).Publish(ctx)
 
 }
