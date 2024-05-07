@@ -80,7 +80,7 @@ func pubDelayInfo() {
 		}
 		// continue
 		pub.Channel("delay-channel").Topic("order-topic").Payload(b).Priority(float64(y)).PublishAtTime(ctx, delayT)
-		pub.Payload(b).PublishAtTime(ctx, delayT)
+		// pub.Payload(b).PublishAtTime(ctx, delayT)
 
 	}
 

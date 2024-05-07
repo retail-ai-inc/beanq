@@ -48,17 +48,6 @@ type (
 	}
 )
 
-var defaultMessage *Message = &Message{
-	Topic:     DefaultOptions.DefaultTopic,
-	Channel:   DefaultOptions.DefaultChannel,
-	Payload:   "",
-	MaxLen:    DefaultOptions.DefaultMaxLen,
-	Retry:     DefaultOptions.JobMaxRetry,
-	Priority:  DefaultOptions.Priority,
-	TimeToRun: DefaultOptions.TimeToRun,
-	MoodType:  string(NORMAL),
-}
-
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {
 
@@ -86,11 +75,11 @@ func mapToMessage(data map[string]any, msg *Message) {
 				msg.Id = v
 			}
 
-		case "topicName":
+		case "topic":
 			if v, ok := val.(string); ok {
 				msg.Topic = v
 			}
-		case "channelName":
+		case "channel":
 			if v, ok := val.(string); ok {
 				msg.Channel = v
 			}
@@ -133,8 +122,8 @@ func messageToMap(message *Message) map[string]any {
 
 	m := make(map[string]any)
 	m["id"] = message.Id
-	m["topicName"] = message.Topic
-	m["channelName"] = message.Channel
+	m["topic"] = message.Topic
+	m["channel"] = message.Channel
 	m["maxLen"] = message.MaxLen
 	m["retry"] = message.Retry
 	m["priority"] = message.Priority

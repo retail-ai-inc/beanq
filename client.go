@@ -78,6 +78,7 @@ func New(config *BeanqConfig) *Client {
 
 	client := &Client{}
 	client.message = &Message{
+		Id:        "",
 		Topic:     config.Topic,
 		Channel:   config.Channel,
 		MaxLen:    config.MaxLen,
@@ -126,7 +127,17 @@ func (t *Client) Payload(payload []byte) *Client {
 func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 
 	defer func() {
-		t.message = defaultMessage
+		t.message = &Message{
+			Id:        "",
+			Topic:     DefaultOptions.DefaultTopic,
+			Channel:   DefaultOptions.DefaultChannel,
+			Payload:   "",
+			MaxLen:    DefaultOptions.DefaultMaxLen,
+			Retry:     DefaultOptions.JobMaxRetry,
+			Priority:  DefaultOptions.Priority,
+			TimeToRun: DefaultOptions.TimeToRun,
+			MoodType:  string(NORMAL),
+		}
 	}()
 
 	if err := cmd.filter(t.message); err != nil {
