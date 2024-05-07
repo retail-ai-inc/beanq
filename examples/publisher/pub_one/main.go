@@ -9,6 +9,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
 )
 
@@ -59,7 +60,11 @@ func pubOneInfo() {
 	config := initCnf()
 	pub := beanq.New(config)
 	ctx := context.Background()
-	pub.Channel("").Topic("").Payload(d).Publish(ctx)
-	pub.Topic("aa").Payload(d).Publish(ctx)
+	if err := pub.Channel("").Topic("").Payload(d).Publish(ctx); err != nil {
+		logger.New().Error(err)
+	}
+	if err := pub.Topic("aa").Payload(d).Publish(ctx); err != nil {
+		logger.New().Error(err)
+	}
 
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"path/filepath"
@@ -8,9 +9,9 @@ import (
 	"sync"
 
 	"github.com/retail-ai-inc/beanq"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -52,7 +53,9 @@ func main() {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
-		pub.Channel("delay-channel").Topic("order-topic").Payload(b).PublishInSequential(ctx)
+		if err := pub.Channel("delay-channel").Topic("order-topic").Payload(b).PublishInSequential(ctx); err != nil {
+			logger.New().Error(err)
+		}
 
 	}
 

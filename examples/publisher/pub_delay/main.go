@@ -10,6 +10,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
@@ -60,7 +61,7 @@ func pubDelayInfo() {
 		// if time.Now().Sub(ntime).Minutes() >= 1 {
 		// 	break
 		// }
-
+		delayT = now
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 
@@ -76,10 +77,11 @@ func pubDelayInfo() {
 		if i == 3 {
 			y = 10
 			delayT = now.Add(35 * time.Second)
-
 		}
 		// continue
-		pub.Channel("delay-channel").Topic("order-topic").Payload(b).Priority(float64(y)).PublishAtTime(ctx, delayT)
+		if err := pub.Channel("delay-channel").Topic("order-topic").Payload(b).Priority(float64(y)).PublishAtTime(ctx, delayT); err != nil {
+			logger.New().Error(err)
+		}
 		// pub.Payload(b).PublishAtTime(ctx, delayT)
 
 	}

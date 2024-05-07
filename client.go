@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
@@ -198,43 +197,40 @@ func (t cmdAble) PublishInSequential(ctx context.Context) error {
 	return nil
 }
 
-func (t cmdAble) Subscribe(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {
+func (t cmdAble) Subscribe(ctx context.Context, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		moodType:      NORMAL,
 		handle:        handle,
 		subscribeType: normalSubscribe,
 	}
 	if err := t(ctx, cmd); err != nil {
-		logger.New().Error(err)
-		return nil
+		return nil, err
 	}
-	return cmd
+	return cmd, nil
 }
 
-func (t cmdAble) SubscribeDelay(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {
+func (t cmdAble) SubscribeDelay(ctx context.Context, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		moodType:      DELAY,
 		handle:        handle,
 		subscribeType: normalSubscribe,
 	}
 	if err := t(ctx, cmd); err != nil {
-		logger.New().Error(err)
-		return nil
+		return nil, err
 	}
-	return cmd
+	return cmd, nil
 }
 
-func (t cmdAble) SubscribeSequential(ctx context.Context, handle IConsumeHandle) IBaseSubscribeCmd {
+func (t cmdAble) SubscribeSequential(ctx context.Context, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		moodType:      SEQUENTIAL,
 		handle:        handle,
 		subscribeType: sequentialSubscribe,
 	}
 	if err := t(ctx, cmd); err != nil {
-		logger.New().Error(err)
-		return nil
+		return nil, err
 	}
-	return cmd
+	return cmd, nil
 }
 
 type (

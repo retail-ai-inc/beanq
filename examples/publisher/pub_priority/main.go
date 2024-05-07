@@ -10,6 +10,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
@@ -62,7 +63,9 @@ func pubMoreAndPriorityInfo() {
 		if i == 3 {
 			y = 10
 		}
-		pub.Channel("delay-channel").Topic("delay-topic").Priority(y).Payload(b).PublishAtTime(ctx, delayT)
+		if err := pub.Channel("delay-channel").Topic("delay-topic").Priority(y).Payload(b).PublishAtTime(ctx, delayT); err != nil {
+			logger.New().Error(err)
+		}
 
 	}
 }
