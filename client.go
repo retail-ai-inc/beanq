@@ -111,7 +111,7 @@ func (t *Client) MoodType(typeName string) *Client {
 }
 
 func (t *Client) Priority(priority float64) *Client {
-	if priority > 1000 {
+	if priority >= 1000 {
 		priority = 999
 	}
 	t.message.Priority = priority
