@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -68,6 +69,7 @@ type (
 		message *Message
 		cmdAble
 		broker IBroker
+		lock   *sync.RWMutex
 	}
 )
 
@@ -87,25 +89,34 @@ func New(config *BeanqConfig) *Client {
 	}
 	client.cmdAble = client.process
 	client.broker = NewBroker(config)
+	client.lock = new(sync.RWMutex)
 	return client
 }
 
 func (t *Client) SetId(id string) *Client {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.message.Id = id
 	return t
 }
 
 func (t *Client) Channel(name string) *Client {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.message.Channel = name
 	return t
 }
 
 func (t *Client) Topic(name string) *Client {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.message.Topic = name
 	return t
 }
 
 func (t *Client) MoodType(typeName string) *Client {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.message.MoodType = typeName
 	return t
 }
@@ -114,17 +125,22 @@ func (t *Client) Priority(priority float64) *Client {
 	if priority >= 1000 {
 		priority = 999
 	}
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.message.Priority = priority
 	return t
 }
 
 func (t *Client) Payload(payload []byte) *Client {
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.message.Payload = stringx.ByteToString(payload)
+
 	return t
 }
 
 func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
-
+	t.lock.Lock()
 	defer func() {
 		t.message = &Message{
 			Id:        "",
@@ -137,6 +153,7 @@ func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 			TimeToRun: DefaultOptions.TimeToRun,
 			MoodType:  string(NORMAL),
 		}
+		t.lock.Unlock()
 	}()
 
 	if err := cmd.filter(t.message); err != nil {
@@ -144,6 +161,7 @@ func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
 	}
 
 	if cmd, ok := cmd.(*Publish); ok {
+
 		t.message.ExecuteTime = cmd.executeTime
 		t.message.AddTime = cmd.executeTime.Format(timex.DateTime)
 		t.message.MoodType = string(cmd.moodType)
