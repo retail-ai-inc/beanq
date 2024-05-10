@@ -287,7 +287,6 @@ type (
 		executeTime    time.Time
 
 		isUnique bool
-		IBaseCmd
 	}
 	// Subscribe command:subscribe
 	Subscribe struct {
@@ -313,6 +312,14 @@ func (t *Publish) filter(message *Message) error {
 	return nil
 }
 
+func (t *Publish) Channel() string {
+	return t.channel
+}
+
+func (t *Publish) Topic() string {
+	return t.topic
+}
+
 func (t *Subscribe) filter(message *Message) error {
 	return nil
 }
@@ -326,4 +333,12 @@ func (t *Subscribe) init(broker IBroker) *Subscribe {
 // Run will to be implemented
 func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
+}
+
+func (t *Subscribe) Channel() string {
+	return t.channel
+}
+
+func (t *Subscribe) Topic() string {
+	return t.topic
 }
