@@ -53,6 +53,8 @@ const (
 type (
 	// IBaseCmd BaseCmd public method
 	IBaseCmd interface {
+		Channel() string
+		Topic() string
 		filter(message *Message) error
 	}
 	// IBaseSubscribeCmd BaseSubscribeCmd subscribe method
@@ -62,7 +64,7 @@ type (
 		Run(ctx context.Context)
 	}
 	// define available command
-	cmdAble func(ctx context.Context, cmd IBaseCmd) error
+	cmdAble func(cmd IBaseCmd) error
 	// Client beanq's client
 	Client struct {
 		broker IBroker
@@ -152,12 +154,20 @@ func (q *BQClient) Priority(priority float64) *BQClient {
 	return q
 }
 
-func (q *BQClient) process(ctx context.Context, cmd IBaseCmd) error {
+func (q *BQClient) process(cmd IBaseCmd) error {
+	var channel, topic string
+	if cmd.Channel() == "" {
+		channel = q.client.Channel
+	}
+	if cmd.Topic() == "" {
+		topic = q.client.Topic
+	}
+
 	if cmd, ok := cmd.(*Publish); ok {
 		// make message
 		message := &Message{
-			Topic:       cmd.topic,
-			Channel:     cmd.channel,
+			Topic:       topic,
+			Channel:     channel,
 			Payload:     stringx.ByteToString(cmd.payload),
 			MoodType:    string(cmd.moodType),
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
@@ -175,22 +185,15 @@ func (q *BQClient) process(ctx context.Context, cmd IBaseCmd) error {
 			return err
 		}
 		// store message
-		return q.client.broker.enqueue(ctx, message)
+		return q.client.broker.enqueue(q.ctx, message)
 	}
 	if cmd, ok := cmd.(*Subscribe); ok {
-		q.client.broker.addConsumer(cmd.subscribeType, cmd.channel, cmd.topic, cmd.handle)
+		q.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
 	}
 	return nil
 }
 
-func (q *BQClient) Publish(channel, topic string, payload []byte) error {
-	if channel == "" {
-		channel = q.client.Channel
-	}
-	if topic == "" {
-		topic = q.client.Topic
-	}
-
+func (t cmdAble) Publish(channel, topic string, payload []byte) error {
 	cmd := &Publish{
 		channel:     channel,
 		topic:       topic,
@@ -199,20 +202,13 @@ func (q *BQClient) Publish(channel, topic string, payload []byte) error {
 		moodType:    NORMAL,
 	}
 
-	if err := q.cmdAble(q.ctx, cmd); err != nil {
+	if err := t(cmd); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (q *BQClient) PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error {
-	if channel == "" {
-		channel = q.client.Channel
-	}
-	if topic == "" {
-		topic = q.client.Topic
-	}
-
+func (t cmdAble) PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error {
 	cmd := &Publish{
 		channel:     channel,
 		topic:       topic,
@@ -221,40 +217,26 @@ func (q *BQClient) PublishAtTime(channel, topic string, payload []byte, atTime t
 		moodType:    DELAY,
 	}
 
-	if err := q.cmdAble(q.ctx, cmd); err != nil {
+	if err := t(cmd); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (q *BQClient) PublishInSequential(channel, topic string, payload []byte) error {
-	if channel == "" {
-		channel = q.client.Channel
-	}
-	if topic == "" {
-		topic = q.client.Topic
-	}
-
+func (t cmdAble) PublishInSequential(channel, topic string, payload []byte) error {
 	cmd := &Publish{
 		channel:  channel,
 		topic:    topic,
 		payload:  payload,
 		moodType: SEQUENTIAL,
 	}
-	if err := q.cmdAble(q.ctx, cmd); err != nil {
+	if err := t(cmd); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (q *BQClient) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	if channel == "" {
-		channel = q.client.Channel
-	}
-	if topic == "" {
-		topic = q.client.Topic
-	}
-
+func (t cmdAble) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
@@ -262,20 +244,13 @@ func (q *BQClient) Subscribe(channel, topic string, handle IConsumeHandle) (IBas
 		handle:        handle,
 		subscribeType: normalSubscribe,
 	}
-	if err := q.cmdAble(q.ctx, cmd); err != nil {
+	if err := t(cmd); err != nil {
 		return nil, err
 	}
 	return cmd, nil
 }
 
-func (q *BQClient) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	if channel == "" {
-		channel = q.client.Channel
-	}
-	if topic == "" {
-		topic = q.client.Topic
-	}
-
+func (t cmdAble) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
@@ -283,20 +258,13 @@ func (q *BQClient) SubscribeDelay(channel, topic string, handle IConsumeHandle) 
 		handle:        handle,
 		subscribeType: normalSubscribe,
 	}
-	if err := q.cmdAble(q.ctx, cmd); err != nil {
+	if err := t(cmd); err != nil {
 		return nil, err
 	}
 	return cmd, nil
 }
 
-func (q *BQClient) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	if channel == "" {
-		channel = q.client.Channel
-	}
-	if topic == "" {
-		topic = q.client.Topic
-	}
-
+func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
@@ -304,7 +272,7 @@ func (q *BQClient) SubscribeSequential(channel, topic string, handle IConsumeHan
 		handle:        handle,
 		subscribeType: sequentialSubscribe,
 	}
-	if err := q.cmdAble(q.ctx, cmd); err != nil {
+	if err := t(cmd); err != nil {
 		return nil, err
 	}
 	return cmd, nil
