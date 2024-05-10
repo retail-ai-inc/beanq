@@ -95,32 +95,32 @@ func New(config *BeanqConfig) *Client {
 	return client
 }
 
-func (t *Client) BQ() *BQClient {
-	qc := &BQClient{
+func (c *Client) BQ() *BQClient {
+	bqc := &BQClient{
 		client: &Client{
-			broker:    t.broker,
-			Topic:     t.Topic,
-			Channel:   t.Channel,
-			MaxLen:    t.MaxLen,
-			Retry:     t.Retry,
-			Priority:  t.Priority,
-			TimeToRun: t.TimeToRun,
+			broker:    c.broker,
+			Topic:     c.Topic,
+			Channel:   c.Channel,
+			MaxLen:    c.MaxLen,
+			Retry:     c.Retry,
+			Priority:  c.Priority,
+			TimeToRun: c.TimeToRun,
 		},
 
 		ctx:      context.Background(),
 		id:       "",
-		priority: t.Priority,
+		priority: c.Priority,
 	}
-	qc.cmdAble = qc.process
-	return qc
+	bqc.cmdAble = bqc.process
+	return bqc
 }
 
-func (t *Client) Wait(ctx context.Context) {
-	t.broker.startConsuming(ctx)
+func (c *Client) Wait(ctx context.Context) {
+	c.broker.startConsuming(ctx)
 }
 
 // Ping this method can be called by user for checking the status of broker
-func (t *Client) Ping() {
+func (c *Client) Ping() {
 
 }
 
@@ -136,31 +136,31 @@ type BQClient struct {
 	priority float64
 }
 
-func (q *BQClient) WithContext(ctx context.Context) *BQClient {
-	q.ctx = ctx
-	return q
+func (b *BQClient) WithContext(ctx context.Context) *BQClient {
+	b.ctx = ctx
+	return b
 }
 
-func (q *BQClient) SetId(id string) *BQClient {
-	q.id = id
-	return q
+func (b *BQClient) SetId(id string) *BQClient {
+	b.id = id
+	return b
 }
 
-func (q *BQClient) Priority(priority float64) *BQClient {
+func (b *BQClient) Priority(priority float64) *BQClient {
 	if priority >= 1000 {
 		priority = 999
 	}
-	q.priority = priority
-	return q
+	b.priority = priority
+	return b
 }
 
-func (q *BQClient) process(cmd IBaseCmd) error {
+func (b *BQClient) process(cmd IBaseCmd) error {
 	var channel, topic string
 	if cmd.Channel() == "" {
-		channel = q.client.Channel
+		channel = b.client.Channel
 	}
 	if cmd.Topic() == "" {
-		topic = q.client.Topic
+		topic = b.client.Topic
 	}
 
 	if cmd, ok := cmd.(*Publish); ok {
@@ -173,22 +173,22 @@ func (q *BQClient) process(cmd IBaseCmd) error {
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
 			ExecuteTime: cmd.executeTime,
 
-			Id:       q.id,
-			Priority: q.priority,
+			Id:       b.id,
+			Priority: b.priority,
 
-			MaxLen:       q.client.MaxLen,
-			Retry:        q.client.Retry,
+			MaxLen:       b.client.MaxLen,
+			Retry:        b.client.Retry,
 			PendingRetry: 0,
-			TimeToRun:    q.client.TimeToRun,
+			TimeToRun:    b.client.TimeToRun,
 		}
 		if err := cmd.filter(message); err != nil {
 			return err
 		}
 		// store message
-		return q.client.broker.enqueue(q.ctx, message)
+		return b.client.broker.enqueue(b.ctx, message)
 	}
 	if cmd, ok := cmd.(*Subscribe); ok {
-		q.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
+		b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
 	}
 	return nil
 }
