@@ -163,10 +163,12 @@ func (q *QueueClient) process(ctx context.Context, cmd IBaseCmd) error {
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
 			ExecuteTime: cmd.executeTime,
 
+			Id:       q.id,
+			Priority: q.priority,
+
 			MaxLen:       q.client.MaxLen,
 			Retry:        q.client.Retry,
 			PendingRetry: 0,
-			Priority:     q.client.Priority,
 			TimeToRun:    q.client.TimeToRun,
 		}
 		if err := cmd.filter(message); err != nil {
