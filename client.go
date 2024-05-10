@@ -93,8 +93,8 @@ func New(config *BeanqConfig) *Client {
 	return client
 }
 
-func (t *Client) BQ() *QueueClient {
-	qc := &QueueClient{
+func (t *Client) BQ() *BQClient {
+	qc := &BQClient{
 		client: &Client{
 			broker:    t.broker,
 			Topic:     t.Topic,
@@ -122,7 +122,7 @@ func (t *Client) Ping() {
 
 }
 
-type QueueClient struct {
+type BQClient struct {
 	cmdAble
 	client *Client
 
@@ -134,17 +134,17 @@ type QueueClient struct {
 	priority float64
 }
 
-func (q *QueueClient) WithContext(ctx context.Context) *QueueClient {
+func (q *BQClient) WithContext(ctx context.Context) *BQClient {
 	q.ctx = ctx
 	return q
 }
 
-func (q *QueueClient) SetId(id string) *QueueClient {
+func (q *BQClient) SetId(id string) *BQClient {
 	q.id = id
 	return q
 }
 
-func (q *QueueClient) Priority(priority float64) *QueueClient {
+func (q *BQClient) Priority(priority float64) *BQClient {
 	if priority >= 1000 {
 		priority = 999
 	}
@@ -152,7 +152,7 @@ func (q *QueueClient) Priority(priority float64) *QueueClient {
 	return q
 }
 
-func (q *QueueClient) process(ctx context.Context, cmd IBaseCmd) error {
+func (q *BQClient) process(ctx context.Context, cmd IBaseCmd) error {
 	if cmd, ok := cmd.(*Publish); ok {
 		// make message
 		message := &Message{
@@ -183,7 +183,7 @@ func (q *QueueClient) process(ctx context.Context, cmd IBaseCmd) error {
 	return nil
 }
 
-func (q *QueueClient) Publish(channel, topic string, payload []byte) error {
+func (q *BQClient) Publish(channel, topic string, payload []byte) error {
 	if channel == "" {
 		channel = q.client.Channel
 	}
@@ -205,7 +205,7 @@ func (q *QueueClient) Publish(channel, topic string, payload []byte) error {
 	return nil
 }
 
-func (q *QueueClient) PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error {
+func (q *BQClient) PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error {
 	if channel == "" {
 		channel = q.client.Channel
 	}
@@ -227,7 +227,7 @@ func (q *QueueClient) PublishAtTime(channel, topic string, payload []byte, atTim
 	return nil
 }
 
-func (q *QueueClient) PublishInSequential(channel, topic string, payload []byte) error {
+func (q *BQClient) PublishInSequential(channel, topic string, payload []byte) error {
 	if channel == "" {
 		channel = q.client.Channel
 	}
@@ -247,7 +247,7 @@ func (q *QueueClient) PublishInSequential(channel, topic string, payload []byte)
 	return nil
 }
 
-func (q *QueueClient) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (q *BQClient) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	if channel == "" {
 		channel = q.client.Channel
 	}
@@ -268,7 +268,7 @@ func (q *QueueClient) Subscribe(channel, topic string, handle IConsumeHandle) (I
 	return cmd, nil
 }
 
-func (q *QueueClient) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (q *BQClient) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	if channel == "" {
 		channel = q.client.Channel
 	}
@@ -289,7 +289,7 @@ func (q *QueueClient) SubscribeDelay(channel, topic string, handle IConsumeHandl
 	return cmd, nil
 }
 
-func (q *QueueClient) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (q *BQClient) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	if channel == "" {
 		channel = q.client.Channel
 	}
