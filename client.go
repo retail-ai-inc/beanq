@@ -246,6 +246,8 @@ func (q *QueueClient) Subscribe(channel, topic string, handle IConsumeHandle) (I
 	}
 
 	cmd := &Subscribe{
+		channel:       channel,
+		topic:         topic,
 		moodType:      NORMAL,
 		handle:        handle,
 		subscribeType: normalSubscribe,
