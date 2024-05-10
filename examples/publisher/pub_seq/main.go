@@ -53,7 +53,7 @@ func main() {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
-		if err := pub.QC().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b); err != nil {
+		if err := pub.BQ().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b); err != nil {
 			logger.New().Error(err)
 		}
 

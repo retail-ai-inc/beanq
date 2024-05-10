@@ -93,7 +93,7 @@ func New(config *BeanqConfig) *Client {
 	return client
 }
 
-func (t *Client) QC() *QueueClient {
+func (t *Client) BQ() *QueueClient {
 	qc := &QueueClient{
 		client: &Client{
 			broker:    t.broker,

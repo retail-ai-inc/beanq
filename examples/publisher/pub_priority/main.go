@@ -63,7 +63,7 @@ func pubMoreAndPriorityInfo() {
 		if i == 3 {
 			y = 10
 		}
-		if err := pub.QC().WithContext(ctx).Priority(y).PublishAtTime("delay-channel", "delay-topic", b, delayT); err != nil {
+		if err := pub.BQ().WithContext(ctx).Priority(y).PublishAtTime("delay-channel", "delay-topic", b, delayT); err != nil {
 			logger.New().Error(err)
 		}
 
