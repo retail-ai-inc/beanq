@@ -95,9 +95,17 @@ func New(config *BeanqConfig) *Client {
 
 func (t *Client) QC() *QueueClient {
 	qc := &QueueClient{
-		client: &(*t),
-		ctx:    context.Background(),
+		client: &Client{
+			broker:    t.broker,
+			Topic:     t.Topic,
+			Channel:   t.Channel,
+			MaxLen:    t.MaxLen,
+			Retry:     t.Retry,
+			Priority:  t.Priority,
+			TimeToRun: t.TimeToRun,
+		},
 
+		ctx:      context.Background(),
 		id:       "",
 		priority: t.Priority,
 	}
@@ -159,7 +167,7 @@ func (q *QueueClient) process(ctx context.Context, cmd IBaseCmd) error {
 			Retry:        q.client.Retry,
 			PendingRetry: 0,
 			Priority:     q.client.Priority,
-			TimeToRun:    0,
+			TimeToRun:    q.client.TimeToRun,
 		}
 		if err := cmd.filter(message); err != nil {
 			return err
