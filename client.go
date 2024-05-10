@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -66,10 +65,14 @@ type (
 	cmdAble func(ctx context.Context, cmd IBaseCmd) error
 	// Client beanq's client
 	Client struct {
-		message *Message
-		cmdAble
 		broker IBroker
-		lock   *sync.RWMutex
+
+		Topic     string        `json:"topic"`
+		Channel   string        `json:"channel"`
+		MaxLen    int64         `json:"maxLen"`
+		Retry     int           `json:"retry"`
+		Priority  float64       `json:"priority"`
+		TimeToRun time.Duration `json:"timeToRun"`
 	}
 )
 
@@ -77,9 +80,7 @@ func New(config *BeanqConfig) *Client {
 	// init config,Will merge default options
 	config.init()
 
-	client := &Client{}
-	client.message = &Message{
-		Id:        "",
+	client := &Client{
 		Topic:     config.Topic,
 		Channel:   config.Channel,
 		MaxLen:    config.MaxLen,
@@ -87,165 +88,211 @@ func New(config *BeanqConfig) *Client {
 		Priority:  config.Priority,
 		TimeToRun: config.TimeToRun,
 	}
-	client.cmdAble = client.process
+
 	client.broker = NewBroker(config)
-	client.lock = new(sync.RWMutex)
 	return client
 }
 
-func (t *Client) SetId(id string) *Client {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.message.Id = id
-	return t
-}
+func (t *Client) QC() *QueueClient {
+	qc := &QueueClient{
+		client: &(*t),
+		ctx:    context.Background(),
 
-func (t *Client) Channel(name string) *Client {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.message.Channel = name
-	return t
-}
-
-func (t *Client) Topic(name string) *Client {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.message.Topic = name
-	return t
-}
-
-func (t *Client) MoodType(typeName string) *Client {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.message.MoodType = typeName
-	return t
-}
-
-func (t *Client) Priority(priority float64) *Client {
-	if priority >= 1000 {
-		priority = 999
+		id:       "",
+		priority: t.Priority,
 	}
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.message.Priority = priority
-	return t
-}
-
-func (t *Client) Payload(payload []byte) *Client {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-	t.message.Payload = stringx.ByteToString(payload)
-
-	return t
-}
-
-func (t *Client) process(ctx context.Context, cmd IBaseCmd) error {
-	t.lock.Lock()
-	defer func() {
-		t.message = &Message{
-			Id:        "",
-			Topic:     DefaultOptions.DefaultTopic,
-			Channel:   DefaultOptions.DefaultChannel,
-			Payload:   "",
-			MaxLen:    DefaultOptions.DefaultMaxLen,
-			Retry:     DefaultOptions.JobMaxRetry,
-			Priority:  DefaultOptions.Priority,
-			TimeToRun: DefaultOptions.TimeToRun,
-			MoodType:  string(NORMAL),
-		}
-		t.lock.Unlock()
-	}()
-
-	if err := cmd.filter(t.message); err != nil {
-		return err
-	}
-
-	if cmd, ok := cmd.(*Publish); ok {
-
-		t.message.ExecuteTime = cmd.executeTime
-		t.message.AddTime = cmd.executeTime.Format(timex.DateTime)
-		t.message.MoodType = string(cmd.moodType)
-
-		// store message
-		return t.broker.enqueue(ctx, t.message)
-	}
-	if cmd, ok := cmd.(*Subscribe); ok {
-		t.broker.addConsumer(cmd.subscribeType, t.message.Channel, t.message.Topic, cmd.handle)
-	}
-	return nil
+	qc.cmdAble = qc.process
+	return qc
 }
 
 func (t *Client) Wait(ctx context.Context) {
 	t.broker.startConsuming(ctx)
 }
 
-func (t *Client) ping() {
+// Ping this method can be called by user for checking the status of broker
+func (t *Client) Ping() {
 
 }
 
-func (t cmdAble) Publish(ctx context.Context) error {
+type QueueClient struct {
+	cmdAble
+	client *Client
+
+	ctx context.Context
+
+	// TODO
+	// id and priority are not common parameters for all publish and subscription, and will need to be optimized in the future.
+	id       string
+	priority float64
+}
+
+func (q *QueueClient) WithContext(ctx context.Context) *QueueClient {
+	q.ctx = ctx
+	return q
+}
+
+func (q *QueueClient) SetId(id string) *QueueClient {
+	q.id = id
+	return q
+}
+
+func (q *QueueClient) Priority(priority float64) *QueueClient {
+	if priority >= 1000 {
+		priority = 999
+	}
+	q.priority = priority
+	return q
+}
+
+func (q *QueueClient) process(ctx context.Context, cmd IBaseCmd) error {
+	if cmd, ok := cmd.(*Publish); ok {
+		// make message
+		message := &Message{
+			Topic:       cmd.topic,
+			Channel:     cmd.channel,
+			Payload:     stringx.ByteToString(cmd.payload),
+			MoodType:    string(cmd.moodType),
+			AddTime:     cmd.executeTime.Format(timex.DateTime),
+			ExecuteTime: cmd.executeTime,
+
+			MaxLen:       q.client.MaxLen,
+			Retry:        q.client.Retry,
+			PendingRetry: 0,
+			Priority:     q.client.Priority,
+			TimeToRun:    0,
+		}
+		if err := cmd.filter(message); err != nil {
+			return err
+		}
+		// store message
+		return q.client.broker.enqueue(ctx, message)
+	}
+	if cmd, ok := cmd.(*Subscribe); ok {
+		q.client.broker.addConsumer(cmd.subscribeType, cmd.channel, cmd.topic, cmd.handle)
+	}
+	return nil
+}
+
+func (q *QueueClient) Publish(channel, topic string, payload []byte) error {
+	if channel == "" {
+		channel = q.client.Channel
+	}
+	if topic == "" {
+		topic = q.client.Topic
+	}
+
 	cmd := &Publish{
-		moodType:    NORMAL,
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
 		executeTime: time.Now(),
+		moodType:    NORMAL,
 	}
-	if err := t(ctx, cmd); err != nil {
+
+	if err := q.cmdAble(q.ctx, cmd); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t cmdAble) PublishAtTime(ctx context.Context, atTime time.Time) error {
+func (q *QueueClient) PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error {
+	if channel == "" {
+		channel = q.client.Channel
+	}
+	if topic == "" {
+		topic = q.client.Topic
+	}
+
 	cmd := &Publish{
-		moodType:    DELAY,
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
 		executeTime: atTime,
+		moodType:    DELAY,
 	}
-	if err := t(ctx, cmd); err != nil {
+
+	if err := q.cmdAble(q.ctx, cmd); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t cmdAble) PublishInSequential(ctx context.Context) error {
+func (q *QueueClient) PublishInSequential(channel, topic string, payload []byte) error {
+	if channel == "" {
+		channel = q.client.Channel
+	}
+	if topic == "" {
+		topic = q.client.Topic
+	}
+
 	cmd := &Publish{
+		channel:  channel,
+		topic:    topic,
+		payload:  payload,
 		moodType: SEQUENTIAL,
 	}
-	if err := t(ctx, cmd); err != nil {
+	if err := q.cmdAble(q.ctx, cmd); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (t cmdAble) Subscribe(ctx context.Context, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (q *QueueClient) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	if channel == "" {
+		channel = q.client.Channel
+	}
+	if topic == "" {
+		topic = q.client.Topic
+	}
+
 	cmd := &Subscribe{
 		moodType:      NORMAL,
 		handle:        handle,
 		subscribeType: normalSubscribe,
 	}
-	if err := t(ctx, cmd); err != nil {
+	if err := q.cmdAble(q.ctx, cmd); err != nil {
 		return nil, err
 	}
 	return cmd, nil
 }
 
-func (t cmdAble) SubscribeDelay(ctx context.Context, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (q *QueueClient) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	if channel == "" {
+		channel = q.client.Channel
+	}
+	if topic == "" {
+		topic = q.client.Topic
+	}
+
 	cmd := &Subscribe{
+		channel:       channel,
+		topic:         topic,
 		moodType:      DELAY,
 		handle:        handle,
 		subscribeType: normalSubscribe,
 	}
-	if err := t(ctx, cmd); err != nil {
+	if err := q.cmdAble(q.ctx, cmd); err != nil {
 		return nil, err
 	}
 	return cmd, nil
 }
 
-func (t cmdAble) SubscribeSequential(ctx context.Context, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (q *QueueClient) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	if channel == "" {
+		channel = q.client.Channel
+	}
+	if topic == "" {
+		topic = q.client.Topic
+	}
+
 	cmd := &Subscribe{
+		channel:       channel,
+		topic:         topic,
 		moodType:      SEQUENTIAL,
 		handle:        handle,
 		subscribeType: sequentialSubscribe,
 	}
-	if err := t(ctx, cmd); err != nil {
+	if err := q.cmdAble(q.ctx, cmd); err != nil {
 		return nil, err
 	}
 	return cmd, nil
@@ -254,14 +301,19 @@ func (t cmdAble) SubscribeSequential(ctx context.Context, handle IConsumeHandle)
 type (
 	// Publish command:publish
 	Publish struct {
-		moodType    moodType
-		executeTime time.Time
-		isUnique    bool
+		channel, topic string
+		payload        []byte
+		moodType       moodType
+		executeTime    time.Time
+
+		isUnique bool
 		IBaseCmd
 	}
 	// Subscribe command:subscribe
 	Subscribe struct {
-		moodType moodType
+		channel, topic string
+		moodType       moodType
+
 		subscribeType
 		IBaseSubscribeCmd
 		broker IBroker
@@ -270,7 +322,6 @@ type (
 )
 
 func (t *Publish) filter(message *Message) error {
-
 	if message.Id == "" {
 		guid := xid.NewWithTime(time.Now())
 		message.Id = guid.String()
