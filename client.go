@@ -155,11 +155,12 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 }
 
 func (b *BQClient) process(cmd IBaseCmd) error {
-	var channel, topic string
-	if cmd.Channel() == "" {
+
+	channel, topic := cmd.Channel(), cmd.Topic()
+	if channel == "" {
 		channel = b.client.Channel
 	}
-	if cmd.Topic() == "" {
+	if topic == "" {
 		topic = b.client.Topic
 	}
 
