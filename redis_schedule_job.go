@@ -40,13 +40,11 @@ type (
 		start(ctx context.Context, consumer IHandle) error
 		enqueue(ctx context.Context, msg *Message, option Option) error
 		sequentialEnqueue(ctx context.Context, message *Message, option Option) error
-		shutDown()
 		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
 		broker                    *RedisBroker
 		wg                        *sync.WaitGroup
-		stop, done                chan struct{}
 		scheduleTicker, seqTicker *time.Ticker
 
 		scheduleErrGroupPool *sync.Pool
@@ -134,9 +132,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 		select {
 		case <-ctx.Done():
 			t.broker.pool.Release()
-			return
-		case <-t.done:
-			t.broker.pool.Release()
+			logger.New().Info("-----Schedule Job Stop-------")
 			return
 		case <-t.scheduleTicker.C:
 		}
@@ -244,9 +240,5 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message, o
 	nmsg := messageToMap(message)
 	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.ChannelName, message.TopicName), "", "*", message.MaxLen, 0, nmsg)
 	return t.broker.client.XAdd(ctx, args).Err()
-	
-}
 
-func (t *scheduleJob) shutDown() {
-	t.done <- struct{}{}
 }

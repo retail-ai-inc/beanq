@@ -2,72 +2,83 @@ package beanq
 
 import (
 	"context"
+	"time"
 
-	"github.com/go-redis/redis/v8"
-	"golang.org/x/sync/errgroup"
+	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
-type ILog interface {
-	// Save log
-	Save(ctx context.Context, log ILog) error
+type (
+	FlagInfo string
+	LevelMsg string
+
+	ConsumerResult struct {
+		Id      string
+		Level   LevelMsg
+		Info    FlagInfo
+		Payload any
+
+		PendingRetry             int64
+		Retry                    int
+		Priority                 float64
+		AddTime                  string
+		ExpireTime               time.Time
+		RunTime                  string
+		BeginTime                time.Time
+		EndTime                  time.Time
+		ExecuteTime              time.Time
+		Topic, Channel, Consumer string
+		MoodType                 string
+	}
+)
+
+const (
+	SuccessInfo FlagInfo = "success"
+	FailedInfo  FlagInfo = "failed"
+
+	ErrLevel  LevelMsg = "error"
+	InfoLevel LevelMsg = "info"
+)
+
+type ILogHook interface {
+	// Archive log
+	Archive(ctx context.Context, result *ConsumerResult) error
 	// Obsolete ,if log has expired ,then delete it
-	Obsolete(ctx context.Context, log ILog) error
+	Obsolete(ctx context.Context)
 }
 
-type DefaultLog struct {
-	egroup *errgroup.Group
+type Log struct {
+	logs []ILogHook
+	pool *ants.Pool
 }
 
-func NewDefaultLog() *DefaultLog {
-	egroup := new(errgroup.Group)
-	egroup.SetLimit(2)
-	return &DefaultLog{
-		egroup: egroup,
+func NewLog(pool *ants.Pool, logs ...ILogHook) *Log {
+	return &Log{
+		logs: logs,
+		pool: pool,
 	}
 }
 
-func (t *DefaultLog) Save(ctx context.Context, log ILog) error {
-	t.egroup.TryGo(func() error {
-		if log != nil {
-			if err := log.Save(ctx, nil); err != nil {
-				return err
+func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
+
+	for _, log := range t.logs {
+		nlog := log
+		_ = t.pool.Submit(func() {
+			if err := nlog.Archive(ctx, result); err != nil {
+				logger.New().Error(err)
 			}
-		}
-		return nil
-	})
-	t.egroup.TryGo(func() error {
-		// default save log logic
-		// ...
-		return nil
-	})
-	return t.egroup.Wait()
-}
-
-func (t *DefaultLog) Obsolete(ctx context.Context, log ILog) error {
-	t.egroup.TryGo(func() error {
-		if log != nil {
-			if err := log.Obsolete(ctx, nil); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	t.egroup.TryGo(func() error {
-		// default obsolete logic
-		// ...
-		return nil
-	})
-	return t.egroup.Wait()
-}
-
-type RedisLog struct {
-	client redis.UniversalClient
-}
-
-func (t *RedisLog) Save(ctx context.Context, log ILog) error {
+		})
+	}
 	return nil
 }
 
-func (t *RedisLog) Obsolete(ctx context.Context, log ILog) error {
+func (t *Log) Obsoletes(ctx context.Context) error {
+
+	for _, log := range t.logs {
+		nlog := log
+		_ = t.pool.Submit(func() {
+			nlog.Obsolete(ctx)
+		})
+	}
 	return nil
 }

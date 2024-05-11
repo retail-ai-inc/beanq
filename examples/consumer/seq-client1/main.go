@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	_ "net/http/pprof"
@@ -12,7 +13,6 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 var (

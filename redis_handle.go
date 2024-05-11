@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -55,16 +54,16 @@ func (t *RedisHandle) Topic() string {
 	return t.topic
 }
 
-func (t *RedisHandle) Process(ctx context.Context, done, seqDone <-chan struct{}) {
+func (t *RedisHandle) Process(ctx context.Context) {
 	switch t.subscribeType {
 	case normalSubscribe:
-		t.runSubscribe(ctx, done)
+		t.runSubscribe(ctx)
 	case sequentialSubscribe:
-		t.runSequentialSubscribe(ctx, seqDone)
+		t.runSequentialSubscribe(ctx)
 	}
 }
 
-func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
+func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	channel := t.channel
 	topic := t.topic
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, channel, topic)
@@ -73,11 +72,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 	for {
 		// check state
 		select {
-		case <-done:
-			logger.New().Info("--------Main Task STOP--------")
-			return
 		case <-ctx.Done():
-			logger.New().Info("--------STOP--------")
+			logger.New().Info("--------Main Task STOP--------")
 			return
 		default:
 
@@ -93,7 +89,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context, done <-chan struct{}) {
 	}
 }
 
-func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan struct{}) {
+func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
 	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_id"}, ":")
@@ -115,10 +111,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 	for {
 		select {
-		case <-done:
-			logger.New().Info("--------Sequential Task STOP--------")
-			return
 		case <-ctx.Done():
+			logger.New().Info("--------Sequential Task STOP--------")
 			return
 		case <-ticker.C:
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
@@ -191,7 +185,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					return nil
 				})
 				group.TryGo(func() error {
-					return t.broker.logJob.saveLog(ctx, result)
+					return t.broker.logJob.Archives(ctx, result)
 				})
 				if err := group.Wait(); err != nil {
 					t.broker.client.SetEX(ctx, key, "", keyExDuration)
@@ -206,7 +200,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 }
 
 // DeadLetter Please refer to http://www.redis.cn/commands/xclaim.html
-func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{}) error {
+func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	defer t.deadLetterTicker.Stop()
 
@@ -214,11 +208,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 		// check state
 		select {
 		case <-ctx.Done():
-			if !errors.Is(ctx.Err(), context.Canceled) {
-				logger.New().With("", ctx.Err()).Error("context closed")
-			}
-			return nil
-		case <-claimDone:
 			logger.New().Info("--------Claim STOP--------")
 			return nil
 		case <-t.deadLetterTicker.C:
@@ -270,7 +259,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				r.Level = ErrLevel
 				r.Info = "too long pending"
 
-				if err := t.broker.logJob.saveLog(ctx, r); err != nil {
+				if err := t.broker.logJob.Archives(ctx, r); err != nil {
 					logger.New().Error(err)
 				}
 
@@ -302,7 +291,7 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 					return t.ack(ctx, stream, channel, nv.ID)
 				})
 				group.TryGo(func() error {
-					return t.broker.logJob.saveLog(ctx, r)
+					return t.broker.logJob.Archives(ctx, r)
 				})
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
