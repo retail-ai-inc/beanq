@@ -3,7 +3,6 @@ package beanq
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -12,10 +11,6 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"golang.org/x/sync/errgroup"
-)
-
-var (
-	ErrSeqJobIsExecuting = errors.New("seq job is executing")
 )
 
 type RedisHandle struct {
@@ -98,7 +93,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
 
-	ticker := time.NewTicker(time.Second * 1)
+	ticker := time.NewTicker(time.Millisecond * 100)
 
 	result := t.result.Get().(*ConsumerResult)
 
@@ -120,28 +115,31 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 			return
 		case <-ticker.C:
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+				if len(tx.XInfoGroups(ctx, stream).Val()) == 0 {
+					t.broker.client.SetEX(ctx, key, "", keyExDuration)
+					return errors.New("no message")
+				}
+				if tx.Get(ctx, key).Val() == "executing" {
+					return errors.New("executing")
+				}
 				if tx.Get(ctx, key).Val() == "" {
 					if err := tx.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
 						return err
 					}
-				} else if tx.Get(ctx, key).Val() == "executing" {
-					return fmt.Errorf("seq job key: %s,error: %w", key, ErrSeqJobIsExecuting)
 				}
 				return nil
 			}, key)
 			if err != nil {
-				if !errors.Is(err, ErrSeqJobIsExecuting) {
-					logger.New().Error(err)
-				}
+				// logger.New().Error(err)
 				continue
 			}
 
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
-				t.broker.client.SetEX(ctx, key, "", keyExDuration)
 				continue
 			}
+
 			stream := vals[0].Stream
 
 			for _, v := range vals[0].Messages {
@@ -203,6 +201,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 			}
 			t.broker.client.SetEX(ctx, key, "", keyExDuration)
+			time.Sleep(time.Millisecond * 500)
 		}
 	}
 }

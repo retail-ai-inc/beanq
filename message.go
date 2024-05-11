@@ -81,7 +81,6 @@ func (data MessageM) ToMessage() *Message {
 			if v, ok := val.(string); ok {
 				msg.Id = v
 			}
-
 		case "topic":
 			if v, ok := val.(string); ok {
 				msg.Topic = v
