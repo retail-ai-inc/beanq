@@ -12,13 +12,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type subscribeType int
-
-const (
-	normalSubscribe subscribeType = iota + 1
-	sequentialSubscribe
-)
-
 type RedisHandle struct {
 	broker           *RedisBroker
 	subscribe        IConsumeHandle
@@ -27,7 +20,7 @@ type RedisHandle struct {
 	topic            string
 	pendingIdle      time.Duration
 	subscribeType    subscribeType
-	errorCallbacks   []ErrorCallback
+	// errorCallbacks   []ErrorCallback
 
 	jobMaxRetry  int
 	minConsumers int64
@@ -162,7 +155,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				result.Priority = message.Priority
 				result.RunTime = sub.String()
 				result.ExecuteTime = message.ExecuteTime
-				result.Topic = message.TopicName
+				result.Topic = message.Topic
 				result.Channel = t.channel
 				result.MoodType = message.MoodType
 				if err != nil {
@@ -252,7 +245,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				r.Payload = msg.Payload
 				r.RunTime = sub.String()
 				r.ExecuteTime = msg.ExecuteTime
-				r.Topic = msg.TopicName
+				r.Topic = msg.Topic
 				r.Channel = t.channel
 				r.MoodType = msg.MoodType
 
@@ -345,7 +338,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.Priority = msg.Priority
 	r.RunTime = sub.String()
 	r.ExecuteTime = msg.ExecuteTime
-	r.Topic = msg.TopicName
+	r.Topic = msg.Topic
 	r.Channel = t.channel
 	r.MoodType = msg.MoodType
 

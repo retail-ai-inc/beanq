@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -49,18 +48,11 @@ func main() {
 	// register consumer
 
 	config := initCnf()
-	csm := beanq.NewConsumer(config)
-	// register normal consumer
-	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
-	// 	// TODO:logic
-	// 	// like this:
-	// 	// time.Sleep(3 * time.Second) // this is my business.
-	// 	logger.New().With("g2", "ch2").Info(msg.Payload())
-	//
-	// 	return nil
-	// })
+	ctx := context.Background()
+	csm := beanq.New(&config)
 	// register delay consumer
-	csm.Subscribe("delay-channel", "order-topic", beanq.DefaultHandle{
+
+	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
 			return nil
@@ -69,11 +61,14 @@ func main() {
 			return nil
 		},
 		DoError: func(ctx context.Context, err error) {
-			fmt.Printf("result:%+v \n", err)
+			logger.New().Error(err)
 		},
 	})
+	if err != nil {
+		logger.New().Error(err)
+	}
 	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 
-	csm.StartConsumer()
+	csm.Wait(ctx)
 
 }

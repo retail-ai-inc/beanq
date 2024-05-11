@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -50,14 +49,12 @@ type (
 		pool             *ants.Pool
 		prefix           string
 		maxLen           int64
-		config           BeanqConfig
+		config           *BeanqConfig
 	}
 )
 
-var _ Broker = (*RedisBroker)(nil)
+func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
-func newRedisBroker(pool *ants.Pool) *RedisBroker {
-	config := Config.Load().(BeanqConfig)
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
@@ -75,25 +72,15 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		logger.New().Fatal(err.Error())
 	}
-	prefix := config.Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
-	}
-	config.Redis.Prefix = prefix
-
-	maxLen := config.Redis.MaxLen
-	if maxLen <= 0 {
-		maxLen = DefaultOptions.DefaultMaxLen
-	}
-	config.Redis.MaxLen = maxLen
 
 	broker := &RedisBroker{
+
 		client: client,
-		logJob: NewLog(pool, NewRedisLog(&config, pool, client)),
+		logJob: NewLog(pool, NewRedisLog(config, pool, client)),
 		once:   &sync.Once{},
 		pool:   pool,
-		prefix: prefix,
-		maxLen: maxLen,
+		prefix: config.Redis.Prefix,
+		maxLen: config.MaxLen,
 		config: config,
 		filter: &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
 	}
@@ -102,10 +89,8 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	return broker
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
-	if msg == nil {
-		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
-	}
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
+
 	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 	if b {
 		return nil
@@ -115,24 +100,26 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	}
 
 	// Sequential job
-	if opts.OrderKey != "" {
-		if err := t.scheduleJob.sequentialEnqueue(ctx, msg, opts); err != nil {
-			return err
-		}
-		return nil
+	if msg.MoodType == string(SEQUENTIAL) {
+
+		mmsg := messageToMap(msg)
+
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, mmsg)
+		return t.client.XAdd(ctx, xAddArgs).Err()
+
 	}
 
 	// normal job
 	if msg.ExecuteTime.Before(time.Now()) {
 		nmsg := messageToMap(msg)
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, nmsg)
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
 		return nil
 	}
 	// delay job
-	if err := t.scheduleJob.enqueue(ctx, msg, opts); err != nil {
+	if err := t.scheduleJob.enqueue(ctx, msg); err != nil {
 		return err
 	}
 	return nil
@@ -141,17 +128,6 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
 
 	bqConfig := t.config
-	jobMaxRetry := bqConfig.JobMaxRetries
-	if jobMaxRetry <= 0 {
-		jobMaxRetry = DefaultOptions.JobMaxRetry
-	}
-
-	minConsumers := bqConfig.MinConsumers
-	if minConsumers <= 0 {
-		minConsumers = DefaultOptions.MinConsumers
-	}
-	timeOut := bqConfig.ConsumeTimeOut
-
 	handler := &RedisHandle{
 		broker:           t,
 		channel:          channel,
@@ -160,9 +136,9 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		subscribeType:    subType,
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,
-		jobMaxRetry:      jobMaxRetry,
-		minConsumers:     minConsumers,
-		timeOut:          timeOut,
+		jobMaxRetry:      bqConfig.JobMaxRetries,
+		minConsumers:     bqConfig.MinConsumers,
+		timeOut:          bqConfig.ConsumeTimeOut,
 		wg:               new(sync.WaitGroup),
 		result: &sync.Pool{New: func() any {
 			return &ConsumerResult{

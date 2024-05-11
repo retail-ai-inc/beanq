@@ -28,17 +28,14 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/json"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
-	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/rs/xid"
 	"github.com/spf13/cast"
 )
 
 type (
 	Message struct {
 		Id           string        `json:"id"`
-		TopicName    string        `json:"topicName"`
-		ChannelName  string        `json:"channelName"`
+		Topic        string        `json:"topic"`
+		Channel      string        `json:"channel"`
 		MaxLen       int64         `json:"maxLen"`
 		Retry        int           `json:"retry"`
 		PendingRetry int64         `json:"pendingRetry"`
@@ -50,28 +47,6 @@ type (
 		MoodType     string        `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
-
-func NewMessage(msgId string, message []byte) *Message {
-
-	now := time.Now()
-	if msgId == "" {
-		guid := xid.NewWithTime(now)
-		msgId = guid.String()
-	}
-
-	return &Message{
-		Id:          msgId,
-		TopicName:   DefaultOptions.DefaultTopic,
-		ChannelName: DefaultOptions.DefaultChannel,
-		MaxLen:      DefaultOptions.DefaultMaxLen,
-		Retry:       DefaultOptions.JobMaxRetry,
-		Priority:    0,
-		Payload:     stringx.ByteToString(message),
-		AddTime:     now.Format(timex.DateTime),
-		ExecuteTime: now,
-		MoodType:    "normal",
-	}
-}
 
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {
@@ -100,13 +75,13 @@ func mapToMessage(data map[string]any, msg *Message) {
 				msg.Id = v
 			}
 
-		case "topicName":
+		case "topic":
 			if v, ok := val.(string); ok {
-				msg.TopicName = v
+				msg.Topic = v
 			}
-		case "channelName":
+		case "channel":
 			if v, ok := val.(string); ok {
-				msg.ChannelName = v
+				msg.Channel = v
 			}
 		case "maxLen":
 			if v, ok := val.(int64); ok {
@@ -147,8 +122,8 @@ func messageToMap(message *Message) map[string]any {
 
 	m := make(map[string]any)
 	m["id"] = message.Id
-	m["topicName"] = message.TopicName
-	m["channelName"] = message.ChannelName
+	m["topic"] = message.Topic
+	m["channel"] = message.Channel
 	m["maxLen"] = message.MaxLen
 	m["retry"] = message.Retry
 	m["priority"] = message.Priority
