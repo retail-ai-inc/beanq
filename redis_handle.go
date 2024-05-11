@@ -93,7 +93,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
 
-	ticker := time.NewTicker(time.Millisecond * 100)
+	// timer := time.NewTimer(time.Millisecond * 100)
 
 	result := t.result.Get().(*ConsumerResult)
 
@@ -102,7 +102,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 	keyExDuration := 20 * time.Second
 
 	defer func() {
-		ticker.Stop()
+		// timer.Stop()
 		result = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
 	}()
 
@@ -113,7 +113,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 			return
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(time.Millisecond * 100):
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				if len(tx.XInfoGroups(ctx, stream).Val()) == 0 {
 					t.broker.client.SetEX(ctx, key, "", keyExDuration)
@@ -201,7 +201,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 			}
 			t.broker.client.SetEX(ctx, key, "", keyExDuration)
-			time.Sleep(time.Millisecond * 500)
 		}
 	}
 }
