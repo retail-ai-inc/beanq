@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -141,7 +140,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				if !errors.Is(err, ErrSeqJobIsExecuting) {
 					logger.New().Error(err)
 				}
-				log.Println(err)
 				continue
 			}
 			stream := vals[0].Stream
