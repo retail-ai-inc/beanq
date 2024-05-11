@@ -119,13 +119,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
-			vals := cmd.Val()
-			if len(vals) <= 0 {
-				t.broker.client.SetEX(ctx, key, "", keyExDuration)
-				continue
-			}
-
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				if tx.Get(ctx, key).Val() == "" {
 					if err := tx.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
@@ -140,6 +133,13 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				if !errors.Is(err, ErrSeqJobIsExecuting) {
 					logger.New().Error(err)
 				}
+				continue
+			}
+
+			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
+			vals := cmd.Val()
+			if len(vals) <= 0 {
+				t.broker.client.SetEX(ctx, key, "", keyExDuration)
 				continue
 			}
 			stream := vals[0].Stream

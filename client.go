@@ -119,6 +119,7 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.startConsuming(ctx)
 }
 
+// WaitingAck TODO NOT COMPLETE
 func (c *Client) WaitingAck(ctx context.Context, id string) (msg *Message, err error) {
 	pollIntervalBase := time.Millisecond
 	maxInterval := 500 * time.Millisecond
