@@ -3,6 +3,8 @@ package beanq
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +13,10 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"golang.org/x/sync/errgroup"
+)
+
+var (
+	ErrSeqJobIsExecuting = errors.New("seq job is executing")
 )
 
 type RedisHandle struct {
@@ -93,7 +99,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
 
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(time.Second * 1)
 
 	result := t.result.Get().(*ConsumerResult)
 
@@ -114,18 +120,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				if tx.Get(ctx, key).Val() == "" {
-					if err := tx.SetEX(ctx, key, 1, keyExDuration).Err(); err != nil {
-						return err
-					}
-				}
-				return nil
-			}, key)
-			if err != nil {
-				continue
-			}
-
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
@@ -133,18 +127,34 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				continue
 			}
 
+			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+				if tx.Get(ctx, key).Val() == "" {
+					if err := tx.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
+						return err
+					}
+				} else if tx.Get(ctx, key).Val() == "executing" {
+					return fmt.Errorf("seq job key: %s,error: %w", key, ErrSeqJobIsExecuting)
+				}
+				return nil
+			}, key)
+			if err != nil {
+				if !errors.Is(err, ErrSeqJobIsExecuting) {
+					logger.New().Error(err)
+				}
+				log.Println(err)
+				continue
+			}
 			stream := vals[0].Stream
+
 			for _, v := range vals[0].Messages {
 				nv := v
 				message := messageToStruct(nv.Values)
 
 				result.Id = message.Id
 				result.BeginTime = time.Now()
-
 				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
 				retry, err := RetryInfo(nctx, func() error {
-
 					if err := t.subscribe.Handle(nctx, message); err != nil {
 						if h, ok := t.subscribe.(IConsumeCancel); ok {
 							return h.Cancel(nctx, message)
@@ -171,6 +181,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					result.Level = ErrLevel
 					result.Info = FlagInfo(err.Error())
 				}
+
 				cancel()
 				group.TryGo(func() error {
 					// `stream` confirmation message

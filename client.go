@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -90,7 +91,6 @@ func New(config *BeanqConfig) *Client {
 		Priority:  config.Priority,
 		TimeToRun: config.TimeToRun,
 	}
-
 	client.broker = NewBroker(config)
 	return client
 }
@@ -119,9 +119,42 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.startConsuming(ctx)
 }
 
+func (c *Client) WaitingAck(ctx context.Context, id string) (msg *Message, err error) {
+	pollIntervalBase := time.Millisecond
+	maxInterval := 500 * time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > maxInterval {
+			pollIntervalBase = maxInterval
+		}
+		return interval
+	}
+
+	var pullAcknowledgement = func(ctx context.Context, id string) (*Message, error) {
+		return nil, nil
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+	for {
+		if msg, err := pullAcknowledgement(ctx, id); err != nil {
+			return msg, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timer.C:
+			// pull the data from global
+			timer.Reset(nextPollInterval())
+		}
+	}
+}
+
 // Ping this method can be called by user for checking the status of broker
 func (c *Client) Ping() {
-
 }
 
 type BQClient struct {
@@ -146,6 +179,10 @@ func (b *BQClient) SetId(id string) *BQClient {
 	return b
 }
 
+func (b *BQClient) GetId() string {
+	return b.id
+}
+
 func (b *BQClient) Priority(priority float64) *BQClient {
 	if priority >= 1000 {
 		priority = 999
@@ -155,11 +192,11 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 }
 
 func (b *BQClient) process(cmd IBaseCmd) error {
-	var channel, topic string
-	if cmd.Channel() == "" {
+	var channel, topic = cmd.Channel(), cmd.Topic()
+	if channel == "" {
 		channel = b.client.Channel
 	}
-	if cmd.Topic() == "" {
+	if topic == "" {
 		topic = b.client.Topic
 	}
 
@@ -181,8 +218,13 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			PendingRetry: 0,
 			TimeToRun:    b.client.TimeToRun,
 		}
+
 		if err := cmd.filter(message); err != nil {
 			return err
+		}
+
+		if b.id != message.Id {
+			b.id = message.Id
 		}
 		// store message
 		return b.client.broker.enqueue(b.ctx, message)
@@ -293,10 +335,9 @@ type (
 		channel, topic string
 		moodType       moodType
 
-		subscribeType
-		IBaseSubscribeCmd
-		broker IBroker
-		handle IConsumeHandle
+		subscribeType subscribeType
+		broker        IBroker
+		handle        IConsumeHandle
 	}
 )
 

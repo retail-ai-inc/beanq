@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -106,18 +107,17 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 
 	// Sequential job
 	if msg.MoodType == string(SEQUENTIAL) {
-
-		mmsg := messageToMap(msg)
-
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, mmsg)
-		return t.client.XAdd(ctx, xAddArgs).Err()
-
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
+		err := t.client.XAdd(ctx, xAddArgs).Err()
+		if err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
+		}
+		return nil
 	}
 
 	// normal job
 	if msg.ExecuteTime.Before(time.Now()) {
-		nmsg := messageToMap(msg)
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, nmsg)
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
