@@ -51,7 +51,7 @@ func main() {
 	ctx := context.Background()
 	csm := beanq.New(&config)
 	// register delay consumer
-	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
+	_, err := csm.Channel("delay-channel").Topic("order-topic").SubscribeDelay(ctx, beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
 			return nil

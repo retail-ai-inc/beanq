@@ -60,10 +60,10 @@ func pubOneInfo() {
 	config := initCnf()
 	pub := beanq.New(config)
 	ctx := context.Background()
-	if err := pub.BQ().WithContext(ctx).Publish("", "", d); err != nil {
+	if err := pub.Payload(d).Publish(ctx); err != nil {
 		logger.New().Error(err)
 	}
-	if err := pub.BQ().WithContext(ctx).Publish("", "aa", d); err != nil {
+	if err := pub.Payload(d).Publish(ctx); err != nil {
 		logger.New().Error(err)
 	}
 

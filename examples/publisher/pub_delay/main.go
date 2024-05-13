@@ -54,6 +54,7 @@ func pubDelayInfo() {
 
 	m := make(map[string]any)
 	ctx := context.Background()
+
 	now := time.Now()
 	delayT := now
 	for i := 0; i < 10; i++ {
@@ -79,9 +80,7 @@ func pubDelayInfo() {
 			delayT = now.Add(35 * time.Second)
 		}
 		// continue
-		if err := pub.BQ().
-			WithContext(ctx).
-			Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {
+		if err := pub.Channel("delay-channel").Topic("order-topic").Priority(float64(y)).Payload(b).PublishAtTime(ctx, delayT); err != nil {
 			logger.New().Error(err)
 		}
 		// pub.Payload(b).PublishAtTime(ctx, delayT)
