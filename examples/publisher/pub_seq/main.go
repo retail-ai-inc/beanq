@@ -49,14 +49,16 @@ func main() {
 
 	m := make(map[string]any)
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 3; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-
-		if err := pub.BQ().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b); err != nil {
+		bq := pub.BQ()
+		if err := bq.WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b); err != nil {
 			logger.New().Error(err)
 		}
 
+		result, err := pub.WaitingAck(ctx, "delay-channel", "order-topic", bq.GetId())
+		log.Println(result, err)
 	}
 
 }

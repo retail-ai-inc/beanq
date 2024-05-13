@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -120,7 +121,7 @@ func (c *Client) Wait(ctx context.Context) {
 }
 
 // WaitingAck TODO NOT COMPLETE
-func (c *Client) WaitingAck(ctx context.Context, id string) (msg *Message, err error) {
+func (c *Client) WaitingAck(ctx context.Context, channel, topic, id string) (ack *ConsumerResult, err error) {
 	pollIntervalBase := time.Millisecond
 	maxInterval := 500 * time.Millisecond
 	nextPollInterval := func() time.Duration {
@@ -134,15 +135,24 @@ func (c *Client) WaitingAck(ctx context.Context, id string) (msg *Message, err e
 		return interval
 	}
 
-	var pullAcknowledgement = func(ctx context.Context, id string) (*Message, error) {
-		return nil, nil
+	var pullAcknowledgement = func() (*ConsumerResult, error) {
+		result, err := c.CheckAckStatus(ctx, channel, topic, id)
+		if err != nil {
+			return nil, err
+		}
+
+		return result, nil
 	}
 
 	timer := time.NewTimer(nextPollInterval())
 	defer timer.Stop()
 	for {
-		if msg, err := pullAcknowledgement(ctx, id); err != nil {
-			return msg, err
+		if ack, err = pullAcknowledgement(); err != nil {
+			return ack, err
+		} else {
+			if ack != nil {
+				return ack, nil
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -152,6 +162,24 @@ func (c *Client) WaitingAck(ctx context.Context, id string) (msg *Message, err e
 			timer.Reset(nextPollInterval())
 		}
 	}
+}
+
+func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*ConsumerResult, error) {
+	data, err := c.broker.checkStatus(ctx, channel, topic, id)
+	if err != nil {
+		return nil, err
+	}
+	if data == "" {
+		return nil, nil
+	}
+
+	var consumerResult ConsumerResult
+	err = json.Unmarshal([]byte(data), &consumerResult)
+	if err != nil {
+		return nil, err
+	}
+
+	return &consumerResult, nil
 }
 
 // Ping this method can be called by user for checking the status of broker

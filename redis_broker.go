@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -95,6 +96,17 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
+func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id string) (string, error) {
+	stringCmd := t.client.HGet(ctx, strings.Join([]string{t.prefix, channel, topic, "status"}, ":"), id)
+	if stringCmd.Err() != nil {
+		if errors.Is(stringCmd.Err(), redis.Nil) {
+			return "", nil
+		}
+		return "", stringCmd.Err()
+	}
+	return stringCmd.Val(), nil
+}
+
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 
 	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
@@ -145,7 +157,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		minConsumers:     bqConfig.MinConsumers,
 		timeOut:          bqConfig.ConsumeTimeOut,
 		wg:               new(sync.WaitGroup),
-		result: &sync.Pool{New: func() any {
+		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
 				Info:    SuccessInfo,
