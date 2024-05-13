@@ -120,7 +120,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				streamInfo := tx.XInfoStream(ctx, stream).Val()
 
 				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-					if (streamInfo == nil || streamInfo.Length == 0) && executingStatus != "" {
+					if streamInfo == nil || streamInfo.Length == 0 {
 						err := pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
 						return err
 					}
@@ -130,6 +130,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					}
 
 					if err := pipeliner.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
+						executable = false
 						return err
 					}
 					executable = true
@@ -215,7 +216,18 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				t.errGroupPool.Put(group)
 
 			}
-			t.broker.client.SetEX(ctx, key, "", keyExDuration)
+			err = t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+					return pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
+				})
+				if err != nil {
+					return err
+				}
+				return err
+			}, key)
+			if err != nil {
+				logger.New().Error(err)
+			}
 		}
 	}
 }
