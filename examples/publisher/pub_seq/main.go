@@ -49,7 +49,7 @@ func main() {
 
 	m := make(map[string]any)
 	ctx := context.Background()
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 10; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 

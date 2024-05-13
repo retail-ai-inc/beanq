@@ -114,23 +114,38 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Millisecond * 100):
+			var executable bool
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				if len(tx.XInfoGroups(ctx, stream).Val()) == 0 {
-					t.broker.client.SetEX(ctx, key, "", keyExDuration)
-					return errors.New("no message")
-				}
-				if tx.Get(ctx, key).Val() == "executing" {
-					return errors.New("executing")
-				}
-				if tx.Get(ctx, key).Val() == "" {
-					if err := tx.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
+				executingStatus := tx.Get(ctx, key).Val()
+				streamInfo := tx.XInfoStream(ctx, stream).Val()
+
+				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+					if (streamInfo == nil || streamInfo.Length == 0) && executingStatus != "" {
+						err := pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
 						return err
 					}
-				}
-				return nil
-			}, key)
+
+					if executingStatus == "executing" {
+						return nil
+					}
+
+					if err := pipeliner.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
+						return err
+					}
+					executable = true
+					return nil
+				})
+				return err
+			}, key, stream)
+
 			if err != nil {
-				// logger.New().Error(err)
+				if !errors.Is(err, redis.TxFailedErr) {
+					logger.New().Error(err)
+				}
+				continue
+			}
+
+			if !executable {
 				continue
 			}
 
