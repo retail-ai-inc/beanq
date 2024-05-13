@@ -198,7 +198,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 						return err
 					}
 					// set result for ack
-					err = t.broker.client.HSet(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status"}, ":"), result.Id, result).Err()
+					err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Err()
 					if err != nil {
 						return err
 					}

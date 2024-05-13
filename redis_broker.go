@@ -97,7 +97,7 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 }
 
 func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id string) (string, error) {
-	stringCmd := t.client.HGet(ctx, strings.Join([]string{t.prefix, channel, topic, "status"}, ":"), id)
+	stringCmd := t.client.Get(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"))
 	if stringCmd.Err() != nil {
 		if errors.Is(stringCmd.Err(), redis.Nil) {
 			return "", nil
