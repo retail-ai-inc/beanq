@@ -52,9 +52,17 @@ func main() {
 	for i := 0; i < 3; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-		bq := pub.BQ()
-		if err := bq.WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).Error(); err != nil {
+		result, err := pub.BQ().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
+		if err != nil {
 			logger.New().Error(err)
+		} else {
+			log.Println(result)
 		}
 	}
+
+	result, err := pub.CheckAckStatus(ctx, "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
+	if err != nil {
+		panic(err)
+	}
+	log.Println(result)
 }

@@ -120,50 +120,6 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.startConsuming(ctx)
 }
 
-// WaitingAck TODO NOT COMPLETE
-func (c *Client) WaitingAck(ctx context.Context, channel, topic, id string) (ack *ConsumerResult, err error) {
-	pollIntervalBase := time.Millisecond
-	maxInterval := 500 * time.Millisecond
-	nextPollInterval := func() time.Duration {
-		// Add 10% jitter.
-		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
-		// Double and clamp for next time.
-		pollIntervalBase *= 2
-		if pollIntervalBase > maxInterval {
-			pollIntervalBase = maxInterval
-		}
-		return interval
-	}
-
-	var pullAcknowledgement = func() (*ConsumerResult, error) {
-		result, err := c.CheckAckStatus(ctx, channel, topic, id)
-		if err != nil {
-			return nil, err
-		}
-
-		return result, nil
-	}
-
-	timer := time.NewTimer(nextPollInterval())
-	defer timer.Stop()
-	for {
-		if ack, err = pullAcknowledgement(); err != nil {
-			return ack, err
-		} else {
-			if ack != nil {
-				return ack, nil
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-timer.C:
-			// pull the data from global
-			timer.Reset(nextPollInterval())
-		}
-	}
-}
-
 func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*ConsumerResult, error) {
 	data, err := c.broker.checkStatus(ctx, channel, topic, id)
 	if err != nil {
@@ -191,6 +147,8 @@ type BQClient struct {
 	client *Client
 
 	ctx context.Context
+
+	waitAck bool
 
 	// TODO
 	// id and priority are not common parameters for all publish and subscription, and will need to be optimized in the future.
@@ -220,6 +178,28 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
+func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
+	cmd := &Publish{
+		channel:  channel,
+		topic:    topic,
+		payload:  payload,
+		moodType: SEQUENTIAL,
+	}
+	sequentialCmd := &SequentialCmd{
+		err:     nil,
+		channel: channel,
+		topic:   topic,
+		ctx:     b.ctx,
+		client:  b.client,
+	}
+	if err := b.process(cmd); err != nil {
+		sequentialCmd.err = err
+	} else {
+		sequentialCmd.id = b.id
+	}
+	return sequentialCmd
+}
+
 func (b *BQClient) process(cmd IBaseCmd) error {
 	var channel, topic = cmd.Channel(), cmd.Topic()
 	if channel == "" {
@@ -230,6 +210,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 	}
 
 	if cmd, ok := cmd.(*Publish); ok {
+		b.waitAck = cmd.moodType == SEQUENTIAL
 		// make message
 		message := &Message{
 			Topic:       topic,
@@ -288,19 +269,6 @@ func (t cmdAble) PublishAtTime(channel, topic string, payload []byte, atTime tim
 		moodType:    DELAY,
 	}
 
-	if err := t(cmd); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t cmdAble) PublishInSequential(channel, topic string, payload []byte) error {
-	cmd := &Publish{
-		channel:  channel,
-		topic:    topic,
-		payload:  payload,
-		moodType: SEQUENTIAL,
-	}
 	if err := t(cmd); err != nil {
 		return err
 	}
@@ -411,4 +379,62 @@ func (t *Subscribe) Channel() string {
 
 func (t *Subscribe) Topic() string {
 	return t.topic
+}
+
+type SequentialCmd struct {
+	err                error
+	ctx                context.Context
+	channel, topic, id string
+	client             *Client
+}
+
+func (s *SequentialCmd) Error() error {
+	return s.err
+}
+
+// WaitingAck ...
+func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
+	if s.err != nil {
+		return nil, err
+	}
+	pollIntervalBase := time.Millisecond
+	maxInterval := 500 * time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > maxInterval {
+			pollIntervalBase = maxInterval
+		}
+		return interval
+	}
+
+	var pullAcknowledgement = func() (*ConsumerResult, error) {
+		result, err := s.client.CheckAckStatus(s.ctx, s.channel, s.topic, s.id)
+		if err != nil {
+			return nil, err
+		}
+
+		return result, nil
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+	for {
+		if ack, err = pullAcknowledgement(); err != nil {
+			return ack, err
+		} else {
+			if ack != nil {
+				return ack, nil
+			}
+		}
+		select {
+		case <-s.ctx.Done():
+			return nil, s.ctx.Err()
+		case <-timer.C:
+			// pull the data from global
+			timer.Reset(nextPollInterval())
+		}
+	}
 }
