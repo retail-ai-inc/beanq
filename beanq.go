@@ -128,12 +128,12 @@ type IHandle interface {
 	Channel() string
 	Topic() string
 	Check(ctx context.Context) error
-	Process(ctx context.Context, mainDone, seqDone <-chan struct{})
-	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
+	Process(ctx context.Context)
+	DeadLetter(ctx context.Context) error
 }
 
 // VolatileLFU
 type VolatileLFU interface {
 	Add(ctx context.Context, key, member string) (bool, error)
-	Delete(ctx context.Context, key string, done <-chan struct{})
+	Delete(ctx context.Context, key string)
 }

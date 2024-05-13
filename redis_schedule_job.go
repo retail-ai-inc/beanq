@@ -46,7 +46,6 @@ type (
 	scheduleJob struct {
 		broker                    *RedisBroker
 		wg                        *sync.WaitGroup
-		stop, done                chan struct{}
 		scheduleTicker, seqTicker *time.Ticker
 
 		scheduleErrGroupPool *sync.Pool
@@ -84,7 +83,7 @@ func (t *scheduleJob) start(ctx context.Context, consumer IHandle) error {
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
-	
+
 	bt, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -134,10 +133,9 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 		select {
 		case <-ctx.Done():
 			t.broker.pool.Release()
+			logger.New().Info("--------Schedule Task STOP--------")
 			return
-		case <-t.done:
-			t.broker.pool.Release()
-			return
+
 		case <-t.scheduleTicker.C:
 		}
 
@@ -248,5 +246,5 @@ func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message) e
 }
 
 func (t *scheduleJob) shutDown() {
-	t.done <- struct{}{}
+
 }
