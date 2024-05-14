@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
@@ -31,6 +32,17 @@ type (
 		MoodType                 string
 	}
 )
+
+func (c *ConsumerResult) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(c)
+}
+
+func (c *ConsumerResult) Initialize() *ConsumerResult {
+	c.Level = InfoLevel
+	c.Info = SuccessInfo
+	c.RunTime = ""
+	return c
+}
 
 const (
 	SuccessInfo FlagInfo = "success"
