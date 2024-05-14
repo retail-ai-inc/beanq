@@ -76,6 +76,17 @@ type (
 	}
 )
 
+func (c *ConsumerResult) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(c)
+}
+
+func (c *ConsumerResult) Initialize() *ConsumerResult {
+	c.Level = InfoLevel
+	c.Info = SuccessInfo
+	c.RunTime = ""
+	return c
+}
+
 const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"

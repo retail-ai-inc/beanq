@@ -44,11 +44,22 @@ func initCnf() *beanq.BeanqConfig {
 
 func main() {
 
+	// register consumer
+
 	config := initCnf()
 	csm := beanq.New(config)
+	// register normal consumer
+	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
+	// 	// TODO:logic
+	// 	// like this:
+	// 	// time.Sleep(3 * time.Second) // this is my business.
+	// 	logger.New().With("g2", "ch2").Info(msg.Payload())
+	//
+	// 	return nil
+	// })
 	// register delay consumer
 	ctx := context.Background()
-	_, err := csm.Channel("delay-channel").Topic("delay-topic").SubscribeDelay(ctx, beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "delay-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			logger.New().With("default-channel", "default-topic").Info(message.Payload)
 			return nil

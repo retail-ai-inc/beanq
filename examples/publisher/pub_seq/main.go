@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -52,11 +53,10 @@ func main() {
 	for i := 0; i < 5; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-
-		if err := pub.Channel("delay-channel").Topic("order-topic").Payload(b).PublishInSequential(ctx); err != nil {
+		bq := pub.BQ()
+		if err := bq.WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).Error(); err != nil {
 			logger.New().Error(err)
 		}
-
+		time.Sleep(time.Second * 1)
 	}
-
 }

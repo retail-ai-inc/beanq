@@ -24,6 +24,8 @@ package beanq
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"strings"
@@ -88,6 +90,17 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
+func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id string) (string, error) {
+	stringCmd := t.client.Get(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"))
+	if stringCmd.Err() != nil {
+		if errors.Is(stringCmd.Err(), redis.Nil) {
+			return "", nil
+		}
+		return "", stringCmd.Err()
+	}
+	return stringCmd.Val(), nil
+}
+
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 
 	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
@@ -100,18 +113,17 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 
 	// Sequential job
 	if msg.MoodType == string(SEQUENTIAL) {
-
-		mmsg := messageToMap(msg)
-
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, mmsg)
-		return t.client.XAdd(ctx, xAddArgs).Err()
-
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
+		err := t.client.XAdd(ctx, xAddArgs).Err()
+		if err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
+		}
+		return nil
 	}
 
 	// normal job
 	if msg.ExecuteTime.Before(time.Now()) {
-		nmsg := messageToMap(msg)
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, nmsg)
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
@@ -139,7 +151,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		minConsumers:     bqConfig.MinConsumers,
 		timeOut:          bqConfig.ConsumeTimeOut,
 		wg:               new(sync.WaitGroup),
-		result: &sync.Pool{New: func() any {
+		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
 				Info:    SuccessInfo,

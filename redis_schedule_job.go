@@ -228,21 +228,17 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 }
 
 func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
-	mmsg := messageToMap(msg)
 	subType := normalSubscribe
 	if msg.MoodType == string(SEQUENTIAL) {
 		subType = sequentialSubscribe
 	}
-	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(subType, t.broker.prefix, msg.Channel, msg.Topic), "", "*", t.broker.maxLen, 0, mmsg)
+	xAddArgs := redisx.NewZAddArgs(MakeStreamKey(subType, t.broker.prefix, msg.Channel, msg.Topic), "", "*", t.broker.maxLen, 0, msg.ToMap())
 	return t.broker.client.XAdd(ctx, xAddArgs).Err()
 }
 
-func (t *scheduleJob) sequentialEnqueue(ctx context.Context, message *Message) error {
-
-	nmsg := messageToMap(message)
-	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, message.Channel, message.Topic), "", "*", message.MaxLen, 0, nmsg)
+func (t *scheduleJob) sequentialEnqueue(ctx context.Context, msg *Message) error {
+	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, msg.Channel, msg.Topic), "", "*", msg.MaxLen, 0, msg.ToMap())
 	return t.broker.client.XAdd(ctx, args).Err()
-
 }
 
 func (t *scheduleJob) shutDown() {
