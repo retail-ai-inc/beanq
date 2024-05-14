@@ -24,8 +24,10 @@ package beanq
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -90,7 +92,6 @@ func New(config *BeanqConfig) *Client {
 		Priority:  config.Priority,
 		TimeToRun: config.TimeToRun,
 	}
-
 	client.broker = NewBroker(config)
 	return client
 }
@@ -119,9 +120,26 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.startConsuming(ctx)
 }
 
+func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*ConsumerResult, error) {
+	data, err := c.broker.checkStatus(ctx, channel, topic, id)
+	if err != nil {
+		return nil, err
+	}
+	if data == "" {
+		return nil, nil
+	}
+
+	var consumerResult ConsumerResult
+	err = json.Unmarshal([]byte(data), &consumerResult)
+	if err != nil {
+		return nil, err
+	}
+
+	return &consumerResult, nil
+}
+
 // Ping this method can be called by user for checking the status of broker
 func (c *Client) Ping() {
-
 }
 
 type BQClient struct {
@@ -129,6 +147,8 @@ type BQClient struct {
 	client *Client
 
 	ctx context.Context
+
+	waitAck bool
 
 	// TODO
 	// id and priority are not common parameters for all publish and subscription, and will need to be optimized in the future.
@@ -146,6 +166,10 @@ func (b *BQClient) SetId(id string) *BQClient {
 	return b
 }
 
+func (b *BQClient) GetId() string {
+	return b.id
+}
+
 func (b *BQClient) Priority(priority float64) *BQClient {
 	if priority >= 1000 {
 		priority = 999
@@ -154,16 +178,39 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
+func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
+	cmd := &Publish{
+		channel:  channel,
+		topic:    topic,
+		payload:  payload,
+		moodType: SEQUENTIAL,
+	}
+	sequentialCmd := &SequentialCmd{
+		err:     nil,
+		channel: channel,
+		topic:   topic,
+		ctx:     b.ctx,
+		client:  b.client,
+	}
+	if err := b.process(cmd); err != nil {
+		sequentialCmd.err = err
+	} else {
+		sequentialCmd.id = b.id
+	}
+	return sequentialCmd
+}
+
 func (b *BQClient) process(cmd IBaseCmd) error {
-	var channel, topic string
-	if cmd.Channel() == "" {
+	var channel, topic = cmd.Channel(), cmd.Topic()
+	if channel == "" {
 		channel = b.client.Channel
 	}
-	if cmd.Topic() == "" {
+	if topic == "" {
 		topic = b.client.Topic
 	}
 
 	if cmd, ok := cmd.(*Publish); ok {
+		b.waitAck = cmd.moodType == SEQUENTIAL
 		// make message
 		message := &Message{
 			Topic:       topic,
@@ -181,8 +228,13 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			PendingRetry: 0,
 			TimeToRun:    b.client.TimeToRun,
 		}
+
 		if err := cmd.filter(message); err != nil {
 			return err
+		}
+
+		if b.id != message.Id {
+			b.id = message.Id
 		}
 		// store message
 		return b.client.broker.enqueue(b.ctx, message)
@@ -217,19 +269,6 @@ func (t cmdAble) PublishAtTime(channel, topic string, payload []byte, atTime tim
 		moodType:    DELAY,
 	}
 
-	if err := t(cmd); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t cmdAble) PublishInSequential(channel, topic string, payload []byte) error {
-	cmd := &Publish{
-		channel:  channel,
-		topic:    topic,
-		payload:  payload,
-		moodType: SEQUENTIAL,
-	}
 	if err := t(cmd); err != nil {
 		return err
 	}
@@ -293,10 +332,9 @@ type (
 		channel, topic string
 		moodType       moodType
 
-		subscribeType
-		IBaseSubscribeCmd
-		broker IBroker
-		handle IConsumeHandle
+		subscribeType subscribeType
+		broker        IBroker
+		handle        IConsumeHandle
 	}
 )
 
@@ -341,4 +379,62 @@ func (t *Subscribe) Channel() string {
 
 func (t *Subscribe) Topic() string {
 	return t.topic
+}
+
+type SequentialCmd struct {
+	err                error
+	ctx                context.Context
+	channel, topic, id string
+	client             *Client
+}
+
+func (s *SequentialCmd) Error() error {
+	return s.err
+}
+
+// WaitingAck ...
+func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
+	if s.err != nil {
+		return nil, err
+	}
+	pollIntervalBase := time.Millisecond
+	maxInterval := 500 * time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > maxInterval {
+			pollIntervalBase = maxInterval
+		}
+		return interval
+	}
+
+	var pullAcknowledgement = func() (*ConsumerResult, error) {
+		result, err := s.client.CheckAckStatus(s.ctx, s.channel, s.topic, s.id)
+		if err != nil {
+			return nil, err
+		}
+
+		return result, nil
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+	for {
+		if ack, err = pullAcknowledgement(); err != nil {
+			return ack, err
+		} else {
+			if ack != nil {
+				return ack, nil
+			}
+		}
+		select {
+		case <-s.ctx.Done():
+			return nil, s.ctx.Err()
+		case <-timer.C:
+			// pull the data from global
+			timer.Reset(nextPollInterval())
+		}
+	}
 }

@@ -23,6 +23,7 @@
 package beanq
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,25 +49,31 @@ type (
 	}
 )
 
-// If possible, more data type judgments need to be added
-func messageToStruct(message any) *Message {
-
-	msg := new(Message)
-	switch message.(type) {
-	case *redis.XMessage:
-		xmsg := message.(*redis.XMessage)
-		mapToMessage(xmsg.Values, msg)
-	case map[string]any:
-		mapToMessage(message.(map[string]any), msg)
-	}
-	return msg
-
+func (m Message) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(m)
 }
 
-// Customized function
-func mapToMessage(data map[string]any, msg *Message) {
+func (m Message) ToMap() map[string]any {
+	data := make(map[string]any)
+	data["id"] = m.Id
+	data["topic"] = m.Topic
+	data["channel"] = m.Channel
+	data["maxLen"] = m.MaxLen
+	data["retry"] = m.Retry
+	data["priority"] = m.Priority
+	data["payload"] = m.Payload
+	data["addTime"] = m.AddTime
+	data["executeTime"] = m.ExecuteTime
+	data["moodType"] = m.MoodType
+	data["timeToRun"] = m.TimeToRun
+	return data
+}
 
+type MessageM map[string]any
+
+func (data MessageM) ToMessage() *Message {
 	now := time.Now()
+	var msg = &Message{}
 	msg.ExecuteTime = now
 	for key, val := range data {
 		switch key {
@@ -74,7 +81,6 @@ func mapToMessage(data map[string]any, msg *Message) {
 			if v, ok := val.(string); ok {
 				msg.Id = v
 			}
-
 		case "topic":
 			if v, ok := val.(string); ok {
 				msg.Topic = v
@@ -113,26 +119,26 @@ func mapToMessage(data map[string]any, msg *Message) {
 			if v, ok := val.(string); ok {
 				msg.MoodType = v
 			}
+		case "timeToRun":
+			if v, ok := val.(string); ok {
+				dur, _ := strconv.Atoi(v)
+				msg.TimeToRun = time.Duration(dur)
+			}
 		}
 	}
+	return msg
 }
 
-// Customized function
-func messageToMap(message *Message) map[string]any {
-
-	m := make(map[string]any)
-	m["id"] = message.Id
-	m["topic"] = message.Topic
-	m["channel"] = message.Channel
-	m["maxLen"] = message.MaxLen
-	m["retry"] = message.Retry
-	m["priority"] = message.Priority
-	m["payload"] = message.Payload
-	m["addTime"] = message.AddTime
-	m["executeTime"] = message.ExecuteTime
-	m["moodType"] = message.MoodType
-	return m
-
+// If possible, more data type judgments need to be added
+func messageToStruct(message any) *Message {
+	msg := new(Message)
+	switch xmsg := message.(type) {
+	case *redis.XMessage:
+		msg = MessageM(xmsg.Values).ToMessage()
+	case map[string]any:
+		msg = MessageM(xmsg).ToMessage()
+	}
+	return msg
 }
 
 // Customized function

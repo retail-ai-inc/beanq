@@ -28,7 +28,7 @@ type RedisHandle struct {
 	timeOut      time.Duration
 
 	wg           *sync.WaitGroup
-	result       *sync.Pool
+	resultPool   *sync.Pool
 	errGroupPool *sync.Pool
 	once         sync.Once
 }
@@ -93,18 +93,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
 
-	ticker := time.NewTicker(time.Second)
-
-	result := t.result.Get().(*ConsumerResult)
-
-	group := t.errGroupPool.Get().(*errgroup.Group)
-
 	keyExDuration := 20 * time.Second
-
-	defer func() {
-		ticker.Stop()
-		result = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-	}()
 
 	for {
 		select {
@@ -113,38 +102,64 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 			return
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-time.After(time.Millisecond * 100):
+			var executable bool
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				if tx.Get(ctx, key).Val() == "" {
-					if err := tx.SetEX(ctx, key, 1, keyExDuration).Err(); err != nil {
+				executingStatus := tx.Get(ctx, key).Val()
+				streamInfo := tx.XInfoStream(ctx, stream).Val()
+
+				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+					if streamInfo == nil || streamInfo.Length == 0 {
+						err := pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
 						return err
 					}
-				}
-				return nil
-			}, key)
+
+					if executingStatus == "executing" {
+						return nil
+					}
+
+					if err := pipeliner.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
+						executable = false
+						return err
+					}
+					executable = true
+					return nil
+				})
+				return err
+			}, key, stream)
+
 			if err != nil {
+				if !errors.Is(err, redis.TxFailedErr) {
+					logger.New().Error(err)
+				}
+				continue
+			}
+
+			if !executable {
 				continue
 			}
 
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
-				t.broker.client.SetEX(ctx, key, "", keyExDuration)
 				continue
 			}
 
 			stream := vals[0].Stream
+
 			for _, v := range vals[0].Messages {
 				nv := v
 				message := messageToStruct(nv.Values)
 
+				result := t.resultPool.Get().(*ConsumerResult).Initialize()
+
+				group := t.errGroupPool.Get().(*errgroup.Group)
+
 				result.Id = message.Id
 				result.BeginTime = time.Now()
-
 				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
 				retry, err := RetryInfo(nctx, func() error {
-
 					if err := t.subscribe.Handle(nctx, message); err != nil {
 						if h, ok := t.subscribe.(IConsumeCancel); ok {
 							return h.Cancel(nctx, message)
@@ -152,6 +167,13 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					}
 					return nil
 				}, t.jobMaxRetry)
+				if err != nil {
+					if h, ok := t.subscribe.(IConsumeError); ok {
+						h.Error(nctx, err)
+					}
+					result.Level = ErrLevel
+					result.Info = FlagInfo(err.Error())
+				}
 
 				result.EndTime = time.Now()
 				sub := result.EndTime.Sub(result.BeginTime)
@@ -164,13 +186,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 				result.Topic = message.Topic
 				result.Channel = t.channel
 				result.MoodType = message.MoodType
-				if err != nil {
-					if h, ok := t.subscribe.(IConsumeError); ok {
-						h.Error(nctx, err)
-					}
-					result.Level = ErrLevel
-					result.Info = FlagInfo(err.Error())
-				}
+
 				cancel()
 				group.TryGo(func() error {
 					// `stream` confirmation message
@@ -181,19 +197,37 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context, done <-chan st
 					if err := t.broker.client.XDel(ctx, stream, nv.ID).Err(); err != nil {
 						return err
 					}
+					// set result for ack
+					err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Err()
+					if err != nil {
+						return err
+					}
 					return nil
 				})
+
 				group.TryGo(func() error {
+					defer t.resultPool.Put(result)
 					return t.broker.logJob.saveLog(ctx, result)
 				})
+
 				if err := group.Wait(); err != nil {
-					t.broker.client.SetEX(ctx, key, "", keyExDuration)
 					logger.New().Error(err)
 				}
 				t.errGroupPool.Put(group)
-
 			}
-			t.broker.client.SetEX(ctx, key, "", keyExDuration)
+
+			err = t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+					return pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
+				})
+				if err != nil {
+					return err
+				}
+				return err
+			}, key)
+			if err != nil {
+				logger.New().Error(err)
+			}
 		}
 	}
 }
@@ -245,7 +279,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context, claimDone <-chan struct{})
 				// msg.Values["pendingRetry"] = pending.RetryCount
 				// msg.Values["idle"] = pending.Idle.Seconds()
 
-				r := t.result.Get().(*ConsumerResult)
+				r := t.resultPool.Get().(*ConsumerResult)
 				r.Id = msg.Id
 				r.BeginTime = msg.ExecuteTime
 
@@ -322,7 +356,7 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 }
 
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
-	r := t.result.Get().(*ConsumerResult)
+	r := t.resultPool.Get().(*ConsumerResult)
 	// var cancel context.CancelFunc
 	msg := messageToStruct(message)
 
@@ -330,7 +364,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 
 	defer func() {
 		r = &ConsumerResult{Level: InfoLevel, Info: SuccessInfo, RunTime: ""}
-		t.result.Put(r)
+		t.resultPool.Put(r)
 		cancel()
 	}()
 
