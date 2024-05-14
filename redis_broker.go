@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -41,24 +42,21 @@ import (
 
 type (
 	RedisBroker struct {
-		client                                          redis.UniversalClient
-		done, seqDone, obsoleteDone, claimDone, logDone chan struct{}
-		scheduleJob                                     scheduleJobI
-		filter                                          VolatileLFU
-		consumerHandlers                                []IHandle
-		logJob                                          ILogJob
-		once                                            *sync.Once
-		pool                                            *ants.Pool
-		prefix                                          string
-		maxLen                                          int64
-		config                                          BeanqConfig
+		client           redis.UniversalClient
+		scheduleJob      scheduleJobI
+		filter           VolatileLFU
+		consumerHandlers []IHandle
+		logJob           ILogJob
+		once             *sync.Once
+		pool             *ants.Pool
+		prefix           string
+		maxLen           int64
+		config           *BeanqConfig
 	}
 )
 
-var _ Broker = (*RedisBroker)(nil)
+func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
-func newRedisBroker(pool *ants.Pool) *RedisBroker {
-	config := Config.Load().(BeanqConfig)
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
@@ -76,42 +74,35 @@ func newRedisBroker(pool *ants.Pool) *RedisBroker {
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		logger.New().Fatal(err.Error())
 	}
-	prefix := config.Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
-	}
-	config.Redis.Prefix = prefix
-
-	maxLen := config.Redis.MaxLen
-	if maxLen <= 0 {
-		maxLen = DefaultOptions.DefaultMaxLen
-	}
-	config.Redis.MaxLen = maxLen
 
 	broker := &RedisBroker{
-		client:       client,
-		done:         make(chan struct{}, 1),
-		seqDone:      make(chan struct{}, 1),
-		obsoleteDone: make(chan struct{}, 1),
-		claimDone:    make(chan struct{}, 1),
-		logDone:      make(chan struct{}, 1),
-		logJob:       newLogJob(client, pool),
-		once:         &sync.Once{},
-		pool:         pool,
-		prefix:       prefix,
-		maxLen:       maxLen,
-		config:       config,
-		filter:       &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
+		client: client,
+		logJob: newLogJob(config, client, pool),
+		once:   &sync.Once{},
+		pool:   pool,
+		prefix: config.Redis.Prefix,
+		maxLen: config.Redis.MaxLen,
+		config: config,
+		filter: &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
 	}
 	broker.scheduleJob = broker.newScheduleJob()
 
 	return broker
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) error {
-	if msg == nil {
-		return fmt.Errorf("enqueue Message Err:%+v", "stream or values is nil")
+func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id string) (string, error) {
+	stringCmd := t.client.Get(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"))
+	if stringCmd.Err() != nil {
+		if errors.Is(stringCmd.Err(), redis.Nil) {
+			return "", nil
+		}
+		return "", stringCmd.Err()
 	}
+	return stringCmd.Val(), nil
+}
+
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
+
 	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 	if b {
 		return nil
@@ -121,24 +112,25 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 	}
 
 	// Sequential job
-	if opts.OrderKey != "" {
-		if err := t.scheduleJob.sequentialEnqueue(ctx, msg, opts); err != nil {
-			return err
+	if msg.MoodType == string(SEQUENTIAL) {
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
+		err := t.client.XAdd(ctx, xAddArgs).Err()
+		if err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
 		}
 		return nil
 	}
 
 	// normal job
 	if msg.ExecuteTime.Before(time.Now()) {
-		nmsg := messageToMap(msg)
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.ChannelName, msg.TopicName), "", "*", t.maxLen, 0, nmsg)
+		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
 		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
 			return err
 		}
 		return nil
 	}
 	// delay job
-	if err := t.scheduleJob.enqueue(ctx, msg, opts); err != nil {
+	if err := t.scheduleJob.enqueue(ctx, msg); err != nil {
 		return err
 	}
 	return nil
@@ -147,30 +139,19 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, opts Option) er
 func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
 
 	bqConfig := t.config
-	jobMaxRetry := bqConfig.JobMaxRetries
-	if jobMaxRetry <= 0 {
-		jobMaxRetry = DefaultOptions.JobMaxRetry
-	}
-
-	minConsumers := bqConfig.MinConsumers
-	if minConsumers <= 0 {
-		minConsumers = DefaultOptions.MinConsumers
-	}
-	timeOut := bqConfig.ConsumeTimeOut
-
 	handler := &RedisHandle{
 		broker:           t,
 		channel:          channel,
 		topic:            topic,
-		run:              subscribe,
+		subscribe:        subscribe,
 		subscribeType:    subType,
 		deadLetterTicker: time.NewTicker(100 * time.Second),
 		pendingIdle:      2 * time.Minute,
-		jobMaxRetry:      jobMaxRetry,
-		minConsumers:     minConsumers,
-		timeOut:          timeOut,
+		jobMaxRetry:      bqConfig.JobMaxRetries,
+		minConsumers:     bqConfig.MinConsumers,
+		timeOut:          bqConfig.ConsumeTimeOut,
 		wg:               new(sync.WaitGroup),
-		result: &sync.Pool{New: func() any {
+		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
 				Info:    SuccessInfo,
@@ -191,8 +172,6 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 	return &scheduleJob{
 		broker:         t,
 		wg:             &sync.WaitGroup{},
-		stop:           make(chan struct{}),
-		done:           make(chan struct{}),
 		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
 		seqTicker:      time.NewTicker(10 * time.Second),
 		scheduleErrGroupPool: &sync.Pool{New: func() any {
@@ -205,6 +184,8 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 }
 
 func (t *RedisBroker) startConsuming(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+
 	for key, cs := range t.consumerHandlers {
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
@@ -222,18 +203,18 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 		t.consumerHandlers[key] = nil
 	}
 	if err := t.pool.Submit(func() {
-		t.logJob.expire(ctx, t.logDone)
+		t.logJob.expire(ctx)
 	}); err != nil {
 		logger.New().Error(err)
 	}
 	if err := t.pool.Submit(func() {
-		t.filter.Delete(ctx, MakeFilter(t.prefix), t.obsoleteDone)
+		t.filter.Delete(ctx, MakeFilter(t.prefix))
 	}); err != nil {
 		logger.New().Error(err)
 	}
 	logger.New().Info("----START----")
 	// monitor signal
-	t.waitSignal()
+	t.waitSignal(cancel)
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
@@ -241,7 +222,7 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 		return err
 	}
 	if err := t.pool.Submit(func() {
-		handle.Process(ctx, t.done, t.seqDone)
+		handle.Process(ctx)
 	}); err != nil {
 		return err
 	}
@@ -252,13 +233,13 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 
 	return t.pool.Submit(func() {
-		if err := handle.DeadLetter(ctx, t.claimDone); err != nil {
+		if err := handle.DeadLetter(ctx); err != nil {
 			logger.New().Error(err)
 		}
 	})
 }
 
-func (t *RedisBroker) waitSignal() {
+func (t *RedisBroker) waitSignal(cancel context.CancelFunc) {
 	sigs := make(chan os.Signal, 1)
 
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
@@ -267,14 +248,9 @@ func (t *RedisBroker) waitSignal() {
 	case sig := <-sigs:
 		if sig == syscall.SIGINT {
 			t.once.Do(func() {
-				t.done <- struct{}{}
-				t.seqDone <- struct{}{}
-				t.obsoleteDone <- struct{}{}
-				t.claimDone <- struct{}{}
-				t.logDone <- struct{}{}
-				t.scheduleJob.shutDown()
 				_ = t.client.Close()
 				t.pool.Release()
+				cancel()
 			})
 		}
 	}

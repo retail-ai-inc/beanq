@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 )
 
@@ -52,6 +51,16 @@ type (
 		MaxRetries         int           `json:"maxRetries"`
 		PoolSize           int           `json:"poolSize"`
 	}
+	Queue struct {
+		Topic        string
+		DelayChannel string
+		DelayTopic   string
+		orderKey     string
+		Channel      string
+		MaxLen       int64
+		Priority     float64
+		TimeToRun    time.Duration
+	}
 	BeanqConfig struct {
 		Health                   Health        `json:"health"`
 		DebugLog                 DebugLog      `json:"debugLog"`
@@ -65,28 +74,53 @@ type (
 		PublishTimeOut           time.Duration `json:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
 		MinConsumers             int64         `json:"minConsumers"`
+		Queue
 	}
 )
 
-// Config Hold the useful configuration settings of beanq so that we can use it quickly from anywhere.
-var Config atomic.Value
+func (t *BeanqConfig) init() {
+	if t.ConsumerPoolSize == 0 {
+		t.ConsumerPoolSize = DefaultOptions.ConsumerPoolSize
+	}
+	if t.JobMaxRetries == 0 {
+		t.JobMaxRetries = DefaultOptions.JobMaxRetry
+	}
+	if t.DeadLetterIdle == 0 {
 
-// BeanqPub publisher
-type BeanqPub interface {
-	Publish(msg *Message, option ...OptionI) error
-	PublishWithContext(ctx context.Context, msg *Message, option ...OptionI) error
-	PublishWithDelay(msg *Message, delayTime time.Duration, option ...OptionI) error
-	PublishAtTime(msg *Message, delay time.Time, option ...OptionI) error
-	PublishInSequence(msg *Message, orderKey string, option ...OptionI) error
-}
-
-// BeanqSub subscribe
-type BeanqSub interface {
-	Subscribe(channel, topic string, subscribe IConsumeHandle)
-	SubscribeSequential(channel, topic string, subscribe IConsumeHandle)
-	StartConsumer()
-	StartConsumerWithContext(ctx context.Context)
-	ping()
+	}
+	if t.KeepSuccessJobsInHistory == 0 {
+		t.KeepSuccessJobsInHistory = DefaultOptions.KeepSuccessJobsInHistory
+	}
+	if t.KeepFailedJobsInHistory == 0 {
+		t.KeepFailedJobsInHistory = DefaultOptions.KeepFailedJobsInHistory
+	}
+	if t.PublishTimeOut == 0 {
+		t.PublishTimeOut = DefaultOptions.PublishTimeOut
+	}
+	if t.ConsumeTimeOut == 0 {
+		t.ConsumeTimeOut = DefaultOptions.ConsumeTimeOut
+	}
+	if t.MinConsumers == 0 {
+		t.MinConsumers = DefaultOptions.MinConsumers
+	}
+	if t.Channel == "" {
+		t.Channel = DefaultOptions.DefaultDelayChannel
+	}
+	if t.Topic == "" {
+		t.Topic = DefaultOptions.DefaultDelayTopic
+	}
+	if t.DelayChannel == "" {
+		t.DelayChannel = DefaultOptions.DefaultDelayChannel
+	}
+	if t.DelayTopic == "" {
+		t.DelayTopic = DefaultOptions.DefaultDelayTopic
+	}
+	if t.MaxLen == 0 {
+		t.MaxLen = DefaultOptions.DefaultMaxLen
+	}
+	if t.TimeToRun == 0 {
+		t.TimeToRun = DefaultOptions.TimeToRun
+	}
 }
 
 // IHandle consumer ,after broker
@@ -94,12 +128,12 @@ type IHandle interface {
 	Channel() string
 	Topic() string
 	Check(ctx context.Context) error
-	Process(ctx context.Context, mainDone, seqDone <-chan struct{})
-	DeadLetter(ctx context.Context, claimDone <-chan struct{}) error
+	Process(ctx context.Context)
+	DeadLetter(ctx context.Context) error
 }
 
 // VolatileLFU
 type VolatileLFU interface {
 	Add(ctx context.Context, key, member string) (bool, error)
-	Delete(ctx context.Context, key string, done <-chan struct{})
+	Delete(ctx context.Context, key string)
 }

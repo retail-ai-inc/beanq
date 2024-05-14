@@ -35,7 +35,7 @@ func (t *RedisUnique) Add(ctx context.Context, key, member string) (bool, error)
 
 }
 
-func (t *RedisUnique) Delete(ctx context.Context, key string, done <-chan struct{}) {
+func (t *RedisUnique) Delete(ctx context.Context, key string) {
 
 	defer func() {
 		t.ticker.Stop()
@@ -43,9 +43,6 @@ func (t *RedisUnique) Delete(ctx context.Context, key string, done <-chan struct
 	for {
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------Obsolete Task STOP--------")
-			return
-		case <-done:
 			logger.New().Info("--------Obsolete Task STOP--------")
 			return
 		case <-t.ticker.C:

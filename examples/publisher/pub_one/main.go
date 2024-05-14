@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
 )
 
@@ -17,7 +18,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -38,8 +39,9 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
+
 func main() {
 	pubOneInfo()
 }
@@ -55,18 +57,14 @@ func pubOneInfo() {
 	}
 
 	d, _ := json.Marshal(msg)
-	// get message
-	bmsg := beanq.NewMessage("", d)
 	config := initCnf()
-	pub := beanq.NewPublisher(config)
-	err := pub.Channel("aa").Topic("bb").Publish(bmsg)
-	pub.Channel("cc").Publish(bmsg)
-	// err := pub.Publish(bmsg, beanq.Topic("ch2"), beanq.Channel("g2"))
-	if err != nil {
-		fmt.Println(err)
+	pub := beanq.New(config)
+	ctx := context.Background()
+	if err := pub.BQ().WithContext(ctx).Publish("", "", d); err != nil {
+		logger.New().Error(err)
 	}
-	defer pub.Close()
+	if err := pub.BQ().WithContext(ctx).Publish("", "aa", d); err != nil {
+		logger.New().Error(err)
+	}
 
-	// publish information
-	fmt.Printf("SendMsgs：%+v \n", bmsg)
 }
