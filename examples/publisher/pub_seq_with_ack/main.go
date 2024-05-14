@@ -49,7 +49,7 @@ func main() {
 
 	m := make(map[string]any)
 	ctx := context.Background()
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 10; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 		result, err := pub.BQ().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
@@ -60,6 +60,7 @@ func main() {
 		}
 	}
 
+	// this is a single check for ACK
 	result, err := pub.CheckAckStatus(ctx, "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
 	if err != nil {
 		panic(err)
