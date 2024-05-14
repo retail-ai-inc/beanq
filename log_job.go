@@ -63,7 +63,7 @@ type (
 
 	ILogJob interface {
 		saveLog(ctx context.Context, result *ConsumerResult) error
-		expire(ctx context.Context, done <-chan struct{})
+		expire(ctx context.Context)
 		archive(ctx context.Context) error
 	}
 
@@ -141,7 +141,7 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 }
 
-func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
+func (t *logJob) expire(ctx context.Context) {
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -153,8 +153,7 @@ func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
 		// check state
 		select {
 		case <-ctx.Done():
-			return
-		case <-done:
+			logger.New().Info("-----Log Task Stop------")
 			return
 		case <-ticker.C:
 		}
