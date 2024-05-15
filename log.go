@@ -52,7 +52,7 @@ const (
 	InfoLevel LevelMsg = "info"
 )
 
-type ILogHook interface {
+type ILog interface {
 	// Archive log
 	Archive(ctx context.Context, result *ConsumerResult) error
 	// Obsolete ,if log has expired ,then delete it
@@ -60,11 +60,11 @@ type ILogHook interface {
 }
 
 type Log struct {
-	logs []ILogHook
+	logs []ILog
 	pool *ants.Pool
 }
 
-func NewLog(pool *ants.Pool, logs ...ILogHook) *Log {
+func NewLog(pool *ants.Pool, logs ...ILog) *Log {
 	return &Log{
 		logs: logs,
 		pool: pool,
@@ -75,11 +75,9 @@ func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
 
 	for _, log := range t.logs {
 		nlog := log
-		_ = t.pool.Submit(func() {
-			if err := nlog.Archive(ctx, result); err != nil {
-				logger.New().Error(err)
-			}
-		})
+		if err := nlog.Archive(ctx, result); err != nil {
+			logger.New().Error(err)
+		}
 	}
 	return nil
 }
@@ -88,9 +86,7 @@ func (t *Log) Obsoletes(ctx context.Context) error {
 
 	for _, log := range t.logs {
 		nlog := log
-		_ = t.pool.Submit(func() {
-			nlog.Obsolete(ctx)
-		})
+		nlog.Obsolete(ctx)
 	}
 	return nil
 }

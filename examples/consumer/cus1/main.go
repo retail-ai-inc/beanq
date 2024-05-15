@@ -44,9 +44,7 @@ func initCnf() beanq.BeanqConfig {
 }
 
 func main() {
-
 	// register consumer
-
 	config := initCnf()
 	ctx := context.Background()
 	csm := beanq.New(&config)

@@ -61,6 +61,20 @@ type (
 		Priority     float64
 		TimeToRun    time.Duration
 	}
+	History struct {
+		On    bool
+		Mongo struct {
+			Database              string
+			Collection            string
+			UserName              string
+			Password              string
+			Host                  string
+			Port                  string
+			ConnectTimeOut        time.Duration
+			MaxConnectionPoolSize uint64
+			MaxConnectionLifeTime time.Duration
+		}
+	}
 	BeanqConfig struct {
 		Health                   Health        `json:"health"`
 		DebugLog                 DebugLog      `json:"debugLog"`
@@ -75,6 +89,7 @@ type (
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
 		MinConsumers             int64         `json:"minConsumers"`
 		Queue
+		History
 	}
 )
 
@@ -120,6 +135,15 @@ func (t *BeanqConfig) init() {
 	}
 	if t.TimeToRun == 0 {
 		t.TimeToRun = DefaultOptions.TimeToRun
+	}
+	if t.History.Mongo.ConnectTimeOut == 0 {
+		t.History.Mongo.ConnectTimeOut = 10 * time.Second
+	}
+	if t.History.Mongo.MaxConnectionPoolSize == 0 {
+		t.History.Mongo.MaxConnectionPoolSize = 200
+	}
+	if t.History.Mongo.MaxConnectionLifeTime == 0 {
+		t.History.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
 }
 

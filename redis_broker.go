@@ -64,6 +64,8 @@ type (
 
 func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
+	ctx := context.Background()
+
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
 		Password:     config.Redis.Password,
@@ -78,7 +80,7 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		PoolFIFO:     true,
 	})
 
-	if err := client.Ping(context.Background()).Err(); err != nil {
+	if err := client.Ping(ctx).Err(); err != nil {
 		logger.New().Fatal(err.Error())
 	}
 
@@ -93,8 +95,13 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		failKey:    MakeLogKey(config.Redis.Prefix, "fail"),
 		successKey: MakeLogKey(config.Redis.Prefix, "success"),
 	}
-
-	broker.logJob = NewLog(pool, broker)
+	var logs []ILog
+	logs = append(logs, broker)
+	if config.History.On {
+		mongoLog := NewMongoLog(ctx, config)
+		logs = append(logs, mongoLog)
+	}
+	broker.logJob = NewLog(pool, logs...)
 	broker.filter = broker
 	broker.scheduleJob = broker.newScheduleJob()
 
