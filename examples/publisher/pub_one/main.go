@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"log"
-	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
 
 	"github.com/retail-ai-inc/beanq"
+	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
 )
@@ -18,8 +18,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
-
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -40,33 +39,32 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
 
 func main() {
-	config := initCnf()
+	pubOneInfo()
+}
 
-	ctx := context.Background()
-	csm := beanq.New(&config)
-	// register delay consumer
-	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
-
-		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
-			return nil
-		},
-		DoCancel: func(ctx context.Context, message *beanq.Message) error {
-			return nil
-		},
-		DoError: func(ctx context.Context, err error) {
-
-		},
-	})
-
-	if err != nil {
-		logger.New().Error(err)
+func pubOneInfo() {
+	// msg can struct or map
+	msg := struct {
+		Info string
+		Id   int
+	}{
+		"msg------1",
+		1,
 	}
 
-	csm.Wait(ctx)
+	d, _ := json.Marshal(msg)
+	config := initCnf()
+	pub := beanq.New(config)
+	ctx := context.Background()
+	if err := pub.BQ().WithContext(ctx).Publish("", "", d); err != nil {
+		logger.New().Error(err)
+	}
+	if err := pub.BQ().WithContext(ctx).Publish("", "aa", d); err != nil {
+		logger.New().Error(err)
+	}
 
 }

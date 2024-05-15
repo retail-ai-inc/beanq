@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -19,7 +18,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -40,16 +39,26 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
 
 func main() {
 
 	config := initCnf()
-	csm := beanq.NewConsumer(config)
 
+	csm := beanq.New(config)
+	// register normal consumer
+	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
+	// 	// TODO:logic
+	// 	// like this:
+	// 	// time.Sleep(3 * time.Second) // this is my business.
+	// 	logger.New().With("g2", "ch2").Info(msg.Payload())
+	//
+	// 	return nil
+	// })
 	// register delay consumer
-	csm.Subscribe("delay-channel", "delay-topic", beanq.DefaultHandle{
+	ctx := context.Background()
+	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "delay-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			logger.New().With("default-channel", "default-topic").Info(message.Payload)
 			return nil
@@ -58,11 +67,14 @@ func main() {
 			return nil
 		},
 		DoError: func(ctx context.Context, err error) {
-			fmt.Printf("+++++++%+v \n", err)
-			return
+
 		},
 	})
+	if err != nil {
+		logger.New().Error(err)
+	}
+
 	// begin to consume information
-	csm.StartConsumer()
+	csm.Wait(ctx)
 
 }

@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/panjf2000/ants/v2"
@@ -10,21 +9,24 @@ import (
 )
 
 type (
-	Broker interface {
-		enqueue(ctx context.Context, msg *Message, options Option) error
+	IBroker interface {
+		checkStatus(ctx context.Context, channel, topic string, id string) (string, error)
+		enqueue(ctx context.Context, msg *Message) error
 		close() error
 		startConsuming(ctx context.Context)
-		addConsumer(subscribeType subscribeType, channel, topic string, run IConsumeHandle)
+		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle)
+		deadLetter(ctx context.Context, handle IHandle) error
 	}
 )
 
 var (
-	broker     *RedisBroker
+	broker     IBroker
 	brokerOnce sync.Once
 )
 
 // NewBroker ...
-func NewBroker(config BeanqConfig) Broker {
+func NewBroker(config *BeanqConfig) IBroker {
+
 	brokerOnce.Do(
 		func() {
 			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true))
@@ -34,9 +36,9 @@ func NewBroker(config BeanqConfig) Broker {
 
 			switch config.Broker {
 			case "redis":
-				broker = newRedisBroker(pool)
+				broker = newRedisBroker(config, pool)
 			default:
-				logger.New().With("", err).Panic("not support broker type:", config.Broker)
+				logger.New().Panic("not support broker type:", config.Broker)
 			}
 		},
 	)
@@ -69,7 +71,7 @@ func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {
 		return c.DoHandle(ctx, message)
 	}
-	return errors.New("missing handle function")
+	return nil
 }
 
 func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {

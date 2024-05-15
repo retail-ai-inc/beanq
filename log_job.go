@@ -63,7 +63,7 @@ type (
 
 	ILogJob interface {
 		saveLog(ctx context.Context, result *ConsumerResult) error
-		expire(ctx context.Context, done <-chan struct{})
+		expire(ctx context.Context)
 		archive(ctx context.Context) error
 	}
 
@@ -76,6 +76,17 @@ type (
 	}
 )
 
+func (c *ConsumerResult) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(c)
+}
+
+func (c *ConsumerResult) Initialize() *ConsumerResult {
+	c.Level = InfoLevel
+	c.Info = SuccessInfo
+	c.RunTime = ""
+	return c
+}
+
 const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"
@@ -84,20 +95,14 @@ const (
 	InfoLevel LevelMsg = "info"
 )
 
-func newLogJob(client redis.UniversalClient, pool *ants.Pool) *logJob {
-	prefix := Config.Load().(BeanqConfig).Redis.Prefix
-	if prefix == "" {
-		prefix = DefaultOptions.Prefix
+func newLogJob(config *BeanqConfig, client redis.UniversalClient, pool *ants.Pool) *logJob {
+	return &logJob{
+		client:            client,
+		pool:              pool,
+		prefix:            config.Redis.Prefix,
+		expiration:        config.KeepFailedJobsInHistory,
+		expirationSuccess: config.KeepSuccessJobsInHistory,
 	}
-	expire := Config.Load().(BeanqConfig).KeepFailedJobsInHistory
-	if expire <= 0 {
-		expire = DefaultOptions.KeepFailedJobsInHistory
-	}
-	expirationSuccess := Config.Load().(BeanqConfig).KeepSuccessJobsInHistory
-	if expirationSuccess <= 0 {
-		expirationSuccess = DefaultOptions.KeepSuccessJobsInHistory
-	}
-	return &logJob{client: client, pool: pool, prefix: prefix, expiration: expire, expirationSuccess: expirationSuccess}
 }
 
 func (t *logJob) setEx(ctx context.Context, key string, val []byte, expiration time.Duration) error {
@@ -136,7 +141,7 @@ func (t *logJob) saveLog(ctx context.Context, result *ConsumerResult) error {
 
 }
 
-func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
+func (t *logJob) expire(ctx context.Context) {
 
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -148,8 +153,7 @@ func (t *logJob) expire(ctx context.Context, done <-chan struct{}) {
 		// check state
 		select {
 		case <-ctx.Done():
-			return
-		case <-done:
+			logger.New().Info("-----Log Task Stop------")
 			return
 		case <-ticker.C:
 		}

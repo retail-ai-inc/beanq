@@ -23,22 +23,20 @@
 package beanq
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/json"
-	"github.com/retail-ai-inc/beanq/helper/stringx"
-	"github.com/retail-ai-inc/beanq/helper/timex"
-	"github.com/rs/xid"
 	"github.com/spf13/cast"
 )
 
 type (
 	Message struct {
 		Id           string        `json:"id"`
-		TopicName    string        `json:"topicName"`
-		ChannelName  string        `json:"channelName"`
+		Topic        string        `json:"topic"`
+		Channel      string        `json:"channel"`
 		MaxLen       int64         `json:"maxLen"`
 		Retry        int           `json:"retry"`
 		PendingRetry int64         `json:"pendingRetry"`
@@ -51,47 +49,31 @@ type (
 	}
 )
 
-func NewMessage(msgId string, message []byte) *Message {
-
-	now := time.Now()
-	if msgId == "" {
-		guid := xid.NewWithTime(now)
-		msgId = guid.String()
-	}
-
-	return &Message{
-		Id:          msgId,
-		TopicName:   DefaultOptions.DefaultTopic,
-		ChannelName: DefaultOptions.DefaultChannel,
-		MaxLen:      DefaultOptions.DefaultMaxLen,
-		Retry:       DefaultOptions.JobMaxRetry,
-		Priority:    0,
-		Payload:     stringx.ByteToString(message),
-		AddTime:     now.Format(timex.DateTime),
-		ExecuteTime: now,
-		MoodType:    "normal",
-	}
+func (m Message) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(m)
 }
 
-// If possible, more data type judgments need to be added
-func messageToStruct(message any) *Message {
-
-	msg := new(Message)
-	switch message.(type) {
-	case *redis.XMessage:
-		xmsg := message.(*redis.XMessage)
-		mapToMessage(xmsg.Values, msg)
-	case map[string]any:
-		mapToMessage(message.(map[string]any), msg)
-	}
-	return msg
-
+func (m Message) ToMap() map[string]any {
+	data := make(map[string]any)
+	data["id"] = m.Id
+	data["topic"] = m.Topic
+	data["channel"] = m.Channel
+	data["maxLen"] = m.MaxLen
+	data["retry"] = m.Retry
+	data["priority"] = m.Priority
+	data["payload"] = m.Payload
+	data["addTime"] = m.AddTime
+	data["executeTime"] = m.ExecuteTime
+	data["moodType"] = m.MoodType
+	data["timeToRun"] = m.TimeToRun
+	return data
 }
 
-// Customized function
-func mapToMessage(data map[string]any, msg *Message) {
+type MessageM map[string]any
 
+func (data MessageM) ToMessage() *Message {
 	now := time.Now()
+	var msg = &Message{}
 	msg.ExecuteTime = now
 	for key, val := range data {
 		switch key {
@@ -99,14 +81,13 @@ func mapToMessage(data map[string]any, msg *Message) {
 			if v, ok := val.(string); ok {
 				msg.Id = v
 			}
-
-		case "topicName":
+		case "topic":
 			if v, ok := val.(string); ok {
-				msg.TopicName = v
+				msg.Topic = v
 			}
-		case "channelName":
+		case "channel":
 			if v, ok := val.(string); ok {
-				msg.ChannelName = v
+				msg.Channel = v
 			}
 		case "maxLen":
 			if v, ok := val.(int64); ok {
@@ -138,26 +119,26 @@ func mapToMessage(data map[string]any, msg *Message) {
 			if v, ok := val.(string); ok {
 				msg.MoodType = v
 			}
+		case "timeToRun":
+			if v, ok := val.(string); ok {
+				dur, _ := strconv.Atoi(v)
+				msg.TimeToRun = time.Duration(dur)
+			}
 		}
 	}
+	return msg
 }
 
-// Customized function
-func messageToMap(message *Message) map[string]any {
-
-	m := make(map[string]any)
-	m["id"] = message.Id
-	m["topicName"] = message.TopicName
-	m["channelName"] = message.ChannelName
-	m["maxLen"] = message.MaxLen
-	m["retry"] = message.Retry
-	m["priority"] = message.Priority
-	m["payload"] = message.Payload
-	m["addTime"] = message.AddTime
-	m["executeTime"] = message.ExecuteTime
-	m["moodType"] = message.MoodType
-	return m
-
+// If possible, more data type judgments need to be added
+func messageToStruct(message any) *Message {
+	msg := new(Message)
+	switch xmsg := message.(type) {
+	case *redis.XMessage:
+		msg = MessageM(xmsg.Values).ToMessage()
+	case map[string]any:
+		msg = MessageM(xmsg).ToMessage()
+	}
+	return msg
 }
 
 // Customized function

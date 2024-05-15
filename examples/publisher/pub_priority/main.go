@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"log"
-	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/retail-ai-inc/beanq"
+	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
+	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
 
@@ -18,8 +20,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
-
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -40,33 +41,31 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
+}
+func main() {
+	pubMoreAndPriorityInfo()
 }
 
-func main() {
-	config := initCnf()
+func pubMoreAndPriorityInfo() {
+
+	pub := beanq.New(initCnf())
+	m := make(map[string]string)
 
 	ctx := context.Background()
-	csm := beanq.New(&config)
-	// register delay consumer
-	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
+	for i := 0; i < 5; i++ {
+		var y float64 = 0
+		m["delayMsg"] = "new msg" + cast.ToString(i)
+		b, _ := json.Marshal(m)
 
-		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
-			return nil
-		},
-		DoCancel: func(ctx context.Context, message *beanq.Message) error {
-			return nil
-		},
-		DoError: func(ctx context.Context, err error) {
+		delayT := time.Now().Add(10 * time.Second)
 
-		},
-	})
+		if i == 3 {
+			y = 10
+		}
+		if err := pub.BQ().WithContext(ctx).Priority(y).PublishAtTime("delay-channel", "delay-topic", b, delayT); err != nil {
+			logger.New().Error(err)
+		}
 
-	if err != nil {
-		logger.New().Error(err)
 	}
-
-	csm.Wait(ctx)
-
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
@@ -18,7 +20,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -39,7 +41,7 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
 func main() {
 	runtime.GOMAXPROCS(2)
@@ -48,24 +50,29 @@ func main() {
 
 func pubDelayInfo() {
 	config := initCnf()
-	pub := beanq.NewPublisher(config)
+	pub := beanq.New(config)
 
 	m := make(map[string]any)
 
+	ctx := context.Background()
 	now := time.Now()
+	delayT := now
 	for i := 0; i < 10; i++ {
+
+		// if time.Now().Sub(ntime).Minutes() >= 1 {
+		// 	break
+		// }
+		delayT = now
 
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 
 		b, _ := json.Marshal(m)
+		if i == 2 {
+			delayT = now
+		}
 
-		// This method will use msgId as the idempotent basis
-		// example:
-		// beanq.NewMessage("1",b)
-		msg := beanq.NewMessage("", b)
-
-		delayT := now.Add(10 * time.Second)
+		delayT = now.Add(10 * time.Second)
 		// Execute immediately
 		if i == 2 {
 			delayT = now
@@ -76,13 +83,16 @@ func pubDelayInfo() {
 		}
 		// Delay execution by 35 seconds
 		if i == 3 {
+			y = 10
 			delayT = now.Add(35 * time.Second)
 		}
-
-		if err := pub.Channel("delay-channel").Topic("delay-topic").PublishAtTime(msg, delayT, beanq.WithPriority(float64(y))); err != nil {
-			log.Println(err)
+		// continue
+		if err := pub.BQ().
+			WithContext(ctx).
+			Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {
+			logger.New().Error(err)
 		}
+		// pub.Payload(b).PublishAtTime(ctx, delayT)
 
 	}
-	defer pub.Close()
 }
