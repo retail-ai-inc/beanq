@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -12,7 +12,6 @@ import (
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -20,7 +19,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -41,7 +40,7 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
 }
 
 type seqCustomer struct {
@@ -64,7 +63,7 @@ func main() {
 	// register consumer
 
 	config := initCnf()
-	csm := beanq.NewConsumer(config)
+	csm := beanq.New(config)
 	// register normal consumer
 	// csm.Register("g2", "ch2", func(ctx context.Context, msg *beanq.Message) error {
 	// 	// TODO:logic
@@ -76,9 +75,11 @@ func main() {
 	// })
 	// register delay consumer
 	// csm.SubscribeSequential("", "", &seqCustomer{})
-	csm.SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
+	ctx := context.Background()
+	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			fmt.Printf("result:%+v,time:%+v \n", message, time.Now())
+			time.Sleep(time.Second * 2)
+			log.Printf("result:%+v,time:%+v \n", message, time.Now())
 			return nil
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
@@ -88,7 +89,10 @@ func main() {
 
 		},
 	})
+	if err != nil {
+		logger.New().Error(err)
+	}
 	// begin to consume information
-	csm.StartConsumer()
+	csm.Wait(ctx)
 
 }
