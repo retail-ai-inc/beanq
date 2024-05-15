@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"strings"
@@ -254,7 +255,27 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) {
 			})
 		}
 	}
+}
 
+func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
+	m := &Mutex{
+		name:   name,
+		expiry: 8 * time.Second,
+		tries:  32,
+		delayFunc: func(tries int) time.Duration {
+			return time.Duration(rand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
+		},
+		genValueFunc:  genValue,
+		driftFactor:   0.01,
+		timeoutFactor: 0.05,
+		quorum:        1,
+		client:        t.client,
+	}
+
+	for _, o := range options {
+		o.Apply(m)
+	}
+	return m
 }
 
 func (t *RedisBroker) close() error {
