@@ -66,21 +66,6 @@ func (m *Mutex) Until() time.Time {
 	return m.until
 }
 
-// TryLock only attempts to lock m once and returns immediately regardless of success or failure without retrying.
-func (m *Mutex) TryLock() error {
-	return m.TryLockContext(context.Background())
-}
-
-// TryLockContext only attempts to lock m once and returns immediately regardless of success or failure without retrying.
-func (m *Mutex) TryLockContext(ctx context.Context) error {
-	return m.lockContext(ctx, 1)
-}
-
-// Lock locks m. In case it returns an error on failure, you may retry to acquire the lock by calling this method again.
-func (m *Mutex) Lock() error {
-	return m.LockContext(context.Background())
-}
-
 // LockContext locks m. In case it returns an error on failure, you may retry to acquire the lock by calling this method again.
 func (m *Mutex) LockContext(ctx context.Context) error {
 	return m.lockContext(ctx, m.tries)
@@ -149,11 +134,6 @@ func (m *Mutex) lockContext(ctx context.Context, tries int) error {
 	return ErrFailed
 }
 
-// Unlock unlocks m and returns the status of unlock.
-func (m *Mutex) Unlock() (bool, error) {
-	return m.UnlockContext(context.Background())
-}
-
 // UnlockContext unlocks m and returns the status of unlock.
 func (m *Mutex) UnlockContext(ctx context.Context) (bool, error) {
 	n, err := m.actOnPoolsAsync(func(client redis.UniversalClient) (bool, error) {
@@ -163,11 +143,6 @@ func (m *Mutex) UnlockContext(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return true, nil
-}
-
-// Extend resets the mutex's expiry and returns the status of expiry extension.
-func (m *Mutex) Extend() (bool, error) {
-	return m.ExtendContext(context.Background())
 }
 
 // ExtendContext resets the mutex's expiry and returns the status of expiry extension.
