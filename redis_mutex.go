@@ -2,17 +2,28 @@ package beanq
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"io"
-	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hashicorp/go-multierror"
 )
+
+// ErrFailed is the error resulting if Redsync fails to acquire the lock after exhausting all retries.
+var ErrFailed = errors.New("redsync: failed to acquire lock")
+
+// ErrExtendFailed is the error resulting if Redsync fails to extend the lock.
+var ErrExtendFailed = errors.New("redsync: failed to extend lock")
+
+// ErrLockAlreadyExpired is the error resulting if trying to unlock the lock which already expired.
+var ErrLockAlreadyExpired = errors.New("redsync: failed to unlock, lock was already expired")
 
 // A DelayFunc is used to decide the amount of time to wait between retries.
 type DelayFunc func(tries int) time.Duration
@@ -33,10 +44,11 @@ type Mutex struct {
 	genValueFunc  func() (string, error)
 	value         string
 	until         time.Time
+	shuffle       bool
 	failFast      bool
 	setNXOnExtend bool
 
-	client redis.UniversalClient
+	pools []redis.UniversalClient
 }
 
 // Name returns mutex name (i.e. the Redis key).
@@ -109,8 +121,8 @@ func (m *Mutex) lockContext(ctx context.Context, tries int) error {
 		n, err := func() (int, error) {
 			ctx, cancel := context.WithTimeout(ctx, time.Duration(int64(float64(m.expiry)*m.timeoutFactor)))
 			defer cancel()
-			return m.actOnPoolsAsync(func() (bool, error) {
-				return m.acquire(ctx, value)
+			return m.actOnPoolsAsync(func(client redis.UniversalClient) (bool, error) {
+				return m.acquire(ctx, client, value)
 			})
 		}()
 
@@ -125,8 +137,8 @@ func (m *Mutex) lockContext(ctx context.Context, tries int) error {
 		_, _ = func() (int, error) {
 			ctx, cancel := context.WithTimeout(ctx, time.Duration(int64(float64(m.expiry)*m.timeoutFactor)))
 			defer cancel()
-			return m.actOnPoolsAsync(func() (bool, error) {
-				return m.release(ctx, value)
+			return m.actOnPoolsAsync(func(client redis.UniversalClient) (bool, error) {
+				return m.release(ctx, client, value)
 			})
 		}()
 		if i == tries-1 && err != nil {
@@ -144,8 +156,8 @@ func (m *Mutex) Unlock() (bool, error) {
 
 // UnlockContext unlocks m and returns the status of unlock.
 func (m *Mutex) UnlockContext(ctx context.Context) (bool, error) {
-	n, err := m.actOnPoolsAsync(func() (bool, error) {
-		return m.release(ctx, m.value)
+	n, err := m.actOnPoolsAsync(func(client redis.UniversalClient) (bool, error) {
+		return m.release(ctx, client, m.value)
 	})
 	if n < m.quorum {
 		return false, err
@@ -161,8 +173,8 @@ func (m *Mutex) Extend() (bool, error) {
 // ExtendContext resets the mutex's expiry and returns the status of expiry extension.
 func (m *Mutex) ExtendContext(ctx context.Context) (bool, error) {
 	start := time.Now()
-	n, err := m.actOnPoolsAsync(func() (bool, error) {
-		return m.touch(ctx, m.value, int(m.expiry/time.Millisecond))
+	n, err := m.actOnPoolsAsync(func(client redis.UniversalClient) (bool, error) {
+		return m.touch(ctx, client, m.value, int(m.expiry/time.Millisecond))
 	})
 	if n < m.quorum {
 		return false, err
@@ -176,39 +188,6 @@ func (m *Mutex) ExtendContext(ctx context.Context) (bool, error) {
 	return false, ErrExtendFailed
 }
 
-// Valid returns true if the lock acquired through m is still valid. It may
-// also return true erroneously if quorum is achieved during the call and at
-// least one node then takes long enough to respond for the lock to expire.
-//
-// Deprecated: Use Until instead. See https://github.com/go-redsync/redsync/issues/72.
-func (m *Mutex) Valid() (bool, error) {
-	return m.ValidContext(context.Background())
-}
-
-// ValidContext returns true if the lock acquired through m is still valid. It may
-// also return true erroneously if quorum is achieved during the call and at
-// least one node then takes long enough to respond for the lock to expire.
-//
-// Deprecated: Use Until instead. See https://github.com/go-redsync/redsync/issues/72.
-func (m *Mutex) ValidContext(ctx context.Context) (bool, error) {
-	n, err := m.actOnPoolsAsync(func() (bool, error) {
-		return m.valid(ctx)
-	})
-	return n >= m.quorum, err
-}
-
-func (m *Mutex) valid(ctx context.Context) (bool, error) {
-	if m.value == "" {
-		return false, nil
-	}
-
-	reply, err := m.client.Get(ctx, m.name).Result()
-	if err != nil {
-		return false, err
-	}
-	return m.value == reply, nil
-}
-
 func genValue() (string, error) {
 	b := make([]byte, 16)
 	_, err := rand.Read(b)
@@ -218,8 +197,8 @@ func genValue() (string, error) {
 	return base64.StdEncoding.EncodeToString(b), nil
 }
 
-func (m *Mutex) acquire(ctx context.Context, value string) (bool, error) {
-	reply, err := m.client.SetNX(ctx, m.name, value, m.expiry).Result()
+func (m *Mutex) acquire(ctx context.Context, client redis.UniversalClient, value string) (bool, error) {
+	reply, err := client.SetNX(ctx, m.name, value, m.expiry).Result()
 	if err != nil {
 		return false, err
 	}
@@ -237,8 +216,8 @@ var deleteScript = NewScript(1, `
 	end
 `)
 
-func (m *Mutex) release(ctx context.Context, value string) (bool, error) {
-	status, err := m.eval(ctx, deleteScript, m.name, value)
+func (m *Mutex) release(ctx context.Context, client redis.UniversalClient, value string) (bool, error) {
+	status, err := m.Eval(ctx, client, deleteScript, m.name, value)
 	if err != nil {
 		return false, err
 	}
@@ -248,7 +227,7 @@ func (m *Mutex) release(ctx context.Context, value string) (bool, error) {
 	return status != int64(0), nil
 }
 
-func (m *Mutex) eval(ctx context.Context, script *Script, keysAndArgs ...interface{}) (interface{}, error) {
+func (m *Mutex) Eval(ctx context.Context, client redis.UniversalClient, script *Script, keysAndArgs ...interface{}) (interface{}, error) {
 	keys := make([]string, script.KeyCount)
 	args := keysAndArgs
 
@@ -259,9 +238,9 @@ func (m *Mutex) eval(ctx context.Context, script *Script, keysAndArgs ...interfa
 		args = keysAndArgs[script.KeyCount:]
 	}
 
-	v, err := m.client.EvalSha(ctx, script.Hash, keys, args...).Result()
+	v, err := client.EvalSha(ctx, script.Hash, keys, args...).Result()
 	if err != nil && strings.Contains(err.Error(), "NOSCRIPT ") {
-		v, err = m.client.Eval(ctx, script.Src, keys, args...).Result()
+		v, err = client.Eval(ctx, script.Src, keys, args...).Result()
 	}
 	return v, noErrNil(err)
 }
@@ -284,32 +263,34 @@ var touchScript = NewScript(1, `
 	end
 `)
 
-func (m *Mutex) touch(ctx context.Context, value string, expiry int) (bool, error) {
+func (m *Mutex) touch(ctx context.Context, client redis.UniversalClient, value string, expiry int) (bool, error) {
 	touchScript := touchScript
 	if m.setNXOnExtend {
 		touchScript = touchWithSetNXScript
 	}
 
-	status, err := m.eval(ctx, touchScript, m.name, value, expiry)
+	status, err := m.Eval(ctx, client, touchScript, m.name, value, expiry)
 	if err != nil {
 		return false, err
 	}
 	return status != int64(0), nil
 }
 
-func (m *Mutex) actOnPoolsAsync(actFn func() (bool, error)) (int, error) {
+func (m *Mutex) actOnPoolsAsync(actFn func(client redis.UniversalClient) (bool, error)) (int, error) {
 	type result struct {
 		node     int
 		statusOK bool
 		err      error
 	}
 
-	ch := make(chan result, 1)
-	go func(node int, pool redis.UniversalClient) {
-		r := result{node: node}
-		r.statusOK, r.err = actFn()
-		ch <- r
-	}(0, m.client)
+	ch := make(chan result, len(m.pools))
+	for node, client := range m.pools {
+		go func(node int, client redis.UniversalClient) {
+			r := result{node: node}
+			r.statusOK, r.err = actFn(client)
+			ch <- r
+		}(node, client)
+	}
 
 	var (
 		n     = 0
@@ -317,32 +298,34 @@ func (m *Mutex) actOnPoolsAsync(actFn func() (bool, error)) (int, error) {
 		err   error
 	)
 
-	r := <-ch
-	if r.statusOK {
-		n++
-	} else if r.err == ErrLockAlreadyExpired {
-		err = multierror.Append(err, ErrLockAlreadyExpired)
-	} else if r.err != nil {
-		err = multierror.Append(err, &RedisError{Node: r.node, Err: r.err})
-	} else {
-		taken = append(taken, r.node)
-		err = multierror.Append(err, &ErrNodeTaken{Node: r.node})
-	}
-
-	if m.failFast {
-		// fast return
-		if n >= m.quorum {
-			return n, err
+	for range m.pools {
+		r := <-ch
+		if r.statusOK {
+			n++
+		} else if r.err == ErrLockAlreadyExpired {
+			err = multierror.Append(err, ErrLockAlreadyExpired)
+		} else if r.err != nil {
+			err = multierror.Append(err, fmt.Errorf("node #%d: %w", r.node, r.err))
+		} else {
+			taken = append(taken, r.node)
+			err = multierror.Append(err, fmt.Errorf("node #%d: lock already taken", r.node))
 		}
 
-		// fail fast
-		if len(taken) >= m.quorum {
-			return n, &ErrTaken{Nodes: taken}
+		if m.failFast {
+			// fast return
+			if n >= m.quorum {
+				return n, err
+			}
+
+			// fail fast
+			if len(taken) >= m.quorum {
+				return n, fmt.Errorf("lock already taken, locked nodes: %v", taken)
+			}
 		}
 	}
 
 	if len(taken) >= m.quorum {
-		return n, &ErrTaken{Nodes: taken}
+		return n, fmt.Errorf("lock already taken, locked nodes: %v", taken)
 	}
 	return n, err
 }
@@ -353,7 +336,6 @@ const (
 )
 
 // Script encapsulates the source, hash and key count for a Lua script.
-// Taken from https://github.com/gomodule/redigo/blob/46992b0f02f74066bcdfd9b03e33bc03abd10dc7/redis/script.go#L24-L30
 type Script struct {
 	KeyCount int
 	Src      string
@@ -365,7 +347,6 @@ type Script struct {
 // argument list. If keyCount is less than zero, then the application supplies
 // the count as the first value in the keysAndArgs argument to the Do, Send and
 // SendHash methods.
-// Taken from https://github.com/gomodule/redigo/blob/46992b0f02f74066bcdfd9b03e33bc03abd10dc7/redis/script.go#L32-L41
 func NewScript(keyCount int, src string) *Script {
 	h := sha1.New()
 	_, _ = io.WriteString(h, src)
@@ -421,7 +402,6 @@ func WithRetryDelay(delay time.Duration) MuxOption {
 // WithSetNXOnExtend improves extending logic to extend the key if exist
 // and if not, tries to set a new key in redis
 // Useful if your redises restart often and you want to reduce the chances of losing the lock
-// Read this MR for more info: https://github.com/go-redsync/redsync/pull/149
 func WithSetNXOnExtend() MuxOption {
 	return OptionFunc(func(m *Mutex) {
 		m.setNXOnExtend = true
@@ -473,5 +453,12 @@ func WithValue(v string) MuxOption {
 func WithFailFast(b bool) MuxOption {
 	return OptionFunc(func(m *Mutex) {
 		m.failFast = b
+	})
+}
+
+// WithShufflePools can be used to shuffle Redis pools to reduce centralized access in concurrent scenarios.
+func WithShufflePools(b bool) MuxOption {
+	return OptionFunc(func(m *Mutex) {
+		m.shuffle = b
 	})
 }
