@@ -69,7 +69,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 		// check state
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------Main Task STOP--------")
+			logger.New().Info("Main Task Stop")
 			return
 		default:
 
@@ -97,7 +97,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------Sequential Task STOP--------")
+			logger.New().Info("Sequential Task Stop")
 			return
 
 		case <-time.After(time.Millisecond * 100):
@@ -241,7 +241,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 		// check state
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------DeadLetter Work STOP--------")
+			logger.New().Info("DeadLetter Work Stop")
 			return nil
 		case <-t.deadLetterTicker.C:
 

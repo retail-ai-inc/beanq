@@ -148,7 +148,7 @@ func (t *RedisBroker) Obsolete(ctx context.Context) {
 		// check state
 		select {
 		case <-ctx.Done():
-			logger.New().Info("-------Redis Obsolete Stop-----------")
+			logger.New().Info("Redis Obsolete Stop")
 			return
 		case <-ticker.C:
 		}
@@ -196,7 +196,7 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------UniqueId Obsolete Task STOP--------")
+			logger.New().Info("UniqueId Obsolete Task Stop")
 			return
 		case <-ticker.C:
 
@@ -355,7 +355,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	}); err != nil {
 		logger.New().Error(err)
 	}
-	logger.New().Info("----START----")
+	logger.New().Info("Beanq Start")
 	// monitor signal
 	t.waitSignal(cancel)
 }
