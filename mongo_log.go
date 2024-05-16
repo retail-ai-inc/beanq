@@ -11,8 +11,10 @@ import (
 )
 
 type MongoLog struct {
-	collection *mongo.Collection
+	database *mongo.Database
 }
+
+const MongoCollection string = "logs"
 
 func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 
@@ -48,7 +50,7 @@ func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 	}
 
 	return &MongoLog{
-		collection: client.Database(historyCfg.Mongo.Database).Collection(historyCfg.Mongo.Collection),
+		database: client.Database(historyCfg.Mongo.Database),
 	}
 }
 
@@ -59,7 +61,7 @@ func (t *MongoLog) Archive(ctx context.Context, result *ConsumerResult) error {
 		"type":  result.Info,
 		"data":  result,
 	}
-	if _, err := t.collection.InsertOne(ctx, data); err != nil {
+	if _, err := t.database.Collection(MongoCollection).InsertOne(ctx, data); err != nil {
 		return err
 	}
 	return nil

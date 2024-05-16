@@ -232,7 +232,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	}
 }
 
-// DeadLetter Please refer to http://www.redis.cn/commands/xclaim.html
+// DeadLetter Please refer to https://redis.io/docs/latest/commands/xclaim/
 func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	defer t.deadLetterTicker.Stop()
@@ -260,11 +260,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 		}
 
 		for _, pending := range pendings {
-			if pending.Idle < t.pendingIdle {
-				continue
-			}
-			// if pending retry count > 5,then add it into dead_letter_stream
-			if pending.RetryCount > 5 {
+			// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
+			if pending.Idle > t.pendingIdle {
 				val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
 					continue
@@ -319,17 +316,14 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 			if err := t.broker.pool.Submit(func() {
 				r := t.execute(ctx, &nv)
 
-				group := t.errGroupPool.Get().(*errgroup.Group)
-				group.TryGo(func() error {
-					return t.ack(ctx, stream, channel, nv.ID)
-				})
-				group.TryGo(func() error {
-					return t.broker.logJob.Archives(ctx, r)
-				})
-				if err := group.Wait(); err != nil {
+				if err := t.ack(ctx, stream, channel, nv.ID); err != nil {
 					logger.New().Error(err)
+					return
 				}
-				t.errGroupPool.Put(group)
+				if err := t.broker.logJob.Archives(ctx, r); err != nil {
+					logger.New().Error(err)
+					return
+				}
 
 				defer t.wg.Done()
 			}); err != nil {

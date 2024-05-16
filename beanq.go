@@ -65,7 +65,6 @@ type (
 		On    bool
 		Mongo struct {
 			Database              string
-			Collection            string
 			UserName              string
 			Password              string
 			Host                  string
