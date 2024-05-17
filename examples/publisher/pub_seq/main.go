@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -57,6 +56,5 @@ func main() {
 		if err := bq.WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).Error(); err != nil {
 			logger.New().Error(err)
 		}
-		time.Sleep(time.Second * 1)
 	}
 }

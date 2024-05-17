@@ -88,57 +88,47 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
-	key := strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_id"}, ":")
-
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
 
-	keyExDuration := 20 * time.Second
+	mutex := t.broker.NewMutex(
+		strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_sync"}, ":"),
+		WithExpiry(20*time.Second),
+	)
 
 	for {
 		select {
 		case <-ctx.Done():
 			logger.New().Info("--------Sequential Task STOP--------")
 			return
-		case <-time.After(time.Millisecond * 100):
-			var executable bool
+		case <-time.After(time.Millisecond * 200):
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				executingStatus := tx.Get(ctx, key).Val()
+				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
+				if err != nil {
+					return err
+				}
+
 				streamInfo := tx.XInfoStream(ctx, stream).Val()
-
-				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-					if streamInfo == nil || streamInfo.Length == 0 {
-						err := pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
-						return err
-					}
-
-					if executingStatus == "executing" {
-						return nil
-					}
-
-					if err := pipeliner.SetEX(ctx, key, "executing", keyExDuration).Err(); err != nil {
-						executable = false
-						return err
-					}
-					executable = true
-					return nil
-				})
-				return err
-			}, key, stream)
+				if streamInfo == nil || (streamInfo.Length-xp.Count) <= 0 {
+					return errors.New("queue data is empty")
+				}
+				return nil
+			}, stream)
 
 			if err != nil {
-				if !errors.Is(err, redis.TxFailedErr) {
-					logger.New().Error(err)
-				}
 				continue
 			}
 
-			if !executable {
+			if err := mutex.LockContext(ctx); err != nil {
+				logger.New().Error(err)
 				continue
 			}
 
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
+				if _, err := mutex.UnlockContext(ctx); err != nil {
+					logger.New().Error(err)
+				}
 				continue
 			}
 
@@ -213,16 +203,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				t.errGroupPool.Put(group)
 			}
 
-			err = t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-					return pipeliner.SetEX(ctx, key, "", keyExDuration).Err()
-				})
-				if err != nil {
-					return err
-				}
-				return err
-			}, key)
-			if err != nil {
+			if _, err := mutex.UnlockContext(ctx); err != nil {
 				logger.New().Error(err)
 			}
 		}
