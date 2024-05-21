@@ -251,6 +251,8 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 
 	case *Subscribe:
 		b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
+	default:
+		return fmt.Errorf("unknown structure type: %T", cmd)
 	}
 
 	return nil
