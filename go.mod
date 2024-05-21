@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/json-iterator/go v1.1.12
 	github.com/labstack/gommon v0.4.2
 	github.com/panjf2000/ants/v2 v2.9.0
@@ -21,6 +22,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
+	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.0 // indirect
