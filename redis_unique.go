@@ -17,21 +17,18 @@ type RedisUnique struct {
 }
 
 func (t *RedisUnique) Add(ctx context.Context, key, member string) (bool, error) {
-
-	incr := 0.000
-	b := false
+	incr := 0.001
 	err := t.client.ZRank(ctx, key, member).Err()
 
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
-			now := time.Now().Unix()
-			incr = float64(now) + 0.001
+			incr = float64(time.Now().Unix()) + incr
+			return false, t.client.ZIncrBy(ctx, key, incr, member).Err()
 		}
-		return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+		return false, err
 	}
-	incr = 0.001
-	b = true
-	return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+
+	return true, t.client.ZIncrBy(ctx, key, incr, member).Err()
 
 }
 

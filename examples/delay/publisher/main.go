@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
+	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
 
@@ -41,30 +43,44 @@ func initCnf() *beanq.BeanqConfig {
 	})
 	return &bqConfig
 }
-
 func main() {
-	pubOneInfo()
+	runtime.GOMAXPROCS(2)
+	pubDelayInfo()
 }
 
-func pubOneInfo() {
-	// msg can struct or map
-	msg := struct {
-		Info string
-		Id   int
-	}{
-		"msg------1",
-		1,
-	}
-
-	d, _ := json.Marshal(msg)
+func pubDelayInfo() {
 	config := initCnf()
 	pub := beanq.New(config)
-	ctx := context.Background()
-	if err := pub.BQ().WithContext(ctx).Publish("", "", d); err != nil {
-		logger.New().Error(err)
-	}
-	if err := pub.BQ().WithContext(ctx).Publish("", "aa", d); err != nil {
-		logger.New().Error(err)
-	}
 
+	m := make(map[string]any)
+	ctx := context.Background()
+	now := time.Now()
+	delayT := now
+	for i := 0; i < 10; i++ {
+
+		// if time.Now().Sub(ntime).Minutes() >= 1 {
+		// 	break
+		// }
+		delayT = now
+		y := 0
+		m["delayMsg"] = "new msg" + cast.ToString(i)
+
+		b, _ := json.Marshal(m)
+
+		if i == 2 {
+			delayT = now
+		}
+
+		if i == 4 {
+			y = 8
+		}
+		if i == 3 {
+			y = 10
+			delayT = now.Add(35 * time.Second)
+		}
+		// continue
+		if err := pub.BQ().WithContext(ctx).Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {
+			logger.New().Error(err)
+		}
+	}
 }

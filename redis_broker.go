@@ -103,37 +103,37 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
-
-	b, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
-	if b {
-		return nil
-	}
+	// Idempotency check
+	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 	if err != nil {
 		return err
 	}
+	if exist {
+		return nil
+	}
 
-	// Sequential job
-	if msg.MoodType == string(SEQUENTIAL) {
+	switch msg.MoodType {
+	case SEQUENTIAL:
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
 		err := t.client.XAdd(ctx, xAddArgs).Err()
 		if err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
 		}
-		return nil
-	}
-
-	// normal job
-	if msg.ExecuteTime.Before(time.Now()) {
+	case NORMAL:
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
-		if err := t.client.XAdd(ctx, xAddArgs).Err(); err != nil {
+		err := t.client.XAdd(ctx, xAddArgs).Err()
+		if err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] normal xadd error:%w", err)
+		}
+	case DELAY:
+		err := t.scheduleJob.enqueue(ctx, msg)
+		if err != nil {
 			return err
 		}
-		return nil
+	default:
+		return errors.New("[RedisBroker.enqueue] unknown:" + msg.MoodType.String())
 	}
-	// delay job
-	if err := t.scheduleJob.enqueue(ctx, msg); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -203,16 +203,19 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 		}
 		t.consumerHandlers[key] = nil
 	}
+
 	if err := t.pool.Submit(func() {
 		t.logJob.expire(ctx)
 	}); err != nil {
 		logger.New().Error(err)
 	}
+
 	if err := t.pool.Submit(func() {
 		t.filter.Delete(ctx, MakeFilter(t.prefix))
 	}); err != nil {
 		logger.New().Error(err)
 	}
+
 	logger.New().Info("----START----")
 	// monitor signal
 	t.waitSignal(cancel)
