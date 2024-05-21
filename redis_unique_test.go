@@ -1,6 +1,8 @@
 package beanq
 
 import (
+	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -27,4 +29,27 @@ func TestGet(t *testing.T) {
 		ticker: time.NewTicker(30 * time.Second),
 	}
 	client.Add(context.Background(), "zset", "cc")
+}
+
+func TestTypeConverter(t *testing.T) {
+	type Mood string
+	var a = struct {
+		Mode Mood
+	}{
+		Mode: "fasdfasdf",
+	}
+	bs, err := json.Marshal(&a)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(string(bs))
+
+	var b struct {
+		Mode Mood
+	}
+	err = json.Unmarshal(bs, &b)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(b.Mode)
 }

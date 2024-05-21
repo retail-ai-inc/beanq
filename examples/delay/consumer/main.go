@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"log"
+	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/retail-ai-inc/beanq"
-	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
-	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )
 
@@ -20,7 +18,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() *beanq.BeanqConfig {
+func initCnf() beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -41,51 +39,33 @@ func initCnf() *beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return &bqConfig
+	return bqConfig
 }
+
 func main() {
-	runtime.GOMAXPROCS(2)
-	pubDelayInfo()
-}
-
-func pubDelayInfo() {
 	config := initCnf()
-	pub := beanq.New(config)
-
-	m := make(map[string]any)
 	ctx := context.Background()
-	now := time.Now()
-	delayT := now
-	for i := 0; i < 10; i++ {
+	csm := beanq.New(&config)
 
-		// if time.Now().Sub(ntime).Minutes() >= 1 {
-		// 	break
-		// }
-		delayT = now
-		y := 0
-		m["delayMsg"] = "new msg" + cast.ToString(i)
-
-		b, _ := json.Marshal(m)
-
-		if i == 2 {
-			delayT = now
-		}
-
-		if i == 4 {
-			y = 8
-		}
-		if i == 3 {
-			y = 10
-			delayT = now.Add(35 * time.Second)
-		}
-		// continue
-		if err := pub.BQ().
-			WithContext(ctx).
-			Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {
+	// register delay consumer
+	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
+		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
+			return nil
+		},
+		DoCancel: func(ctx context.Context, message *beanq.Message) error {
+			return nil
+		},
+		DoError: func(ctx context.Context, err error) {
 			logger.New().Error(err)
-		}
-		// pub.Payload(b).PublishAtTime(ctx, delayT)
 
+		},
+	})
+	if err != nil {
+		logger.New().Error(err)
 	}
+	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
+
+	csm.Wait(ctx)
 
 }

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
@@ -48,24 +47,16 @@ func main() {
 }
 
 func pubMoreAndPriorityInfo() {
-
 	pub := beanq.New(initCnf())
 	m := make(map[string]string)
 
 	ctx := context.Background()
 	for i := 0; i < 5; i++ {
-		var y float64 = 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
-		delayT := time.Now().Add(10 * time.Second)
-
-		if i == 3 {
-			y = 10
-		}
-		if err := pub.BQ().WithContext(ctx).Priority(y).PublishAtTime("delay-channel", "delay-topic", b, delayT); err != nil {
+		if err := pub.BQ().WithContext(ctx).Publish("default-channel", "default-topic", b); err != nil {
 			logger.New().Error(err)
 		}
-
 	}
 }

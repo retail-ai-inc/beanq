@@ -43,13 +43,21 @@ const (
 	sequentialSubscribe
 )
 
-// message type
-type moodType string
+// MoodType message type
+type MoodType string
+
+func (m MoodType) String() string {
+	return fmt.Sprintf("mood type: %s", string(m))
+}
+
+func (m MoodType) MarshalBinary() ([]byte, error) {
+	return []byte(m), nil
+}
 
 const (
-	NORMAL     moodType = "normal"
-	DELAY      moodType = "delay"
-	SEQUENTIAL moodType = "sequential"
+	NORMAL     MoodType = "normal"
+	DELAY      MoodType = "delay"
+	SEQUENTIAL MoodType = "sequential"
 )
 
 type (
@@ -209,14 +217,15 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		topic = b.client.Topic
 	}
 
-	if cmd, ok := cmd.(*Publish); ok {
+	switch cmd := cmd.(type) {
+	case *Publish:
 		b.waitAck = cmd.moodType == SEQUENTIAL
 		// make message
 		message := &Message{
 			Topic:       topic,
 			Channel:     channel,
 			Payload:     stringx.ByteToString(cmd.payload),
-			MoodType:    string(cmd.moodType),
+			MoodType:    cmd.moodType,
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
 			ExecuteTime: cmd.executeTime,
 
@@ -236,12 +245,16 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		if b.id != message.Id {
 			b.id = message.Id
 		}
+
 		// store message
 		return b.client.broker.enqueue(b.ctx, message)
-	}
-	if cmd, ok := cmd.(*Subscribe); ok {
+
+	case *Subscribe:
 		b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
+	default:
+		return fmt.Errorf("unknown structure type: %T", cmd)
 	}
+
 	return nil
 }
 
@@ -322,7 +335,7 @@ type (
 	Publish struct {
 		channel, topic string
 		payload        []byte
-		moodType       moodType
+		moodType       MoodType
 		executeTime    time.Time
 
 		isUnique bool
@@ -330,7 +343,7 @@ type (
 	// Subscribe command:subscribe
 	Subscribe struct {
 		channel, topic string
-		moodType       moodType
+		moodType       MoodType
 
 		subscribeType subscribeType
 		broker        IBroker
