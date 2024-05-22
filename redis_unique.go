@@ -40,7 +40,7 @@ func (t *RedisUnique) Delete(ctx context.Context, key string) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------Obsolete Task STOP--------")
+			logger.New().Info("Obsolete Task Stop")
 			return
 		case <-t.ticker.C:
 

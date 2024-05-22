@@ -26,9 +26,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -36,27 +38,34 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/panjf2000/ants/v2"
+	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
 
 type (
 	RedisBroker struct {
-		client           redis.UniversalClient
-		scheduleJob      scheduleJobI
-		filter           VolatileLFU
-		consumerHandlers []IHandle
-		logJob           ILogJob
-		once             *sync.Once
-		pool             *ants.Pool
-		prefix           string
-		maxLen           int64
-		config           *BeanqConfig
+		client              redis.UniversalClient
+		scheduleJob         scheduleJobI
+		filter              VolatileLFU
+		consumerHandlers    []IHandle
+		logJob              *Log
+		once                *sync.Once
+		pool                *ants.Pool
+		prefix              string
+		maxLen              int64
+		config              *BeanqConfig
+		failKey, successKey string
 	}
 )
 
 func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
+
+	ctx := context.Background()
 
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
 		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
@@ -72,23 +81,154 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		PoolFIFO:     true,
 	})
 
-	if err := client.Ping(context.Background()).Err(); err != nil {
+	if err := client.Ping(ctx).Err(); err != nil {
 		logger.New().Fatal(err.Error())
 	}
 
 	broker := &RedisBroker{
-		client: client,
-		logJob: newLogJob(config, client, pool),
-		once:   &sync.Once{},
-		pool:   pool,
-		prefix: config.Redis.Prefix,
-		maxLen: config.Redis.MaxLen,
-		config: config,
-		filter: &RedisUnique{client: client, ticker: time.NewTicker(30 * time.Second)},
+
+		client:     client,
+		once:       &sync.Once{},
+		pool:       pool,
+		prefix:     config.Redis.Prefix,
+		maxLen:     config.MaxLen,
+		config:     config,
+		failKey:    MakeLogKey(config.Redis.Prefix, "fail"),
+		successKey: MakeLogKey(config.Redis.Prefix, "success"),
 	}
+	var logs []ILog
+	logs = append(logs, broker)
+	if config.History.On {
+		mongoLog := NewMongoLog(ctx, config)
+		logs = append(logs, mongoLog)
+	}
+	broker.logJob = NewLog(pool, logs...)
+	broker.filter = broker
 	broker.scheduleJob = broker.newScheduleJob()
 
 	return broker
+}
+
+// Archive log
+func (t *RedisBroker) Archive(ctx context.Context, result *ConsumerResult) error {
+	now := time.Now()
+	if result.AddTime == "" {
+		result.AddTime = now.Format(timex.DateTime)
+	}
+
+	// default ErrorLevel
+	key := strings.Join([]string{t.failKey}, ":")
+	expiration := t.config.KeepFailedJobsInHistory
+
+	// InfoLevel
+	if result.Level == InfoLevel {
+		key = strings.Join([]string{t.successKey}, ":")
+		expiration = t.config.KeepSuccessJobsInHistory
+	}
+
+	result.ExpireTime = time.UnixMilli(now.UnixMilli() + expiration.Milliseconds())
+
+	b, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("JsonMarshalErr:%s,Stack:%+v", err.Error(), stringx.ByteToString(debug.Stack()))
+	}
+
+	return t.client.ZAdd(ctx, key, &redis.Z{
+		Score:  float64(result.ExpireTime.UnixMilli()),
+		Member: b,
+	}).Err()
+}
+
+// Obsolete log
+func (t *RedisBroker) Obsolete(ctx context.Context) {
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		// check state
+		select {
+		case <-ctx.Done():
+			logger.New().Info("Redis Obsolete Stop")
+			return
+		case <-ticker.C:
+		}
+
+		// delete fail logs
+		if err := t.pool.Submit(func() {
+			t.client.ZRemRangeByScore(ctx, t.failKey, "0", cast.ToString(time.Now().UnixMilli()))
+		}); err != nil {
+			logger.New().Error(err)
+		}
+		// delete success logs
+		if err := t.pool.Submit(func() {
+			t.client.ZRemRangeByScore(ctx, t.successKey, "0", cast.ToString(time.Now().UnixMilli()))
+		}); err != nil {
+			logger.New().Error(err)
+		}
+	}
+}
+
+// Add unique id
+func (t *RedisBroker) Add(ctx context.Context, key, member string) (bool, error) {
+	incr := 0.000
+	b := false
+	err := t.client.ZRank(ctx, key, member).Err()
+
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			now := time.Now().Unix()
+			incr = float64(now) + 0.001
+		}
+		return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+	}
+	incr = 0.001
+	b = true
+	return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+}
+
+// Delete delete expire id
+func (t *RedisBroker) Delete(ctx context.Context, key string) {
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer func() {
+		ticker.Stop()
+	}()
+	for {
+		select {
+		case <-ctx.Done():
+			logger.New().Info("UniqueId Obsolete Task Stop")
+			return
+		case <-ticker.C:
+
+			cmd := t.client.ZRangeByScoreWithScores(ctx, key, &redis.ZRangeBy{
+				Min:    "-inf",
+				Max:    "+inf",
+				Offset: 0,
+				Count:  100,
+			})
+			val := cmd.Val()
+			if len(val) <= 0 {
+				continue
+			}
+
+			for _, v := range val {
+
+				floor := math.Floor(v.Score)
+				frac := v.Score - floor
+				expTime := cast.ToTime(cast.ToInt(floor))
+
+				if time.Since(expTime).Seconds() >= 3600*2 {
+					t.client.ZRem(ctx, key, v.Member)
+					continue
+				}
+				if time.Since(expTime).Seconds() >= 60*30 && frac*1000 <= 2 {
+					t.client.ZRem(ctx, key, v.Member)
+					continue
+				}
+			}
+		}
+	}
 }
 
 func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id string) (string, error) {
@@ -100,6 +240,7 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id
 		return "", stringCmd.Err()
 	}
 	return stringCmd.Val(), nil
+
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
@@ -147,7 +288,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		subscribe:        subscribe,
 		subscribeType:    subType,
 		deadLetterTicker: time.NewTicker(100 * time.Second),
-		pendingIdle:      2 * time.Minute,
+		pendingIdle:      20 * time.Minute,
 		jobMaxRetry:      bqConfig.JobMaxRetries,
 		minConsumers:     bqConfig.MinConsumers,
 		timeOut:          bqConfig.ConsumeTimeOut,
@@ -205,7 +346,9 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	}
 
 	if err := t.pool.Submit(func() {
-		t.logJob.expire(ctx)
+
+		_ = t.logJob.Obsoletes(ctx)
+
 	}); err != nil {
 		logger.New().Error(err)
 	}
@@ -216,7 +359,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 		logger.New().Error(err)
 	}
 
-	logger.New().Info("----START----")
+	logger.New().Info("Beanq Start")
 	// monitor signal
 	t.waitSignal(cancel)
 }

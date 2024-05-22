@@ -40,7 +40,6 @@ type (
 		start(ctx context.Context, consumer IHandle) error
 		enqueue(ctx context.Context, msg *Message) error
 		sequentialEnqueue(ctx context.Context, message *Message) error
-		shutDown()
 		sendToStream(ctx context.Context, msg *Message) error
 	}
 	scheduleJob struct {
@@ -133,7 +132,7 @@ func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
 		select {
 		case <-ctx.Done():
 			t.broker.pool.Release()
-			logger.New().Info("--------Schedule Task STOP--------")
+			logger.New().Info("Schedule Task Stop")
 			return
 
 		case <-t.scheduleTicker.C:

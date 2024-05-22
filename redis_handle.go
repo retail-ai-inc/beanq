@@ -2,12 +2,12 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"golang.org/x/sync/errgroup"
@@ -69,7 +69,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 		// check state
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------Main Task STOP--------")
+			logger.New().Info("Main Task Stop")
 			return
 		default:
 
@@ -98,8 +98,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------Sequential Task STOP--------")
+			logger.New().Info("Sequential Task Stop")
 			return
+
 		case <-time.After(time.Millisecond * 200):
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
@@ -197,7 +198,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 
 				group.TryGo(func() error {
 					defer t.resultPool.Put(result)
-					return t.broker.logJob.saveLog(ctx, result)
+					return t.broker.logJob.Archives(ctx, result)
+
 				})
 
 				if err := group.Wait(); err != nil {
@@ -213,7 +215,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	}
 }
 
-// DeadLetter Please refer to http://www.redis.cn/commands/xclaim.html
+// DeadLetter Please refer to https://redis.io/docs/latest/commands/xclaim/
 func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	defer t.deadLetterTicker.Stop()
@@ -222,7 +224,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 		// check state
 		select {
 		case <-ctx.Done():
-			logger.New().Info("--------DeadLetter Work STOP--------")
+			logger.New().Info("DeadLetter Work Stop")
 			return nil
 		case <-t.deadLetterTicker.C:
 
@@ -241,11 +243,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 		}
 
 		for _, pending := range pendings {
-			if pending.Idle < t.pendingIdle {
-				continue
-			}
-			// if pending retry count > 5,then add it into dead_letter_stream
-			if pending.RetryCount > 5 {
+			// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
+			if pending.Idle > t.pendingIdle {
 				val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
 					continue
@@ -273,7 +272,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				r.Level = ErrLevel
 				r.Info = "too long pending"
 
-				if err := t.broker.logJob.saveLog(ctx, r); err != nil {
+				if err := t.broker.logJob.Archives(ctx, r); err != nil {
 					logger.New().Error(err)
 				}
 
@@ -300,17 +299,14 @@ func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 			if err := t.broker.pool.Submit(func() {
 				r := t.execute(ctx, &nv)
 
-				group := t.errGroupPool.Get().(*errgroup.Group)
-				group.TryGo(func() error {
-					return t.ack(ctx, stream, channel, nv.ID)
-				})
-				group.TryGo(func() error {
-					return t.broker.logJob.saveLog(ctx, r)
-				})
-				if err := group.Wait(); err != nil {
+				if err := t.ack(ctx, stream, channel, nv.ID); err != nil {
 					logger.New().Error(err)
+					return
 				}
-				t.errGroupPool.Put(group)
+				if err := t.broker.logJob.Archives(ctx, r); err != nil {
+					logger.New().Error(err)
+					return
+				}
 
 				defer t.wg.Done()
 			}); err != nil {

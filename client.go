@@ -26,6 +26,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"math/rand"
 	"time"
@@ -91,6 +92,22 @@ type (
 func New(config *BeanqConfig) *Client {
 	// init config,Will merge default options
 	config.init()
+
+	on := flag.Bool("on", false, "mongo log enable")
+	database := flag.String("database", config.History.Mongo.Database, "Mongo database name for saving logs")
+	username := flag.String("username", config.History.Mongo.UserName, "Mongo username")
+	password := flag.String("password", config.History.Mongo.Password, "Mongo password")
+	host := flag.String("host", config.History.Mongo.Host, "Mongo host")
+	port := flag.String("port", config.History.Mongo.Port, "Mongo port")
+	flag.Parse()
+	if *on {
+		config.History.On = true
+		config.History.Mongo.Database = *database
+		config.History.Mongo.UserName = *username
+		config.History.Mongo.Password = *password
+		config.History.Mongo.Host = *host
+		config.History.Mongo.Port = *port
+	}
 
 	client := &Client{
 		Topic:     config.Topic,
@@ -209,7 +226,9 @@ func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *S
 }
 
 func (b *BQClient) process(cmd IBaseCmd) error {
-	var channel, topic = cmd.Channel(), cmd.Topic()
+
+	channel, topic := cmd.Channel(), cmd.Topic()
+
 	if channel == "" {
 		channel = b.client.Channel
 	}
