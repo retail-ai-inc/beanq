@@ -139,7 +139,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				nv := v
 				message := messageToStruct(nv.Values)
 
-				result := t.resultPool.Get().(*ConsumerResult)
+				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
 
 				group := t.errGroupPool.Get().(*errgroup.Group)
 
@@ -169,7 +169,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				result.EndTime = time.Now()
 				result.Retry = retry
 				result.RunTime = result.EndTime.Sub(result.BeginTime).String()
-				result.FillInfoByMessage(message)
 
 				cancel()
 				group.TryGo(func() error {
@@ -248,14 +247,13 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				// msg.Values["pendingRetry"] = pending.RetryCount
 				// msg.Values["idle"] = pending.Idle.Seconds()
 
-				r := t.resultPool.Get().(*ConsumerResult)
+				r := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(msg)
 				r.EndTime = time.Now()
 				r.Retry = msg.Retry
 
 				r.RunTime = r.EndTime.Sub(r.BeginTime).String()
 				r.Level = ErrLevel
 				r.Info = "too long pending"
-				r.FillInfoByMessage(msg)
 
 				if err := t.broker.logJob.Archives(ctx, r); err != nil {
 					logger.New().Error(err)
@@ -312,9 +310,8 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 }
 
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
-	r := t.resultPool.Get().(*ConsumerResult)
-	// var cancel context.CancelFunc
 	msg := messageToStruct(message)
+	r := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(msg)
 
 	nctx, cancel := context.WithTimeout(context.Background(), msg.TimeToRun)
 
@@ -333,7 +330,6 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 	r.EndTime = time.Now()
 	r.Retry = retryCount
 	r.RunTime = r.EndTime.Sub(r.BeginTime).String()
-	r.FillInfoByMessage(msg)
 
 	if err != nil {
 		if h, ok := t.subscribe.(IConsumeError); ok {

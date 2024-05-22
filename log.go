@@ -39,10 +39,14 @@ func (c *ConsumerResult) MarshalBinary() (data []byte, err error) {
 	return json.Marshal(c)
 }
 
-func (c *ConsumerResult) FillInfoByMessage(message *Message) {
-	if message == nil {
-		return
+func (c *ConsumerResult) FillInfoByMessage(message *Message) *ConsumerResult {
+	if c == nil {
+		return &ConsumerResult{}
 	}
+	if message == nil {
+		return c
+	}
+
 	c.Id = message.Id
 	c.AddTime = message.AddTime
 	c.Payload = message.Payload
@@ -51,6 +55,7 @@ func (c *ConsumerResult) FillInfoByMessage(message *Message) {
 	c.Topic = message.Topic
 	c.Channel = message.Channel
 	c.MoodType = message.MoodType
+	return nil
 }
 
 const (
