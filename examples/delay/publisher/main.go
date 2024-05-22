@@ -76,7 +76,7 @@ func pubDelayInfo() {
 		}
 		if i == 3 {
 			y = 10
-			delayT = now.Add(35 * time.Second)
+			delayT = now.Add(10 * time.Second)
 		}
 		// continue
 		if err := pub.BQ().WithContext(ctx).Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {

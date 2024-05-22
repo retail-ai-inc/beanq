@@ -1,0 +1,29 @@
+version: '3.7'
+
+services:
+  example:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    init: true
+    tty: true
+    container_name: beanq-example
+    volumes:
+      - ./:/var/www/example:rw
+      - ~/go/pkg:/go/pkg
+    depends_on:
+      - redis
+    networks:
+      - beanq
+  redis:
+    image: redis:5.0.12
+    container_name: redis-beanq
+    restart: always
+    command: redis-server --requirepass secret
+    networks:
+      - beanq
+networks:
+  beanq:
+    name: beanq-network
+
+
