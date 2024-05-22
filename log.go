@@ -39,21 +39,28 @@ func (c *ConsumerResult) MarshalBinary() (data []byte, err error) {
 	return json.Marshal(c)
 }
 
-func (c *ConsumerResult) Initialize() *ConsumerResult {
-	c.Level = InfoLevel
-	c.Info = SuccessInfo
-	c.RunTime = ""
-	return c
+func (c *ConsumerResult) FillInfoByMessage(message *Message) {
+	if message == nil {
+		return
+	}
+	c.Id = message.Id
+	c.AddTime = message.AddTime
+	c.Payload = message.Payload
+	c.Priority = message.Priority
+	c.ExecuteTime = message.ExecuteTime
+	c.Topic = message.Topic
+	c.Channel = message.Channel
+	c.MoodType = message.MoodType
 }
 
 const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"
 
-	SuccessStatus   Status = "success"
-	FailedStatus    Status = "failed"
-	PendingStatus   Status = "pending"
-	ExecutingStatus Status = "executing"
+	StatusSuccess   Status = "success"
+	StatusFailed    Status = "failed"
+	StatusPending   Status = "pending"
+	StatusExecuting Status = "executing"
 
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"
@@ -79,7 +86,6 @@ func NewLog(pool *ants.Pool, logs ...ILog) *Log {
 }
 
 func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
-
 	for _, log := range t.logs {
 		nlog := log
 		if err := nlog.Archive(ctx, result); err != nil {

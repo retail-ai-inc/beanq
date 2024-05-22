@@ -155,7 +155,7 @@ type IHandle interface {
 	DeadLetter(ctx context.Context) error
 }
 
-// VolatileLFU
+// VolatileLFU ...
 type VolatileLFU interface {
 	Add(ctx context.Context, key, member string) (bool, error)
 	Delete(ctx context.Context, key string)

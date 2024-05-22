@@ -125,9 +125,10 @@ func doTimeout(ctx context.Context, f func() error) error {
 	}
 }
 
+// RetryInfo retry=0 means no retries, but it will be executed at least once.
 func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error) {
 
-	for i = 0; i < retry; i++ {
+	for i = 0; i <= retry; i++ {
 		err = doTimeout(ctx, f)
 		if err == nil {
 			return
