@@ -177,8 +177,7 @@ func (t *RedisBroker) Add(ctx context.Context, key, member string) (bool, error)
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			now := time.Now().Unix()
-			incr = float64(now) + incr
-			return false, t.client.ZIncrBy(ctx, key, incr, member).Err()
+			return false, t.client.ZIncrBy(ctx, key, float64(now)+incr, member).Err()
 		}
 		return false, fmt.Errorf("[RedisBroker.Add] ZRank error:%w", err)
 	}
