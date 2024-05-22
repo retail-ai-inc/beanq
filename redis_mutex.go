@@ -1,3 +1,9 @@
+// redis_mutex.go
+
+// This file includes modified code from redsync by original author.
+// Original source: https://github.com/go-redsync/redsync
+// License: BSD 3-Clause License
+
 package beanq
 
 import (
@@ -17,13 +23,13 @@ import (
 )
 
 // ErrFailed is the error resulting if Redsync fails to acquire the lock after exhausting all retries.
-var ErrFailed = errors.New("redsync: failed to acquire lock")
+var ErrFailed = errors.New("failed to acquire lock")
 
 // ErrExtendFailed is the error resulting if Redsync fails to extend the lock.
-var ErrExtendFailed = errors.New("redsync: failed to extend lock")
+var ErrExtendFailed = errors.New("failed to extend lock")
 
 // ErrLockAlreadyExpired is the error resulting if trying to unlock the lock which already expired.
-var ErrLockAlreadyExpired = errors.New("redsync: failed to unlock, lock was already expired")
+var ErrLockAlreadyExpired = errors.New("failed to unlock, lock was already expired")
 
 // A DelayFunc is used to decide the amount of time to wait between retries.
 type DelayFunc func(tries int) time.Duration

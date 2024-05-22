@@ -161,6 +161,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					}
 					result.Level = ErrLevel
 					result.Info = FlagInfo(err.Error())
+					result.Status = FailedStatus
+				} else {
+					result.Status = SuccessStatus
 				}
 
 				result.EndTime = time.Now()

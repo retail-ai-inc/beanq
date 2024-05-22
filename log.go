@@ -12,8 +12,10 @@ import (
 type (
 	FlagInfo string
 	LevelMsg string
+	Status   string
 
 	ConsumerResult struct {
+		Status  Status
 		Id      string
 		Level   LevelMsg
 		Info    FlagInfo
@@ -29,7 +31,7 @@ type (
 		EndTime                  time.Time
 		ExecuteTime              time.Time
 		Topic, Channel, Consumer string
-		MoodType                 string
+		MoodType                 MoodType
 	}
 )
 
@@ -47,6 +49,11 @@ func (c *ConsumerResult) Initialize() *ConsumerResult {
 const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"
+
+	SuccessStatus   Status = "success"
+	FailedStatus    Status = "failed"
+	PendingStatus   Status = "pending"
+	ExecutingStatus Status = "executing"
 
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"

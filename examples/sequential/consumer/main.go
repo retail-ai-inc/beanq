@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -18,8 +19,7 @@ var (
 	bqConfig   beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
-
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -40,33 +40,54 @@ func initCnf() beanq.BeanqConfig {
 			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
 		}
 	})
-	return bqConfig
+	return &bqConfig
+}
+
+type seqCustomer struct {
+	metadata string
+}
+
+func (t *seqCustomer) Handle(ctx context.Context, message *beanq.Message) error {
+	time.Sleep(time.Second * 1)
+	log.Printf("%s:%v\n", t.metadata, message)
+	return nil
+}
+func (t *seqCustomer) Cancel(ctx context.Context, message *beanq.Message) error {
+	return nil
+}
+func (t *seqCustomer) Error(ctx context.Context, err error) {
+
 }
 
 func main() {
-	// register consumer
 	config := initCnf()
-	ctx := context.Background()
-	csm := beanq.New(&config)
-	// register delay consumer
+	csm := beanq.New(config)
 
-	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
+	ctx := context.Background()
+	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
+			time.Sleep(time.Second * 2)
+			log.Printf("result:%+v,time:%+v \n", message, time.Now())
 			return nil
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
 			return nil
 		},
 		DoError: func(ctx context.Context, err error) {
-			logger.New().Error(err)
+
 		},
 	})
 	if err != nil {
 		logger.New().Error(err)
 	}
-	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 
+	_, err = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", &seqCustomer{
+		metadata: "I am a custom",
+	})
+	if err != nil {
+		logger.New().Error(err)
+	}
+	// begin to consume information
 	csm.Wait(ctx)
 
 }

@@ -45,7 +45,7 @@ type (
 		AddTime      string        `json:"addTime"`
 		ExecuteTime  time.Time     `json:"executeTime"`
 		TimeToRun    time.Duration `json:"timeToRun"`
-		MoodType     string        `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
+		MoodType     MoodType      `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
 	}
 )
 
@@ -117,7 +117,7 @@ func (data MessageM) ToMessage() *Message {
 			}
 		case "moodType":
 			if v, ok := val.(string); ok {
-				msg.MoodType = v
+				msg.MoodType = MoodType(v)
 			}
 		case "timeToRun":
 			if v, ok := val.(string); ok {

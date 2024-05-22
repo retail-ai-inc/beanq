@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/json"
@@ -44,48 +43,20 @@ func initCnf() *beanq.BeanqConfig {
 	return &bqConfig
 }
 func main() {
-	runtime.GOMAXPROCS(2)
-	pubDelayInfo()
+	pubMoreAndPriorityInfo()
 }
 
-func pubDelayInfo() {
-	config := initCnf()
-	pub := beanq.New(config)
+func pubMoreAndPriorityInfo() {
+	pub := beanq.New(initCnf())
+	m := make(map[string]string)
 
-	m := make(map[string]any)
 	ctx := context.Background()
-	now := time.Now()
-	delayT := now
-	for i := 0; i < 10; i++ {
-
-		// if time.Now().Sub(ntime).Minutes() >= 1 {
-		// 	break
-		// }
-		delayT = now
-		y := 0
+	for i := 0; i < 5; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
-
 		b, _ := json.Marshal(m)
 
-		if i == 2 {
-			delayT = now
-		}
-
-		if i == 4 {
-			y = 8
-		}
-		if i == 3 {
-			y = 10
-			delayT = now.Add(35 * time.Second)
-		}
-		// continue
-		if err := pub.BQ().
-			WithContext(ctx).
-			Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {
+		if err := pub.BQ().WithContext(ctx).Publish("default-channel", "default-topic", b); err != nil {
 			logger.New().Error(err)
 		}
-		// pub.Payload(b).PublishAtTime(ctx, delayT)
-
 	}
-
 }

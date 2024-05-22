@@ -44,28 +44,43 @@ func initCnf() *beanq.BeanqConfig {
 	return &bqConfig
 }
 func main() {
-	pubMoreAndPriorityInfo()
+	runtime.GOMAXPROCS(2)
+	pubDelayInfo()
 }
 
-func pubMoreAndPriorityInfo() {
+func pubDelayInfo() {
+	config := initCnf()
+	pub := beanq.New(config)
 
-	pub := beanq.New(initCnf())
-	m := make(map[string]string)
-
+	m := make(map[string]any)
 	ctx := context.Background()
-	for i := 0; i < 5; i++ {
-		var y float64 = 0
+	now := time.Now()
+	delayT := now
+	for i := 0; i < 10; i++ {
+
+		// if time.Now().Sub(ntime).Minutes() >= 1 {
+		// 	break
+		// }
+		delayT = now
+		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
+
 		b, _ := json.Marshal(m)
 
-		delayT := time.Now().Add(10 * time.Second)
+		if i == 2 {
+			delayT = now
+		}
 
+		if i == 4 {
+			y = 8
+		}
 		if i == 3 {
 			y = 10
+			delayT = now.Add(35 * time.Second)
 		}
-		if err := pub.BQ().WithContext(ctx).Priority(y).PublishAtTime("delay-channel", "delay-topic", b, delayT); err != nil {
+		// continue
+		if err := pub.BQ().WithContext(ctx).Priority(float64(y)).PublishAtTime("delay-channel", "order-topic", b, delayT); err != nil {
 			logger.New().Error(err)
 		}
-
 	}
 }
