@@ -55,7 +55,7 @@ func (c *ConsumerResult) FillInfoByMessage(message *Message) *ConsumerResult {
 	c.Topic = message.Topic
 	c.Channel = message.Channel
 	c.MoodType = message.MoodType
-	return nil
+	return c
 }
 
 const (
