@@ -171,20 +171,18 @@ func (t *RedisBroker) Obsolete(ctx context.Context) {
 
 // Add unique id
 func (t *RedisBroker) Add(ctx context.Context, key, member string) (bool, error) {
-	incr := 0.000
-	b := false
+	incr := 0.001
 	err := t.client.ZRank(ctx, key, member).Err()
 
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			now := time.Now().Unix()
-			incr = float64(now) + 0.001
+			return false, t.client.ZIncrBy(ctx, key, float64(now)+incr, member).Err()
 		}
-		return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+		return false, fmt.Errorf("[RedisBroker.Add] ZRank error:%w", err)
 	}
-	incr = 0.001
-	b = true
-	return b, t.client.ZIncrBy(ctx, key, incr, member).Err()
+
+	return true, t.client.ZIncrBy(ctx, key, incr, member).Err()
 }
 
 // Delete delete expire id
@@ -240,10 +238,28 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id
 		return "", stringCmd.Err()
 	}
 	return stringCmd.Val(), nil
+}
 
+func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error) {
+	results, err := t.client.XRangeN(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"), "-", "+", 100).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	for _, result := range results {
+		message := messageToStruct(result)
+		if message.Id == id {
+			return message, nil
+		}
+	}
+	return nil, nil
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
+	// TODO Transaction consistency should be considered here.
 	// Idempotency check
 	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 	if err != nil {
@@ -282,17 +298,17 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 
 	bqConfig := t.config
 	handler := &RedisHandle{
-		broker:           t,
-		channel:          channel,
-		topic:            topic,
-		subscribe:        subscribe,
-		subscribeType:    subType,
-		deadLetterTicker: time.NewTicker(100 * time.Second),
-		pendingIdle:      20 * time.Minute,
-		jobMaxRetry:      bqConfig.JobMaxRetries,
-		minConsumers:     bqConfig.MinConsumers,
-		timeOut:          bqConfig.ConsumeTimeOut,
-		wg:               new(sync.WaitGroup),
+		broker:             t,
+		channel:            channel,
+		topic:              topic,
+		subscribe:          subscribe,
+		subscribeType:      subType,
+		deadLetterTicker:   time.NewTicker(bqConfig.DeadLetterTicker),
+		deadLetterIdleTime: bqConfig.DeadLetterIdleTime,
+		jobMaxRetry:        bqConfig.JobMaxRetries,
+		minConsumers:       bqConfig.MinConsumers,
+		timeOut:            bqConfig.ConsumeTimeOut,
+		wg:                 new(sync.WaitGroup),
 		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
@@ -389,7 +405,7 @@ func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 func (t *RedisBroker) waitSignal(cancel context.CancelFunc) {
 	sigs := make(chan os.Signal, 1)
 
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGTSTP)
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 
 	select {
 	case sig := <-sigs:

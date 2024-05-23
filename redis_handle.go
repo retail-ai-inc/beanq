@@ -14,13 +14,13 @@ import (
 )
 
 type RedisHandle struct {
-	broker           *RedisBroker
-	subscribe        IConsumeHandle
-	deadLetterTicker *time.Ticker
-	channel          string
-	topic            string
-	pendingIdle      time.Duration
-	subscribeType    subscribeType
+	broker             *RedisBroker
+	subscribe          IConsumeHandle
+	deadLetterTicker   *time.Ticker
+	channel            string
+	topic              string
+	deadLetterIdleTime time.Duration
+	subscribeType      subscribeType
 	// errorCallbacks   []ErrorCallback
 
 	jobMaxRetry  int
@@ -139,11 +139,11 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				nv := v
 				message := messageToStruct(nv.Values)
 
-				result := t.resultPool.Get().(*ConsumerResult).Initialize()
+				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
 
 				group := t.errGroupPool.Get().(*errgroup.Group)
 
-				result.Id = message.Id
+				result.Status = StatusExecuting
 				result.BeginTime = time.Now()
 				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
@@ -154,29 +154,21 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						}
 					}
 					return nil
-				}, t.jobMaxRetry)
+				}, message.Retry)
 				if err != nil {
 					if h, ok := t.subscribe.(IConsumeError); ok {
 						h.Error(nctx, err)
 					}
 					result.Level = ErrLevel
 					result.Info = FlagInfo(err.Error())
-					result.Status = FailedStatus
+					result.Status = StatusFailed
 				} else {
-					result.Status = SuccessStatus
+					result.Status = StatusSuccess
 				}
 
 				result.EndTime = time.Now()
-				sub := result.EndTime.Sub(result.BeginTime)
-				result.AddTime = message.AddTime
 				result.Retry = retry
-				result.Payload = message.Payload
-				result.Priority = message.Priority
-				result.RunTime = sub.String()
-				result.ExecuteTime = message.ExecuteTime
-				result.Topic = message.Topic
-				result.Channel = t.channel
-				result.MoodType = message.MoodType
+				result.RunTime = result.EndTime.Sub(result.BeginTime).String()
 
 				cancel()
 				group.TryGo(func() error {
@@ -205,6 +197,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
+
 				t.errGroupPool.Put(group)
 			}
 
@@ -244,9 +237,11 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 
 		for _, pending := range pendings {
 			// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
-			if pending.Idle > t.pendingIdle {
+			if pending.Idle > t.deadLetterIdleTime {
 				val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
+					// the message is not in stream, but in the pending list. need to ack it.
+					t.broker.client.XAck(ctx, streamKey, t.channel, pending.ID)
 					continue
 				}
 
@@ -254,21 +249,11 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				// msg.Values["pendingRetry"] = pending.RetryCount
 				// msg.Values["idle"] = pending.Idle.Seconds()
 
-				r := t.resultPool.Get().(*ConsumerResult)
-				r.Id = msg.Id
-				r.BeginTime = msg.ExecuteTime
-
+				r := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(msg)
 				r.EndTime = time.Now()
-				sub := r.EndTime.Sub(r.BeginTime)
-				r.AddTime = msg.AddTime
 				r.Retry = msg.Retry
-				r.Payload = msg.Payload
-				r.RunTime = sub.String()
-				r.ExecuteTime = msg.ExecuteTime
-				r.Topic = msg.Topic
-				r.Channel = t.channel
-				r.MoodType = msg.MoodType
 
+				r.RunTime = r.EndTime.Sub(r.BeginTime).String()
 				r.Level = ErrLevel
 				r.Info = "too long pending"
 
@@ -289,7 +274,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 func (t *RedisHandle) do(ctx context.Context, streams []redis.XStream) {
 	channel := t.channel
 	for key, v := range streams {
-
 		stream := v.Stream
 		message := v.Messages
 
@@ -328,9 +312,8 @@ func (t *RedisHandle) ack(ctx context.Context, stream, channel string, ids ...st
 }
 
 func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *ConsumerResult {
-	r := t.resultPool.Get().(*ConsumerResult)
-	// var cancel context.CancelFunc
 	msg := messageToStruct(message)
+	r := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(msg)
 
 	nctx, cancel := context.WithTimeout(context.Background(), msg.TimeToRun)
 
@@ -340,24 +323,15 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 		cancel()
 	}()
 
-	r.Id = msg.Id
+	r.Status = StatusExecuting
 	r.BeginTime = time.Now()
-
 	retryCount, err := RetryInfo(ctx, func() error {
 		return t.subscribe.Handle(nctx, msg)
-	}, t.jobMaxRetry)
+	}, msg.Retry)
 
 	r.EndTime = time.Now()
-	sub := r.EndTime.Sub(r.BeginTime)
-	r.AddTime = msg.AddTime
 	r.Retry = retryCount
-	r.Payload = msg.Payload
-	r.Priority = msg.Priority
-	r.RunTime = sub.String()
-	r.ExecuteTime = msg.ExecuteTime
-	r.Topic = msg.Topic
-	r.Channel = t.channel
-	r.MoodType = msg.MoodType
+	r.RunTime = r.EndTime.Sub(r.BeginTime).String()
 
 	if err != nil {
 		if h, ok := t.subscribe.(IConsumeError); ok {

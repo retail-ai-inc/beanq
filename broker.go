@@ -10,6 +10,7 @@ import (
 
 type (
 	IBroker interface {
+		getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error)
 		checkStatus(ctx context.Context, channel, topic string, id string) (string, error)
 		enqueue(ctx context.Context, msg *Message) error
 		close() error

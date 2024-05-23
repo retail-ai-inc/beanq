@@ -82,7 +82,6 @@ func (t *scheduleJob) start(ctx context.Context, consumer IHandle) error {
 }
 
 func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
-
 	bt, err := json.Marshal(msg)
 	if err != nil {
 		return err
