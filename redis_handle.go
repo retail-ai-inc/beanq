@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -242,7 +241,6 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
 					// the message is not in stream, but in the pending list. need to ack it.
-					log.Printf("Message ID %s not found in the stream, removing from pending\n", pending.ID)
 					t.broker.client.XAck(ctx, streamKey, t.channel, pending.ID)
 					continue
 				}
