@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -14,13 +15,13 @@ import (
 )
 
 type RedisHandle struct {
-	broker           *RedisBroker
-	subscribe        IConsumeHandle
-	deadLetterTicker *time.Ticker
-	channel          string
-	topic            string
-	pendingIdle      time.Duration
-	subscribeType    subscribeType
+	broker             *RedisBroker
+	subscribe          IConsumeHandle
+	deadLetterTicker   *time.Ticker
+	channel            string
+	topic              string
+	deadLetterIdleTime time.Duration
+	subscribeType      subscribeType
 	// errorCallbacks   []ErrorCallback
 
 	jobMaxRetry  int
@@ -237,9 +238,12 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 
 		for _, pending := range pendings {
 			// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
-			if pending.Idle > t.pendingIdle {
+			if pending.Idle > t.deadLetterIdleTime {
 				val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
 				if len(val) <= 0 {
+					// the message is not in stream, but in the pending list. need to ack it.
+					log.Printf("Message ID %s not found in the stream, removing from pending\n", pending.ID)
+					t.broker.client.XAck(ctx, streamKey, t.channel, pending.ID)
 					continue
 				}
 

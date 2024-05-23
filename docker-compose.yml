@@ -17,6 +17,8 @@ services:
       - beanq
   redis:
     image: redis:5.0.12
+    ports:
+      - "6379:6379"
     container_name: redis-beanq
     restart: always
     command: redis-server --requirepass secret

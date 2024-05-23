@@ -298,17 +298,17 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 
 	bqConfig := t.config
 	handler := &RedisHandle{
-		broker:           t,
-		channel:          channel,
-		topic:            topic,
-		subscribe:        subscribe,
-		subscribeType:    subType,
-		deadLetterTicker: time.NewTicker(100 * time.Second),
-		pendingIdle:      20 * time.Minute,
-		jobMaxRetry:      bqConfig.JobMaxRetries,
-		minConsumers:     bqConfig.MinConsumers,
-		timeOut:          bqConfig.ConsumeTimeOut,
-		wg:               new(sync.WaitGroup),
+		broker:             t,
+		channel:            channel,
+		topic:              topic,
+		subscribe:          subscribe,
+		subscribeType:      subType,
+		deadLetterTicker:   time.NewTicker(bqConfig.DeadLetterTicker),
+		deadLetterIdleTime: bqConfig.DeadLetterIdleTime,
+		jobMaxRetry:        bqConfig.JobMaxRetries,
+		minConsumers:       bqConfig.MinConsumers,
+		timeOut:            bqConfig.ConsumeTimeOut,
+		wg:                 new(sync.WaitGroup),
 		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,

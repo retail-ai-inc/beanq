@@ -44,6 +44,8 @@ type Options struct {
 	JobMaxRetry              int
 	DefaultMaxLen            int64
 	MinConsumers             int64
+	DeadLetterIdle           time.Duration
+	DeadLetterTicker         time.Duration
 	TimeToRun                time.Duration
 	KeepSuccessJobsInHistory time.Duration
 	KeepFailedJobsInHistory  time.Duration
@@ -53,7 +55,8 @@ type Options struct {
 }
 
 var DefaultOptions = &Options{
-
+	DeadLetterIdle:           time.Second * 60,
+	DeadLetterTicker:         time.Second * 5,
 	KeepFailedJobsInHistory:  time.Hour * 24 * 7,
 	KeepSuccessJobsInHistory: time.Hour * 24 * 7,
 	PublishTimeOut:           10 * time.Second,

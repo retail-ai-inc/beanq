@@ -81,7 +81,8 @@ type (
 		Redis                    Redis         `json:"redis"`
 		ConsumerPoolSize         int           `json:"consumerPoolSize"`
 		JobMaxRetries            int           `json:"jobMaxRetries"`
-		DeadLetterIdle           time.Duration `json:"deadLetterIdle"`
+		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
+		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
 		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
 		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
 		PublishTimeOut           time.Duration `json:"publishTimeOut"`
@@ -99,9 +100,13 @@ func (t *BeanqConfig) init() {
 	if t.JobMaxRetries == 0 {
 		t.JobMaxRetries = DefaultOptions.JobMaxRetry
 	}
-	if t.DeadLetterIdle == 0 {
-
+	if t.DeadLetterIdleTime == 0 {
+		t.DeadLetterIdleTime = DefaultOptions.DeadLetterIdle
 	}
+	if t.DeadLetterTicker == 0 {
+		t.DeadLetterTicker = DefaultOptions.DeadLetterTicker
+	}
+
 	if t.KeepSuccessJobsInHistory == 0 {
 		t.KeepSuccessJobsInHistory = DefaultOptions.KeepSuccessJobsInHistory
 	}

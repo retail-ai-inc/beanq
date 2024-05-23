@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -48,10 +49,11 @@ func main() {
 	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	ctx := context.Background()
 	for i := 0; i < 10; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
 		result, err := pub.BQ().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
 		if err != nil {
 			logger.New().Error(err)
@@ -61,7 +63,7 @@ func main() {
 	}
 
 	// this is a single check for ACK
-	result, err := pub.CheckAckStatus(ctx, "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
+	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
 	if err != nil {
 		panic(err)
 	}
