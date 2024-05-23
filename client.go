@@ -89,23 +89,36 @@ type (
 	}
 )
 
+var (
+	on       = flag.Bool("on", false, "mongo log enable")
+	database = flag.String("database", "", "Mongo database name for saving logs")
+	username = flag.String("username", "", "Mongo username")
+	password = flag.String("password", "", "Mongo password")
+	host     = flag.String("host", "", "Mongo host")
+	port     = flag.String("port", "", "Mongo port")
+)
+
 func New(config *BeanqConfig) *Client {
 	// init config,Will merge default options
 	config.init()
 
-	on := flag.Bool("on", false, "mongo log enable")
-	database := flag.String("database", config.History.Mongo.Database, "Mongo database name for saving logs")
-	username := flag.String("username", config.History.Mongo.UserName, "Mongo username")
-	password := flag.String("password", config.History.Mongo.Password, "Mongo password")
-	host := flag.String("host", config.History.Mongo.Host, "Mongo host")
-	port := flag.String("port", config.History.Mongo.Port, "Mongo port")
 	flag.Parse()
 	if *on {
 		config.History.On = true
+	}
+	if *database != "" {
 		config.History.Mongo.Database = *database
+	}
+	if *username != "" {
 		config.History.Mongo.UserName = *username
+	}
+	if *password != "" {
 		config.History.Mongo.Password = *password
+	}
+	if *host != "" {
 		config.History.Mongo.Host = *host
+	}
+	if *port != "" {
 		config.History.Mongo.Port = *port
 	}
 
