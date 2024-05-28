@@ -49,7 +49,7 @@ func main() {
 	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 20; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)

@@ -66,7 +66,14 @@ type (
 		DoCancel func(ctx context.Context, message *Message) error
 		DoError  func(ctx context.Context, err error)
 	}
+	WorkflowHandler func(ctx context.Context, wf *Workflow) error
 )
+
+func (c WorkflowHandler) Handle(ctx context.Context, message *Message) error {
+	workflow := NewWorkflow(message)
+
+	return c(ctx, workflow)
+}
 
 func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {

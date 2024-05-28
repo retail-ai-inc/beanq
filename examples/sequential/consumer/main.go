@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -48,7 +49,7 @@ type seqCustomer struct {
 }
 
 func (t *seqCustomer) Handle(ctx context.Context, message *beanq.Message) error {
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 4)
 	log.Printf("%s:%v\n", t.metadata, message)
 	return nil
 }
@@ -59,22 +60,79 @@ func (t *seqCustomer) Error(ctx context.Context, err error) {
 
 }
 
+var index int
+
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
 
 	ctx := context.Background()
-	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
-		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+		index++
+		fmt.Println("index:", index)
+		wf.NewTask().OnRollback(func(task beanq.Task) error {
+			if index%3 == 0 {
+				return fmt.Errorf("rollback error:%d", index)
+			} else if index%4 == 0 {
+				panic("rollback panic test")
+			}
+			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
+			return nil
+		}).OnExecute(func(task beanq.Task) error {
+			log.Println(task.ID() + " job-1")
 			time.Sleep(time.Second * 2)
-			log.Printf("result:%+v,time:%+v \n", message, time.Now())
+			return nil
+		})
+
+		wf.NewTask().OnRollback(func(task beanq.Task) error {
+			log.Println(task.ID()+" rollback-2:", wf.Message().Id)
+			return nil
+		}).OnExecute(func(task beanq.Task) error {
+			log.Println(task.ID() + " job-2")
+			time.Sleep(time.Second * 1)
+			return nil
+		})
+
+		wf.NewTask().OnRollback(func(task beanq.Task) error {
+			log.Println(task.ID()+" rollback-3:", wf.Message().Id)
+			return nil
+		}).OnExecute(func(task beanq.Task) error {
+			if index%2 == 0 {
+				return fmt.Errorf("execute error: %d", index)
+			} else if index == 7 {
+				panic("execute panic test")
+			}
+			log.Println(task.ID() + " job-3")
+			time.Sleep(time.Second * 1)
+			return nil
+		})
+
+		err := wf.WithRollbackResultHandler(func(taskID string, err error) {
+			if err == nil {
+				return
+			}
+			log.Printf("%s rollback error: %v\n", taskID, err)
+		}).Run()
+		if err != nil {
+			return err
+		}
+		return nil
+	}))
+	if err != nil {
+		logger.New().Error(err)
+	}
+
+	_, err = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
+		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+			log.Println("default handler ", message.Id)
 			return nil
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
+			log.Println("default cancel ", message.Id)
 			return nil
 		},
 		DoError: func(ctx context.Context, err error) {
-
+			log.Println("default error ", err)
 		},
 	})
 	if err != nil {

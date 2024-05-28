@@ -146,12 +146,12 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				result.Status = StatusExecuting
 				result.BeginTime = time.Now()
 				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
-
 				retry, err := RetryInfo(nctx, func() error {
 					if err := t.subscribe.Handle(nctx, message); err != nil {
 						if h, ok := t.subscribe.(IConsumeCancel); ok {
 							return h.Cancel(nctx, message)
 						}
+						return err
 					}
 					return nil
 				}, message.Retry)
@@ -325,6 +325,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 
 	r.Status = StatusExecuting
 	r.BeginTime = time.Now()
+
 	retryCount, err := RetryInfo(ctx, func() error {
 		return t.subscribe.Handle(nctx, msg)
 	}, msg.Retry)
