@@ -97,6 +97,8 @@ func main() {
 		}).OnExecute(func(task beanq.Task) error {
 			if index%2 == 0 {
 				return fmt.Errorf("execute error: %d", index)
+			} else if index == 7 {
+				panic("execute panic test")
 			}
 			log.Println(task.ID() + " job-3")
 			time.Sleep(time.Second * 1)

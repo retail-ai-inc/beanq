@@ -51,15 +51,26 @@ func (w *Workflow) CurrentTask() Task {
 	return w.currentTask
 }
 
-func (w *Workflow) Run() error {
-	for i, task := range w.tasks {
-		w.currentTask = task
-		err := task.Execute()
+func (w *Workflow) Run() (err error) {
+	for index, task := range w.tasks {
+		func() {
+			var panicked = true
+			defer func() {
+				if panicked || err != nil {
+					w.rollback(index)
+					w.results[index] = err
+				}
+			}()
+
+			w.currentTask = task
+			if err = task.Execute(); err == nil {
+				panicked = false
+				w.results[index] = nil
+			}
+		}()
 		if err != nil {
-			w.rollback(i)
 			return err
 		}
-		w.results[i] = nil
 	}
 	return nil
 }
