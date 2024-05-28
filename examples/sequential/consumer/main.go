@@ -73,6 +73,8 @@ func main() {
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
 			if index%3 == 0 {
 				return fmt.Errorf("rollback error:%d", index)
+			} else if index%4 == 0 {
+				panic("rollback panic test")
 			}
 			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
 			return nil

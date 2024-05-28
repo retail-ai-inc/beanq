@@ -94,8 +94,9 @@ func (data MessageM) ToMessage() *Message {
 				msg.MaxLen = v
 			}
 		case "retry":
-			if v, ok := val.(int); ok {
-				msg.Retry = v
+			if v, ok := val.(string); ok {
+				retry, _ := strconv.Atoi(v)
+				msg.Retry = retry
 			}
 		case "priority":
 			msg.Priority = cast.ToFloat64(val)

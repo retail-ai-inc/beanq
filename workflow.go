@@ -54,20 +54,22 @@ func (w *Workflow) CurrentTask() Task {
 func (w *Workflow) Run() (err error) {
 	for index, task := range w.tasks {
 		func() {
-			var panicked = true
 			defer func() {
-				if panicked || err != nil {
+				if e := recover(); e != nil || err != nil {
 					w.rollback(index)
+					if err == nil {
+						err = fmt.Errorf("%v", e)
+					}
 					w.results[index] = err
 				}
 			}()
 
 			w.currentTask = task
 			if err = task.Execute(); err == nil {
-				panicked = false
 				w.results[index] = nil
 			}
 		}()
+
 		if err != nil {
 			return err
 		}
@@ -77,15 +79,25 @@ func (w *Workflow) Run() (err error) {
 
 func (w *Workflow) rollback(from int) {
 	for i := from - 1; i >= 0; i-- {
-		task := w.tasks[i]
-		err := task.Rollback()
-		if err != nil {
-			// handle rollback error
-			if w.rollbackResultHandler != nil {
-				w.rollbackResultHandler(task.ID(), err)
-			}
-		}
-		w.results[i] = err
+		func(index int) {
+			var err error
+			task := w.tasks[index]
+
+			defer func() {
+				if e := recover(); e != nil || err != nil {
+					// handle rollback error
+					if err == nil {
+						err = fmt.Errorf("%v", e)
+					}
+
+					if w.rollbackResultHandler != nil {
+						w.rollbackResultHandler(task.ID(), err)
+					}
+				}
+			}()
+
+			err = task.Rollback()
+		}(i)
 	}
 }
 
