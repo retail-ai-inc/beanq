@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/retail-ai-inc/beanq"
@@ -60,49 +61,49 @@ func (t *seqCustomer) Error(ctx context.Context, err error) {
 
 }
 
-var index int
+var index atomic.Int32
 
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
 
 	ctx := context.Background()
-	_, err := csm.BQ().WithContext(ctx).DynamicSubscribeSequential("dynamic-test", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
-		index++
-		fmt.Println("index:", index)
+	_, err := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+		index.Add(1)
+		fmt.Println("index:", index.Load())
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			if index%3 == 0 {
-				return fmt.Errorf("rollback error:%d", index)
-			} else if index%4 == 0 {
+			if index.Load()%3 == 0 {
+				return fmt.Errorf("rollback error:%d", index.Load())
+			} else if index.Load()%4 == 0 {
 				panic("rollback panic test")
 			}
-			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
+			log.Println("topic ", wf.Message().Topic, task.ID()+" rollback-1:", wf.Message().Id)
 			return nil
 		}).OnExecute(func(task beanq.Task) error {
-			log.Println(task.ID() + " job-1")
+			log.Println("topic ", wf.Message().Topic, task.ID()+" job-1")
 			time.Sleep(time.Second * 2)
 			return nil
 		})
 
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			log.Println(task.ID()+" rollback-2:", wf.Message().Id)
+			log.Println("topic ", wf.Message().Topic, task.ID()+" rollback-2:", wf.Message().Id)
 			return nil
 		}).OnExecute(func(task beanq.Task) error {
-			log.Println(task.ID() + " job-2")
+			log.Println("topic ", wf.Message().Topic, task.ID()+" job-2")
 			time.Sleep(time.Second * 1)
 			return nil
 		})
 
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			log.Println(task.ID()+" rollback-3:", wf.Message().Id)
+			log.Println("topic ", wf.Message().Topic, task.ID()+" rollback-3:", wf.Message().Id)
 			return nil
 		}).OnExecute(func(task beanq.Task) error {
-			if index%2 == 0 {
-				return fmt.Errorf("execute error: %d", index)
-			} else if index == 7 {
+			if index.Load()%2 == 0 {
+				return fmt.Errorf("execute error: %d", index.Load())
+			} else if index.Load() == 7 {
 				panic("execute panic test")
 			}
-			log.Println(task.ID() + " job-3")
+			log.Println("topic ", wf.Message().Topic, task.ID()+" job-3")
 			time.Sleep(time.Second * 1)
 			return nil
 		})
@@ -121,31 +122,4 @@ func main() {
 	if err != nil {
 		logger.New().Error(err)
 	}
-
-	_, err = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
-		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			log.Println("default handler ", message.Id)
-			return nil
-		},
-		DoCancel: func(ctx context.Context, message *beanq.Message) error {
-			log.Println("default cancel ", message.Id)
-			return nil
-		},
-		DoError: func(ctx context.Context, err error) {
-			log.Println("default error ", err)
-		},
-	})
-	if err != nil {
-		logger.New().Error(err)
-	}
-
-	_, err = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", &seqCustomer{
-		metadata: "I am a custom",
-	})
-	if err != nil {
-		logger.New().Error(err)
-	}
-	// begin to consume information
-	csm.Wait(ctx)
-
 }

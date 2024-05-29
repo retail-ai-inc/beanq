@@ -17,7 +17,7 @@ type (
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle
 		deadLetter(ctx context.Context, handle IHandle) error
-		dynamicConsuming(dynamicKey string, subType subscribeType, subscribe IConsumeHandle)
+		dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle)
 	}
 )
 
@@ -54,6 +54,7 @@ type (
 	IConsumeHandle interface {
 		Handle(ctx context.Context, message *Message) error
 	}
+
 	IConsumeCancel interface {
 		Cancel(ctx context.Context, message *Message) error
 	}

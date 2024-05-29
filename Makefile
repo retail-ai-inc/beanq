@@ -37,6 +37,12 @@ sequential-consumer:
 	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
 	go run -race ./main.go
 
+dynamic-consumer:
+	@echo "start dynamic sequential consumer"
+	@cd examples/sequential/consumer-dynamic && \
+	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	go run -race ./main.go
+
 sequential-publisher:
 	@echo "start sequential publisher"
 	@cd examples/sequential/publisher && \
@@ -46,6 +52,12 @@ sequential-publisher:
 sequential-publisher-ack:
 	@echo "start sequential publisher with ack"
 	@cd examples/sequential/publisher-with-ack && \
+	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	go run -race ./main.go
+
+dynamic-publisher:
+	@echo "start dynamic sequential publisher with ack"
+	@cd examples/sequential/publisher-dynamic && \
 	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
 	go run -race ./main.go
 
@@ -70,6 +82,10 @@ clean:
 	@cd examples/sequential/publisher && \
 	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
 	@cd examples/sequential/publisher-with-ack && \
+	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	@cd examples/sequential/publisher-dynamic && \
+	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	@cd examples/sequential/consumer-dynamic && \
 	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
 
 	@echo "done!"

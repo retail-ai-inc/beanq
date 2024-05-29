@@ -49,12 +49,23 @@ func main() {
 	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 5; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
-		result, err := pub.BQ().WithContext(ctx).Dynamic("dynamic-test").PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
+		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic", b).Error()
+		if err != nil {
+			logger.New().Error(err)
+		}
+	}
+
+	for i := 0; i < 5; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+		m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
+		b, _ := json.Marshal(m)
+		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-2", b).WaitingAck()
 		if err != nil {
 			logger.New().Error(err)
 		} else {

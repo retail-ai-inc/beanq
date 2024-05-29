@@ -97,7 +97,7 @@ func (t *BeanqConfig) init() {
 	if t.ConsumerPoolSize == 0 {
 		t.ConsumerPoolSize = DefaultOptions.ConsumerPoolSize
 	}
-	if t.JobMaxRetries == 0 {
+	if t.JobMaxRetries < 0 {
 		t.JobMaxRetries = DefaultOptions.JobMaxRetry
 	}
 	if t.DeadLetterIdleTime == 0 {
@@ -158,7 +158,7 @@ type IHandle interface {
 	Check(ctx context.Context) error
 	Process(ctx context.Context)
 	DeadLetter(ctx context.Context) error
-	// close() error
+	close() error
 }
 
 // VolatileLFU ...

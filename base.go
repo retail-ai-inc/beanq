@@ -78,6 +78,15 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 	return makeKey(prefix, channel, topic, stream)
 }
 
+// MakeDynamicKey create key for dynamic
+func MakeDynamicKey(prefix, channel string) string {
+	if channel == "" {
+		channel = DefaultOptions.DefaultChannel
+	}
+
+	return makeKey(prefix, channel, "dynamic")
+}
+
 // GetChannelAndTopicFromStreamKey get channel and topic
 func GetChannelAndTopicFromStreamKey(streamKey string) (channel, topic string) {
 	s := strings.SplitN(streamKey, ":", 4)[1:3]

@@ -197,8 +197,8 @@ type BQClient struct {
 
 	ctx context.Context
 
-	waitAck    bool
-	dynamicKey string
+	waitAck bool
+	dynamic bool
 
 	// TODO
 	// id and priority are not common parameters for all publish and subscription, and will need to be optimized in the future.
@@ -212,11 +212,8 @@ func (b *BQClient) WithContext(ctx context.Context) *BQClient {
 }
 
 // Dynamic only support Sequential type for now.
-func (b *BQClient) Dynamic(dynamic string) *BQClient {
-	if dynamic == "" {
-		dynamic = "default_dynamic"
-	}
-	b.dynamicKey = dynamic
+func (b *BQClient) Dynamic() *BQClient {
+	b.dynamic = true
 	return b
 }
 
@@ -289,7 +286,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			Retry:        b.client.Retry,
 			PendingRetry: 0,
 			TimeToRun:    b.client.TimeToRun,
-			dynamicKey:   b.dynamicKey,
+			dynamic:      b.dynamic,
 		}
 
 		if err := cmd.filter(message); err != nil {
@@ -312,9 +309,12 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		if topic == "" {
 			topic = b.client.Topic
 		}
-		b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
-	case *DynamicSubscribe:
-		b.client.broker.dynamicConsuming(cmd.dynamicKey, cmd.subscribeType, cmd.handle)
+
+		if b.dynamic {
+			b.client.broker.dynamicConsuming(channel, cmd.subscribeType, cmd.handle)
+		} else {
+			b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
+		}
 	default:
 		return fmt.Errorf("unknown structure type: %T", cmd)
 	}
@@ -394,19 +394,6 @@ func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandl
 	return cmd, nil
 }
 
-func (t cmdAble) DynamicSubscribeSequential(dynamicKey string, handle IConsumeHandle) (*DynamicSubscribe, error) {
-	cmd := &DynamicSubscribe{
-		dynamicKey:    dynamicKey,
-		moodType:      SEQUENTIAL,
-		handle:        handle,
-		subscribeType: sequentialSubscribe,
-	}
-	if err := t(cmd); err != nil {
-		return nil, err
-	}
-	return cmd, nil
-}
-
 type (
 	// Publish command:publish
 	Publish struct {
@@ -422,16 +409,6 @@ type (
 	Subscribe struct {
 		channel, topic string
 		moodType       MoodType
-
-		subscribeType subscribeType
-		broker        IBroker
-		handle        IConsumeHandle
-	}
-
-	// DynamicSubscribe dynamic subscribe
-	DynamicSubscribe struct {
-		dynamicKey string
-		moodType   MoodType
 
 		subscribeType subscribeType
 		broker        IBroker
@@ -458,10 +435,6 @@ func (t *Subscribe) filter(message *Message) error {
 // Run will to be implemented
 func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
-}
-
-func (t *DynamicSubscribe) filter(message *Message) error {
-	return nil
 }
 
 type SequentialCmd struct {

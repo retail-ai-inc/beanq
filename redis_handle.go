@@ -31,6 +31,7 @@ type RedisHandle struct {
 	resultPool   *sync.Pool
 	errGroupPool *sync.Pool
 	once         sync.Once
+	closeCh      chan struct{}
 }
 
 func (t *RedisHandle) Check(ctx context.Context) error {
@@ -97,11 +98,13 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 
 	for {
 		select {
+		case <-t.closeCh:
+			return
 		case <-ctx.Done():
 			logger.New().Info("Sequential Task Stop")
 			return
 
-		case <-time.After(time.Millisecond * 200):
+		case <-time.After(time.Millisecond * 10):
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
 				if err != nil {
@@ -367,5 +370,10 @@ func (t *RedisHandle) check(ctx context.Context, streamName string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (t *RedisHandle) close() error {
+	close(t.closeCh)
 	return nil
 }

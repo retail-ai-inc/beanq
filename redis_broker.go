@@ -66,6 +66,8 @@ type (
 	}
 )
 
+var ErrorIdempotent = errors.New("duplicate id")
+
 func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
 	ctx := context.Background()
@@ -270,14 +272,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 		return err
 	}
 	if exist {
-		return nil
+		return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
 	}
 
 	switch msg.MoodType {
 	case SEQUENTIAL:
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-		if msg.dynamicKey != "" {
-			err := t.client.HSet(ctx, msg.dynamicKey, streamKey, time.Now().Unix()).Err()
+		if msg.dynamic {
+			err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()
 			if err != nil {
 				return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)
 			}
@@ -320,6 +322,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		minConsumers:       bqConfig.MinConsumers,
 		timeOut:            bqConfig.ConsumeTimeOut,
 		wg:                 new(sync.WaitGroup),
+		closeCh:            make(chan struct{}),
 		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
@@ -352,8 +355,9 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 	}
 }
 
-func (t *RedisBroker) dynamicConsuming(dynamicKey string, subType subscribeType, subscribe IConsumeHandle) {
+func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle) {
 	ctx, cancel := context.WithCancel(context.Background())
+	dynamicKey := MakeDynamicKey(t.prefix, channel)
 	go func() {
 		if err := t.pool.Submit(func() {
 
@@ -375,6 +379,8 @@ func (t *RedisBroker) dynamicConsuming(dynamicKey string, subType subscribeType,
 	}()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-time.After(time.Second):
 			keyValues, err := t.client.HGetAll(ctx, dynamicKey).Result()
 			if err != nil {
@@ -400,7 +406,7 @@ func (t *RedisBroker) dynamicConsuming(dynamicKey string, subType subscribeType,
 				log.Println("delete keys:", deleteKeys)
 				for _, key := range deleteKeys {
 					if value, loaded := t.consumerHandlerDic.LoadAndDelete(key); loaded {
-						err := value.(IBroker).close()
+						err := value.(IHandle).close()
 						if err != nil {
 							logger.New().Error(err)
 						}
