@@ -26,11 +26,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
 	"os/signal"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -52,6 +54,7 @@ type (
 		client              redis.UniversalClient
 		scheduleJob         scheduleJobI
 		filter              VolatileLFU
+		consumerHandlerDic  sync.Map
 		consumerHandlers    []IHandle
 		logJob              *Log
 		once                *sync.Once
@@ -87,14 +90,15 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
 	broker := &RedisBroker{
 
-		client:     client,
-		once:       &sync.Once{},
-		pool:       pool,
-		prefix:     config.Redis.Prefix,
-		maxLen:     config.MaxLen,
-		config:     config,
-		failKey:    MakeLogKey(config.Redis.Prefix, "fail"),
-		successKey: MakeLogKey(config.Redis.Prefix, "success"),
+		client:             client,
+		once:               &sync.Once{},
+		pool:               pool,
+		prefix:             config.Redis.Prefix,
+		maxLen:             config.MaxLen,
+		config:             config,
+		consumerHandlerDic: sync.Map{},
+		failKey:            MakeLogKey(config.Redis.Prefix, "fail"),
+		successKey:         MakeLogKey(config.Redis.Prefix, "success"),
 	}
 	var logs []ILog
 	logs = append(logs, broker)
@@ -271,7 +275,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 
 	switch msg.MoodType {
 	case SEQUENTIAL:
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
+		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
+		if msg.dynamicKey != "" {
+			err := t.client.HSet(ctx, msg.dynamicKey, streamKey, time.Now().Unix()).Err()
+			if err != nil {
+				return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)
+			}
+		}
+		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
 		err := t.client.XAdd(ctx, xAddArgs).Err()
 		if err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
@@ -294,7 +305,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 	return nil
 }
 
-func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle {
 
 	bqConfig := t.config
 	handler := &RedisHandle{
@@ -324,6 +335,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		once: sync.Once{},
 	}
 	t.consumerHandlers = append(t.consumerHandlers, handler)
+	return handler
 }
 
 func (t *RedisBroker) newScheduleJob() *scheduleJob {
@@ -337,6 +349,92 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 			group.SetLimit(2)
 			return group
 		}},
+	}
+}
+
+func (t *RedisBroker) dynamicConsuming(dynamicKey string, subType subscribeType, subscribe IConsumeHandle) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		if err := t.pool.Submit(func() {
+
+			_ = t.logJob.Obsoletes(ctx)
+
+		}); err != nil {
+			logger.New().Error(err)
+		}
+
+		if err := t.pool.Submit(func() {
+			t.filter.Delete(ctx, MakeFilter(t.prefix))
+		}); err != nil {
+			logger.New().Error(err)
+		}
+
+		logger.New().Info("Beanq dynamic consuming Start")
+		// monitor signal
+		t.waitSignal(cancel)
+	}()
+	for {
+		select {
+		case <-time.After(time.Second):
+			keyValues, err := t.client.HGetAll(ctx, dynamicKey).Result()
+			if err != nil {
+				logger.New().Error(err)
+				continue
+			}
+
+			var deleteKeys []string
+			var retainKeys []string
+			for k, v := range keyValues {
+				// k is stream, v is unix
+				unix, _ := strconv.Atoi(v)
+
+				if time.Since(time.Unix(int64(unix), 0)).Minutes() >= 1 {
+					// delete expired keys
+					deleteKeys = append(deleteKeys, k)
+				} else {
+					retainKeys = append(retainKeys, k)
+				}
+			}
+
+			if len(deleteKeys) > 0 {
+				log.Println("delete keys:", deleteKeys)
+				for _, key := range deleteKeys {
+					if value, loaded := t.consumerHandlerDic.LoadAndDelete(key); loaded {
+						err := value.(IBroker).close()
+						if err != nil {
+							logger.New().Error(err)
+						}
+						err = t.client.HDel(ctx, dynamicKey, key).Err()
+						if err != nil {
+							logger.New().Error(err)
+						}
+					}
+				}
+			}
+
+			for _, key := range retainKeys {
+				if _, ok := t.consumerHandlerDic.Load(key); ok {
+					continue
+				}
+
+				channel, topic := GetChannelAndTopicFromStreamKey(key)
+				handler := t.addConsumer(subType, channel, topic, subscribe)
+				t.consumerHandlerDic.Store(key, handler)
+				// consume data
+				if err := t.worker(ctx, handler); err != nil {
+					logger.New().With("", err).Error("worker err")
+				}
+
+				if err := t.scheduleJob.start(ctx, handler); err != nil {
+					logger.New().With("", err).Error("schedule job err")
+				}
+				// REFERENCE: https://redis.io/commands/xclaim/
+				// monitor other stream pending
+				if err := t.deadLetter(ctx, handler); err != nil {
+					logger.New().With("", err).Error("claim job err")
+				}
+			}
+		}
 	}
 
 }

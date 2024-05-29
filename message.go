@@ -46,6 +46,8 @@ type (
 		ExecuteTime  time.Time     `json:"executeTime"`
 		TimeToRun    time.Duration `json:"timeToRun"`
 		MoodType     MoodType      `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
+
+		dynamicKey string
 	}
 )
 

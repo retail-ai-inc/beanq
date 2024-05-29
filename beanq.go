@@ -158,6 +158,7 @@ type IHandle interface {
 	Check(ctx context.Context) error
 	Process(ctx context.Context)
 	DeadLetter(ctx context.Context) error
+	// close() error
 }
 
 // VolatileLFU ...
