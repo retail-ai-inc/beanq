@@ -373,6 +373,13 @@ func (t *RedisHandle) check(ctx context.Context, streamName string) error {
 }
 
 func (t *RedisHandle) close() error {
-	close(t.closeCh)
+	// safe close
+	select {
+	case <-t.closeCh:
+		// already close
+	default:
+		close(t.closeCh)
+	}
+
 	return nil
 }
