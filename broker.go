@@ -30,7 +30,7 @@ func NewBroker(config *BeanqConfig) IBroker {
 
 	brokerOnce.Do(
 		func() {
-			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true))
+			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true), ants.WithNonblocking(true))
 			if err != nil {
 				logger.New().With("", err).Panic("goroutine pool error")
 			}
