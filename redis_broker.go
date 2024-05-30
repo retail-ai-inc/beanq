@@ -90,7 +90,6 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	}
 
 	broker := &RedisBroker{
-
 		client:             client,
 		once:               &sync.Once{},
 		pool:               pool,
@@ -589,8 +588,4 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 		})
 	}
 	return m
-}
-
-func (t *RedisBroker) close() error {
-	return nil
 }

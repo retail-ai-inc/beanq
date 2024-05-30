@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -246,12 +245,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						return err
 					}
 					// set result for ack
-					set, err := t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
+					_, err := t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
 					if err != nil {
 						return err
-					}
-					if !set {
-						log.Println("same set:", result.Id)
 					}
 					return nil
 				})

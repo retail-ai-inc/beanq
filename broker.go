@@ -13,7 +13,6 @@ type (
 		getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error)
 		checkStatus(ctx context.Context, channel, topic string, id string) (string, error)
 		enqueue(ctx context.Context, msg *Message) error
-		close() error
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle
 		deadLetter(ctx context.Context, handle IHandle) error
