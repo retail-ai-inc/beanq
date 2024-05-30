@@ -6,6 +6,7 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -49,12 +50,12 @@ func main() {
 	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 15; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
-		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic", b).Error()
+		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%5), b).Error()
 		if err != nil {
 			logger.New().Error(err)
 		}
@@ -65,7 +66,7 @@ func main() {
 		defer cancel()
 		m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-2", b).WaitingAck()
+		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-n", b).WaitingAck()
 		if err != nil {
 			logger.New().Error(err)
 		} else {

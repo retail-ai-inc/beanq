@@ -123,7 +123,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			}
 
 			if err := mutex.LockContext(ctx); err != nil {
-				logger.New().Error(err)
 				continue
 			}
 

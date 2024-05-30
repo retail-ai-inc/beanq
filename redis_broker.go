@@ -32,7 +32,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -377,48 +376,78 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		// monitor signal
 		t.waitSignal(cancel)
 	}()
+	var getValidScript = NewScript(1, `
+		local hashKey = KEYS[1]
+		local threshold = tonumber(ARGV[1])
+		
+		local result = {}
+		local allFields = redis.call('HGETALL', hashKey)
+		
+		for i = 1, #allFields, 2 do
+			local field = allFields[i]
+			local value = tonumber(allFields[i + 1])
+			
+			if value and value > threshold then
+				table.insert(result, field)
+            	table.insert(result, value)
+			else 
+				redis.call('HDEL', hashKey, field)
+			end
+		end
+		
+		return result
+	`)
+
+	var getAllValid = func(ctx context.Context, script *Script, keysAndArgs ...interface{}) (map[string]interface{}, error) {
+		keys := make([]string, script.KeyCount)
+		args := keysAndArgs
+
+		if script.KeyCount > 0 {
+			for i := 0; i < script.KeyCount; i++ {
+				keys[i] = keysAndArgs[i].(string)
+			}
+			args = keysAndArgs[script.KeyCount:]
+		}
+
+		v, err := t.client.EvalSha(ctx, script.Hash, keys, args...).Result()
+		if err != nil && strings.Contains(err.Error(), "NOSCRIPT ") {
+			v, err = t.client.Eval(ctx, script.Src, keys, args...).Result()
+		}
+
+		var result map[string]interface{}
+		if r, ok := v.([]interface{}); ok && len(r) > 0 {
+			result = make(map[string]interface{})
+			for i := 0; i < len(r); i = i + 2 {
+				result[r[i].(string)] = r[i+1]
+			}
+		}
+		return result, noErrNil(err)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second):
-			keyValues, err := t.client.HGetAll(ctx, dynamicKey).Result()
+			keyValues, err := getAllValid(ctx, getValidScript, dynamicKey, time.Now().Add(-time.Minute*3).Unix())
 			if err != nil {
 				logger.New().Error(err)
 				continue
 			}
 
-			var deleteKeys []string
-			var retainKeys []string
-			for k, v := range keyValues {
-				// k is stream, v is unix
-				unix, _ := strconv.Atoi(v)
-
-				if time.Since(time.Unix(int64(unix), 0)).Minutes() >= 1 {
-					// delete expired keys
-					deleteKeys = append(deleteKeys, k)
-				} else {
-					retainKeys = append(retainKeys, k)
-				}
-			}
-
-			if len(deleteKeys) > 0 {
-				log.Println("delete keys:", deleteKeys)
-				for _, key := range deleteKeys {
-					if value, loaded := t.consumerHandlerDic.LoadAndDelete(key); loaded {
-						err := value.(IHandle).close()
-						if err != nil {
-							logger.New().Error(err)
-						}
-						err = t.client.HDel(ctx, dynamicKey, key).Err()
-						if err != nil {
-							logger.New().Error(err)
-						}
+			t.consumerHandlerDic.Range(func(key, value any) bool {
+				if _, ok := keyValues[key.(string)]; keyValues == nil || !ok {
+					err := value.(IHandle).close()
+					if err != nil {
+						logger.New().Error(err)
 					}
+					log.Println("close handler:", key.(string))
+					t.consumerHandlerDic.Delete(key)
 				}
-			}
+				return true
+			})
 
-			for _, key := range retainKeys {
+			for key, _ := range keyValues {
 				if _, ok := t.consumerHandlerDic.Load(key); ok {
 					continue
 				}
