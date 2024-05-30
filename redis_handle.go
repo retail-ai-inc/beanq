@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"log"
 	"strings"
 	"sync"
 	"time"
@@ -10,18 +11,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
 
 type RedisHandle struct {
-	broker             *RedisBroker
-	subscribe          IConsumeHandle
+	broker        *RedisBroker
+	channel       string
+	topic         string
+	subscribeType subscribeType
+	subscribe     IConsumeHandle
+
 	deadLetterTicker   *time.Ticker
-	channel            string
-	topic              string
 	deadLetterIdleTime time.Duration
-	subscribeType      subscribeType
-	// errorCallbacks   []ErrorCallback
+
+	scheduleTicker *time.Ticker
 
 	jobMaxRetry  int
 	minConsumers int64
@@ -83,6 +87,65 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 			continue
 		}
 		t.do(ctx, streams)
+	}
+}
+
+func (t *RedisHandle) Schedule(ctx context.Context) {
+	// timeWheel To be implemented
+	defer t.scheduleTicker.Stop()
+
+	var (
+		now      time.Time
+		timeUnit        = MakeTimeUnit(t.broker.prefix, t.channel, t.topic)
+		scoreMin string = "0"
+		scoreMax string
+	)
+	for {
+		select {
+		case <-t.closeCh:
+			return
+		case <-ctx.Done():
+			t.broker.pool.Release()
+			logger.New().Info("Schedule Task Stop")
+			return
+
+		case <-t.scheduleTicker.C:
+		}
+
+		now = time.Now()
+
+		scoreMax = cast.ToString(now.UnixMilli() + 1)
+		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+				Min:    scoreMin,
+				Max:    scoreMax,
+				Offset: 0,
+				Count:  1,
+			}).Result()
+
+			if err != nil {
+				return err
+			}
+
+			if len(val) <= 0 {
+				scoreMin = scoreMax
+			} else {
+				scoreMin = val[0]
+				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, timeUnit)
+		if err != nil {
+			logger.New().Error(err)
+			continue
+		}
+
+		if err := t.broker.scheduleJob.doConsume(ctx, scoreMax, t.channel, t.topic); err != nil {
+			logger.New().With("", err).Error("consume err")
+			// continue
+		}
 	}
 }
 
@@ -183,17 +246,21 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						return err
 					}
 					// set result for ack
-					err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Err()
+					set, err := t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
 					if err != nil {
 						return err
+					}
+					if !set {
+						log.Println("same set:", result.Id)
 					}
 					return nil
 				})
 
 				group.TryGo(func() error {
 					defer t.resultPool.Put(result)
-					return t.broker.logJob.Archives(ctx, result)
-
+					// fix data race
+					clone := *result
+					return t.broker.logJob.Archives(ctx, &clone)
 				})
 
 				if err := group.Wait(); err != nil {
@@ -218,6 +285,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	for {
 		// check state
 		select {
+		case <-t.closeCh:
+			return nil
 		case <-ctx.Done():
 			logger.New().Info("DeadLetter Work Stop")
 			return nil
@@ -377,6 +446,7 @@ func (t *RedisHandle) close() error {
 	select {
 	case <-t.closeCh:
 		// already close
+		return nil
 	default:
 		close(t.closeCh)
 	}

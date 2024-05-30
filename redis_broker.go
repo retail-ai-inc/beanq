@@ -317,6 +317,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		subscribeType:      subType,
 		deadLetterTicker:   time.NewTicker(bqConfig.DeadLetterTicker),
 		deadLetterIdleTime: bqConfig.DeadLetterIdleTime,
+		scheduleTicker:     time.NewTicker(defaultScheduleJobConfig.consumeTicker),
 		jobMaxRetry:        bqConfig.JobMaxRetries,
 		minConsumers:       bqConfig.MinConsumers,
 		timeOut:            bqConfig.ConsumeTimeOut,
@@ -342,10 +343,8 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 
 func (t *RedisBroker) newScheduleJob() *scheduleJob {
 	return &scheduleJob{
-		broker:         t,
-		wg:             &sync.WaitGroup{},
-		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
-		seqTicker:      time.NewTicker(10 * time.Second),
+		broker: t,
+		wg:     &sync.WaitGroup{},
 		scheduleErrGroupPool: &sync.Pool{New: func() any {
 			group := new(errgroup.Group)
 			group.SetLimit(2)
@@ -376,6 +375,7 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		// monitor signal
 		t.waitSignal(cancel)
 	}()
+
 	var getValidScript = NewScript(1, `
 		local hashKey = KEYS[1]
 		local threshold = tonumber(ARGV[1])
@@ -460,7 +460,7 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 					logger.New().With("", err).Error("worker err")
 				}
 
-				if err := t.scheduleJob.start(ctx, handler); err != nil {
+				if err := t.schedule(ctx, handler); err != nil {
 					logger.New().With("", err).Error("schedule job err")
 				}
 				// REFERENCE: https://redis.io/commands/xclaim/
@@ -483,7 +483,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 			logger.New().With("", err).Error("worker err")
 		}
 
-		if err := t.scheduleJob.start(ctx, cs); err != nil {
+		if err := t.schedule(ctx, cs); err != nil {
 			logger.New().With("", err).Error("schedule job err")
 		}
 		// REFERENCE: https://redis.io/commands/xclaim/
@@ -526,8 +526,17 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 	return nil
 }
 
-func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
+func (t *RedisBroker) schedule(ctx context.Context, handle IHandle) error {
+	if err := t.pool.Submit(func() {
+		handle.Schedule(ctx)
+	}); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 	return t.pool.Submit(func() {
 		if err := handle.DeadLetter(ctx); err != nil {
 			logger.New().Error(err)

@@ -157,6 +157,7 @@ type IHandle interface {
 	Topic() string
 	Check(ctx context.Context) error
 	Process(ctx context.Context)
+	Schedule(ctx context.Context)
 	DeadLetter(ctx context.Context) error
 	close() error
 }
