@@ -50,12 +50,12 @@ func main() {
 	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 1000; i++ {
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
-		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%5), b).Error()
+		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
 		if err != nil {
 			logger.New().Error(err)
 		}
