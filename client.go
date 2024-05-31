@@ -286,7 +286,6 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			Retry:        b.client.Retry,
 			PendingRetry: 0,
 			TimeToRun:    b.client.TimeToRun,
-			dynamic:      b.dynamic,
 		}
 
 		if err := cmd.filter(message); err != nil {
@@ -298,7 +297,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 
 		// store message
-		return b.client.broker.enqueue(b.ctx, message)
+		return b.client.broker.enqueue(b.ctx, message, b.dynamic)
 
 	case *Subscribe:
 		channel, topic := cmd.channel, cmd.topic

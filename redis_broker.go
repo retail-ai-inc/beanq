@@ -262,7 +262,7 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 	return nil, nil
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) error {
 	// TODO Transaction consistency should be considered here.
 	// Idempotency check
 	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
@@ -276,7 +276,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 	switch msg.MoodType {
 	case SEQUENTIAL:
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-		if msg.dynamic {
+		if dynamic {
 			err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()
 			if err != nil {
 				return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)

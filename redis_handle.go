@@ -72,6 +72,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	for {
 		// check state
 		select {
+		case <-t.closeCh:
+			return
 		case <-ctx.Done():
 			logger.New().Info("Main Task Stop")
 			return
@@ -166,7 +168,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			logger.New().Info("Sequential Task Stop")
 			return
 
-		case <-time.After(time.Millisecond * 10):
+		case <-time.After(time.Millisecond * 100):
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
 				if err != nil {
@@ -200,13 +202,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			stream := vals[0].Stream
 
 			for _, v := range vals[0].Messages {
-				nv := v
-				message := messageToStruct(nv.Values)
-
+				message := messageToStruct(v.Values)
 				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
-
 				group := t.errGroupPool.Get().(*errgroup.Group)
-
 				result.Status = StatusExecuting
 				result.BeginTime = time.Now()
 				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -237,11 +235,11 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				cancel()
 				group.TryGo(func() error {
 					// `stream` confirmation message
-					if err := t.broker.client.XAck(ctx, stream, t.channel, nv.ID).Err(); err != nil {
+					if err := t.broker.client.XAck(ctx, stream, t.channel, v.ID).Err(); err != nil {
 						return err
 					}
 					// delete data from `stream`
-					if err := t.broker.client.XDel(ctx, stream, nv.ID).Err(); err != nil {
+					if err := t.broker.client.XDel(ctx, stream, v.ID).Err(); err != nil {
 						return err
 					}
 					// set result for ack
@@ -253,7 +251,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				})
 
 				group.TryGo(func() error {
-					defer t.resultPool.Put(result)
 					// fix data race
 					clone := *result
 					return t.broker.logJob.Archives(ctx, &clone)
@@ -262,8 +259,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
-
 				t.errGroupPool.Put(group)
+				t.resultPool.Put(result)
 			}
 
 			if _, err := mutex.UnlockContext(ctx); err != nil {
@@ -331,6 +328,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
+				t.resultPool.Put(r)
 			}
 
 		}
@@ -419,7 +417,7 @@ func (t *RedisHandle) checkStream(ctx context.Context) error {
 
 }
 
-func (t *RedisHandle) checkDeadletterStream(ctx context.Context) error {
+func (t *RedisHandle) checkDeadLetterStream(ctx context.Context) error {
 
 	// if dead letter stream don't exist,then create it
 	deadLetterStreamKey := MakeDeadLetterStreamKey(t.broker.prefix, t.channel, t.topic)

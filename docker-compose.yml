@@ -8,6 +8,8 @@ services:
     init: true
     tty: true
     container_name: beanq-example
+    ports:
+      - "6060:6060"
     volumes:
       - ./:/var/www/example:rw
       - ~/go/pkg:/go/pkg
