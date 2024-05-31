@@ -423,11 +423,16 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		return result, noErrNil(err)
 	}
 
+	duration := time.Second
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
 	for {
+		timer.Reset(duration)
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Second):
+		case <-timer.C:
 			keyValues, err := getAllValid(ctx, getValidScript, dynamicKey, time.Now().Add(-time.Minute*3).Unix())
 			if err != nil {
 				logger.New().Error(err)

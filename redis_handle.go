@@ -160,7 +160,12 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		WithExpiry(20*time.Second),
 	)
 
+	duration := time.Millisecond * 100
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
 	for {
+		timer.Reset(duration)
 		select {
 		case <-t.closeCh:
 			return
@@ -168,7 +173,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			logger.New().Info("Sequential Task Stop")
 			return
 
-		case <-time.After(time.Millisecond * 100):
+		case <-timer.C:
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
 				if err != nil {
