@@ -64,14 +64,11 @@ const (
 type (
 	// IBaseCmd BaseCmd public method
 	IBaseCmd interface {
-		Channel() string
-		Topic() string
 		filter(message *Message) error
 	}
 	// IBaseSubscribeCmd BaseSubscribeCmd subscribe method
 	IBaseSubscribeCmd interface {
 		IBaseCmd
-		init(broker IBroker) *Subscribe
 		Run(ctx context.Context)
 	}
 	// define available command
@@ -201,6 +198,7 @@ type BQClient struct {
 	ctx context.Context
 
 	waitAck bool
+	dynamic bool
 
 	// TODO
 	// id and priority are not common parameters for all publish and subscription, and will need to be optimized in the future.
@@ -210,6 +208,12 @@ type BQClient struct {
 
 func (b *BQClient) WithContext(ctx context.Context) *BQClient {
 	b.ctx = ctx
+	return b
+}
+
+// Dynamic only support Sequential type for now.
+func (b *BQClient) Dynamic() *BQClient {
+	b.dynamic = true
 	return b
 }
 
@@ -253,19 +257,19 @@ func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *S
 }
 
 func (b *BQClient) process(cmd IBaseCmd) error {
-
-	channel, topic := cmd.Channel(), cmd.Topic()
-
-	if channel == "" {
-		channel = b.client.Channel
-	}
-	if topic == "" {
-		topic = b.client.Topic
-	}
-
 	switch cmd := cmd.(type) {
 	case *Publish:
+		channel, topic := cmd.channel, cmd.topic
+
+		if channel == "" {
+			channel = b.client.Channel
+		}
+		if topic == "" {
+			topic = b.client.Topic
+		}
+
 		b.waitAck = cmd.moodType == SEQUENTIAL
+
 		// make message
 		message := &Message{
 			Topic:       topic,
@@ -293,10 +297,23 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 
 		// store message
-		return b.client.broker.enqueue(b.ctx, message)
+		return b.client.broker.enqueue(b.ctx, message, b.dynamic)
 
 	case *Subscribe:
-		b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
+		channel, topic := cmd.channel, cmd.topic
+
+		if channel == "" {
+			channel = b.client.Channel
+		}
+		if topic == "" {
+			topic = b.client.Topic
+		}
+
+		if b.dynamic {
+			b.client.broker.dynamicConsuming(channel, cmd.subscribeType, cmd.handle)
+		} else {
+			b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
+		}
 	default:
 		return fmt.Errorf("unknown structure type: %T", cmd)
 	}
@@ -386,6 +403,7 @@ type (
 
 		isUnique bool
 	}
+
 	// Subscribe command:subscribe
 	Subscribe struct {
 		channel, topic string
@@ -409,35 +427,13 @@ func (t *Publish) filter(message *Message) error {
 	return nil
 }
 
-func (t *Publish) Channel() string {
-	return t.channel
-}
-
-func (t *Publish) Topic() string {
-	return t.topic
-}
-
 func (t *Subscribe) filter(message *Message) error {
 	return nil
-}
-
-func (t *Subscribe) init(broker IBroker) *Subscribe {
-	t.broker = broker
-
-	return t
 }
 
 // Run will to be implemented
 func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
-}
-
-func (t *Subscribe) Channel() string {
-	return t.channel
-}
-
-func (t *Subscribe) Topic() string {
-	return t.topic
 }
 
 type SequentialCmd struct {

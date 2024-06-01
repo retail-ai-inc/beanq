@@ -37,15 +37,15 @@ import (
 
 type (
 	scheduleJobI interface {
-		start(ctx context.Context, consumer IHandle) error
 		enqueue(ctx context.Context, msg *Message) error
 		sequentialEnqueue(ctx context.Context, message *Message) error
 		sendToStream(ctx context.Context, msg *Message) error
+		doConsume(ctx context.Context, max string, channel, topic string) error
 	}
+
 	scheduleJob struct {
-		broker                    *RedisBroker
-		wg                        *sync.WaitGroup
-		scheduleTicker, seqTicker *time.Ticker
+		broker *RedisBroker
+		wg     *sync.WaitGroup
 
 		scheduleErrGroupPool *sync.Pool
 	}
@@ -70,16 +70,6 @@ var (
 		consumeTicker:  1 * time.Second,
 	}
 )
-
-func (t *scheduleJob) start(ctx context.Context, consumer IHandle) error {
-	if err := t.broker.pool.Submit(func() {
-		t.consume(ctx, consumer)
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
 
 func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 	bt, err := json.Marshal(msg)
@@ -117,70 +107,12 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 	return err
 }
 
-func (t *scheduleJob) consume(ctx context.Context, consumer IHandle) {
-	// timeWheel To be implemented
-	defer t.scheduleTicker.Stop()
-
-	var (
-		now      time.Time
-		timeUnit        = MakeTimeUnit(t.broker.prefix, consumer.Channel(), consumer.Topic())
-		scoreMin string = "0"
-		scoreMax string
-	)
-	for {
-		select {
-		case <-ctx.Done():
-			t.broker.pool.Release()
-			logger.New().Info("Schedule Task Stop")
-			return
-
-		case <-t.scheduleTicker.C:
-		}
-
-		now = time.Now()
-
-		scoreMax = cast.ToString(now.UnixMilli() + 1)
-		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-				Min:    scoreMin,
-				Max:    scoreMax,
-				Offset: 0,
-				Count:  1,
-			}).Result()
-
-			if err != nil {
-				return err
-			}
-
-			if len(val) <= 0 {
-				scoreMin = scoreMax
-			} else {
-				scoreMin = val[0]
-				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
-					return err
-				}
-			}
-			return nil
-		}, timeUnit)
-		if err != nil {
-			logger.New().Error(err)
-			continue
-		}
-
-		if err := t.doConsume(ctx, scoreMax, consumer); err != nil {
-			logger.New().With("", err).Error("consume err")
-			// continue
-		}
-	}
-}
-
-func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer IHandle) error {
-
+func (t *scheduleJob) doConsume(ctx context.Context, max string, channel, topic string) error {
 	zRangeBy := &redis.ZRangeBy{
 		Min: defaultScheduleJobConfig.scoreMin,
 		Max: max,
 	}
-	key := MakeZSetKey(t.broker.prefix, consumer.Channel(), consumer.Topic())
+	key := MakeZSetKey(t.broker.prefix, channel, topic)
 
 	val := t.broker.client.ZRevRangeByScore(ctx, key, zRangeBy).Val()
 
@@ -188,15 +120,14 @@ func (t *scheduleJob) doConsume(ctx context.Context, max string, consumer IHandl
 		return nil
 	}
 
-	t.doConsumeZset(ctx, val, consumer)
+	t.doConsumeZset(ctx, val, channel, topic)
 	return nil
 }
 
-func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer IHandle) {
+func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, channel, topic string) {
+	var zsetKey = MakeZSetKey(t.broker.prefix, channel, topic)
 
-	var zsetKey = MakeZSetKey(t.broker.prefix, consumer.Channel(), consumer.Topic())
-
-	doTask := func(ctx context.Context, vv string, consumer IHandle) error {
+	doTask := func(ctx context.Context, vv string) error {
 
 		msg, err := jsonToMessage(vv)
 		if err != nil {
@@ -218,7 +149,7 @@ func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, consumer
 	}
 	// begin to execute consumer's datas
 	for _, vv := range vals {
-		if err := doTask(ctx, vv, consumer); err != nil {
+		if err := doTask(ctx, vv); err != nil {
 			logger.New().With("", err).Error("consumer err")
 			continue
 		}
@@ -237,8 +168,4 @@ func (t *scheduleJob) sendToStream(ctx context.Context, msg *Message) error {
 func (t *scheduleJob) sequentialEnqueue(ctx context.Context, msg *Message) error {
 	args := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.broker.prefix, msg.Channel, msg.Topic), "", "*", msg.MaxLen, 0, msg.ToMap())
 	return t.broker.client.XAdd(ctx, args).Err()
-}
-
-func (t *scheduleJob) shutDown() {
-
 }

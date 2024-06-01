@@ -12,11 +12,11 @@ type (
 	IBroker interface {
 		getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error)
 		checkStatus(ctx context.Context, channel, topic string, id string) (string, error)
-		enqueue(ctx context.Context, msg *Message) error
-		close() error
+		enqueue(ctx context.Context, msg *Message, dynamic bool) error
 		startConsuming(ctx context.Context)
-		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle)
+		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle
 		deadLetter(ctx context.Context, handle IHandle) error
+		dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle)
 	}
 )
 
@@ -30,7 +30,7 @@ func NewBroker(config *BeanqConfig) IBroker {
 
 	brokerOnce.Do(
 		func() {
-			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true))
+			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true), ants.WithNonblocking(true))
 			if err != nil {
 				logger.New().With("", err).Panic("goroutine pool error")
 			}
@@ -53,6 +53,7 @@ type (
 	IConsumeHandle interface {
 		Handle(ctx context.Context, message *Message) error
 	}
+
 	IConsumeCancel interface {
 		Cancel(ctx context.Context, message *Message) error
 	}

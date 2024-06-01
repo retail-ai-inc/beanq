@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -52,6 +53,7 @@ type (
 		client              redis.UniversalClient
 		scheduleJob         scheduleJobI
 		filter              VolatileLFU
+		consumerHandlerDic  sync.Map
 		consumerHandlers    []IHandle
 		logJob              *Log
 		once                *sync.Once
@@ -62,6 +64,8 @@ type (
 		failKey, successKey string
 	}
 )
+
+var ErrorIdempotent = errors.New("duplicate id")
 
 func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
@@ -86,15 +90,15 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	}
 
 	broker := &RedisBroker{
-
-		client:     client,
-		once:       &sync.Once{},
-		pool:       pool,
-		prefix:     config.Redis.Prefix,
-		maxLen:     config.MaxLen,
-		config:     config,
-		failKey:    MakeLogKey(config.Redis.Prefix, "fail"),
-		successKey: MakeLogKey(config.Redis.Prefix, "success"),
+		client:             client,
+		once:               &sync.Once{},
+		pool:               pool,
+		prefix:             config.Redis.Prefix,
+		maxLen:             config.MaxLen,
+		config:             config,
+		consumerHandlerDic: sync.Map{},
+		failKey:            MakeLogKey(config.Redis.Prefix, "fail"),
+		successKey:         MakeLogKey(config.Redis.Prefix, "success"),
 	}
 	var logs []ILog
 	logs = append(logs, broker)
@@ -258,7 +262,7 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 	return nil, nil
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) error {
 	// TODO Transaction consistency should be considered here.
 	// Idempotency check
 	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
@@ -266,12 +270,19 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 		return err
 	}
 	if exist {
-		return nil
+		return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
 	}
 
 	switch msg.MoodType {
 	case SEQUENTIAL:
-		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
+		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
+		if dynamic {
+			err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()
+			if err != nil {
+				return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)
+			}
+		}
+		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
 		err := t.client.XAdd(ctx, xAddArgs).Err()
 		if err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
@@ -294,7 +305,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message) error {
 	return nil
 }
 
-func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) {
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle {
 
 	bqConfig := t.config
 	handler := &RedisHandle{
@@ -305,10 +316,12 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		subscribeType:      subType,
 		deadLetterTicker:   time.NewTicker(bqConfig.DeadLetterTicker),
 		deadLetterIdleTime: bqConfig.DeadLetterIdleTime,
+		scheduleTicker:     time.NewTicker(defaultScheduleJobConfig.consumeTicker),
 		jobMaxRetry:        bqConfig.JobMaxRetries,
 		minConsumers:       bqConfig.MinConsumers,
 		timeOut:            bqConfig.ConsumeTimeOut,
 		wg:                 new(sync.WaitGroup),
+		closeCh:            make(chan struct{}),
 		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
@@ -324,19 +337,143 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		once: sync.Once{},
 	}
 	t.consumerHandlers = append(t.consumerHandlers, handler)
+	return handler
 }
 
 func (t *RedisBroker) newScheduleJob() *scheduleJob {
 	return &scheduleJob{
-		broker:         t,
-		wg:             &sync.WaitGroup{},
-		scheduleTicker: time.NewTicker(defaultScheduleJobConfig.consumeTicker),
-		seqTicker:      time.NewTicker(10 * time.Second),
+		broker: t,
+		wg:     &sync.WaitGroup{},
 		scheduleErrGroupPool: &sync.Pool{New: func() any {
 			group := new(errgroup.Group)
 			group.SetLimit(2)
 			return group
 		}},
+	}
+}
+
+func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle) {
+	ctx, cancel := context.WithCancel(context.Background())
+	dynamicKey := MakeDynamicKey(t.prefix, channel)
+	go func() {
+		if err := t.pool.Submit(func() {
+
+			_ = t.logJob.Obsoletes(ctx)
+
+		}); err != nil {
+			logger.New().Error(err)
+		}
+
+		if err := t.pool.Submit(func() {
+			t.filter.Delete(ctx, MakeFilter(t.prefix))
+		}); err != nil {
+			logger.New().Error(err)
+		}
+
+		logger.New().Info("Beanq dynamic consuming Start")
+		// monitor signal
+		t.waitSignal(cancel)
+	}()
+
+	var getValidScript = NewScript(1, `
+		local hashKey = KEYS[1]
+		local threshold = tonumber(ARGV[1])
+		
+		local result = {}
+		local allFields = redis.call('HGETALL', hashKey)
+		
+		for i = 1, #allFields, 2 do
+			local field = allFields[i]
+			local value = tonumber(allFields[i + 1])
+			
+			if value and value > threshold then
+				table.insert(result, field)
+            	table.insert(result, value)
+			else 
+				redis.call('HDEL', hashKey, field)
+			end
+		end
+		
+		return result
+	`)
+
+	var getAllValid = func(ctx context.Context, script *Script, keysAndArgs ...interface{}) (map[string]interface{}, error) {
+		keys := make([]string, script.KeyCount)
+		args := keysAndArgs
+
+		if script.KeyCount > 0 {
+			for i := 0; i < script.KeyCount; i++ {
+				keys[i] = keysAndArgs[i].(string)
+			}
+			args = keysAndArgs[script.KeyCount:]
+		}
+
+		v, err := t.client.EvalSha(ctx, script.Hash, keys, args...).Result()
+		if err != nil && strings.Contains(err.Error(), "NOSCRIPT ") {
+			v, err = t.client.Eval(ctx, script.Src, keys, args...).Result()
+		}
+
+		var result map[string]interface{}
+		if r, ok := v.([]interface{}); ok && len(r) > 0 {
+			result = make(map[string]interface{})
+			for i := 0; i < len(r); i = i + 2 {
+				result[r[i].(string)] = r[i+1]
+			}
+		}
+		return result, noErrNil(err)
+	}
+
+	duration := time.Second
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
+	for {
+		timer.Reset(duration)
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+			keyValues, err := getAllValid(ctx, getValidScript, dynamicKey, time.Now().Add(-time.Minute*3).Unix())
+			if err != nil {
+				logger.New().Error(err)
+				continue
+			}
+
+			t.consumerHandlerDic.Range(func(key, value any) bool {
+				if _, ok := keyValues[key.(string)]; keyValues == nil || !ok {
+					err := value.(IHandle).close()
+					if err != nil {
+						logger.New().Error(err)
+					}
+					log.Println("close handler:", key.(string))
+					t.consumerHandlerDic.Delete(key)
+				}
+				return true
+			})
+
+			for key, _ := range keyValues {
+				if _, ok := t.consumerHandlerDic.Load(key); ok {
+					continue
+				}
+
+				channel, topic := GetChannelAndTopicFromStreamKey(key)
+				handler := t.addConsumer(subType, channel, topic, subscribe)
+				t.consumerHandlerDic.Store(key, handler)
+				// consume data
+				if err := t.worker(ctx, handler); err != nil {
+					logger.New().With("", err).Error("worker err")
+				}
+
+				if err := t.schedule(ctx, handler); err != nil {
+					logger.New().With("", err).Error("schedule job err")
+				}
+				// REFERENCE: https://redis.io/commands/xclaim/
+				// monitor other stream pending
+				if err := t.deadLetter(ctx, handler); err != nil {
+					logger.New().With("", err).Error("claim job err")
+				}
+			}
+		}
 	}
 
 }
@@ -350,7 +487,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 			logger.New().With("", err).Error("worker err")
 		}
 
-		if err := t.scheduleJob.start(ctx, cs); err != nil {
+		if err := t.schedule(ctx, cs); err != nil {
 			logger.New().With("", err).Error("schedule job err")
 		}
 		// REFERENCE: https://redis.io/commands/xclaim/
@@ -393,8 +530,17 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 	return nil
 }
 
-func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
+func (t *RedisBroker) schedule(ctx context.Context, handle IHandle) error {
+	if err := t.pool.Submit(func() {
+		handle.Schedule(ctx)
+	}); err != nil {
+		return err
+	}
 
+	return nil
+}
+
+func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 	return t.pool.Submit(func() {
 		if err := handle.DeadLetter(ctx); err != nil {
 			logger.New().Error(err)
@@ -447,8 +593,4 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 		})
 	}
 	return m
-}
-
-func (t *RedisBroker) close() error {
-	return nil
 }

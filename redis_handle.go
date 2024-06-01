@@ -10,18 +10,21 @@ import (
 	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
 
 type RedisHandle struct {
-	broker             *RedisBroker
-	subscribe          IConsumeHandle
+	broker        *RedisBroker
+	channel       string
+	topic         string
+	subscribeType subscribeType
+	subscribe     IConsumeHandle
+
 	deadLetterTicker   *time.Ticker
-	channel            string
-	topic              string
 	deadLetterIdleTime time.Duration
-	subscribeType      subscribeType
-	// errorCallbacks   []ErrorCallback
+
+	scheduleTicker *time.Ticker
 
 	jobMaxRetry  int
 	minConsumers int64
@@ -31,6 +34,7 @@ type RedisHandle struct {
 	resultPool   *sync.Pool
 	errGroupPool *sync.Pool
 	once         sync.Once
+	closeCh      chan struct{}
 }
 
 func (t *RedisHandle) Check(ctx context.Context) error {
@@ -68,6 +72,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	for {
 		// check state
 		select {
+		case <-t.closeCh:
+			return
 		case <-ctx.Done():
 			logger.New().Info("Main Task Stop")
 			return
@@ -85,6 +91,65 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	}
 }
 
+func (t *RedisHandle) Schedule(ctx context.Context) {
+	// timeWheel To be implemented
+	defer t.scheduleTicker.Stop()
+
+	var (
+		now      time.Time
+		timeUnit        = MakeTimeUnit(t.broker.prefix, t.channel, t.topic)
+		scoreMin string = "0"
+		scoreMax string
+	)
+	for {
+		select {
+		case <-t.closeCh:
+			return
+		case <-ctx.Done():
+			t.broker.pool.Release()
+			logger.New().Info("Schedule Task Stop")
+			return
+
+		case <-t.scheduleTicker.C:
+		}
+
+		now = time.Now()
+
+		scoreMax = cast.ToString(now.UnixMilli() + 1)
+		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+				Min:    scoreMin,
+				Max:    scoreMax,
+				Offset: 0,
+				Count:  1,
+			}).Result()
+
+			if err != nil {
+				return err
+			}
+
+			if len(val) <= 0 {
+				scoreMin = scoreMax
+			} else {
+				scoreMin = val[0]
+				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+					return err
+				}
+			}
+			return nil
+		}, timeUnit)
+		if err != nil {
+			logger.New().Error(err)
+			continue
+		}
+
+		if err := t.broker.scheduleJob.doConsume(ctx, scoreMax, t.channel, t.topic); err != nil {
+			logger.New().With("", err).Error("consume err")
+			// continue
+		}
+	}
+}
+
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
@@ -95,13 +160,20 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		WithExpiry(20*time.Second),
 	)
 
+	duration := time.Millisecond * 100
+	timer := time.NewTimer(duration)
+	defer timer.Stop()
+
 	for {
+		timer.Reset(duration)
 		select {
+		case <-t.closeCh:
+			return
 		case <-ctx.Done():
 			logger.New().Info("Sequential Task Stop")
 			return
 
-		case <-time.After(time.Millisecond * 200):
+		case <-timer.C:
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
 				if err != nil {
@@ -120,7 +192,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			}
 
 			if err := mutex.LockContext(ctx); err != nil {
-				logger.New().Error(err)
 				continue
 			}
 
@@ -136,13 +207,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			stream := vals[0].Stream
 
 			for _, v := range vals[0].Messages {
-				nv := v
-				message := messageToStruct(nv.Values)
-
+				message := messageToStruct(v.Values)
 				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
-
 				group := t.errGroupPool.Get().(*errgroup.Group)
-
 				result.Status = StatusExecuting
 				result.BeginTime = time.Now()
 				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -173,15 +240,15 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				cancel()
 				group.TryGo(func() error {
 					// `stream` confirmation message
-					if err := t.broker.client.XAck(ctx, stream, t.channel, nv.ID).Err(); err != nil {
+					if err := t.broker.client.XAck(ctx, stream, t.channel, v.ID).Err(); err != nil {
 						return err
 					}
 					// delete data from `stream`
-					if err := t.broker.client.XDel(ctx, stream, nv.ID).Err(); err != nil {
+					if err := t.broker.client.XDel(ctx, stream, v.ID).Err(); err != nil {
 						return err
 					}
 					// set result for ack
-					err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Err()
+					_, err := t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
 					if err != nil {
 						return err
 					}
@@ -189,16 +256,16 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				})
 
 				group.TryGo(func() error {
-					defer t.resultPool.Put(result)
-					return t.broker.logJob.Archives(ctx, result)
-
+					// fix data race
+					clone := *result
+					return t.broker.logJob.Archives(ctx, &clone)
 				})
 
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
-
 				t.errGroupPool.Put(group)
+				t.resultPool.Put(result)
 			}
 
 			if _, err := mutex.UnlockContext(ctx); err != nil {
@@ -216,6 +283,8 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	for {
 		// check state
 		select {
+		case <-t.closeCh:
+			return nil
 		case <-ctx.Done():
 			logger.New().Info("DeadLetter Work Stop")
 			return nil
@@ -264,6 +333,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
+				t.resultPool.Put(r)
 			}
 
 		}
@@ -352,7 +422,7 @@ func (t *RedisHandle) checkStream(ctx context.Context) error {
 
 }
 
-func (t *RedisHandle) checkDeadletterStream(ctx context.Context) error {
+func (t *RedisHandle) checkDeadLetterStream(ctx context.Context) error {
 
 	// if dead letter stream don't exist,then create it
 	deadLetterStreamKey := MakeDeadLetterStreamKey(t.broker.prefix, t.channel, t.topic)
@@ -367,5 +437,18 @@ func (t *RedisHandle) check(ctx context.Context, streamName string) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func (t *RedisHandle) close() error {
+	// safe close
+	select {
+	case <-t.closeCh:
+		// already close
+		return nil
+	default:
+		close(t.closeCh)
+	}
+
 	return nil
 }
