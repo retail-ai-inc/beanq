@@ -443,9 +443,11 @@ func (t *RedisHandle) check(ctx context.Context, streamName string) error {
 func (t *RedisHandle) close() error {
 	// safe close
 	select {
-	case <-t.closeCh:
-		// already close
-		return nil
+	case _, ok := <-t.closeCh:
+		if !ok {
+			// already closed
+			return nil
+		}
 	default:
 		close(t.closeCh)
 	}
