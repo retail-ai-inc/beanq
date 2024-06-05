@@ -355,25 +355,28 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dynamicKey := MakeDynamicKey(t.prefix, channel)
-	go func() {
-		if err := t.pool.Submit(func() {
+	t.once.Do(func() {
+		go func() {
+			if err := t.pool.Submit(func() {
 
-			_ = t.logJob.Obsoletes(ctx)
+				_ = t.logJob.Obsoletes(ctx)
 
-		}); err != nil {
-			logger.New().Error(err)
-		}
+			}); err != nil {
+				logger.New().Error(err)
+			}
 
-		if err := t.pool.Submit(func() {
-			t.filter.Delete(ctx, MakeFilter(t.prefix))
-		}); err != nil {
-			logger.New().Error(err)
-		}
+			if err := t.pool.Submit(func() {
+				t.filter.Delete(ctx, MakeFilter(t.prefix))
+			}); err != nil {
+				logger.New().Error(err)
+			}
 
-		logger.New().Info("Beanq dynamic consuming Start")
-		// monitor signal
-		t.waitSignal(cancel)
-	}()
+			logger.New().Info("Beanq dynamic consuming Start")
+			// monitor signal
+			t.waitSignal(cancel)
+		}()
+
+	})
 
 	var getValidScript = NewScript(1, `
 		local hashKey = KEYS[1]
@@ -439,40 +442,46 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 				continue
 			}
 
-			t.consumerHandlerDic.Range(func(key, value any) bool {
-				if _, ok := keyValues[key.(string)]; keyValues == nil || !ok {
-					err := value.(IHandle).close()
-					if err != nil {
-						logger.New().Error(err)
+			v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, &sync.Map{})
+			dic, ok := v.(*sync.Map)
+			if ok {
+				dic.Range(func(key, value any) bool {
+					if _, ok := keyValues[key.(string)]; keyValues == nil || !ok {
+						err := value.(IHandle).close()
+						if err != nil {
+							logger.New().Error(err)
+						}
+						log.Println("close handler:", key.(string))
+						dic.Delete(key)
 					}
-					log.Println("close handler:", key.(string))
-					t.consumerHandlerDic.Delete(key)
-				}
-				return true
-			})
+					return true
+				})
+				for key, _ := range keyValues {
+					if _, ok := dic.Load(key); ok {
+						continue
+					}
 
-			for key, _ := range keyValues {
-				if _, ok := t.consumerHandlerDic.Load(key); ok {
-					continue
-				}
+					channel, topic := GetChannelAndTopicFromStreamKey(key)
+					handler := t.addConsumer(subType, channel, topic, subscribe)
+					dic.Store(key, handler)
+					// consume data
+					if err := t.worker(ctx, handler); err != nil {
+						logger.New().With("", err).Error("worker err")
+					}
 
-				channel, topic := GetChannelAndTopicFromStreamKey(key)
-				handler := t.addConsumer(subType, channel, topic, subscribe)
-				t.consumerHandlerDic.Store(key, handler)
-				// consume data
-				if err := t.worker(ctx, handler); err != nil {
-					logger.New().With("", err).Error("worker err")
+					if err := t.schedule(ctx, handler); err != nil {
+						logger.New().With("", err).Error("schedule job err")
+					}
+					// REFERENCE: https://redis.io/commands/xclaim/
+					// monitor other stream pending
+					if err := t.deadLetter(ctx, handler); err != nil {
+						logger.New().With("", err).Error("claim job err")
+					}
 				}
-
-				if err := t.schedule(ctx, handler); err != nil {
-					logger.New().With("", err).Error("schedule job err")
-				}
-				// REFERENCE: https://redis.io/commands/xclaim/
-				// monitor other stream pending
-				if err := t.deadLetter(ctx, handler); err != nil {
-					logger.New().With("", err).Error("claim job err")
-				}
+			} else {
+				logger.New().With("", err).Error("dic type: %T is wrong", dic)
 			}
+
 		}
 	}
 
