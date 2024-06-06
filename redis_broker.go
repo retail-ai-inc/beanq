@@ -424,7 +424,7 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		return result, noErrNil(err)
 	}
 
-	duration := time.Second
+	duration := time.Millisecond * 200
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
