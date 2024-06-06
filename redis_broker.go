@@ -355,27 +355,24 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dynamicKey := MakeDynamicKey(t.prefix, channel)
+	// monitor signal
+	t.waitSignal(cancel)
 	t.once.Do(func() {
-		go func() {
-			if err := t.pool.Submit(func() {
+		if err := t.pool.Submit(func() {
 
-				_ = t.logJob.Obsoletes(ctx)
+			_ = t.logJob.Obsoletes(ctx)
 
-			}); err != nil {
-				logger.New().Error(err)
-			}
+		}); err != nil {
+			logger.New().Error(err)
+		}
 
-			if err := t.pool.Submit(func() {
-				t.filter.Delete(ctx, MakeFilter(t.prefix))
-			}); err != nil {
-				logger.New().Error(err)
-			}
+		if err := t.pool.Submit(func() {
+			t.filter.Delete(ctx, MakeFilter(t.prefix))
+		}); err != nil {
+			logger.New().Error(err)
+		}
 
-			logger.New().Info("Beanq dynamic consuming Start")
-			// monitor signal
-			t.waitSignal(cancel)
-		}()
-
+		logger.New().Info("Beanq dynamic consuming Start")
 	})
 
 	var getValidScript = NewScript(1, `
@@ -442,49 +439,43 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 				continue
 			}
 
-			v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, &sync.Map{})
-			dic, ok := v.(*sync.Map)
-			if ok {
-				dic.Range(func(key, value any) bool {
-					if _, ok := keyValues[key.(string)]; keyValues == nil || !ok {
-						err := value.(IHandle).close()
-						if err != nil {
-							logger.New().Error(err)
-						}
-						log.Println("close handler:", key.(string))
-						dic.Delete(key)
+			v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, map[string]IHandle{})
+			dic := v.(map[string]IHandle)
+			for key, handle := range dic {
+				if _, ok := keyValues[key]; keyValues == nil || !ok {
+					err := handle.close()
+					if err != nil {
+						logger.New().Error(err)
 					}
-					return true
-				})
-				for key, _ := range keyValues {
-					if _, ok := dic.Load(key); ok {
-						continue
-					}
-
-					channel, topic := GetChannelAndTopicFromStreamKey(key)
-					handler := t.addConsumer(subType, channel, topic, subscribe)
-					dic.Store(key, handler)
-					// consume data
-					if err := t.worker(ctx, handler); err != nil {
-						logger.New().With("", err).Error("worker err")
-					}
-
-					if err := t.schedule(ctx, handler); err != nil {
-						logger.New().With("", err).Error("schedule job err")
-					}
-					// REFERENCE: https://redis.io/commands/xclaim/
-					// monitor other stream pending
-					if err := t.deadLetter(ctx, handler); err != nil {
-						logger.New().With("", err).Error("claim job err")
-					}
+					log.Println("close handler:", key)
+					delete(dic, key)
 				}
-			} else {
-				logger.New().With("", err).Error("dic type: %T is wrong", dic)
 			}
 
+			for key := range keyValues {
+				if _, ok := dic[key]; ok {
+					continue
+				}
+
+				channel, topic := GetChannelAndTopicFromStreamKey(key)
+				handler := t.addConsumer(subType, channel, topic, subscribe)
+				dic[key] = handler
+				// consume data
+				if err := t.worker(ctx, handler); err != nil {
+					logger.New().With("", err).Error("worker err")
+				}
+
+				if err := t.schedule(ctx, handler); err != nil {
+					logger.New().With("", err).Error("schedule job err")
+				}
+				// REFERENCE: https://redis.io/commands/xclaim/
+				// monitor other stream pending
+				if err := t.deadLetter(ctx, handler); err != nil {
+					logger.New().With("", err).Error("claim job err")
+				}
+			}
 		}
 	}
-
 }
 
 func (t *RedisBroker) startConsuming(ctx context.Context) {
@@ -523,7 +514,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 
 	logger.New().Info("Beanq Start")
 	// monitor signal
-	t.waitSignal(cancel)
+	<-t.waitSignal(cancel)
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
@@ -557,21 +548,21 @@ func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 	})
 }
 
-func (t *RedisBroker) waitSignal(cancel context.CancelFunc) {
+func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 	sigs := make(chan os.Signal, 1)
-
+	done := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-
-	select {
-	case sig := <-sigs:
-		if sig == syscall.SIGINT {
-			t.once.Do(func() {
-				_ = t.client.Close()
-				t.pool.Release()
-				cancel()
-			})
+	go func() {
+		select {
+		case <-sigs:
+			_ = t.client.Close()
+			t.pool.Release()
+			cancel()
+			_ = logger.New().Sync()
+			done <- true
 		}
-	}
+	}()
+	return done
 }
 
 func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {

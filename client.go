@@ -480,11 +480,11 @@ func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 	for {
 		if ack, err = pullAcknowledgement(); err != nil {
 			return ack, err
-		} else {
-			if ack != nil {
-				return ack, nil
-			}
 		}
+		if ack != nil {
+			return ack, nil
+		}
+
 		select {
 		case <-s.ctx.Done():
 			return nil, s.ctx.Err()

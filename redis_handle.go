@@ -2,12 +2,12 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/spf13/cast"
@@ -160,6 +160,13 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		WithExpiry(20*time.Second),
 	)
 
+	result := t.resultPool.Get().(*ConsumerResult)
+	group := t.errGroupPool.Get().(*errgroup.Group)
+	defer func() {
+		t.errGroupPool.Put(group)
+		t.resultPool.Put(result)
+	}()
+
 	duration := time.Millisecond * 100
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
@@ -208,15 +215,16 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 
 			for _, v := range vals[0].Messages {
 				message := messageToStruct(v.Values)
-				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
-				group := t.errGroupPool.Get().(*errgroup.Group)
+
+				result.FillInfoByMessage(message)
 				result.Status = StatusExecuting
 				result.BeginTime = time.Now()
-				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
-				retry, err := RetryInfo(nctx, func() error {
-					if err := t.subscribe.Handle(nctx, message); err != nil {
+				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
+
+				retry, err := RetryInfo(sessionCtx, func() error {
+					if err := t.subscribe.Handle(sessionCtx, message); err != nil {
 						if h, ok := t.subscribe.(IConsumeCancel); ok {
-							return h.Cancel(nctx, message)
+							return h.Cancel(sessionCtx, message)
 						}
 						return err
 					}
@@ -224,7 +232,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				}, message.Retry)
 				if err != nil {
 					if h, ok := t.subscribe.(IConsumeError); ok {
-						h.Error(nctx, err)
+						h.Error(sessionCtx, err)
 					}
 					result.Level = ErrLevel
 					result.Info = FlagInfo(err.Error())
@@ -264,8 +272,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
 				}
-				t.errGroupPool.Put(group)
-				t.resultPool.Put(result)
 			}
 
 			if _, err := mutex.UnlockContext(ctx); err != nil {
@@ -279,7 +285,10 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	defer t.deadLetterTicker.Stop()
-
+	r := t.resultPool.Get().(*ConsumerResult)
+	defer func() {
+		t.resultPool.Put(r)
+	}()
 	for {
 		// check state
 		select {
@@ -318,7 +327,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				// msg.Values["pendingRetry"] = pending.RetryCount
 				// msg.Values["idle"] = pending.Idle.Seconds()
 
-				r := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(msg)
+				r.FillInfoByMessage(msg)
 				r.EndTime = time.Now()
 				r.Retry = msg.Retry
 
@@ -333,9 +342,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
-				t.resultPool.Put(r)
 			}
-
 		}
 		continue
 	}

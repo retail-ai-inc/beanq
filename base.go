@@ -147,9 +147,9 @@ func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error
 		e := doTimeout(ctx, f)
 		if e == nil {
 			return
-		} else {
-			err = errors.Join(err, e)
 		}
+
+		err = errors.Join(err, e)
 
 		waitTime := jitterBackoff(500*time.Millisecond, time.Second, i)
 		select {
