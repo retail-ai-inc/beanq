@@ -245,7 +245,8 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id
 }
 
 func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error) {
-	results, err := t.client.XRangeN(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"), "-", "+", 100).Result()
+	streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, channel, topic)
+	results, err := t.client.XRangeN(ctx, streamKey, "-", "+", 100).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return nil, nil
