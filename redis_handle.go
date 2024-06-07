@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -167,7 +166,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		t.resultPool.Put(result)
 	}()
 
-	duration := time.Millisecond * 100
+	duration := time.Millisecond * 500
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
@@ -181,19 +180,12 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			return
 
 		case <-timer.C:
-			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				results, err := tx.XRangeN(ctx, stream, "-", "+", 100).Result()
-				if err != nil {
-					return err
-				}
-				if len(results) == 0 {
-					return errors.New("queue data is empty")
-				}
-
-				return nil
-			}, stream)
-
+			results, err := t.broker.client.XRangeN(ctx, stream, "-", "+", 100).Result()
 			if err != nil {
+				logger.New().Error(err)
+				continue
+			}
+			if len(results) == 0 {
 				continue
 			}
 
