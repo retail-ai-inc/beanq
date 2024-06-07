@@ -182,15 +182,14 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 
 		case <-timer.C:
 			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
+				results, err := tx.XRangeN(ctx, stream, "-", "+", 100).Result()
 				if err != nil {
 					return err
 				}
-
-				streamInfo := tx.XInfoStream(ctx, stream).Val()
-				if streamInfo == nil || (streamInfo.Length-xp.Count) <= 0 {
+				if len(results) == 0 {
 					return errors.New("queue data is empty")
 				}
+
 				return nil
 			}, stream)
 
@@ -273,7 +272,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					logger.New().Error(err)
 				}
 			}
-
 			if _, err := mutex.UnlockContext(ctx); err != nil {
 				logger.New().Error(err)
 			}
