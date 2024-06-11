@@ -452,7 +452,7 @@ func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 	if s.err != nil {
 		return nil, err
 	}
-	pollIntervalBase := time.Millisecond
+	pollIntervalBase := 5 * time.Millisecond
 	maxInterval := 500 * time.Millisecond
 	nextPollInterval := func() time.Duration {
 		// Add 10% jitter.
@@ -480,11 +480,11 @@ func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 	for {
 		if ack, err = pullAcknowledgement(); err != nil {
 			return ack, err
-		} else {
-			if ack != nil {
-				return ack, nil
-			}
 		}
+		if ack != nil {
+			return ack, nil
+		}
+
 		select {
 		case <-s.ctx.Done():
 			return nil, s.ctx.Err()

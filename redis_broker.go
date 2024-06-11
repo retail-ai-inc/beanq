@@ -245,7 +245,8 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id
 }
 
 func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error) {
-	results, err := t.client.XRangeN(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"), "-", "+", 100).Result()
+	streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, channel, topic)
+	results, err := t.client.XRangeN(ctx, streamKey, "-", "+", 100).Result()
 	if err != nil {
 		if errors.Is(err, redis.Nil) {
 			return nil, nil
@@ -355,7 +356,9 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dynamicKey := MakeDynamicKey(t.prefix, channel)
-	go func() {
+	// monitor signal
+	t.waitSignal(cancel)
+	t.once.Do(func() {
 		if err := t.pool.Submit(func() {
 
 			_ = t.logJob.Obsoletes(ctx)
@@ -371,9 +374,7 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		}
 
 		logger.New().Info("Beanq dynamic consuming Start")
-		// monitor signal
-		t.waitSignal(cancel)
-	}()
+	})
 
 	var getValidScript = NewScript(1, `
 		local hashKey = KEYS[1]
@@ -423,7 +424,7 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		return result, noErrNil(err)
 	}
 
-	duration := time.Second
+	duration := time.Millisecond * 200
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
@@ -439,26 +440,27 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 				continue
 			}
 
-			t.consumerHandlerDic.Range(func(key, value any) bool {
-				if _, ok := keyValues[key.(string)]; keyValues == nil || !ok {
-					err := value.(IHandle).close()
+			v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, map[string]IHandle{})
+			dic := v.(map[string]IHandle)
+			for key, handle := range dic {
+				if _, ok := keyValues[key]; keyValues == nil || !ok {
+					err := handle.close()
 					if err != nil {
 						logger.New().Error(err)
 					}
-					log.Println("close handler:", key.(string))
-					t.consumerHandlerDic.Delete(key)
+					log.Println("close handler:", key)
+					delete(dic, key)
 				}
-				return true
-			})
+			}
 
-			for key, _ := range keyValues {
-				if _, ok := t.consumerHandlerDic.Load(key); ok {
+			for key := range keyValues {
+				if _, ok := dic[key]; ok {
 					continue
 				}
 
 				channel, topic := GetChannelAndTopicFromStreamKey(key)
 				handler := t.addConsumer(subType, channel, topic, subscribe)
-				t.consumerHandlerDic.Store(key, handler)
+				dic[key] = handler
 				// consume data
 				if err := t.worker(ctx, handler); err != nil {
 					logger.New().With("", err).Error("worker err")
@@ -475,7 +477,6 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 			}
 		}
 	}
-
 }
 
 func (t *RedisBroker) startConsuming(ctx context.Context) {
@@ -514,7 +515,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 
 	logger.New().Info("Beanq Start")
 	// monitor signal
-	t.waitSignal(cancel)
+	<-t.waitSignal(cancel)
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
@@ -548,21 +549,21 @@ func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
 	})
 }
 
-func (t *RedisBroker) waitSignal(cancel context.CancelFunc) {
+func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 	sigs := make(chan os.Signal, 1)
-
+	done := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-
-	select {
-	case sig := <-sigs:
-		if sig == syscall.SIGINT {
-			t.once.Do(func() {
-				_ = t.client.Close()
-				t.pool.Release()
-				cancel()
-			})
+	go func() {
+		select {
+		case <-sigs:
+			_ = t.client.Close()
+			t.pool.Release()
+			cancel()
+			_ = logger.New().Sync()
+			done <- true
 		}
-	}
+	}()
+	return done
 }
 
 func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
