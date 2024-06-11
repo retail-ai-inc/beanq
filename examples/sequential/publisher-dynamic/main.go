@@ -6,7 +6,6 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
@@ -50,34 +49,36 @@ func main() {
 	pub := beanq.New(config)
 
 	m := make(map[string]any)
-	for i := 0; i < 1000; i++ {
-		m["delayMsg"] = "new msg" + cast.ToString(i)
-		b, _ := json.Marshal(m)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
-		if err != nil {
-			logger.New().Error(err)
-		}
-	}
+	// for i := 0; i < 1000; i++ {
+	// 	m["delayMsg"] = "new msg" + cast.ToString(i)
+	// 	b, _ := json.Marshal(m)
+	//
+	// 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	// 	defer cancel()
+	//
+	// 	_, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%100), b).WaitingAck()
+	// 	if err != nil {
+	// 		logger.New().Error(err)
+	// 	}
+	// }
 
-	for i := 0; i < 5; i++ {
+	for i := 1; i < 5; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
 		m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
 		b, _ := json.Marshal(m)
-		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-n", b).WaitingAck()
+		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-n"+cast.ToString(i), b).WaitingAck()
 		if err != nil {
 			logger.New().Error(err)
 		} else {
-			log.Println(result)
+			logger.New().Info(result)
 		}
 	}
 
 	// this is a single check for ACK
-	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
-	if err != nil {
-		panic(err)
-	}
-	log.Println(result)
+	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// log.Println(result)
 }

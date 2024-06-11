@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"math/rand"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -73,9 +72,9 @@ func main() {
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
 	ctx := context.Background()
-	_, err := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("", "mynewstream", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			time.Sleep(time.Second * time.Duration(rand.Int63n(5)))
+			// time.Sleep(time.Second * time.Duration(rand.Int63n(5)))
 			logger.New().Info("default handler ", message.Id, message.Topic)
 			return nil
 		},
@@ -90,7 +89,7 @@ func main() {
 	if err != nil {
 		logger.New().Error(err)
 	}
-
+	csm.Wait(ctx)
 	/*_, err := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
 		index.Add(1)
 		wf.NewTask().OnRollback(func(task beanq.Task) error {

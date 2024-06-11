@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/pkg/errors"
+	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/spf13/cast"
@@ -160,6 +161,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		WithExpiry(20*time.Second),
 	)
 
+	subKey := MakeSubKey(t.broker.prefix)
+
 	duration := time.Millisecond * 100
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
@@ -205,7 +208,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			}
 
 			stream := vals[0].Stream
-
 			for _, v := range vals[0].Messages {
 				message := messageToStruct(v.Values)
 				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
@@ -247,9 +249,24 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					if err := t.broker.client.XDel(ctx, stream, v.ID).Err(); err != nil {
 						return err
 					}
+					return nil
+				})
+
+				group.TryGo(func() error {
 					// set result for ack
-					_, err := t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
+					var m map[string]any
+					data, err := result.MarshalBinary()
 					if err != nil {
+						return err
+					}
+					if err := json.Unmarshal(data, &m); err != nil {
+						return err
+					}
+
+					if err := t.broker.client.XAdd(ctx, &redis.XAddArgs{
+						Stream: subKey,
+						Values: m,
+					}).Err(); err != nil {
 						return err
 					}
 					return nil

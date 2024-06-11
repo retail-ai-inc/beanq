@@ -120,6 +120,10 @@ func MakeFilter(prefix string) string {
 	return makeKey(prefix, "filter")
 }
 
+func MakeSubKey(prefix string) string {
+	return makeKey(prefix, "subKey")
+}
+
 func doTimeout(ctx context.Context, f func() error) error {
 	errCh := make(chan error, 1)
 	go func() {

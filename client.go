@@ -253,6 +253,7 @@ func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *S
 	} else {
 		sequentialCmd.id = b.id
 	}
+
 	return sequentialCmd
 }
 
@@ -448,7 +449,13 @@ func (s *SequentialCmd) Error() error {
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
+func (s *SequentialCmd) WaitingAck(uniqueId string) (ack *ConsumerResult, err error) {
+
+	id := s.client.broker.monitorStream(s.ctx, "", "", uniqueId)
+	return nil, nil
+
+	fmt.Printf("id:::%+v \n", id)
+
 	if s.err != nil {
 		return nil, err
 	}

@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -43,18 +45,31 @@ func initCnf() *beanq.BeanqConfig {
 	return &bqConfig
 }
 func main() {
-
 	config := initCnf()
 	pub := beanq.New(config)
 
-	m := make(map[string]any)
-	ctx := context.Background()
-	for i := 0; i < 5; i++ {
-		m["delayMsg"] = "new msg" + cast.ToString(i)
-		b, _ := json.Marshal(m)
-		bq := pub.BQ()
-		if err := bq.WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).Error(); err != nil {
-			logger.New().Error(err)
-		}
+	now := time.Now()
+	fmt.Printf("now:%+v \n", now)
+	wg := sync.WaitGroup{}
+
+	wg.Add(10)
+	for i := 1; i <= 10; i++ {
+		go func() {
+
+			defer wg.Done()
+			m := make(map[string]any, 2)
+			m["delayMsg"] = "new msg" + cast.ToString(i)
+			m["id"] = cast.ToString(i)
+			b, _ := json.Marshal(m)
+			bq := pub.BQ()
+			ctx := context.Background()
+			if err := bq.WithContext(ctx).PublishInSequential("", "mynewstream", b).Error(); err != nil {
+				logger.New().Error(err)
+			}
+
+		}()
 	}
+
+	wg.Wait()
+	fmt.Printf("after:%+v,sub:%+v \n", time.Now(), time.Now().Sub(now))
 }

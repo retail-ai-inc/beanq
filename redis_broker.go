@@ -113,6 +113,39 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) string {
+	var lastId string = "0"
+
+	key := MakeSubKey(t.prefix)
+	for {
+		if ctx.Err() != nil {
+			return ""
+		}
+		r, err := t.client.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{key, lastId},
+			Count:   100,
+			Block:   30 * time.Second,
+		}).Result()
+		if err != nil && !errors.Is(err, redis.Nil) {
+			log.Fatal(err)
+		}
+
+		for _, v := range r {
+			for _, vv := range v.Messages {
+				if d, ok := vv.Values["Id"]; ok {
+
+					if id == d.(string) {
+						t.client.XDel(ctx, key, v.Messages[0].ID)
+						id = d.(string)
+						return id
+					}
+				}
+			}
+		}
+	}
+
+}
+
 // Archive log
 func (t *RedisBroker) Archive(ctx context.Context, result *ConsumerResult) error {
 	now := time.Now()
@@ -331,7 +364,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		}},
 		errGroupPool: &sync.Pool{New: func() any {
 			group := new(errgroup.Group)
-			group.SetLimit(2)
+			group.SetLimit(3)
 			return group
 		}},
 		once: sync.Once{},
