@@ -18,7 +18,7 @@ type (
 		deadLetter(ctx context.Context, handle IHandle) error
 		dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle)
 
-		monitorStream(ctx context.Context, channel, topic, id string) string
+		monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error)
 	}
 )
 

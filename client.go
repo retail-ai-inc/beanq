@@ -28,7 +28,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -449,55 +448,11 @@ func (s *SequentialCmd) Error() error {
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck(uniqueId string) (ack *ConsumerResult, err error) {
+func (s *SequentialCmd) WaitingAck(uniqueId string) (ack map[string]any, err error) {
 
-	id := s.client.broker.monitorStream(s.ctx, "", "", uniqueId)
-	return nil, nil
-
-	fmt.Printf("id:::%+v \n", id)
-
-	if s.err != nil {
+	ack, err = s.client.broker.monitorStream(s.ctx, "", "", uniqueId)
+	if err != nil {
 		return nil, err
 	}
-	pollIntervalBase := time.Millisecond
-	maxInterval := 500 * time.Millisecond
-	nextPollInterval := func() time.Duration {
-		// Add 10% jitter.
-		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
-		// Double and clamp for next time.
-		pollIntervalBase *= 2
-		if pollIntervalBase > maxInterval {
-			pollIntervalBase = maxInterval
-		}
-		return interval
-	}
-
-	var pullAcknowledgement = func() (*ConsumerResult, error) {
-		// no need check pending status
-		result, err := s.client.getAckStatus(s.ctx, s.channel, s.topic, s.id, false)
-		if err != nil {
-			return nil, err
-		}
-
-		return result, nil
-	}
-
-	timer := time.NewTimer(nextPollInterval())
-	defer timer.Stop()
-	for {
-		if ack, err = pullAcknowledgement(); err != nil {
-			return ack, err
-		} else {
-			if ack != nil {
-				return ack, nil
-			}
-		}
-		select {
-		case <-s.ctx.Done():
-			return nil, s.ctx.Err()
-		case <-timer.C:
-			// pull the data from global
-			timer.Reset(nextPollInterval())
-		}
-	}
+	return ack, nil
 }

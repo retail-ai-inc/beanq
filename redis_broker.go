@@ -113,13 +113,13 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
-func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) string {
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
 	var lastId string = "0"
 
 	key := MakeSubKey(t.prefix)
 	for {
 		if ctx.Err() != nil {
-			return ""
+			return nil, ctx.Err()
 		}
 		r, err := t.client.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{key, lastId},
@@ -137,7 +137,7 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 					if id == d.(string) {
 						t.client.XDel(ctx, key, v.Messages[0].ID)
 						id = d.(string)
-						return id
+						return vv.Values, nil
 					}
 				}
 			}
