@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"sync"
 
 	"github.com/retail-ai-inc/beanq"
@@ -42,7 +44,39 @@ func initCnf() *beanq.BeanqConfig {
 	})
 	return &bqConfig
 }
+
+type Str struct {
+	Id     uint64
+	Values map[string]any
+}
+
+type SortStr []Str
+
+func (t SortStr) Len() int {
+	return len(t)
+}
+func (t SortStr) Less(i, j int) bool {
+	return t[i].Id < t[j].Id
+}
+func (t SortStr) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
+}
+
 func main() {
+	sl := make([]Str, 0)
+	sl = append(sl, Str{
+		Id:     11,
+		Values: nil,
+	}, Str{
+		Id:     2,
+		Values: nil,
+	}, Str{
+		Id:     3,
+		Values: nil,
+	})
+	sort.Sort(SortStr(sl))
+	fmt.Printf("%+v \n", sl)
+	return
 	pubMoreAndPriorityInfo()
 }
 

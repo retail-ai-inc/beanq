@@ -120,8 +120,8 @@ func MakeFilter(prefix string) string {
 	return makeKey(prefix, "filter")
 }
 
-func MakeSubKey(prefix string) string {
-	return makeKey(prefix, "subKey")
+func MakeSubKey(prefix, channel, topic string) string {
+	return makeKey(prefix, channel, topic, "subKey")
 }
 
 func doTimeout(ctx context.Context, f func() error) error {

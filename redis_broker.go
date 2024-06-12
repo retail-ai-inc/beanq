@@ -116,7 +116,7 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
 	var lastId string = "0"
 
-	key := MakeSubKey(t.prefix)
+	key := MakeSubKey(t.prefix, channel, topic)
 	for {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
@@ -138,6 +138,8 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 						t.client.XDel(ctx, key, v.Messages[0].ID)
 						id = d.(string)
 						return vv.Values, nil
+					} else {
+						lastId = v.Messages[0].ID
 					}
 				}
 			}
@@ -308,6 +310,20 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) e
 
 	switch msg.MoodType {
 	case SEQUENTIAL:
+		// will improve it
+		// script := ``
+		// key := strings.Join([]string{t.prefix, msg.Channel, msg.Topic, "uniqueKey"}, ":")
+		// arg1 := ""
+		// arg2 := ""
+		//
+		// sha1Hash := sha1.New()
+		// sha1Hash.Write([]byte(script))
+		// sha1Str := hex.EncodeToString(sha1Hash.Sum(nil))
+		//
+		// t.client.ScriptLoad(ctx, script).Result()
+		//
+		// t.client.EvalSha(ctx, sha1Str, []string{key}, arg1, arg2)
+
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 		if dynamic {
 			err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()

@@ -161,7 +161,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		WithExpiry(20*time.Second),
 	)
 
-	subKey := MakeSubKey(t.broker.prefix)
+	subKey := MakeSubKey(t.broker.prefix, t.channel, t.topic)
 
 	duration := time.Millisecond * 100
 	timer := time.NewTimer(duration)
