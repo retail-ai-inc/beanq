@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"os"
@@ -44,6 +43,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/retail-ai-inc/beanq/helper/stringx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/rs/xid"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
@@ -71,8 +71,16 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
 	ctx := context.Background()
 
+	hosts := strings.Split(config.Redis.Host, ",")
+	for i, h := range hosts {
+		hs := strings.Split(h, ":")
+		if len(hs) == 1 {
+			hosts[i] = strings.Join([]string{h, config.Redis.Port}, ":")
+		}
+	}
+
 	client := redis.NewUniversalClient(&redis.UniversalOptions{
-		Addrs:        []string{strings.Join([]string{config.Redis.Host, config.Redis.Port}, ":")},
+		Addrs:        hosts,
 		Password:     config.Redis.Password,
 		DB:           config.Redis.Database,
 		MaxRetries:   config.Redis.MaxRetries,
@@ -278,9 +286,12 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) e
 	case SEQUENTIAL:
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 		if dynamic {
-			err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()
+			err := t.client.XAdd(ctx, &redis.XAddArgs{
+				Stream: "dynamic_discovery:" + msg.Channel,
+				Values: map[string]interface{}{"streamKey": streamKey},
+			}).Err()
 			if err != nil {
-				return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)
+				return fmt.Errorf("[RedisBroker.enqueue] seq adding dynamic key error:%w", err)
 			}
 		}
 		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
@@ -376,103 +387,62 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		logger.New().Info("Beanq dynamic consuming Start")
 	})
 
-	var getValidScript = NewScript(1, `
-		local hashKey = KEYS[1]
-		local threshold = tonumber(ARGV[1])
-		
-		local result = {}
-		local allFields = redis.call('HGETALL', hashKey)
-		
-		for i = 1, #allFields, 2 do
-			local field = allFields[i]
-			local value = tonumber(allFields[i + 1])
-			
-			if value and value > threshold then
-				table.insert(result, field)
-            	table.insert(result, value)
-			else 
-				redis.call('HDEL', hashKey, field)
-			end
-		end
-		
-		return result
-	`)
+	groupName := "read_group"
+	consumerName := xid.New().String()
+	streamName := "dynamic_discovery:" + channel
 
-	var getAllValid = func(ctx context.Context, script *Script, keysAndArgs ...interface{}) (map[string]interface{}, error) {
-		keys := make([]string, script.KeyCount)
-		args := keysAndArgs
-
-		if script.KeyCount > 0 {
-			for i := 0; i < script.KeyCount; i++ {
-				keys[i] = keysAndArgs[i].(string)
-			}
-			args = keysAndArgs[script.KeyCount:]
-		}
-
-		v, err := t.client.EvalSha(ctx, script.Hash, keys, args...).Result()
-		if err != nil && strings.Contains(err.Error(), "NOSCRIPT ") {
-			v, err = t.client.Eval(ctx, script.Src, keys, args...).Result()
-		}
-
-		var result map[string]interface{}
-		if r, ok := v.([]interface{}); ok && len(r) > 0 {
-			result = make(map[string]interface{})
-			for i := 0; i < len(r); i = i + 2 {
-				result[r[i].(string)] = r[i+1]
-			}
-		}
-		return result, noErrNil(err)
+	err := t.client.XGroupCreateMkStream(ctx, streamName, groupName, "0").Err()
+	if err != nil && !errors.Is(err, redis.Nil) && err.Error() != "BUSYGROUP Consumer Group name already exists" {
+		logger.New().Panic(err)
+		return
 	}
-
-	duration := time.Millisecond * 200
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
+	// delete the dead topic
+	go func() {
+		/*err := v.close()
+		if err != nil {
+			logger.New().Error(err)
+		}
+		delete(dic, key)*/
+	}()
 
 	for {
-		timer.Reset(duration)
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
-			keyValues, err := getAllValid(ctx, getValidScript, dynamicKey, time.Now().Add(-time.Minute*3).Unix())
-			if err != nil {
-				logger.New().Error(err)
-				continue
-			}
+		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+			Group:    groupName,
+			Consumer: consumerName,
+			Streams:  []string{streamName, ">"},
+			Count:    1,
+			Block:    0,
+		}).Result()
+		if err != nil {
+			logger.New().Error(fmt.Errorf("error reading from stream: %w", err))
+			continue
+		}
 
-			v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, map[string]IHandle{})
-			dic := v.(map[string]IHandle)
-			for key, handle := range dic {
-				if _, ok := keyValues[key]; keyValues == nil || !ok {
-					err := handle.close()
-					if err != nil {
-						logger.New().Error(err)
+		// handle
+		for _, stream := range streams {
+			for _, message := range stream.Messages {
+				// ack
+				t.client.XAck(ctx, streamName, groupName, message.ID)
+				key := message.Values["streamKey"].(string)
+				v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, map[string]IHandle{})
+				dic := v.(map[string]IHandle)
+				if _, ok := dic[key]; !ok {
+					channel, topic := GetChannelAndTopicFromStreamKey(key)
+					handler := t.addConsumer(subType, channel, topic, subscribe)
+					dic[key] = handler
+					// consume data
+					if err := t.worker(ctx, handler); err != nil {
+						logger.New().With("", err).Error("worker err")
+						continue
 					}
-					log.Println("close handler:", key)
-					delete(dic, key)
-				}
-			}
 
-			for key := range keyValues {
-				if _, ok := dic[key]; ok {
-					continue
-				}
-
-				channel, topic := GetChannelAndTopicFromStreamKey(key)
-				handler := t.addConsumer(subType, channel, topic, subscribe)
-				dic[key] = handler
-				// consume data
-				if err := t.worker(ctx, handler); err != nil {
-					logger.New().With("", err).Error("worker err")
-				}
-
-				if err := t.schedule(ctx, handler); err != nil {
-					logger.New().With("", err).Error("schedule job err")
-				}
-				// REFERENCE: https://redis.io/commands/xclaim/
-				// monitor other stream pending
-				if err := t.deadLetter(ctx, handler); err != nil {
-					logger.New().With("", err).Error("claim job err")
+					// REFERENCE: https://redis.io/commands/xclaim/
+					// monitor other stream pending
+					if err := t.deadLetter(ctx, handler); err != nil {
+						logger.New().With("", err).Error("claim job err")
+					}
+				} else {
+					// do nothing
 				}
 			}
 		}
@@ -573,7 +543,7 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 	m := &Mutex{
 		name:   name,
 		expiry: 8 * time.Second,
-		tries:  32,
+		tries:  1,
 		delayFunc: func(tries int) time.Duration {
 			return time.Duration(rand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
 		},
