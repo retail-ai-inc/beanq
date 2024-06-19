@@ -75,7 +75,7 @@ func main() {
 	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("", "mynewstream", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			// time.Sleep(time.Second * time.Duration(rand.Int63n(5)))
-			logger.New().Info("default handler ", message.Id, message.Topic)
+			logger.New().Info("default handler ", message.Id)
 			return nil
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {

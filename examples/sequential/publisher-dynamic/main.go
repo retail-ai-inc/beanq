@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -48,7 +49,6 @@ func main() {
 	config := initCnf()
 	pub := beanq.New(config)
 
-	m := make(map[string]any)
 	// for i := 0; i < 1000; i++ {
 	// 	m["delayMsg"] = "new msg" + cast.ToString(i)
 	// 	b, _ := json.Marshal(m)
@@ -62,19 +62,24 @@ func main() {
 	// 	}
 	// }
 
-	for i := 1; i < 5; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-		m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
-		b, _ := json.Marshal(m)
-		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-n"+cast.ToString(i), b).WaitingAck()
-		if err != nil {
-			logger.New().Error(err)
-		} else {
-			logger.New().Info(result)
-		}
+	for i := 1; i < 5000; i++ {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancel()
+			m := make(map[string]any, 0)
+			m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
+			b, _ := json.Marshal(m)
+			now := time.Now()
+			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingAck()
+			if err != nil {
+				logger.New().Error(err)
+			} else {
+				logger.New().Info(result)
+			}
+			fmt.Printf("sub:%+v \n", time.Now().Sub(now))
+		}()
 	}
-
+	select {}
 	// this is a single check for ACK
 	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
 	// if err != nil {

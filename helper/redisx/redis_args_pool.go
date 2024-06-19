@@ -30,7 +30,7 @@ func NewZAddArgs(stream, minId, Id string, maxLen, Limit int64, vals any) *redis
 	args.Values = vals
 
 	defer func() {
-		args := &redis.XAddArgs{
+		args = &redis.XAddArgs{
 			Stream:     "",
 			NoMkStream: false,
 			MaxLen:     0,

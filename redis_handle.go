@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -154,12 +153,7 @@ func (t *RedisHandle) Schedule(ctx context.Context) {
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
-	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 10*time.Second)
-
-	mutex := t.broker.NewMutex(
-		strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_sync"}, ":"),
-		WithExpiry(20*time.Second),
-	)
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 100, 10*time.Second)
 
 	subKey := MakeSubKey(t.broker.prefix, t.channel, t.topic)
 
@@ -194,16 +188,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				continue
 			}
 
-			if err := mutex.LockContext(ctx); err != nil {
-				continue
-			}
-
 			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 			vals := cmd.Val()
 			if len(vals) <= 0 {
-				if _, err := mutex.UnlockContext(ctx); err != nil {
-					logger.New().Error(err)
-				}
 				continue
 			}
 
@@ -240,6 +227,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				result.RunTime = result.EndTime.Sub(result.BeginTime).String()
 
 				cancel()
+
+				// t.broker.client.Del(ctx, strings.Join([]string{t.broker.prefix, message.Channel, message.Topic, message.Id}, ":"))
 				group.TryGo(func() error {
 					// `stream` confirmation message
 					if err := t.broker.client.XAck(ctx, stream, t.channel, v.ID).Err(); err != nil {
@@ -264,7 +253,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					}
 
 					if err := t.broker.client.XAdd(ctx, &redis.XAddArgs{
-						Stream: subKey,
+						Stream: subKey + "_" + m["Id"].(string),
 						Values: m,
 					}).Err(); err != nil {
 						return err
@@ -283,10 +272,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				}
 				t.errGroupPool.Put(group)
 				t.resultPool.Put(result)
-			}
-
-			if _, err := mutex.UnlockContext(ctx); err != nil {
-				logger.New().Error(err)
 			}
 		}
 	}

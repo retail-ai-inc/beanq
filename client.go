@@ -448,9 +448,9 @@ func (s *SequentialCmd) Error() error {
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck(uniqueId string) (ack map[string]any, err error) {
+func (s *SequentialCmd) WaitingAck() (map[string]any, error) {
 
-	ack, err = s.client.broker.monitorStream(s.ctx, "", "", uniqueId)
+	ack, err := s.client.broker.monitorStream(s.ctx, s.channel, s.topic, s.id)
 	if err != nil {
 		return nil, err
 	}

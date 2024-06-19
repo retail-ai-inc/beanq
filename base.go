@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"math/rand"
 	"runtime/debug"
@@ -184,4 +185,12 @@ func randDuration(center time.Duration) time.Duration {
 	var ri = int64(center)
 	var jitter = rand.Int63n(ri)
 	return time.Duration(math.Abs(float64(ri + jitter)))
+}
+
+func HashKey(id []byte, pare uint64) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(id))
+	hashKey := h.Sum64()
+	hashKey = hashKey % pare
+	return hashKey
 }

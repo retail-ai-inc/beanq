@@ -116,34 +116,37 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
 	var lastId string = "0"
 
-	key := MakeSubKey(t.prefix, channel, topic)
+	key := MakeSubKey(t.prefix, channel, topic) + "_" + id
+
 	for {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
+
 		r, err := t.client.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{key, lastId},
-			Count:   100,
+			Count:   1,
 			Block:   30 * time.Second,
 		}).Result()
 		if err != nil && !errors.Is(err, redis.Nil) {
-			log.Fatal(err)
+			return nil, err
 		}
 
 		for _, v := range r {
 			for _, vv := range v.Messages {
 				if d, ok := vv.Values["Id"]; ok {
-
 					if id == d.(string) {
-						t.client.XDel(ctx, key, v.Messages[0].ID)
-						id = d.(string)
-						return vv.Values, nil
+						if err := t.client.XDel(ctx, key, vv.ID).Err(); err != nil {
+							return nil, err
+						}
+
+						m := make(map[string]any, 0)
+						m = vv.Values
+						return m, nil
 					} else {
-						lastId = v.Messages[0].ID
+						// lastId = vv.ID
 					}
 				}
 			}
 		}
+
 	}
 
 }
@@ -311,28 +314,22 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) e
 	switch msg.MoodType {
 	case SEQUENTIAL:
 		// will improve it
-		// script := ``
-		// key := strings.Join([]string{t.prefix, msg.Channel, msg.Topic, "uniqueKey"}, ":")
-		// arg1 := ""
-		// arg2 := ""
-		//
-		// sha1Hash := sha1.New()
-		// sha1Hash.Write([]byte(script))
-		// sha1Str := hex.EncodeToString(sha1Hash.Sum(nil))
-		//
-		// t.client.ScriptLoad(ctx, script).Result()
-		//
-		// t.client.EvalSha(ctx, sha1Str, []string{key}, arg1, arg2)
 
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-		if dynamic {
-			err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()
-			if err != nil {
-				return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)
-			}
-		}
+
+		// str, err := t.client.Get(ctx, strings.Join([]string{t.prefix, msg.Channel, msg.Topic, msg.Id}, ":")).Result()
+
+		// if str != "" {
+		// 	return fmt.Errorf("pending")
+		// }
+		// if dynamic {
+		// 	err := t.client.HSet(ctx, MakeDynamicKey(t.prefix, msg.Channel), streamKey, time.Now().Unix()).Err()
+		// 	if err != nil {
+		// 		return fmt.Errorf("[RedisBroker.enqueue] seq hset dynamic key error:%w", err)
+		// 	}
+		// }
 		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
-		err := t.client.XAdd(ctx, xAddArgs).Err()
+		err = t.client.XAdd(ctx, xAddArgs).Err()
 		if err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
 		}
