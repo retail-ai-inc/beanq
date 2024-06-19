@@ -393,17 +393,9 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 
 	err := t.client.XGroupCreateMkStream(ctx, streamName, groupName, "0").Err()
 	if err != nil && !errors.Is(err, redis.Nil) && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		logger.New().Panic(err)
+		logger.New().Errorf("dynamic consuming xgroup create error: %v", err)
 		return
 	}
-	// delete the dead topic
-	go func() {
-		/*err := v.close()
-		if err != nil {
-			logger.New().Error(err)
-		}
-		delete(dic, key)*/
-	}()
 
 	for {
 		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
@@ -414,7 +406,7 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 			Block:    0,
 		}).Result()
 		if err != nil {
-			logger.New().Error(fmt.Errorf("error reading from stream: %w", err))
+			logger.New().Errorf("error reading from stream: %v", err)
 			continue
 		}
 

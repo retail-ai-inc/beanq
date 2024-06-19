@@ -150,6 +150,8 @@ func (t *RedisHandle) Schedule(ctx context.Context) {
 }
 
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
+	defer t.close()
+
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 0)
@@ -170,10 +172,15 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
+	deadline := time.Minute
+	deadlineTimer := time.NewTimer(deadline)
+	defer deadlineTimer.Stop()
+
 	for {
 		timer.Reset(duration)
 		select {
-		case <-t.closeCh:
+		case <-deadlineTimer.C:
+			// No new message before deadline
 			return
 		case <-ctx.Done():
 			logger.New().Info("Sequential Task Stop")
@@ -187,6 +194,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			if len(results) == 0 {
 				continue
 			}
+			// If there is new messages, reset the deadline.
+			deadlineTimer.Reset(deadline)
 
 			func() {
 				if err := mutex.LockContext(ctx); err != nil {
