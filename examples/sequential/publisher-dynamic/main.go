@@ -49,31 +49,37 @@ func main() {
 	config := initCnf()
 	pub := beanq.New(config)
 
-	m := make(map[string]any)
-	for i := 0; i < 1000; i++ {
-		m["delayMsg"] = "new msg" + cast.ToString(i)
-		b, _ := json.Marshal(m)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-		err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
-		if err != nil {
-			logger.New().Error(err)
-		}
+	wg := sync.WaitGroup{}
+	count := 200
+	wg.Add(count * 2)
+	for i := 0; i < count; i++ {
+		go func(i int) {
+			defer wg.Done()
+			m := make(map[string]any)
+			m["delayMsg"] = "delay-channel new msg" + cast.ToString(i)
+			b, _ := json.Marshal(m)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancel()
+			err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
+			if err != nil {
+				logger.New().Error(err)
+			}
+		}(i)
+		go func(i int) {
+			defer wg.Done()
+			m := make(map[string]any)
+			m["delayMsg"] = "other-channel new msg" + cast.ToString(i)
+			b, _ := json.Marshal(m)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+			defer cancel()
+			err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("other-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
+			if err != nil {
+				logger.New().Error(err)
+			}
+		}(i)
 	}
 
-	for i := 0; i < 5; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-		m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
-		b, _ := json.Marshal(m)
-		result, err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-n", b).WaitingAck()
-		if err != nil {
-			logger.New().Error(err)
-		} else {
-			log.Println(result)
-		}
-	}
-
+	wg.Wait()
 	// this is a single check for ACK
 	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
 	if err != nil {
