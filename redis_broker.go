@@ -199,7 +199,6 @@ func (t *RedisBroker) Add(ctx context.Context, key, member string) (bool, error)
 
 // Delete delete expire id
 func (t *RedisBroker) Delete(ctx context.Context, key string) {
-
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -271,7 +270,7 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 	return nil, nil
 }
 
-func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) error {
+func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 	// TODO Transaction consistency should be considered here.
 	// Idempotency check
 	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
@@ -285,7 +284,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) e
 	switch msg.MoodType {
 	case SEQUENTIAL:
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-		if dynamic {
+		if dynamicOn {
 			err := t.client.XAdd(ctx, &redis.XAddArgs{
 				Stream: "dynamic_discovery:" + msg.Channel,
 				Values: map[string]interface{}{"streamKey": streamKey},
@@ -317,23 +316,32 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamic bool) e
 	return nil
 }
 
-func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle {
+func (t *RedisBroker) deleteConcurrentHandler(channel string, key string) {
+	consumerDicKey := MakeDynamicKey(t.prefix, channel)
+	value, ok := t.consumerHandlerDic.Load(consumerDicKey)
+	if !ok {
+		return
+	}
+	handlerMap := value.(*concurrentHandlerMap)
+	handlerMap.Delete(key)
+}
 
+func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle {
 	bqConfig := t.config
 	handler := &RedisHandle{
-		broker:             t,
-		channel:            channel,
-		topic:              topic,
-		subscribe:          subscribe,
-		subscribeType:      subType,
-		deadLetterTicker:   time.NewTicker(bqConfig.DeadLetterTicker),
-		deadLetterIdleTime: bqConfig.DeadLetterIdleTime,
-		scheduleTicker:     time.NewTicker(defaultScheduleJobConfig.consumeTicker),
-		jobMaxRetry:        bqConfig.JobMaxRetries,
-		minConsumers:       bqConfig.MinConsumers,
-		timeOut:            bqConfig.ConsumeTimeOut,
-		wg:                 new(sync.WaitGroup),
-		closeCh:            make(chan struct{}),
+		broker:              t,
+		channel:             channel,
+		topic:               topic,
+		subscribe:           subscribe,
+		subscribeType:       subType,
+		deadLetterTickerDur: bqConfig.DeadLetterTicker,
+		deadLetterIdleTime:  bqConfig.DeadLetterIdleTime,
+		scheduleTickerDur:   defaultScheduleJobConfig.consumeTicker,
+		jobMaxRetry:         bqConfig.JobMaxRetries,
+		minConsumers:        bqConfig.MinConsumers,
+		timeOut:             bqConfig.ConsumeTimeOut,
+		wg:                  new(sync.WaitGroup),
+		closeCh:             make(chan struct{}),
 		resultPool: &sync.Pool{New: func() any {
 			return &ConsumerResult{
 				Level:   InfoLevel,
@@ -352,6 +360,44 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 	return handler
 }
 
+func (t *RedisBroker) addDynamicConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle, streamKey, dynamicKey string) *RedisHandle {
+	bqConfig := t.config
+	if dynamicKey == "" {
+		dynamicKey = channel
+	}
+	handler := &RedisHandle{
+		broker:              t,
+		streamKey:           streamKey,
+		dynamicKey:          dynamicKey,
+		channel:             channel,
+		topic:               topic,
+		subscribe:           subscribe,
+		subscribeType:       subType,
+		deadLetterTickerDur: bqConfig.DeadLetterTicker,
+		deadLetterIdleTime:  bqConfig.DeadLetterIdleTime,
+		scheduleTickerDur:   defaultScheduleJobConfig.consumeTicker,
+		jobMaxRetry:         bqConfig.JobMaxRetries,
+		minConsumers:        bqConfig.MinConsumers,
+		timeOut:             bqConfig.ConsumeTimeOut,
+		wg:                  new(sync.WaitGroup),
+		closeCh:             make(chan struct{}),
+		resultPool: &sync.Pool{New: func() any {
+			return &ConsumerResult{
+				Level:   InfoLevel,
+				Info:    SuccessInfo,
+				RunTime: "",
+			}
+		}},
+		errGroupPool: &sync.Pool{New: func() any {
+			group := new(errgroup.Group)
+			group.SetLimit(2)
+			return group
+		}},
+		once: sync.Once{},
+	}
+	return handler
+}
+
 func (t *RedisBroker) newScheduleJob() *scheduleJob {
 	return &scheduleJob{
 		broker: t,
@@ -364,17 +410,13 @@ func (t *RedisBroker) newScheduleJob() *scheduleJob {
 	}
 }
 
-func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, subscribe IConsumeHandle) {
+func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, subscribe IConsumeHandle, dynamicKey string) {
 	ctx, cancel := context.WithCancel(context.Background())
-	dynamicKey := MakeDynamicKey(t.prefix, channel)
 	// monitor signal
 	t.waitSignal(cancel)
 	t.once.Do(func() {
-		if err := t.pool.Submit(func() {
-
-			_ = t.logJob.Obsoletes(ctx)
-
-		}); err != nil {
+		err := t.logJob.Obsoletes(ctx)
+		if err != nil {
 			logger.New().Error(err)
 		}
 
@@ -389,11 +431,11 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 
 	groupName := "read_group"
 	consumerName := xid.New().String()
-	streamName := "dynamic_discovery:" + channel
+	discoveryStreamName := "dynamic_discovery:" + channel
 
-	err := t.client.XGroupCreateMkStream(ctx, streamName, groupName, "0").Err()
+	err := t.client.XGroupCreateMkStream(ctx, discoveryStreamName, groupName, "0").Err()
 	if err != nil && !errors.Is(err, redis.Nil) && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		logger.New().Errorf("dynamic consuming xgroup create error: %v", err)
+		logger.New().Error(err)
 		return
 	}
 
@@ -401,40 +443,41 @@ func (t *RedisBroker) dynamicConsuming(channel string, subType subscribeType, su
 		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
 			Consumer: consumerName,
-			Streams:  []string{streamName, ">"},
+			Streams:  []string{discoveryStreamName, ">"},
 			Count:    1,
 			Block:    0,
 		}).Result()
 		if err != nil {
-			logger.New().Errorf("error reading from stream: %v", err)
+			logger.New().Error(err)
 			continue
 		}
 
+		consumerDicKey := MakeDynamicKey(t.prefix, channel)
 		// handle
 		for _, stream := range streams {
 			for _, message := range stream.Messages {
 				// ack
-				t.client.XAck(ctx, streamName, groupName, message.ID)
-				key := message.Values["streamKey"].(string)
-				v, _ := t.consumerHandlerDic.LoadOrStore(dynamicKey, map[string]IHandle{})
-				dic := v.(map[string]IHandle)
-				if _, ok := dic[key]; !ok {
-					channel, topic := GetChannelAndTopicFromStreamKey(key)
-					handler := t.addConsumer(subType, channel, topic, subscribe)
-					dic[key] = handler
+				t.client.XAck(ctx, discoveryStreamName, groupName, message.ID)
+				dynamicStream := message.Values["streamKey"].(string)
+				v, _ := t.consumerHandlerDic.LoadOrStore(consumerDicKey, newConcurrentHandlerMap())
+				handlerMap := v.(*concurrentHandlerMap)
+				if _, ok := handlerMap.Get(dynamicStream); !ok {
+					channel, topic := GetChannelAndTopicFromStreamKey(dynamicStream)
+					handler := t.addDynamicConsumer(subType, channel, topic, subscribe, dynamicStream, dynamicKey)
 					// consume data
 					if err := t.worker(ctx, handler); err != nil {
 						logger.New().With("", err).Error("worker err")
+						if errHandler, ok := subscribe.(IConsumeError); ok {
+							errHandler.Error(ctx, err)
+						}
 						continue
 					}
-
 					// REFERENCE: https://redis.io/commands/xclaim/
 					// monitor other stream pending
 					if err := t.deadLetter(ctx, handler); err != nil {
 						logger.New().With("", err).Error("claim job err")
 					}
-				} else {
-					// do nothing
+					handlerMap.Set(dynamicStream, handler)
 				}
 			}
 		}
@@ -556,4 +599,38 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 		})
 	}
 	return m
+}
+
+type concurrentHandlerMap struct {
+	handlerMap map[string]*RedisHandle
+	mux        *sync.RWMutex
+}
+
+func newConcurrentHandlerMap() *concurrentHandlerMap {
+	return &concurrentHandlerMap{handlerMap: make(map[string]*RedisHandle), mux: &sync.RWMutex{}}
+}
+
+func (h *concurrentHandlerMap) Get(key string) (*RedisHandle, bool) {
+	h.mux.RLock()
+	defer h.mux.RUnlock()
+	value, found := h.handlerMap[key]
+	return value, found
+}
+
+func (h *concurrentHandlerMap) Set(key string, value *RedisHandle) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	h.handlerMap[key] = value
+}
+
+func (h *concurrentHandlerMap) Delete(key string) {
+	h.mux.Lock()
+	defer h.mux.Unlock()
+	delete(h.handlerMap, key)
+}
+
+func (h *concurrentHandlerMap) Len() int {
+	h.mux.RLock()
+	defer h.mux.RUnlock()
+	return len(h.handlerMap)
 }

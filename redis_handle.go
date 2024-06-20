@@ -15,15 +15,17 @@ import (
 
 type RedisHandle struct {
 	broker        *RedisBroker
+	streamKey     string
+	dynamicKey    string
 	channel       string
 	topic         string
 	subscribeType subscribeType
 	subscribe     IConsumeHandle
 
-	deadLetterTicker   *time.Ticker
-	deadLetterIdleTime time.Duration
+	deadLetterTickerDur time.Duration
+	deadLetterIdleTime  time.Duration
 
-	scheduleTicker *time.Ticker
+	scheduleTickerDur time.Duration
 
 	jobMaxRetry  int
 	minConsumers int64
@@ -52,14 +54,12 @@ func (t *RedisHandle) Topic() string {
 }
 
 func (t *RedisHandle) Process(ctx context.Context) {
-
 	switch t.subscribeType {
 	case normalSubscribe:
 		t.runSubscribe(ctx)
 	case sequentialSubscribe:
 		t.runSequentialSubscribe(ctx)
 	}
-
 }
 
 func (t *RedisHandle) runSubscribe(ctx context.Context) {
@@ -92,7 +92,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 
 func (t *RedisHandle) Schedule(ctx context.Context) {
 	// timeWheel To be implemented
-	defer t.scheduleTicker.Stop()
+	ticker := time.NewTicker(t.scheduleTickerDur)
+	defer ticker.Stop()
 
 	var (
 		now      time.Time
@@ -109,7 +110,7 @@ func (t *RedisHandle) Schedule(ctx context.Context) {
 			logger.New().Info("Schedule Task Stop")
 			return
 
-		case <-t.scheduleTicker.C:
+		case <-ticker.C:
 		}
 
 		now = time.Now()
@@ -156,8 +157,10 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 0)
 
+	// dynamicKey only affects the mutex name.
+	// If the dynamicKey and topic of different channels are the same, there will be a lock.
 	mutex := t.broker.NewMutex(
-		strings.Join([]string{t.broker.prefix, t.channel, t.topic, "seq_sync"}, ":"),
+		strings.Join([]string{t.broker.prefix, t.dynamicKey, t.topic, "seq_sync"}, ":"),
 		WithExpiry(20*time.Second),
 	)
 
@@ -281,7 +284,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 // DeadLetter Please refer to https://redis.io/docs/latest/commands/xclaim/
 func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
-	defer t.deadLetterTicker.Stop()
+	ticker := time.NewTicker(t.deadLetterTickerDur)
+	defer ticker.Stop()
 	r := t.resultPool.Get().(*ConsumerResult)
 	defer func() {
 		t.resultPool.Put(r)
@@ -294,7 +298,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 		case <-ctx.Done():
 			logger.New().Info("DeadLetter Work Stop")
 			return nil
-		case <-t.deadLetterTicker.C:
+		case <-ticker.C:
 
 		}
 
@@ -453,6 +457,9 @@ func (t *RedisHandle) close() error {
 			return nil
 		}
 	default:
+		if t.streamKey != "" {
+			t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
+		}
 		close(t.closeCh)
 	}
 

@@ -171,11 +171,6 @@ func (t ZapLogger) Error(i ...any) {
 	return
 }
 
-func (t ZapLogger) Errorf(template string, args ...any) {
-	t.logger.With(t.zapFields...).Sugar().Errorf(template, args...)
-	return
-}
-
 func (t ZapLogger) DPanic(i ...any) {
 	t.logger.With(t.zapFields...).DPanic(fmt.Sprint(i...))
 	return
