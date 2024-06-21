@@ -84,6 +84,13 @@ type (
 		Priority  float64       `json:"priority"`
 		TimeToRun time.Duration `json:"timeToRun"`
 	}
+
+	dynamicOption struct {
+		on  bool
+		key string
+	}
+
+	DynamicOption func(option *dynamicOption)
 )
 
 var (
@@ -143,9 +150,10 @@ func (c *Client) BQ() *BQClient {
 			TimeToRun: c.TimeToRun,
 		},
 
-		ctx:      context.Background(),
-		id:       "",
-		priority: c.Priority,
+		dynamicOption: &dynamicOption{},
+		ctx:           context.Background(),
+		id:            "",
+		priority:      c.Priority,
 	}
 	bqc.cmdAble = bqc.process
 	return bqc
@@ -197,8 +205,8 @@ type BQClient struct {
 
 	ctx context.Context
 
-	waitAck bool
-	dynamic bool
+	waitAck       bool
+	dynamicOption *dynamicOption
 
 	// TODO
 	// id and priority are not common parameters for all publish and subscription, and will need to be optimized in the future.
@@ -212,8 +220,16 @@ func (b *BQClient) WithContext(ctx context.Context) *BQClient {
 }
 
 // Dynamic only support Sequential type for now.
-func (b *BQClient) Dynamic() *BQClient {
-	b.dynamic = true
+func (b *BQClient) Dynamic(options ...DynamicOption) *BQClient {
+	opt := &dynamicOption{
+		on:  true,
+		key: "",
+	}
+	for _, option := range options {
+		option(opt)
+	}
+
+	b.dynamicOption = opt
 	return b
 }
 
@@ -297,7 +313,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 
 		// store message
-		return b.client.broker.enqueue(b.ctx, message, b.dynamic)
+		return b.client.broker.enqueue(b.ctx, message, b.dynamicOption.on)
 
 	case *Subscribe:
 		channel, topic := cmd.channel, cmd.topic
@@ -309,8 +325,8 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			topic = b.client.Topic
 		}
 
-		if b.dynamic {
-			b.client.broker.dynamicConsuming(channel, cmd.subscribeType, cmd.handle)
+		if b.dynamicOption.on {
+			b.client.broker.dynamicConsuming(cmd.subscribeType, channel, cmd.handle, b.dynamicOption.key)
 		} else {
 			b.client.broker.addConsumer(cmd.subscribeType, channel, topic, cmd.handle)
 		}
@@ -492,5 +508,11 @@ func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 			// pull the data from global
 			timer.Reset(nextPollInterval())
 		}
+	}
+}
+
+func DynamicKeyOpt(key string) DynamicOption {
+	return func(option *dynamicOption) {
+		option.key = key
 	}
 }

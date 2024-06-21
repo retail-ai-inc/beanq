@@ -6,8 +6,10 @@ import (
 	"math/rand"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/trace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,81 +67,68 @@ func (t *seqCustomer) Error(ctx context.Context, err error) {
 var index atomic.Int32
 
 func main() {
+	f, err := os.Create("trace.out")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	err = trace.Start(f)
+	if err != nil {
+		panic(err)
+	}
+	defer trace.Stop()
+
 	config := initCnf()
 	csm := beanq.New(config)
+	wg := &sync.WaitGroup{}
 	go func() {
 		log.Println(http.ListenAndServe(":6060", nil))
 	}()
-	ctx := context.Background()
-	_, err := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.DefaultHandle{
-		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			time.Sleep(time.Second * time.Duration(rand.Int63n(5)))
-			logger.New().Info("default handler ", message.Id, message.Topic)
-			return nil
-		},
-		DoCancel: func(ctx context.Context, message *beanq.Message) error {
-			logger.New().Info("default cancel ", message.Id)
-			return nil
-		},
-		DoError: func(ctx context.Context, err error) {
-			logger.New().Info("default error ", err)
-		},
-	})
-	if err != nil {
-		logger.New().Error(err)
-	}
-
-	/*_, err := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
-		index.Add(1)
-		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			if index.Load()%3 == 0 {
-				return fmt.Errorf("rollback error:%d", index.Load())
-			} else if index.Load()%4 == 0 {
-				panic("rollback panic test")
-			}
-			logger.New().Info("topic:", wf.Message().Topic, task.ID()+" rollback-1:", wf.Message().Id)
-			return nil
-		}).OnExecute(func(task beanq.Task) error {
-			logger.New().Info("topic:", wf.Message().Topic, task.ID()+"execute job-1")
-			time.Sleep(time.Second * 2)
-			return nil
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ctx := context.Background()
+		_, err := csm.BQ().WithContext(ctx).Dynamic(beanq.DynamicKeyOpt("same-key")).SubscribeSequential("delay-channel", "*", beanq.DefaultHandle{
+			DoHandle: func(ctx context.Context, message *beanq.Message) error {
+				time.Sleep(time.Second * time.Duration(rand.Int63n(3)))
+				logger.New().Info("default handler ", message.Id, message.Topic)
+				return nil
+			},
+			DoCancel: func(ctx context.Context, message *beanq.Message) error {
+				logger.New().Info("default cancel ", message.Id)
+				return nil
+			},
+			DoError: func(ctx context.Context, err error) {
+				logger.New().Info("default error ", err)
+			},
 		})
-
-		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			logger.New().Info("topic:", wf.Message().Topic, task.ID()+" rollback-2:", wf.Message().Id)
-			return nil
-		}).OnExecute(func(task beanq.Task) error {
-			logger.New().Info("topic:", wf.Message().Topic, task.ID()+"execute job-2")
-			time.Sleep(time.Second * 1)
-			return nil
-		})
-
-		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			logger.New().Info("topic:", wf.Message().Topic, task.ID()+" rollback-3:", wf.Message().Id)
-			return nil
-		}).OnExecute(func(task beanq.Task) error {
-			if index.Load()%2 == 0 {
-				return fmt.Errorf("execute error: %d", index.Load())
-			} else if index.Load() == 7 {
-				panic("execute panic test")
-			}
-			logger.New().Info("topic:", wf.Message().Topic, task.ID()+"execute job-3")
-			time.Sleep(time.Second * 1)
-			return nil
-		})
-
-		err := wf.WithRollbackResultHandler(func(taskID string, err error) {
-			if err == nil {
-				return
-			}
-			logger.New().Info("topic:", wf.Message().Topic, taskID, "rollback error: ", err)
-		}).Run()
 		if err != nil {
-			return err
+			logger.New().Error(err)
 		}
-		return nil
-	}))
-	if err != nil {
-		logger.New().Error(err)
-	}*/
+	}()
+
+	go func() {
+		defer wg.Done()
+		ctx := context.Background()
+		_, err := csm.BQ().WithContext(ctx).Dynamic(beanq.DynamicKeyOpt("same-key")).SubscribeSequential("other-channel", "*", beanq.DefaultHandle{
+			DoHandle: func(ctx context.Context, message *beanq.Message) error {
+				time.Sleep(time.Second * time.Duration(rand.Int63n(4)))
+				logger.New().Info("default2 handler ", message.Id, message.Topic)
+				return nil
+			},
+			DoCancel: func(ctx context.Context, message *beanq.Message) error {
+				logger.New().Info("default2 cancel ", message.Id)
+				return nil
+			},
+			DoError: func(ctx context.Context, err error) {
+				logger.New().Info("default2 error ", err)
+			},
+		})
+		if err != nil {
+			logger.New().Error(err)
+		}
+	}()
+
+	wg.Wait()
 }
