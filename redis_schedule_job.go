@@ -32,6 +32,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
@@ -108,13 +109,6 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 }
 
 var (
-	scheduleTimer = sync.Pool{
-		New: func() any {
-			t := time.NewTimer(1 * time.Hour)
-			t.Stop()
-			return t
-		},
-	}
 	Unexpired = errors.New("unexpired")
 )
 
@@ -125,30 +119,21 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		currentString string // millisecond string
 	)
 
-	timer := scheduleTimer.Get().(*time.Timer)
-	timer.Reset(1 * time.Second)
+	timer := timex.TimerPool.Get(1 * time.Second)
+	defer timex.TimerPool.Put(timer)
 
 	for {
 		select {
 		case <-closeCh:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			scheduleTimer.Put(timer)
 			t.broker.pool.Release()
 			return nil
 		case <-ctx.Done():
 			t.broker.pool.Release()
 			logger.New().Info("Schedule Task Stop")
-			if !timer.Stop() {
-				<-timer.C
-			}
-			scheduleTimer.Put(timer)
 			return nil
 		case <-timer.C:
 
 		}
-
 		timer.Reset(1 * time.Second)
 
 		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
@@ -198,8 +183,6 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		_ = t.broker.pool.Submit(func() {
 			t.execute(ctx, val, channel, topic)
 		})
-		scheduleTimer.Put(timer)
-
 	}
 
 }
