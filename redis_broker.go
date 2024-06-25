@@ -51,7 +51,6 @@ import (
 type (
 	RedisBroker struct {
 		client              redis.UniversalClient
-		muxClients          []redis.UniversalClient
 		scheduleJob         scheduleJobI
 		filter              VolatileLFU
 		consumerHandlerDic  sync.Map
@@ -98,20 +97,8 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		logger.New().Fatal(err.Error())
 	}
 
-	var muxClients []redis.UniversalClient
-	if len(hosts) > 1 {
-		for _, host := range hosts {
-			muxClients = append(muxClients, redis.NewClient(&redis.Options{
-				Addr: host,
-			}))
-		}
-	} else {
-		muxClients = []redis.UniversalClient{client}
-	}
-
 	broker := &RedisBroker{
 		client:             client,
-		muxClients:         muxClients,
 		once:               &sync.Once{},
 		pool:               pool,
 		prefix:             config.Redis.Prefix,
@@ -585,19 +572,13 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 }
 
 func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
-	pools := t.muxClients
-	var (
-		defaultFailFast, defaultShuffle bool
-	)
-	if len(pools) > 1 {
-		defaultFailFast = true
-		defaultShuffle = true
+	pools := []redis.UniversalClient{
+		t.client,
 	}
-
 	m := &Mutex{
 		name:   name,
 		expiry: 8 * time.Second,
-		tries:  32,
+		tries:  1,
 		delayFunc: func(tries int) time.Duration {
 			return time.Duration(rand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
 		},
@@ -606,8 +587,6 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 		timeoutFactor: 0.05,
 		quorum:        len(pools)/2 + 1,
 		pools:         pools,
-		failFast:      defaultFailFast,
-		shuffle:       defaultShuffle,
 	}
 
 	for _, o := range options {
@@ -615,15 +594,11 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 	}
 
 	if m.shuffle {
-		randomPools(m.pools)
+		rand.Shuffle(len(pools), func(i, j int) {
+			pools[i], pools[j] = pools[j], pools[i]
+		})
 	}
 	return m
-}
-
-func randomPools(pools []redis.UniversalClient) {
-	rand.Shuffle(len(pools), func(i, j int) {
-		pools[i], pools[j] = pools[j], pools[i]
-	})
 }
 
 type concurrentHandlerMap struct {
