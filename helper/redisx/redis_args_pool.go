@@ -57,25 +57,13 @@ var redisXReadGroupArgsPool = &sync.Pool{New: func() any {
 }}
 
 func NewReadGroupArgs(group, consumer string, streams []string, count int64, block time.Duration) *redis.XReadGroupArgs {
-	args := redisXReadGroupArgsPool.Get().(*redis.XReadGroupArgs)
-	args.Group = group
-	args.Consumer = consumer
-	args.Streams = streams
-	args.Count = count
-	args.Block = block
-
-	defer func() {
-		args = &redis.XReadGroupArgs{
-			Group:    "",
-			Consumer: "",
-			Streams:  nil,
-			Count:    0,
-			Block:    0,
-			NoAck:    false,
-		}
-		redisXReadGroupArgsPool.Put(args)
-	}()
-	return args
+	return &redis.XReadGroupArgs{
+		Group:    group,
+		Consumer: consumer,
+		Streams:  streams,
+		Count:    count,
+		Block:    block,
+	}
 }
 
 var xAutoClaimPool = &sync.Pool{New: func() any {

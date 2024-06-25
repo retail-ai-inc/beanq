@@ -2,12 +2,11 @@ package beanq
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/pkg/errors"
-	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/spf13/cast"
@@ -16,15 +15,17 @@ import (
 
 type RedisHandle struct {
 	broker        *RedisBroker
+	streamKey     string
+	dynamicKey    string
 	channel       string
 	topic         string
 	subscribeType subscribeType
 	subscribe     IConsumeHandle
 
-	deadLetterTicker   *time.Ticker
-	deadLetterIdleTime time.Duration
+	deadLetterTickerDur time.Duration
+	deadLetterIdleTime  time.Duration
 
-	scheduleTicker *time.Ticker
+	scheduleTickerDur time.Duration
 
 	jobMaxRetry  int
 	minConsumers int64
@@ -53,14 +54,12 @@ func (t *RedisHandle) Topic() string {
 }
 
 func (t *RedisHandle) Process(ctx context.Context) {
-
 	switch t.subscribeType {
 	case normalSubscribe:
 		t.runSubscribe(ctx)
 	case sequentialSubscribe:
 		t.runSequentialSubscribe(ctx)
 	}
-
 }
 
 func (t *RedisHandle) runSubscribe(ctx context.Context) {
@@ -93,7 +92,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 
 func (t *RedisHandle) Schedule(ctx context.Context) {
 	// timeWheel To be implemented
-	defer t.scheduleTicker.Stop()
+	ticker := time.NewTicker(t.scheduleTickerDur)
+	defer ticker.Stop()
 
 	var (
 		now      time.Time
@@ -110,7 +110,7 @@ func (t *RedisHandle) Schedule(ctx context.Context) {
 			logger.New().Info("Schedule Task Stop")
 			return
 
-		case <-t.scheduleTicker.C:
+		case <-ticker.C:
 		}
 
 		now = time.Now()
@@ -151,128 +151,145 @@ func (t *RedisHandle) Schedule(ctx context.Context) {
 }
 
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
+	defer t.close()
+
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
-	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 100, 10*time.Second)
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 0)
 
-	subKey := MakeSubKey(t.broker.prefix, t.channel, t.topic)
+	// dynamicKey only affects the mutex name.
+	// If the dynamicKey and topic of different channels are the same, there will be a lock.
+	mutex := t.broker.NewMutex(
+		strings.Join([]string{t.broker.prefix, t.dynamicKey, t.topic, "seq_sync"}, ":"),
+		WithExpiry(20*time.Second),
+	)
 
-	duration := time.Millisecond * 100
+	result := t.resultPool.Get().(*ConsumerResult)
+	group := t.errGroupPool.Get().(*errgroup.Group)
+	defer func() {
+		t.errGroupPool.Put(group)
+		t.resultPool.Put(result)
+	}()
+
+	duration := time.Millisecond * 500
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
+
+	deadline := time.Minute
+	deadlineTimer := time.NewTimer(deadline)
+	defer deadlineTimer.Stop()
 
 	for {
 		timer.Reset(duration)
 		select {
-		case <-t.closeCh:
+		case <-deadlineTimer.C:
+			// No new message before deadline
 			return
 		case <-ctx.Done():
 			logger.New().Info("Sequential Task Stop")
 			return
-
 		case <-timer.C:
-			err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-				xp, err := tx.XPending(ctx, stream, readGroupArgs.Group).Result()
-				if err != nil {
-					return err
-				}
-
-				streamInfo := tx.XInfoStream(ctx, stream).Val()
-				if streamInfo == nil || (streamInfo.Length-xp.Count) <= 0 {
-					return errors.New("queue data is empty")
-				}
-				return nil
-			}, stream)
-
+			results, err := t.broker.client.XRangeN(ctx, stream, "-", "+", 100).Result()
 			if err != nil {
+				logger.New().Error(err)
 				continue
 			}
 
-			cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
-			vals := cmd.Val()
-			if len(vals) <= 0 {
+			if len(results) == 0 {
 				continue
 			}
+			// If there is new messages, reset the deadline.
+			deadlineTimer.Reset(deadline)
 
-			stream := vals[0].Stream
-			for _, v := range vals[0].Messages {
-				message := messageToStruct(v.Values)
-				result := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(message)
-				group := t.errGroupPool.Get().(*errgroup.Group)
-				result.Status = StatusExecuting
-				result.BeginTime = time.Now()
-				nctx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
-				retry, err := RetryInfo(nctx, func() error {
-					if err := t.subscribe.Handle(nctx, message); err != nil {
-						if h, ok := t.subscribe.(IConsumeCancel); ok {
-							return h.Cancel(nctx, message)
-						}
-						return err
+			func() {
+				if err := mutex.LockContext(ctx); err != nil {
+					return
+				}
+				defer func() {
+					if _, err := mutex.UnlockContext(ctx); err != nil {
+						logger.New().Error(err)
 					}
-					return nil
-				}, message.Retry)
-				if err != nil {
-					if h, ok := t.subscribe.(IConsumeError); ok {
-						h.Error(nctx, err)
-					}
-					result.Level = ErrLevel
-					result.Info = FlagInfo(err.Error())
-					result.Status = StatusFailed
-				} else {
-					result.Status = StatusSuccess
+				}()
+
+				cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
+				vals := cmd.Val()
+				if len(vals) <= 0 {
+					return
 				}
 
-				result.EndTime = time.Now()
-				result.Retry = retry
-				result.RunTime = result.EndTime.Sub(result.BeginTime).String()
+				stream := vals[0].Stream
+				for _, v := range vals[0].Messages {
+					message := messageToStruct(v.Values)
 
-				cancel()
+					result.FillInfoByMessage(message)
+					result.Status = StatusExecuting
+					result.BeginTime = time.Now()
+					sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
-				// t.broker.client.Del(ctx, strings.Join([]string{t.broker.prefix, message.Channel, message.Topic, message.Id}, ":"))
-				group.TryGo(func() error {
+					retry, err := RetryInfo(sessionCtx, func() error {
+						if err := t.subscribe.Handle(sessionCtx, message); err != nil {
+							if h, ok := t.subscribe.(IConsumeCancel); ok {
+								return h.Cancel(sessionCtx, message)
+							}
+							return err
+						}
+						return nil
+					}, message.Retry)
+
+					if err != nil {
+						if h, ok := t.subscribe.(IConsumeError); ok {
+							h.Error(sessionCtx, err)
+						}
+						result.Level = ErrLevel
+						result.Info = FlagInfo(err.Error())
+						result.Status = StatusFailed
+					} else {
+						result.Status = StatusSuccess
+					}
+
+					result.EndTime = time.Now()
+					result.Retry = retry
+					result.RunTime = result.EndTime.Sub(result.BeginTime).String()
 					// `stream` confirmation message
 					if err := t.broker.client.XAck(ctx, stream, t.channel, v.ID).Err(); err != nil {
-						return err
+						logger.New().Error(err)
 					}
-					// delete data from `stream`
-					if err := t.broker.client.XDel(ctx, stream, v.ID).Err(); err != nil {
-						return err
-					}
-					return nil
-				})
 
-				group.TryGo(func() error {
+					t.broker.client.XAdd(ctx, &redis.XAddArgs{
+						Stream:     strings.Join([]string{t.broker.prefix, t.channel, t.topic, result.Id}, ":"),
+						NoMkStream: false,
+						MaxLen:     0,
+						Approx:     false,
+						Limit:      0,
+						Values:     v.Values,
+					})
+
 					// set result for ack
-					var m map[string]any
-					data, err := result.MarshalBinary()
-					if err != nil {
-						return err
-					}
-					if err := json.Unmarshal(data, &m); err != nil {
-						return err
-					}
+					// _, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
+					// if err != nil {
+					// 	logger.New().Error(err)
+					// }
 
-					if err := t.broker.client.XAdd(ctx, &redis.XAddArgs{
-						Stream: subKey + "_" + m["Id"].(string),
-						Values: m,
-					}).Err(); err != nil {
-						return err
+					cancel()
+					group.TryGo(func() error {
+						// delete data from `stream`
+						if err := t.broker.client.XDel(ctx, stream, v.ID).Err(); err != nil {
+							return err
+						}
+						return nil
+					})
+
+					group.TryGo(func() error {
+						// fix data race
+						clone := *result
+						return t.broker.logJob.Archives(ctx, &clone)
+					})
+
+					if err := group.Wait(); err != nil {
+						logger.New().Error(err)
 					}
-					return nil
-				})
-
-				group.TryGo(func() error {
-					// fix data race
-					clone := *result
-					return t.broker.logJob.Archives(ctx, &clone)
-				})
-
-				if err := group.Wait(); err != nil {
-					logger.New().Error(err)
 				}
-				t.errGroupPool.Put(group)
-				t.resultPool.Put(result)
-			}
+			}()
 		}
 	}
 }
@@ -280,8 +297,12 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 // DeadLetter Please refer to https://redis.io/docs/latest/commands/xclaim/
 func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
-	defer t.deadLetterTicker.Stop()
-
+	ticker := time.NewTicker(t.deadLetterTickerDur)
+	defer ticker.Stop()
+	r := t.resultPool.Get().(*ConsumerResult)
+	defer func() {
+		t.resultPool.Put(r)
+	}()
 	for {
 		// check state
 		select {
@@ -290,7 +311,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 		case <-ctx.Done():
 			logger.New().Info("DeadLetter Work Stop")
 			return nil
-		case <-t.deadLetterTicker.C:
+		case <-ticker.C:
 
 		}
 
@@ -320,7 +341,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				// msg.Values["pendingRetry"] = pending.RetryCount
 				// msg.Values["idle"] = pending.Idle.Seconds()
 
-				r := t.resultPool.Get().(*ConsumerResult).FillInfoByMessage(msg)
+				r.FillInfoByMessage(msg)
 				r.EndTime = time.Now()
 				r.Retry = msg.Retry
 
@@ -335,9 +356,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
 					logger.New().Error(err)
 				}
-				t.resultPool.Put(r)
 			}
-
 		}
 		continue
 	}
@@ -445,10 +464,15 @@ func (t *RedisHandle) check(ctx context.Context, streamName string) error {
 func (t *RedisHandle) close() error {
 	// safe close
 	select {
-	case <-t.closeCh:
-		// already close
-		return nil
+	case _, ok := <-t.closeCh:
+		if !ok {
+			// already closed
+			return nil
+		}
 	default:
+		if t.streamKey != "" {
+			t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
+		}
 		close(t.closeCh)
 	}
 

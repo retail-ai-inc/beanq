@@ -68,6 +68,7 @@ func main() {
 			defer cancel()
 			m := make(map[string]any, 0)
 			m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
+			m["Id"] = cast.ToString(i)
 			b, _ := json.Marshal(m)
 			now := time.Now()
 			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingAck()
@@ -80,6 +81,7 @@ func main() {
 		}()
 	}
 	select {}
+
 	// this is a single check for ACK
 	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
 	// if err != nil {

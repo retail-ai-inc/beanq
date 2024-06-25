@@ -104,7 +104,9 @@ func (t *Log) Obsoletes(ctx context.Context) error {
 
 	for _, log := range t.logs {
 		nlog := log
-		nlog.Obsolete(ctx)
+		go func() {
+			nlog.Obsolete(ctx)
+		}()
 	}
 	return nil
 }
