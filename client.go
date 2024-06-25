@@ -466,7 +466,7 @@ func (s *SequentialCmd) Error() error {
 // WaitingAck ...
 func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 	if s.err != nil {
-		return nil, err
+		return nil, s.err
 	}
 	pollIntervalBase := 5 * time.Millisecond
 	maxInterval := 500 * time.Millisecond
