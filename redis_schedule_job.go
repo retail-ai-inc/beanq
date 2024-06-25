@@ -24,6 +24,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -40,13 +41,12 @@ type (
 		enqueue(ctx context.Context, msg *Message) error
 		sequentialEnqueue(ctx context.Context, message *Message) error
 		sendToStream(ctx context.Context, msg *Message) error
-		doConsume(ctx context.Context, max string, channel, topic string) error
+		run(ctx context.Context, channel, topic string, closeCh chan struct{}) error
 	}
 
 	scheduleJob struct {
-		broker *RedisBroker
-		wg     *sync.WaitGroup
-
+		broker               *RedisBroker
+		wg                   *sync.WaitGroup
 		scheduleErrGroupPool *sync.Pool
 	}
 )
@@ -107,24 +107,105 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 	return err
 }
 
-func (t *scheduleJob) doConsume(ctx context.Context, max string, channel, topic string) error {
-	zRangeBy := &redis.ZRangeBy{
-		Min: defaultScheduleJobConfig.scoreMin,
-		Max: max,
+var (
+	scheduleTimer = sync.Pool{
+		New: func() any {
+			t := time.NewTimer(1 * time.Hour)
+			t.Stop()
+			return t
+		},
 	}
-	key := MakeZSetKey(t.broker.prefix, channel, topic)
+	Unexpired = errors.New("unexpired")
+)
 
-	val := t.broker.client.ZRevRangeByScore(ctx, key, zRangeBy).Val()
+func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh chan struct{}) error {
 
-	if len(val) <= 0 {
-		return nil
+	var (
+		timeUnit      = MakeTimeUnit(t.broker.prefix, channel, topic)
+		currentString string // millisecond string
+	)
+
+	timer := scheduleTimer.Get().(*time.Timer)
+	timer.Reset(1 * time.Second)
+
+	for {
+		select {
+		case <-closeCh:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			scheduleTimer.Put(timer)
+			t.broker.pool.Release()
+			return nil
+		case <-ctx.Done():
+			t.broker.pool.Release()
+			logger.New().Info("Schedule Task Stop")
+			if !timer.Stop() {
+				<-timer.C
+			}
+			scheduleTimer.Put(timer)
+			return nil
+		case <-timer.C:
+
+		}
+
+		timer.Reset(1 * time.Second)
+
+		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
+			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
+				Min:    "-inf",
+				Max:    "+inf",
+				Offset: 0,
+				Count:  1,
+			}).Result()
+			if err != nil {
+				return err
+			}
+
+			if len(val) > 0 {
+				currentMilliSecond, err := cast.ToInt64E(val[0])
+				if err != nil {
+					return err
+				}
+				if currentMilliSecond > time.Now().UnixMilli() {
+					return Unexpired
+				}
+				currentString = cast.ToString(currentMilliSecond + 1)
+				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+					return err
+				}
+				return nil
+			}
+			return Unexpired
+
+		})
+
+		if err != nil {
+			if !errors.Is(err, Unexpired) {
+				logger.New().Error(err)
+			}
+			continue
+		}
+
+		zRangeBy := &redis.ZRangeBy{Min: defaultScheduleJobConfig.scoreMin, Max: currentString}
+		key := MakeZSetKey(t.broker.prefix, channel, topic)
+		cmd := t.broker.client.ZRevRangeByScore(ctx, key, zRangeBy)
+		val := cmd.Val()
+
+		if len(val) <= 0 {
+			continue
+		}
+		_ = t.broker.pool.Submit(func() {
+			t.execute(ctx, val, channel, topic)
+		})
+		scheduleTimer.Put(timer)
+
 	}
 
-	t.doConsumeZset(ctx, val, channel, topic)
-	return nil
 }
 
-func (t *scheduleJob) doConsumeZset(ctx context.Context, vals []string, channel, topic string) {
+func (t *scheduleJob) execute(ctx context.Context, vals []string, channel, topic string) {
+
 	var zsetKey = MakeZSetKey(t.broker.prefix, channel, topic)
 
 	doTask := func(ctx context.Context, vv string) error {

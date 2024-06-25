@@ -9,7 +9,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -91,63 +90,11 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 }
 
 func (t *RedisHandle) Schedule(ctx context.Context) {
-	// timeWheel To be implemented
-	ticker := time.NewTicker(t.scheduleTickerDur)
-	defer ticker.Stop()
 
-	var (
-		now      time.Time
-		timeUnit        = MakeTimeUnit(t.broker.prefix, t.channel, t.topic)
-		scoreMin string = "0"
-		scoreMax string
-	)
-	for {
-		select {
-		case <-t.closeCh:
-			return
-		case <-ctx.Done():
-			t.broker.pool.Release()
-			logger.New().Info("Schedule Task Stop")
-			return
-
-		case <-ticker.C:
-		}
-
-		now = time.Now()
-
-		scoreMax = cast.ToString(now.UnixMilli() + 1)
-		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-				Min:    scoreMin,
-				Max:    scoreMax,
-				Offset: 0,
-				Count:  1,
-			}).Result()
-
-			if err != nil {
-				return err
-			}
-
-			if len(val) <= 0 {
-				scoreMin = scoreMax
-			} else {
-				scoreMin = val[0]
-				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
-					return err
-				}
-			}
-			return nil
-		}, timeUnit)
-		if err != nil {
-			logger.New().Error(err)
-			continue
-		}
-
-		if err := t.broker.scheduleJob.doConsume(ctx, scoreMax, t.channel, t.topic); err != nil {
-			logger.New().With("", err).Error("consume err")
-			// continue
-		}
+	if err := t.broker.scheduleJob.run(ctx, t.channel, t.topic, t.closeCh); err != nil {
+		logger.New().Error(err)
 	}
+	return
 }
 
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
