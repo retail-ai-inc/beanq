@@ -28,6 +28,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -464,56 +465,51 @@ func (s *SequentialCmd) Error() error {
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck() (map[string]any, error) {
-	ack, err := s.client.broker.monitorStream(s.ctx, s.channel, s.topic, s.id)
-	if err != nil {
-		return nil, err
+func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	pollIntervalBase := 5 * time.Millisecond
+	maxInterval := 500 * time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > maxInterval {
+			pollIntervalBase = maxInterval
+		}
+		return interval
 	}
 
-	return ack, nil
-	//
-	//
-	// pollIntervalBase := 5 * time.Millisecond
-	// maxInterval := 500 * time.Millisecond
-	// nextPollInterval := func() time.Duration {
-	// 	// Add 10% jitter.
-	// 	interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
-	// 	// Double and clamp for next time.
-	// 	pollIntervalBase *= 2
-	// 	if pollIntervalBase > maxInterval {
-	// 		pollIntervalBase = maxInterval
-	// 	}
-	// 	return interval
-	// }
-	//
-	// var pullAcknowledgement = func() (*ConsumerResult, error) {
-	// 	// no need check pending status
-	// 	result, err := s.client.getAckStatus(s.ctx, s.channel, s.topic, s.id, false)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	//
-	// 	return result, nil
-	// }
-	//
-	// timer := time.NewTimer(nextPollInterval())
-	// defer timer.Stop()
-	// for {
-	// 	if ack, err = pullAcknowledgement(); err != nil {
-	// 		return ack, err
-	// 	}
-	// 	if ack != nil {
-	// 		return ack, nil
-	// 	}
-	//
-	// 	select {
-	// 	case <-s.ctx.Done():
-	// 		return nil, s.ctx.Err()
-	// 	case <-timer.C:
-	// 		// pull the data from global
-	// 		timer.Reset(nextPollInterval())
-	// 	}
-	// }
+	var pullAcknowledgement = func() (*ConsumerResult, error) {
+		// no need check pending status
+		result, err := s.client.getAckStatus(s.ctx, s.channel, s.topic, s.id, false)
+		if err != nil {
+			return nil, err
+		}
+
+		return result, nil
+	}
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+	for {
+		if ack, err = pullAcknowledgement(); err != nil {
+			return ack, err
+		}
+		if ack != nil {
+			return ack, nil
+		}
+
+		select {
+		case <-s.ctx.Done():
+			return nil, s.ctx.Err()
+		case <-timer.C:
+			// pull the data from global
+			timer.Reset(nextPollInterval())
+		}
+	}
 }
 
 func DynamicKeyOpt(key string) DynamicOption {
