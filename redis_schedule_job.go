@@ -125,10 +125,8 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 	for {
 		select {
 		case <-closeCh:
-			t.broker.pool.Release()
 			return nil
 		case <-ctx.Done():
-			t.broker.pool.Release()
 			logger.New().Info("Schedule Task Stop")
 			return nil
 		case <-timer.C:
