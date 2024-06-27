@@ -121,15 +121,24 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
-func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
-	var lastId string = "0"
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (any, error) {
 
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	// --------------------------------------------------
+	var lastId string = "0"
 	key := strings.Join([]string{t.prefix, channel, topic, id}, ":")
 	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+
+		}
 		cmd := t.client.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{key, lastId},
-			Count:   1,
-			Block:   300 * time.Millisecond,
+			Count:   2000,
 		})
 
 		r, err := cmd.Result()
@@ -139,25 +148,18 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 
 		for _, v := range r {
 			for _, vv := range v.Messages {
-
-				if d, ok := vv.Values["id"]; ok {
-					if id == d.(string) {
-						if err := t.client.XDel(ctx, key, vv.ID).Err(); err != nil {
-							return nil, err
-						}
-
-						m := make(map[string]any, 0)
-						m = vv.Values
-						return m, nil
-					} else {
-						// lastId = vv.ID
+				if nid, ok := vv.Values["id"]; ok {
+					if nid == id {
+						t.client.XDel(ctx, key, vv.ID)
+						return vv.Values, nil
 					}
+					lastId = vv.ID
 				}
 			}
 		}
-
 	}
 
+	return nil, nil
 }
 
 // Archive log
@@ -321,9 +323,12 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	}
 
 	switch msg.MoodType {
+	case PUB_SUB:
+		key := MakeStreamKey(pubSubscribe, t.prefix, msg.Channel, msg.Topic)
+		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(key, "", "*", t.maxLen, 0, msg.ToMap())).Err(); err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] pub/sub xadd error:%w", err)
+		}
 	case SEQUENTIAL:
-		// will improve it
-
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 
 		if dynamicOn {

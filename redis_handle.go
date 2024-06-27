@@ -9,6 +9,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -54,6 +55,8 @@ func (t *RedisHandle) Topic() string {
 
 func (t *RedisHandle) Process(ctx context.Context) {
 	switch t.subscribeType {
+	case pubSubscribe:
+		t.pubSubscribe(ctx)
 	case normalSubscribe:
 		t.runSubscribe(ctx)
 	case sequentialSubscribe:
@@ -61,24 +64,70 @@ func (t *RedisHandle) Process(ctx context.Context) {
 	}
 }
 
+func (t *RedisHandle) pubSubscribe(ctx context.Context) {
+
+	lastId := "0"
+	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+
+	timer := timex.TimerPool.Get(1 * time.Second)
+	defer timex.TimerPool.Put(timer)
+
+	for {
+		select {
+		case <-t.closeCh:
+			timer.Stop()
+			return
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+
+		}
+		timer.Reset(1 * time.Second)
+		cmd := t.broker.client.XRead(ctx, &redis.XReadArgs{
+			Streams: []string{stream, lastId},
+			Count:   1,
+		})
+		if err := cmd.Err(); err != nil {
+			logger.New().Error(err)
+			continue
+		}
+
+		result := cmd.Val()
+		for _, v := range result {
+			for _, vv := range v.Messages {
+				lastId = vv.ID
+				if err := t.subscribe.Handle(ctx, messageToStruct(vv.Values)); err != nil {
+					logger.New().Error(err)
+				}
+			}
+		}
+	}
+}
+
 func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	channel := t.channel
 	topic := t.topic
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, channel, topic)
-	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minConsumers, 10*time.Second)
+	readGroupArgs := redisx.NewReadGroupArgs(channel, stream, []string{stream, ">"}, t.minConsumers, 0)
+
+	timer := timex.TimerPool.Get(1 * time.Second)
+	defer timex.TimerPool.Put(timer)
 
 	for {
 		// check state
 		select {
 		case <-t.closeCh:
+			timer.Stop()
 			return
 		case <-ctx.Done():
+			timer.Stop()
 			logger.New().Info("Main Task Stop")
 			return
-		default:
+		case <-timer.C:
 
 		}
-
+		timer.Reset(1 * time.Second)
 		// block XReadGroup to read data
 		streams := t.broker.client.XReadGroup(ctx, readGroupArgs).Val()
 
@@ -202,20 +251,11 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						logger.New().Error(err)
 					}
 
-					t.broker.client.XAdd(ctx, &redis.XAddArgs{
-						Stream:     strings.Join([]string{t.broker.prefix, t.channel, t.topic, result.Id}, ":"),
-						NoMkStream: false,
-						MaxLen:     0,
-						Approx:     false,
-						Limit:      0,
-						Values:     v.Values,
-					})
-
 					// set result for ack
-					// _, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
-					// if err != nil {
-					// 	logger.New().Error(err)
-					// }
+					_, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
+					if err != nil {
+						logger.New().Error(err)
+					}
 
 					cancel()
 					group.TryGo(func() error {

@@ -76,6 +76,9 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 	if subType == sequentialSubscribe {
 		stream = "sequential_stream"
 	}
+	if subType == pubSubscribe {
+		stream = "pubsub_stream"
+	}
 	return makeKey(prefix, channel, topic, stream)
 }
 
