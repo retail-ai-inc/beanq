@@ -151,7 +151,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 
 	stream := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 
-	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1, 0)
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, stream, []string{stream, ">"}, 1000, 0)
 
 	// dynamicKey only affects the mutex name.
 	// If the dynamicKey and topic of different channels are the same, there will be a lock.
@@ -212,68 +212,78 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 				if len(vals) <= 0 {
 					return
 				}
+				for _, v := range vals {
+					stream := v.Stream
+					for _, vv := range v.Messages {
+						message := messageToStruct(vv.Values)
 
-				stream := vals[0].Stream
-				for _, v := range vals[0].Messages {
-					message := messageToStruct(v.Values)
+						result.FillInfoByMessage(message)
+						result.Status = StatusExecuting
+						result.BeginTime = time.Now()
+						sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
-					result.FillInfoByMessage(message)
-					result.Status = StatusExecuting
-					result.BeginTime = time.Now()
-					sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
-
-					retry, err := RetryInfo(sessionCtx, func() error {
-						if err := t.subscribe.Handle(sessionCtx, message); err != nil {
-							if h, ok := t.subscribe.(IConsumeCancel); ok {
-								return h.Cancel(sessionCtx, message)
+						retry, err := RetryInfo(sessionCtx, func() error {
+							if err := t.subscribe.Handle(sessionCtx, message); err != nil {
+								if h, ok := t.subscribe.(IConsumeCancel); ok {
+									return h.Cancel(sessionCtx, message)
+								}
+								return err
 							}
-							return err
+							return nil
+						}, message.Retry)
+
+						if err != nil {
+							if h, ok := t.subscribe.(IConsumeError); ok {
+								h.Error(sessionCtx, err)
+							}
+							result.Level = ErrLevel
+							result.Info = FlagInfo(err.Error())
+							result.Status = StatusFailed
+						} else {
+							result.Status = StatusSuccess
 						}
-						return nil
-					}, message.Retry)
 
-					if err != nil {
-						if h, ok := t.subscribe.(IConsumeError); ok {
-							h.Error(sessionCtx, err)
+						result.EndTime = time.Now()
+						result.Retry = retry
+						result.RunTime = result.EndTime.Sub(result.BeginTime).String()
+						// `stream` confirmation message
+						if err := t.broker.client.XAck(ctx, stream, t.channel, vv.ID).Err(); err != nil {
+							logger.New().Error(err)
 						}
-						result.Level = ErrLevel
-						result.Info = FlagInfo(err.Error())
-						result.Status = StatusFailed
-					} else {
-						result.Status = StatusSuccess
-					}
 
-					result.EndTime = time.Now()
-					result.Retry = retry
-					result.RunTime = result.EndTime.Sub(result.BeginTime).String()
-					// `stream` confirmation message
-					if err := t.broker.client.XAck(ctx, stream, t.channel, v.ID).Err(); err != nil {
-						logger.New().Error(err)
-					}
+						t.broker.client.XAdd(ctx, &redis.XAddArgs{
+							Stream:     strings.Join([]string{t.broker.prefix, t.channel, t.topic, message.Id}, ":"),
+							NoMkStream: false,
+							MaxLen:     0,
+							Approx:     false,
+							Limit:      0,
+							Values:     vv.Values,
+						})
+						// set result for ack
+						// _, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
+						// if err != nil {
+						// 	logger.New().Error(err)
+						// }
 
-					// set result for ack
-					_, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
-					if err != nil {
-						logger.New().Error(err)
-					}
+						cancel()
+						group.TryGo(func() error {
+							// delete data from `stream`
+							if err := t.broker.client.XDel(ctx, stream, vv.ID).Err(); err != nil {
+								return err
+							}
+							return nil
+						})
 
-					cancel()
-					group.TryGo(func() error {
-						// delete data from `stream`
-						if err := t.broker.client.XDel(ctx, stream, v.ID).Err(); err != nil {
-							return err
+						group.TryGo(func() error {
+							// fix data race
+							clone := *result
+							return t.broker.logJob.Archives(ctx, &clone)
+						})
+
+						if err := group.Wait(); err != nil {
+							logger.New().Error(err)
 						}
-						return nil
-					})
 
-					group.TryGo(func() error {
-						// fix data race
-						clone := *result
-						return t.broker.logJob.Archives(ctx, &clone)
-					})
-
-					if err := group.Wait(); err != nil {
-						logger.New().Error(err)
 					}
 				}
 			}()

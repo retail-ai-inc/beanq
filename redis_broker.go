@@ -123,28 +123,29 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (any, error) {
 
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-
+	timer := timex.TimerPool.Get(1 * time.Second)
+	defer timex.TimerPool.Put(timer)
 	// --------------------------------------------------
 	var lastId string = "0"
 	key := strings.Join([]string{t.prefix, channel, topic, id}, ":")
 	for {
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return nil, ctx.Err()
-		case <-ticker.C:
+		case <-timer.C:
 
 		}
+		timer.Reset(1 * time.Second)
 		cmd := t.client.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{key, lastId},
-			Count:   2000,
+			Count:   1,
 		})
-
-		r, err := cmd.Result()
-		if err != nil && !errors.Is(err, redis.Nil) {
-			return nil, err
+		if err := cmd.Err(); err != nil {
+			logger.New().Error(err)
+			continue
 		}
+		r := cmd.Val()
 
 		for _, v := range r {
 			for _, vv := range v.Messages {

@@ -497,6 +497,15 @@ func (s *SequentialCmd) Error() error {
 	return s.err
 }
 
+// test pub/sub
+func (s *SequentialCmd) WaitingPubAck() (any, error) {
+	nack, err := s.client.broker.monitorStream(s.ctx, s.channel, s.topic, s.id)
+	if err != nil {
+		return nil, err
+	}
+	return nack, nil
+}
+
 // WaitingAck ...
 func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 	if s.err != nil {

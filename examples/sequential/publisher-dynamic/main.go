@@ -62,7 +62,7 @@ func main() {
 	// 	}
 	// }
 
-	for i := 1; i < 5000; i++ {
+	for i := 1; i < 500; i++ {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
@@ -71,7 +71,7 @@ func main() {
 			m["Id"] = cast.ToString(i)
 			b, _ := json.Marshal(m)
 			now := time.Now()
-			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingAck()
+			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingPubAck()
 			if err != nil {
 				logger.New().Error(err)
 			} else {
