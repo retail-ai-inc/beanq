@@ -440,12 +440,18 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
 		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
 			Consumer: consumerName,
 			Streams:  []string{discoveryStreamName, ">"},
 			Count:    1,
 			Block:    0,
+			NoAck:    true,
 		}).Result()
 		if err != nil {
 			logger.New().Error(err)
@@ -456,8 +462,6 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 		// handle
 		for _, stream := range streams {
 			for _, message := range stream.Messages {
-				// ack
-				t.client.XAck(ctx, discoveryStreamName, groupName, message.ID)
 				dynamicStream := message.Values["streamKey"].(string)
 				v, _ := t.consumerHandlerDic.LoadOrStore(consumerDicKey, newConcurrentHandlerMap())
 				handlerMap := v.(*concurrentHandlerMap)
@@ -476,7 +480,12 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 					// monitor other stream pending
 					if err := t.deadLetter(ctx, handler); err != nil {
 						logger.New().With("", err).Error("claim job err")
+						if errHandler, ok := subscribe.(IConsumeError); ok {
+							errHandler.Error(ctx, err)
+						}
+						continue
 					}
+
 					handlerMap.Set(dynamicStream, handler)
 				}
 			}
@@ -561,9 +570,9 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 	go func() {
 		select {
 		case <-sigs:
+			cancel()
 			_ = t.client.Close()
 			t.pool.Release()
-			cancel()
 			_ = logger.New().Sync()
 			done <- true
 		}
@@ -594,11 +603,15 @@ func (t *RedisBroker) NewMutex(name string, options ...MuxOption) *Mutex {
 	}
 
 	if m.shuffle {
-		rand.Shuffle(len(pools), func(i, j int) {
-			pools[i], pools[j] = pools[j], pools[i]
-		})
+		randomPools(m.pools)
 	}
 	return m
+}
+
+func randomPools(pools []redis.UniversalClient) {
+	rand.Shuffle(len(pools), func(i, j int) {
+		pools[i], pools[j] = pools[j], pools[i]
+	})
 }
 
 type concurrentHandlerMap struct {
