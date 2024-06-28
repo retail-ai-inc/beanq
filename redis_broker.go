@@ -271,41 +271,60 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
-	// TODO Transaction consistency should be considered here.
-	// Idempotency check
-	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
-	if err != nil {
-		return err
-	}
-	if exist {
-		return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
-	}
-
 	switch msg.MoodType {
 	case SEQUENTIAL:
-		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-		if dynamicOn {
-			err := t.client.XAdd(ctx, &redis.XAddArgs{
-				Stream: "dynamic_discovery:" + msg.Channel,
-				Values: map[string]interface{}{"streamKey": streamKey},
-			}).Err()
+		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			success, err := pipeliner.SetNX(ctx, strings.Join([]string{t.prefix, "idempotency", msg.Id}, ":"),
+				true, time.Hour*2).Result()
 			if err != nil {
-				return fmt.Errorf("[RedisBroker.enqueue] seq adding dynamic key error:%w", err)
+				return fmt.Errorf("[RedisBroker.enqueue] Idempotency check:%w", err)
 			}
-		}
-		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
-		err := t.client.XAdd(ctx, xAddArgs).Err()
-		if err != nil {
-			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
-		}
+			// Idempotency check
+			if !success {
+				return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
+			}
+
+			streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
+			if dynamicOn {
+				err := pipeliner.XAdd(ctx, &redis.XAddArgs{
+					Stream: "dynamic_discovery:" + msg.Channel,
+					Values: map[string]interface{}{"streamKey": streamKey},
+				}).Err()
+				if err != nil {
+					return fmt.Errorf("[RedisBroker.enqueue] seq adding dynamic key error:%w", err)
+				}
+			}
+			xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
+			err = pipeliner.XAdd(ctx, xAddArgs).Err()
+			if err != nil {
+				return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
+			}
+			return nil
+		})
+		return err
 	case NORMAL:
+		exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
+		if err != nil {
+			return err
+		}
+		if exist {
+			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
+		}
+
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
-		err := t.client.XAdd(ctx, xAddArgs).Err()
+		err = t.client.XAdd(ctx, xAddArgs).Err()
 		if err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] normal xadd error:%w", err)
 		}
 	case DELAY:
-		err := t.scheduleJob.enqueue(ctx, msg)
+		exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
+		if err != nil {
+			return err
+		}
+		if exist {
+			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
+		}
+		err = t.scheduleJob.enqueue(ctx, msg)
 		if err != nil {
 			return err
 		}
@@ -417,12 +436,6 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	t.once.Do(func() {
 		err := t.logJob.Obsoletes(ctx)
 		if err != nil {
-			logger.New().Error(err)
-		}
-
-		if err := t.pool.Submit(func() {
-			t.filter.Delete(ctx, MakeFilter(t.prefix))
-		}); err != nil {
 			logger.New().Error(err)
 		}
 

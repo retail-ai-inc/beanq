@@ -205,7 +205,6 @@ type BQClient struct {
 
 	ctx context.Context
 
-	waitAck       bool
 	dynamicOption *dynamicOption
 
 	// TODO
@@ -283,8 +282,6 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		if topic == "" {
 			topic = b.client.Topic
 		}
-
-		b.waitAck = cmd.moodType == SEQUENTIAL
 
 		// make message
 		message := &Message{
