@@ -273,35 +273,40 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 	switch msg.MoodType {
 	case SEQUENTIAL:
-		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			success, err := pipeliner.SetNX(ctx, strings.Join([]string{t.prefix, "idempotency", msg.Id}, ":"),
-				true, time.Hour*2).Result()
-			if err != nil {
-				return fmt.Errorf("[RedisBroker.enqueue] Idempotency check:%w", err)
-			}
-			// Idempotency check
-			if !success {
-				return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
-			}
+		idempotencyKey := strings.Join([]string{t.prefix, "idempotency", msg.Id}, ":")
+		idempotencyValue, err := genValue()
+		if err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] genValue error:%w", err)
+		}
+		success, err := t.client.SetNX(ctx, idempotencyKey,
+			idempotencyValue, time.Hour*2).Result()
+		if err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] Idempotency check error:%w", err)
+		}
+		// Idempotency check
+		if !success {
+			return fmt.Errorf("[RedisBroker.enqueue] check id: %w, idempotencyKey:%s", ErrorIdempotent, idempotencyKey)
+		}
 
+		_, err = t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 			if dynamicOn {
-				err := pipeliner.XAdd(ctx, &redis.XAddArgs{
+				pipeliner.XAdd(ctx, &redis.XAddArgs{
 					Stream: "dynamic_discovery:" + msg.Channel,
 					Values: map[string]interface{}{"streamKey": streamKey},
-				}).Err()
-				if err != nil {
-					return fmt.Errorf("[RedisBroker.enqueue] seq adding dynamic key error:%w", err)
-				}
+				})
 			}
 			xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
-			err = pipeliner.XAdd(ctx, xAddArgs).Err()
-			if err != nil {
-				return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
-			}
+			pipeliner.XAdd(ctx, xAddArgs)
 			return nil
 		})
-		return err
+		if err != nil {
+			// drop idempotencyKey
+			_, deleteErr := (&Mutex{}).Eval(ctx, t.client, deleteScript, idempotencyKey, idempotencyValue)
+			err = errors.Join(err, deleteErr)
+			return fmt.Errorf("[RedisBroker.enqueue] pipeline:%w", err)
+		}
+		return nil
 	case NORMAL:
 		exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 		if err != nil {
