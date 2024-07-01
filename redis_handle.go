@@ -167,7 +167,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		t.resultPool.Put(result)
 	}()
 
-	duration := time.Millisecond * 500
+	duration := time.Millisecond * 100
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
