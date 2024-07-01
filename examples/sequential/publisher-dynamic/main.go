@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/retail-ai-inc/beanq"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/spf13/cast"
@@ -46,9 +47,32 @@ func initCnf() *beanq.BeanqConfig {
 }
 func main() {
 
-	config := initCnf()
-	pub := beanq.New(config)
+	for i := 0; i < 200; i++ {
+		m := make(map[string]any)
+		m["deviceUuid"] = "device_1"
+		m["uuid"] = "fd768e9b" + cast.ToString(i)
+		m["amount"] = 700
+		m["transactionType"] = 12
+		m["cardId"] = "5732542140"
+		m["retailerStoreId"] = 1
+		m["retailerTerminalId"] = 111
+		m["retailerCompanyId"] = 1
+		client := resty.New()
+		now := time.Now()
+		// POST JSON string
+		// No need to set content type, if you have client level setting
+		res, err := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetBody(m).
+			Post("http://127.0.0.1:8888/v1/prepaid/card/deposit")
+		if err != nil {
 
+		}
+		fmt.Printf("%+v \n", string(res.Body()))
+		fmt.Printf("sub:%+v \n", time.Now().Sub(now))
+	}
+
+	return
 	// for i := 0; i < 1000; i++ {
 	// 	m["delayMsg"] = "new msg" + cast.ToString(i)
 	// 	b, _ := json.Marshal(m)
@@ -61,6 +85,7 @@ func main() {
 	// 		logger.New().Error(err)
 	// 	}
 	// }
+	config := initCnf()
 
 	for i := 1; i < 800; i++ {
 		go func() {
@@ -71,6 +96,8 @@ func main() {
 			m["Id"] = cast.ToString(i)
 			b, _ := json.Marshal(m)
 			now := time.Now()
+
+			pub := beanq.New(config)
 			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingPubAck()
 			if err != nil {
 				logger.New().Error(err)
