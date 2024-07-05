@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -118,8 +119,19 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 		t.resultPool.Put(result)
 	}()
 
-	duration := time.Millisecond * 500
-	timer := time.NewTimer(duration)
+	pollIntervalBase := 10 * time.Millisecond
+	maxInterval := 500 * time.Millisecond
+	nextPollInterval := func() time.Duration {
+		// Add 10% jitter.
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		// Double and clamp for next time.
+		pollIntervalBase *= 2
+		if pollIntervalBase > maxInterval {
+			pollIntervalBase = maxInterval
+		}
+		return interval
+	}
+	timer := time.NewTimer(nextPollInterval())
 	defer timer.Stop()
 
 	deadline := time.Minute
@@ -127,7 +139,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	defer deadlineTimer.Stop()
 
 	for {
-		timer.Reset(duration)
 		select {
 		case <-deadlineTimer.C:
 			// No new message before deadline
@@ -136,19 +147,23 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 			logger.New().Info("Sequential Task Stop")
 			return
 		case <-timer.C:
-			results, err := t.broker.client.XRangeN(ctx, stream, "-", "+", 100).Result()
+			timer.Reset(nextPollInterval())
+
+			count, err := t.broker.client.XLen(ctx, stream).Result()
 			if err != nil {
 				logger.New().Error(err)
 				continue
 			}
-			if len(results) == 0 {
+			if count == 0 {
 				continue
 			}
+
 			// If there is new messages, reset the deadline.
 			deadlineTimer.Reset(deadline)
 
 			func() {
 				if err := mutex.LockContext(ctx); err != nil {
+					time.Sleep(time.Millisecond * 100)
 					return
 				}
 				defer func() {
@@ -404,10 +419,10 @@ func (t *RedisHandle) close() error {
 			return nil
 		}
 	default:
+		close(t.closeCh)
 		if t.streamKey != "" {
 			t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
 		}
-		close(t.closeCh)
 	}
 
 	return nil

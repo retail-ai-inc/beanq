@@ -102,7 +102,7 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		once:               &sync.Once{},
 		pool:               pool,
 		prefix:             config.Redis.Prefix,
-		maxLen:             config.MaxLen,
+		maxLen:             config.Redis.MaxLen,
 		config:             config,
 		consumerHandlerDic: sync.Map{},
 		failKey:            MakeLogKey(config.Redis.Prefix, "fail"),
@@ -294,6 +294,10 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 				pipeliner.XAdd(ctx, &redis.XAddArgs{
 					Stream: "dynamic_discovery:" + msg.Channel,
 					Values: map[string]interface{}{"streamKey": streamKey},
+					MinID:  "",
+					ID:     "*",
+					MaxLen: t.maxLen,
+					Limit:  0,
 				})
 			}
 			xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
@@ -386,7 +390,9 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 
 func (t *RedisBroker) addDynamicConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle, streamKey, dynamicKey string) *RedisHandle {
 	bqConfig := t.config
+
 	if dynamicKey == "" {
+		// set default dynamicKey
 		dynamicKey = channel
 	}
 	handler := &RedisHandle{
@@ -450,6 +456,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	groupName := "read_group"
 	consumerName := xid.New().String()
 	discoveryStreamName := "dynamic_discovery:" + channel
+	consumerDicKey := MakeDynamicKey(t.prefix, channel)
 
 	err := t.client.XGroupCreateMkStream(ctx, discoveryStreamName, groupName, "0").Err()
 	if err != nil && !errors.Is(err, redis.Nil) && err.Error() != "BUSYGROUP Consumer Group name already exists" {
@@ -457,29 +464,63 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 		return
 	}
 
+	timer := time.NewTimer(0)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-timer.C:
+			timer.Reset(time.Second * 100)
+			pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+				Stream: discoveryStreamName,
+				Group:  groupName,
+				Start:  "-",
+				End:    "+",
+				Count:  100,
+			}).Val()
+
+			if len(pendings) <= 0 {
+				continue
+			}
+
+			for _, pending := range pendings {
+				if pending.Idle > time.Minute*10 {
+					val := t.client.XRangeN(ctx, discoveryStreamName, pending.ID, "+", 1).Val()
+					if len(val) <= 0 {
+						// the message is not in stream, but in the pending list. need to ack it.
+						t.client.XAck(ctx, discoveryStreamName, groupName, pending.ID)
+						continue
+					}
+
+					if err := t.client.XDel(ctx, discoveryStreamName, val[0].ID).Err(); err != nil {
+						logger.New().Error(err)
+					}
+				}
+			}
 		default:
+
 		}
 		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
 			Consumer: consumerName,
 			Streams:  []string{discoveryStreamName, ">"},
-			Count:    1,
-			Block:    0,
-			NoAck:    true,
+			Count:    50,
+			Block:    time.Millisecond * 10,
 		}).Result()
 		if err != nil {
-			logger.New().Error(err)
+			if !errors.Is(err, redis.Nil) {
+				logger.New().Error(err)
+			}
 			continue
 		}
 
-		consumerDicKey := MakeDynamicKey(t.prefix, channel)
 		// handle
 		for _, stream := range streams {
+			var messageIDs []string
 			for _, message := range stream.Messages {
+				t.client.XAck(ctx, discoveryStreamName, groupName, message.ID)
+				messageIDs = append(messageIDs, message.ID)
 				dynamicStream := message.Values["streamKey"].(string)
 				v, _ := t.consumerHandlerDic.LoadOrStore(consumerDicKey, newConcurrentHandlerMap())
 				handlerMap := v.(*concurrentHandlerMap)
@@ -506,6 +547,10 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 
 					handlerMap.Set(dynamicStream, handler)
 				}
+			}
+			// delete data from `stream`
+			if err := t.client.XDel(ctx, discoveryStreamName, messageIDs...).Err(); err != nil {
+				logger.New().With("", err).Error("del message err")
 			}
 		}
 	}
