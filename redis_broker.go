@@ -464,40 +464,49 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 		return
 	}
 
-	timer := time.NewTimer(0)
+	go func() {
+		timer := time.NewTimer(0)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				timer.Reset(time.Second * 100)
+				pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+					Stream: discoveryStreamName,
+					Group:  groupName,
+					Start:  "-",
+					End:    "+",
+					Count:  100,
+				}).Val()
+
+				if len(pendings) <= 0 {
+					continue
+				}
+
+				for _, pending := range pendings {
+					if pending.Idle > time.Minute*10 {
+						val := t.client.XRangeN(ctx, discoveryStreamName, pending.ID, "+", 1).Val()
+						if len(val) <= 0 {
+							// the message is not in stream, but in the pending list. need to ack it.
+							t.client.XAck(ctx, discoveryStreamName, groupName, pending.ID)
+							continue
+						}
+
+						if err := t.client.XDel(ctx, discoveryStreamName, val[0].ID).Err(); err != nil {
+							logger.New().Error(err)
+						}
+					}
+				}
+			}
+		}
+	}()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-timer.C:
-			timer.Reset(time.Second * 100)
-			pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
-				Stream: discoveryStreamName,
-				Group:  groupName,
-				Start:  "-",
-				End:    "+",
-				Count:  100,
-			}).Val()
-
-			if len(pendings) <= 0 {
-				continue
-			}
-
-			for _, pending := range pendings {
-				if pending.Idle > time.Minute*10 {
-					val := t.client.XRangeN(ctx, discoveryStreamName, pending.ID, "+", 1).Val()
-					if len(val) <= 0 {
-						// the message is not in stream, but in the pending list. need to ack it.
-						t.client.XAck(ctx, discoveryStreamName, groupName, pending.ID)
-						continue
-					}
-
-					if err := t.client.XDel(ctx, discoveryStreamName, val[0].ID).Err(); err != nil {
-						logger.New().Error(err)
-					}
-				}
-			}
 		default:
 
 		}
@@ -535,22 +544,16 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 						}
 						continue
 					}
-					// REFERENCE: https://redis.io/commands/xclaim/
-					// monitor other stream pending
-					if err := t.deadLetter(ctx, handler); err != nil {
-						logger.New().With("", err).Error("claim job err")
-						if errHandler, ok := subscribe.(IConsumeError); ok {
-							errHandler.Error(ctx, err)
-						}
-						continue
-					}
 
 					handlerMap.Set(dynamicStream, handler)
 				}
 			}
+
 			// delete data from `stream`
-			if err := t.client.XDel(ctx, discoveryStreamName, messageIDs...).Err(); err != nil {
-				logger.New().With("", err).Error("del message err")
+			if len(messageIDs) > 0 {
+				if err := t.client.XDel(ctx, discoveryStreamName, messageIDs...).Err(); err != nil {
+					logger.New().With("", err).Error("del message err")
+				}
 			}
 		}
 	}
