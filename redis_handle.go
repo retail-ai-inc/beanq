@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
 	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -56,7 +58,7 @@ func (t *RedisHandle) Topic() string {
 func (t *RedisHandle) Process(ctx context.Context) {
 	switch t.subscribeType {
 	case pubSubscribe:
-		t.pubSubscribe(ctx)
+		t.pubSeqSubscribe(ctx)
 	case normalSubscribe:
 		t.runSubscribe(ctx)
 	case sequentialSubscribe:
@@ -144,6 +146,117 @@ func (t *RedisHandle) Schedule(ctx context.Context) {
 		logger.New().Error(err)
 	}
 	return
+}
+
+func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
+	defer t.close()
+
+	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, 20, 1*time.Minute)
+
+	for {
+
+		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
+		if err := cmd.Err(); err != nil {
+			if errors.Is(err, context.Canceled) {
+				logger.New().Info("Pub/Sub Task Stop")
+				return
+			}
+			if !errors.Is(err, redis.Nil) {
+				logger.New().Error(err)
+			}
+			continue
+		}
+
+		streams := cmd.Val()
+		if len(streams) <= 0 {
+			continue
+		}
+
+		stream := streams[0].Stream
+		messages := streams[0].Messages
+
+		var wait sync.WaitGroup
+		for _, msg := range messages {
+
+			wait.Add(1)
+			go func(vv redis.XMessage, rh *RedisHandle) {
+
+				result := rh.resultPool.Get().(*ConsumerResult)
+				group := rh.errGroupPool.Get().(*errgroup.Group)
+				defer func() {
+					wait.Done()
+					rh.errGroupPool.Put(group)
+					rh.resultPool.Put(result)
+
+				}()
+
+				message := messageToStruct(vv.Values)
+
+				result.FillInfoByMessage(message)
+				result.Status = StatusExecuting
+				result.BeginTime = time.Now()
+				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
+
+				retry, err := RetryInfo(sessionCtx, func() error {
+					if err := rh.subscribe.Handle(sessionCtx, message); err != nil {
+						if h, ok := rh.subscribe.(IConsumeCancel); ok {
+							return h.Cancel(sessionCtx, message)
+						}
+						return err
+					}
+					return nil
+				}, message.Retry)
+
+				if err != nil {
+					if h, ok := rh.subscribe.(IConsumeError); ok {
+						h.Error(sessionCtx, err)
+					}
+					result.Level = ErrLevel
+					result.Info = FlagInfo(err.Error())
+					result.Status = StatusFailed
+				} else {
+					result.Status = StatusSuccess
+				}
+
+				result.EndTime = time.Now()
+				result.Retry = retry
+				result.RunTime = result.EndTime.Sub(result.BeginTime).String()
+
+				cancel()
+				// ------------------------
+				client := rh.broker.client
+				group.TryGo(func() error {
+					// join in hash stream
+					id := HashKey([]byte(message.Id), 50)
+					addCmd := client.XAdd(
+						ctx,
+						redisx.NewZAddArgs(strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":"), "", "*", 100, 0, vv.Values),
+					)
+					return addCmd.Err()
+				})
+
+				group.TryGo(func() error {
+					if err := client.XAck(ctx, stream, t.channel, vv.ID).Err(); err != nil {
+						return err
+					}
+					if err := client.XDel(ctx, stream, vv.ID).Err(); err != nil {
+						return err
+					}
+					return nil
+				})
+				group.TryGo(func() error {
+					clone := *result
+					return rh.broker.logJob.Archives(ctx, &clone)
+				})
+				if err := group.Wait(); err != nil {
+					logger.New().Error(err)
+					return
+				}
+			}(msg, t)
+		}
+		wait.Wait()
+	}
 }
 
 func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
@@ -260,10 +373,10 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 							Values:     vv.Values,
 						})
 						// set result for ack
-						// _, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
-						// if err != nil {
-						// 	logger.New().Error(err)
-						// }
+						_, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
+						if err != nil {
+							logger.New().Error(err)
+						}
 
 						cancel()
 						group.TryGo(func() error {

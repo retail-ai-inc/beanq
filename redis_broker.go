@@ -123,44 +123,45 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (any, error) {
 
-	timer := timex.TimerPool.Get(100 * time.Millisecond)
-	defer timex.TimerPool.Put(timer)
-	// --------------------------------------------------
+	hid := HashKey([]byte(id), 50)
+	key := strings.Join([]string{t.prefix, channel, topic, cast.ToString(hid)}, ":")
+
 	var lastId string = "0"
-	key := strings.Join([]string{t.prefix, channel, topic, id}, ":")
+
 	for {
 		select {
 		case <-ctx.Done():
-			timer.Stop()
 			return nil, ctx.Err()
-		case <-timer.C:
+		default:
 
 		}
-		timer.Reset(100 * time.Millisecond)
-		cmd := t.client.XRead(ctx, &redis.XReadArgs{
+		args := &redis.XReadArgs{
 			Streams: []string{key, lastId},
-			Count:   1,
-		})
+			Count:   10,
+			Block:   10 * time.Second,
+		}
+		cmd := t.client.XRead(ctx, args)
 		if err := cmd.Err(); err != nil {
-			logger.New().Error(err)
+			if !errors.Is(err, redis.Nil) {
+				logger.New().Error(err)
+			}
 			continue
 		}
-		r := cmd.Val()
 
-		for _, v := range r {
-			for _, vv := range v.Messages {
-				if nid, ok := vv.Values["id"]; ok {
-					if nid == id {
-						t.client.XDel(ctx, key, vv.ID)
-						return vv.Values, nil
+		messages := cmd.Val()[0].Messages
+
+		for _, message := range messages {
+			if nid, ok := message.Values["id"]; ok {
+				if nid == id {
+					if err := t.client.XDel(ctx, key, message.ID).Err(); err != nil {
+						return nil, err
 					}
-					lastId = vv.ID
+					return message.Values, nil
 				}
 			}
+			lastId = message.ID
 		}
 	}
-
-	return nil, nil
 }
 
 // Archive log

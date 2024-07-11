@@ -4,10 +4,8 @@ import (
 	"context"
 	"log"
 	_ "net/http/pprof"
-	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/trace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,17 +63,17 @@ func (t *seqCustomer) Error(ctx context.Context, err error) {
 var index atomic.Int32
 
 func main() {
-	f, err := os.Create("trace.out")
-	if err != nil {
-		panic(err)
-	}
-	// defer f.Close()
-
-	err = trace.Start(f)
-	if err != nil {
-		panic(err)
-	}
-	defer trace.Stop()
+	// f, err := os.Create("trace.out")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// // defer f.Close()
+	//
+	// err = trace.Start(f)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// defer trace.Stop()
 
 	config := initCnf()
 	csm := beanq.New(config)
@@ -85,7 +83,7 @@ func main() {
 	// }()
 
 	ctx := context.Background()
-	_, err = csm.BQ().WithContext(ctx).SubscribeSequential("default-delay-channel", "mynewstream", beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).PSubscribe("default-delay-channel", "mynewstream", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			// time.Sleep(time.Second * time.Duration(rand.Int63n(5)))
 			logger.New().Info("default handler ", message.Id)
