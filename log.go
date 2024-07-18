@@ -60,10 +60,12 @@ const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"
 
+	StatusPrepare   Status = "prepare"
+	StatusPublished Status = "published"
+	StatusPending   Status = "pending"
+	StatusReceived  Status = "received"
 	StatusSuccess   Status = "success"
 	StatusFailed    Status = "failed"
-	StatusPending   Status = "pending"
-	StatusExecuting Status = "executing"
 
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"

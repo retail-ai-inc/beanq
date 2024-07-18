@@ -18,7 +18,6 @@ func NewAsyncPool(poolSize int) *AsyncPool {
 	pool, err := ants.NewPool(
 		poolSize,
 		ants.WithPreAlloc(true),
-		ants.WithNonblocking(true),
 		ants.WithPanicHandler(func(i interface{}) {
 			logger.New().Error(i)
 
@@ -92,9 +91,11 @@ func captureException(ctx context.Context, err error) {
 	sentry.CurrentHub().Clone().CaptureException(err)
 }
 
-func recoverPanic(c context.Context) {
+func recoverPanic(c context.Context, callback func(p any)) {
 	if err := recover(); err != nil {
 		logger.New().Error(err)
+
+		callback(err)
 
 		if sentry.CurrentHub().Client() == nil {
 			return

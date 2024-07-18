@@ -3,6 +3,8 @@ package beanq
 import (
 	"context"
 	"errors"
+	"fmt"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -181,9 +183,19 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 
 			wait.Add(1)
 			go func(vv redis.XMessage, rh *RedisHandle) {
-
 				result := rh.resultPool.Get().(*ConsumerResult)
 				group := rh.errGroupPool.Get().(*errgroup.Group)
+
+				defer recoverPanic(ctx, func(p any) {
+					// receive the message
+					t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
+						clone := *result
+						clone.Status = StatusFailed
+						clone.Info = FlagInfo(fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack()))
+						return t.broker.logJob.Archives(ctx, &clone)
+					})
+				})
+
 				defer func() {
 					wait.Done()
 					rh.errGroupPool.Put(group)
@@ -194,8 +206,15 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				message := messageToStruct(vv.Values)
 
 				result.FillInfoByMessage(message)
-				result.Status = StatusExecuting
+				result.Status = StatusReceived
 				result.BeginTime = time.Now()
+
+				// receive the message
+				t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
+					clone := *result
+					return t.broker.logJob.Archives(ctx, &clone)
+				})
+
 				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
 				retry, err := RetryInfo(sessionCtx, func() error {
@@ -246,6 +265,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					return nil
 				})
 				group.TryGo(func() error {
+					// set the execution result
 					clone := *result
 					return rh.broker.logJob.Archives(ctx, &clone)
 				})
@@ -331,8 +351,15 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						message := messageToStruct(vv.Values)
 
 						result.FillInfoByMessage(message)
-						result.Status = StatusExecuting
+						result.Status = StatusReceived
 						result.BeginTime = time.Now()
+
+						t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
+							// fix data race
+							clone := *result
+							return t.broker.logJob.Archives(ctx, &clone)
+						})
+
 						sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
 						retry, err := RetryInfo(sessionCtx, func() error {
@@ -519,7 +546,7 @@ func (t *RedisHandle) execute(ctx context.Context, message *redis.XMessage) *Con
 		cancel()
 	}()
 
-	r.Status = StatusExecuting
+	r.Status = StatusReceived
 	r.BeginTime = time.Now()
 
 	retryCount, err := RetryInfo(ctx, func() error {

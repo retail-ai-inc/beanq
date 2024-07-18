@@ -329,6 +329,15 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
 	}
 
+	// after idempotency check, before publish
+	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+		message := messageToStruct(msg)
+		result := &ConsumerResult{}
+		result.FillInfoByMessage(message)
+		result.Status = StatusPrepare
+		return t.logJob.Archives(ctx, result)
+	})
+
 	switch msg.MoodType {
 	case PUB_SUB:
 		key := MakeStreamKey(pubSubscribe, t.prefix, msg.Channel, msg.Topic)
@@ -367,6 +376,15 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	default:
 		return errors.New("[RedisBroker.enqueue] unknown:" + msg.MoodType.String())
 	}
+
+	// publish success
+	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+		message := messageToStruct(msg)
+		result := &ConsumerResult{}
+		result.FillInfoByMessage(message)
+		result.Status = StatusPublished
+		return t.logJob.Archives(ctx, result)
+	})
 
 	return nil
 }
