@@ -167,7 +167,7 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 
 		if err != nil {
 			if !errors.Is(err, Unexpired) {
-				logger.New().Error(err)
+				captureException(ctx, err)
 			}
 			continue
 		}
@@ -180,11 +180,11 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		if len(val) <= 0 {
 			continue
 		}
-		_ = t.broker.pool.Submit(func() {
+		t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
 			t.execute(ctx, val, channel, topic)
+			return nil
 		})
 	}
-
 }
 
 func (t *scheduleJob) execute(ctx context.Context, vals []string, channel, topic string) {
@@ -214,7 +214,7 @@ func (t *scheduleJob) execute(ctx context.Context, vals []string, channel, topic
 	// begin to execute consumer's datas
 	for _, vv := range vals {
 		if err := doTask(ctx, vv); err != nil {
-			logger.New().With("", err).Error("consumer err")
+			captureException(ctx, err)
 			continue
 		}
 	}

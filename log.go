@@ -4,9 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/json"
-	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type (
@@ -80,10 +78,10 @@ type ILog interface {
 
 type Log struct {
 	logs []ILog
-	pool *ants.Pool
+	pool *AsyncPool
 }
 
-func NewLog(pool *ants.Pool, logs ...ILog) *Log {
+func NewLog(pool *AsyncPool, logs ...ILog) *Log {
 	return &Log{
 		logs: logs,
 		pool: pool,
@@ -94,7 +92,7 @@ func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
 	for _, log := range t.logs {
 		nlog := log
 		if err := nlog.Archive(ctx, result); err != nil {
-			logger.New().Error(err)
+			captureException(ctx, err)
 		}
 	}
 	return nil

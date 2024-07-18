@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/json"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
@@ -57,7 +56,7 @@ type (
 		consumerHandlers    []IHandle
 		logJob              *Log
 		once                *sync.Once
-		pool                *ants.Pool
+		asyncPool           *AsyncPool
 		prefix              string
 		maxLen              int64
 		config              *BeanqConfig
@@ -67,7 +66,7 @@ type (
 
 var ErrorIdempotent = errors.New("duplicate id")
 
-func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
+func newRedisBroker(config *BeanqConfig) IBroker {
 
 	ctx := context.Background()
 
@@ -97,10 +96,12 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		logger.New().Fatal(err.Error())
 	}
 
+	asyncPool := NewAsyncPool(config.ConsumerPoolSize)
+
 	broker := &RedisBroker{
 		client:             client,
 		once:               &sync.Once{},
-		pool:               pool,
+		asyncPool:          asyncPool,
 		prefix:             config.Redis.Prefix,
 		maxLen:             config.MaxLen,
 		config:             config,
@@ -114,7 +115,8 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		mongoLog := NewMongoLog(ctx, config)
 		logs = append(logs, mongoLog)
 	}
-	broker.logJob = NewLog(pool, logs...)
+
+	broker.logJob = NewLog(asyncPool, logs...)
 	broker.filter = broker
 	broker.scheduleJob = broker.newScheduleJob()
 
@@ -143,7 +145,7 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 		cmd := t.client.XRead(ctx, args)
 		if err := cmd.Err(); err != nil {
 			if !errors.Is(err, redis.Nil) {
-				logger.New().Error(err)
+				captureException(ctx, err)
 			}
 			continue
 		}
@@ -210,17 +212,14 @@ func (t *RedisBroker) Obsolete(ctx context.Context) {
 		}
 
 		// delete fail logs
-		if err := t.pool.Submit(func() {
-			t.client.ZRemRangeByScore(ctx, t.failKey, "0", cast.ToString(time.Now().UnixMilli()))
-		}); err != nil {
-			logger.New().Error(err)
-		}
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+			return t.client.ZRemRangeByScore(ctx, t.failKey, "0", cast.ToString(time.Now().UnixMilli())).Err()
+		})
+
 		// delete success logs
-		if err := t.pool.Submit(func() {
-			t.client.ZRemRangeByScore(ctx, t.successKey, "0", cast.ToString(time.Now().UnixMilli()))
-		}); err != nil {
-			logger.New().Error(err)
-		}
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+			return t.client.ZRemRangeByScore(ctx, t.successKey, "0", cast.ToString(time.Now().UnixMilli())).Err()
+		})
 	}
 }
 
@@ -271,11 +270,17 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) {
 				expTime := cast.ToTime(cast.ToInt(floor))
 
 				if time.Since(expTime).Seconds() >= 3600*2 {
-					t.client.ZRem(ctx, key, v.Member)
+					err := t.client.ZRem(ctx, key, v.Member).Err()
+					if err != nil {
+						captureException(ctx, err)
+					}
 					continue
 				}
 				if time.Since(expTime).Seconds() >= 60*30 && frac*1000 <= 2 {
-					t.client.ZRem(ctx, key, v.Member)
+					err := t.client.ZRem(ctx, key, v.Member).Err()
+					if err != nil {
+						captureException(ctx, err)
+					}
 					continue
 				}
 			}
@@ -467,14 +472,13 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	t.once.Do(func() {
 		err := t.logJob.Obsoletes(ctx)
 		if err != nil {
-			logger.New().Error(err)
+			captureException(ctx, err)
 		}
 
-		if err := t.pool.Submit(func() {
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 			t.filter.Delete(ctx, MakeFilter(t.prefix))
-		}); err != nil {
-			logger.New().Error(err)
-		}
+			return nil
+		})
 
 		logger.New().Info("Beanq dynamic consuming Start")
 	})
@@ -485,7 +489,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 
 	err := t.client.XGroupCreateMkStream(ctx, discoveryStreamName, groupName, "0").Err()
 	if err != nil && !errors.Is(err, redis.Nil) && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		logger.New().Error(err)
+		captureException(ctx, err)
 		return
 	}
 
@@ -498,7 +502,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 			Block:    0,
 		}).Result()
 		if err != nil {
-			logger.New().Error(err)
+			captureException(ctx, err)
 			continue
 		}
 
@@ -524,9 +528,11 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 					}
 					// REFERENCE: https://redis.io/commands/xclaim/
 					// monitor other stream pending
-					if err := t.deadLetter(ctx, handler); err != nil {
-						logger.New().With("", err).Error("claim job err")
-					}
+
+					t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+						return handler.DeadLetter(ctx)
+					})
+
 					handlerMap.Set(dynamicStream, handler)
 				}
 			}
@@ -543,30 +549,28 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 			logger.New().With("", err).Error("worker err")
 		}
 
-		if err := t.schedule(ctx, cs); err != nil {
-			logger.New().With("", err).Error("schedule job err")
-		}
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+			cs.Schedule(ctx)
+			return nil
+		})
+
 		// REFERENCE: https://redis.io/commands/xclaim/
 		// monitor other stream pending
-		if err := t.deadLetter(ctx, cs); err != nil {
-			logger.New().With("", err).Error("claim job err")
-		}
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+			return cs.DeadLetter(ctx)
+		})
+
 		t.consumerHandlers[key] = nil
 	}
 
-	if err := t.pool.Submit(func() {
+	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+		return t.logJob.Obsoletes(ctx)
+	})
 
-		_ = t.logJob.Obsoletes(ctx)
-
-	}); err != nil {
-		logger.New().Error(err)
-	}
-
-	if err := t.pool.Submit(func() {
+	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 		t.filter.Delete(ctx, MakeFilter(t.prefix))
-	}); err != nil {
-		logger.New().Error(err)
-	}
+		return nil
+	})
 
 	logger.New().Info("Beanq Start")
 	// monitor signal
@@ -577,31 +581,11 @@ func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
 	if err := handle.Check(ctx); err != nil {
 		return err
 	}
-	if err := t.pool.Submit(func() {
+	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 		handle.Process(ctx)
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (t *RedisBroker) schedule(ctx context.Context, handle IHandle) error {
-	if err := t.pool.Submit(func() {
-		handle.Schedule(ctx)
-	}); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (t *RedisBroker) deadLetter(ctx context.Context, handle IHandle) error {
-	return t.pool.Submit(func() {
-		if err := handle.DeadLetter(ctx); err != nil {
-			logger.New().Error(err)
-		}
+		return nil
 	})
+	return nil
 }
 
 func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
@@ -612,7 +596,7 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 		select {
 		case <-sigs:
 			_ = t.client.Close()
-			t.pool.Release()
+			t.asyncPool.Release()
 			cancel()
 			_ = logger.New().Sync()
 			done <- true
