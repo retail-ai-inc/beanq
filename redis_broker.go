@@ -520,10 +520,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 					handler := t.addDynamicConsumer(subType, channel, topic, subscribe, dynamicStream, dynamicKey)
 					// consume data
 					if err := t.worker(ctx, handler); err != nil {
-						logger.New().With("", err).Error("worker err")
-						if errHandler, ok := subscribe.(IConsumeError); ok {
-							errHandler.Error(ctx, err)
-						}
+						captureException(ctx, err)
 						continue
 					}
 					// REFERENCE: https://redis.io/commands/xclaim/
@@ -546,7 +543,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	for key, cs := range t.consumerHandlers {
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
-			logger.New().With("", err).Error("worker err")
+			captureException(ctx, err)
 		}
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
