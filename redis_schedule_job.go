@@ -125,10 +125,8 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 	for {
 		select {
 		case <-closeCh:
-			timer.Stop()
 			return nil
 		case <-ctx.Done():
-			timer.Stop()
 			logger.New().Info("Schedule Task Stop")
 			return nil
 		case <-timer.C:

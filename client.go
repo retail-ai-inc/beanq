@@ -252,7 +252,7 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
-func (b *BQClient) PPublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
+func (b *BQClient) PPublishInSequential(ctx context.Context, channel, topic string, payload []byte) *SequentialCmd {
 	cmd := &Publish{
 		channel:  channel,
 		topic:    topic,
@@ -263,7 +263,7 @@ func (b *BQClient) PPublishInSequential(channel, topic string, payload []byte) *
 		err:     nil,
 		channel: channel,
 		topic:   topic,
-		ctx:     b.ctx,
+		ctx:     ctx,
 		client:  b.client,
 	}
 	if err := b.process(cmd); err != nil {
@@ -521,8 +521,11 @@ func (s *SequentialCmd) Error() error {
 }
 
 // test pub/sub
-func (s *SequentialCmd) WaitingPubAck(id string) (any, error) {
-	nack, err := s.client.broker.monitorStream(s.ctx, s.channel, s.topic, id)
+func (s *SequentialCmd) WaitingPubAck(ctx context.Context, id string) (any, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	nack, err := s.client.broker.monitorStream(ctx, s.channel, s.topic, id)
 	if err != nil {
 		return nil, err
 	}

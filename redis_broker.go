@@ -90,7 +90,7 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 		PoolSize:     config.Redis.PoolSize,
 		MinIdleConns: config.Redis.MinIdleConnections,
 		PoolTimeout:  config.Redis.PoolTimeout,
-		PoolFIFO:     true,
+		PoolFIFO:     false,
 	})
 
 	if err := client.Ping(ctx).Err(); err != nil {
@@ -121,40 +121,57 @@ func newRedisBroker(config *BeanqConfig, pool *ants.Pool) IBroker {
 	return broker
 }
 
-func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (any, error) {
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
 
-	hid := HashKey([]byte(id), 50)
+	hid := HashKey(stringx.StringToByte(id), 50)
 	key := strings.Join([]string{t.prefix, channel, topic, cast.ToString(hid)}, ":")
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 
-	var lastId string = "0"
+	var (
+		lastId string = "0"
+		args          = redis.XReadArgs{
+			Block: 5 * time.Second,
+			Count: 20,
+		}
+		streamExist bool = false
+	)
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("[RedisBroker.monitor] Context error:%w", ctx.Err())
 		default:
 
 		}
-		args := &redis.XReadArgs{
-			Streams: []string{key, lastId},
-			Count:   10,
-			Block:   10 * time.Second,
+
+		if !streamExist {
+			if info := t.client.XInfoStream(ctx, key).Val(); info == nil {
+				continue
+			}
+			streamExist = true
 		}
-		cmd := t.client.XRead(ctx, args)
+
+		args.Streams = []string{key, lastId}
+		cmd := t.client.XRead(ctx, &args)
+
 		if err := cmd.Err(); err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return nil, fmt.Errorf("[RedisBroker.monitor] XRead error:%w", errors.New("pending"))
+			}
 			if !errors.Is(err, redis.Nil) {
-				logger.New().Error(err)
+				return nil, fmt.Errorf("[RedisBroker.monitor] XRead error:%w", err)
 			}
 			continue
 		}
 
 		messages := cmd.Val()[0].Messages
-
 		for _, message := range messages {
+
 			if nid, ok := message.Values["id"]; ok {
 				if nid == id {
 					if err := t.client.XDel(ctx, key, message.ID).Err(); err != nil {
-						return nil, err
+						return nil, fmt.Errorf("[RedisBroker.monitor] XDel error:%w", err)
 					}
 					return message.Values, nil
 				}
@@ -315,20 +332,44 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 	// TODO Transaction consistency should be considered here.
-	// Idempotency check
-	exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
-	if err != nil {
-		return err
-	}
-	if exist {
-		return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
-	}
 
 	switch msg.MoodType {
 	case PUB_SUB:
-		key := MakeStreamKey(pubSubscribe, t.prefix, msg.Channel, msg.Topic)
-		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(key, "", "*", t.maxLen, 0, msg.ToMap())).Err(); err != nil {
-			return fmt.Errorf("[RedisBroker.enqueue] pub/sub xadd error:%w", err)
+
+		key := MakeFilter(t.prefix)
+		member := msg.Id
+
+		streamKey := MakeStreamKey(pubSubscribe, t.prefix, msg.Channel, msg.Topic)
+
+		incr := 0.001
+		if err := t.client.ZRank(ctx, key, member).Err(); err != nil {
+			if errors.Is(err, redis.Nil) {
+				incr = float64(time.Now().Unix()) + incr
+			} else {
+				return fmt.Errorf("[RedisBroker.enqueue] ZRank error:%w", err)
+			}
+		}
+		if err := t.client.ZIncrBy(ctx, key, incr, member).Err(); err != nil {
+			return fmt.Errorf("[RedisBroker.enqueue] ZIncrBy error:%w", err)
+		}
+		timer := timex.TimerPool.Get(15 * time.Millisecond)
+		defer timex.TimerPool.Put(timer)
+		var index int64 = 0
+		for {
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("[RedisBroker.enqueue] Context error:%w", ctx.Err())
+			case <-timer.C:
+				timer.Reset(time.Duration(rand.Int63n(15)+30) * time.Millisecond)
+				if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())).Err(); err != nil {
+					if index < 3 {
+						index++
+						continue
+					}
+					return fmt.Errorf("[RedisBroker.enqueue] XAdd error:%w", err)
+				}
+				return nil
+			}
 		}
 	case SEQUENTIAL:
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
@@ -344,7 +385,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		}
 
 		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
-		err = t.client.XAdd(ctx, xAddArgs).Err()
+		err := t.client.XAdd(ctx, xAddArgs).Err()
 		if err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
 		}
