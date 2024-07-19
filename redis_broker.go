@@ -331,9 +331,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 	// after idempotency check, before publish
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		message := messageToStruct(msg)
 		result := &ConsumerResult{}
-		result.FillInfoByMessage(message)
+		result.FillInfoByMessage(msg)
 		result.Status = StatusPrepare
 		return t.logJob.Archives(ctx, result)
 	})
@@ -379,9 +378,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 	// publish success
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		message := messageToStruct(msg)
 		result := &ConsumerResult{}
-		result.FillInfoByMessage(message)
+		result.FillInfoByMessage(msg)
 		result.Status = StatusPublished
 		return t.logJob.Archives(ctx, result)
 	})

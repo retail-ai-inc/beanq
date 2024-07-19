@@ -188,8 +188,8 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 
 				defer recoverPanic(ctx, func(p any) {
 					// receive the message
+					clone := *result
 					t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-						clone := *result
 						clone.Status = StatusFailed
 						clone.Info = FlagInfo(fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack()))
 						return t.broker.logJob.Archives(ctx, &clone)
@@ -210,8 +210,8 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				result.BeginTime = time.Now()
 
 				// receive the message
+				clone := *result
 				t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-					clone := *result
 					return t.broker.logJob.Archives(ctx, &clone)
 				})
 
@@ -264,9 +264,9 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					}
 					return nil
 				})
+				clone = *result
 				group.TryGo(func() error {
 					// set the execution result
-					clone := *result
 					return rh.broker.logJob.Archives(ctx, &clone)
 				})
 				if err := group.Wait(); err != nil {
