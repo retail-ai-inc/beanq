@@ -11,14 +11,15 @@ type timerPool struct {
 	p sync.Pool
 }
 
-func (t timerPool) Get(duration time.Duration) *time.Timer {
+func (t *timerPool) Get(duration time.Duration) *time.Timer {
 	if tm, ok := t.p.Get().(*time.Timer); ok && tm != nil {
+		tm.Reset(duration)
 		return tm
 	}
 	return time.NewTimer(duration)
 }
 
-func (t timerPool) Put(timer *time.Timer) {
+func (t *timerPool) Put(timer *time.Timer) {
 	if !timer.Stop() {
 		select {
 		case <-timer.C:

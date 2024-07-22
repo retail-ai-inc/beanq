@@ -40,8 +40,9 @@ import (
 type subscribeType int
 
 const (
-	normalSubscribe subscribeType = iota + 1
-	sequentialSubscribe
+	normalSubscribe     = subscribeType(1)
+	sequentialSubscribe = subscribeType(2)
+	pubSubscribe        = subscribeType(3)
 )
 
 // MoodType message type
@@ -59,6 +60,7 @@ const (
 	NORMAL     MoodType = "normal"
 	DELAY      MoodType = "delay"
 	SEQUENTIAL MoodType = "sequential"
+	PUB_SUB    MoodType = "pub_sub"
 )
 
 type (
@@ -250,6 +252,29 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
+func (b *BQClient) PPublishInSequential(ctx context.Context, channel, topic string, payload []byte) *SequentialCmd {
+	cmd := &Publish{
+		channel:  channel,
+		topic:    topic,
+		payload:  payload,
+		moodType: PUB_SUB,
+	}
+	sequentialCmd := &SequentialCmd{
+		err:     nil,
+		channel: channel,
+		topic:   topic,
+		ctx:     ctx,
+		client:  b.client,
+	}
+	if err := b.process(cmd); err != nil {
+		sequentialCmd.err = err
+	} else {
+		sequentialCmd.id = b.id
+	}
+
+	return sequentialCmd
+}
+
 func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
 	cmd := &Publish{
 		channel:  channel,
@@ -269,6 +294,7 @@ func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *S
 	} else {
 		sequentialCmd.id = b.id
 	}
+
 	return sequentialCmd
 }
 
@@ -409,6 +435,37 @@ func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandl
 	return cmd, nil
 }
 
+func (t cmdAble) PPublish(channel, topic string, payload []byte) error {
+	cmd := &Publish{
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
+		executeTime: time.Now(),
+		moodType:    PUB_SUB,
+	}
+
+	if err := t(cmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t cmdAble) PSubscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	cmd := &Subscribe{
+		channel:       channel,
+		topic:         topic,
+		moodType:      PUB_SUB,
+		handle:        handle,
+		subscribeType: pubSubscribe,
+	}
+	if err := t(cmd); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
+func (t cmdAble) PUnSubscribe() {}
+
 type (
 	// Publish command:publish
 	Publish struct {
@@ -461,6 +518,18 @@ type SequentialCmd struct {
 
 func (s *SequentialCmd) Error() error {
 	return s.err
+}
+
+// test pub/sub
+func (s *SequentialCmd) WaitingPubAck(ctx context.Context, id string) (any, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	nack, err := s.client.broker.monitorStream(ctx, s.channel, s.topic, id)
+	if err != nil {
+		return nil, err
+	}
+	return nack, nil
 }
 
 // WaitingAck ...

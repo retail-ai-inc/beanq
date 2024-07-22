@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"sync"
 	"time"
 
@@ -45,45 +45,82 @@ func initCnf() *beanq.BeanqConfig {
 	return &bqConfig
 }
 func main() {
+	//
+	// wait := sync.WaitGroup{}
+	// wait.Add(300)
+	// for i := 1; i <= 300; i++ {
+	// 	go func(ni int) {
+	// 		defer wait.Done()
+	//
+	// 		data := make(map[string]any)
+	// 		data["deviceUuid"] = "device_1"
+	// 		data["uuid"] = "test-" + cast.ToString(ni)
+	// 		data["amount"] = 700
+	// 		data["transactionType"] = 12
+	// 		data["cardId"] = "5732542140"
+	// 		data["retailerStoreId"] = 1
+	// 		data["retailerTerminalId"] = 111
+	// 		data["retailerCompanyId"] = 1
+	// 		now := time.Now()
+	// 		client := resty.New()
+	// 		resp, err := client.R().
+	// 			SetHeader("Content-Type", "application/json").
+	// 			SetBody(data).
+	// 			Post("http://127.0.0.1:8888/v1/prepaid/card/deposit")
+	// 		if err != nil {
+	// 			fmt.Printf("错误:%+v \n", err)
+	// 			return
+	// 		}
+	// 		fmt.Printf("返回值 ：%+v,耗时：%+v \n", string(resp.Body()), time.Now().Sub(now))
+	// 	}(i)
+	// }
+	// wait.Wait()
+	// return
 
-	config := initCnf()
-	pub := beanq.New(config)
+	pub := beanq.New(initCnf())
+	for i := 0; i < 1000; i++ {
+		m := make(map[string]any)
+		m["delayMsg"] = "new msg" + cast.ToString(i)
+		b, _ := json.Marshal(m)
 
-	wg := sync.WaitGroup{}
-	count := 200
-	wg.Add(count * 2)
-	for i := 0; i < count; i++ {
-		go func(i int) {
-			defer wg.Done()
-			m := make(map[string]any)
-			m["delayMsg"] = "delay-channel new msg" + cast.ToString(i)
-			b, _ := json.Marshal(m)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-			defer cancel()
-			err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("delay-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
-			if err != nil {
-				logger.New().Error(err)
-			}
-		}(i)
-		go func(i int) {
-			defer wg.Done()
-			m := make(map[string]any)
-			m["delayMsg"] = "other-channel new msg" + cast.ToString(i)
-			b, _ := json.Marshal(m)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-			defer cancel()
-			err := pub.BQ().WithContext(ctx).Dynamic().PublishInSequential("other-channel", "order-topic-"+strconv.Itoa(i%100), b).Error()
-			if err != nil {
-				logger.New().Error(err)
-			}
-		}(i)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+
+		r, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PPublishInSequential(ctx, "default-delay-channel", "mynewstream", b).WaitingPubAck(ctx, cast.ToString(i))
+		if err != nil {
+			logger.New().Error(err)
+		}
+		fmt.Printf("-----msg:%+v \n", r)
 	}
+	return
+	// config := initCnf()
+	//
+	// for i := 1; i < 800; i++ {
+	// 	go func() {
+	// 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	// 		defer cancel()
+	// 		m := make(map[string]any, 0)
+	// 		m["delayMsg"] = "topic2 new msg" + cast.ToString(i)
+	// 		m["Id"] = cast.ToString(i)
+	// 		b, _ := json.Marshal(m)
+	// 		now := time.Now()
+	//
+	// 		pub := beanq.New(config)
+	// 		result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingPubAck()
+	// 		if err != nil {
+	// 			logger.New().Error(err)
+	// 		} else {
+	// 			logger.New().Info(result)
+	// 		}
+	// 		fmt.Printf("sub:%+v \n", time.Now().Sub(now))
+	// 	}()
+	// }
+	// select {}
 
-	wg.Wait()
 	// this is a single check for ACK
-	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
-	if err != nil {
-		panic(err)
-	}
-	log.Println(result)
+	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// log.Println(result)
 }

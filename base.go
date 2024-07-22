@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"math"
 	"math/rand"
 	"runtime/debug"
@@ -75,6 +76,9 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 	if subType == sequentialSubscribe {
 		stream = "sequential_stream"
 	}
+	if subType == pubSubscribe {
+		stream = "pubsub_stream"
+	}
 	return makeKey(prefix, channel, topic, stream)
 }
 
@@ -118,6 +122,10 @@ func MakeTimeUnit(prefix, channel, topic string) string {
 
 func MakeFilter(prefix string) string {
 	return makeKey(prefix, "filter")
+}
+
+func MakeSubKey(prefix, channel, topic string) string {
+	return makeKey(prefix, channel, topic, "subKey")
 }
 
 func doTimeout(ctx context.Context, f func() error) error {
@@ -180,4 +188,12 @@ func randDuration(center time.Duration) time.Duration {
 	var ri = int64(center)
 	var jitter = rand.Int63n(ri)
 	return time.Duration(math.Abs(float64(ri + jitter)))
+}
+
+func HashKey(id []byte, flake uint64) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write(id)
+	hashKey := h.Sum64()
+	hashKey = hashKey % flake
+	return hashKey
 }

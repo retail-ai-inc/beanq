@@ -13,7 +13,7 @@ var redisXAddArgsPool = &sync.Pool{New: func() any {
 		NoMkStream: false,
 		MaxLen:     0,
 		MinID:      "",
-		Approx:     false,
+		Approx:     true,
 		Limit:      0,
 		ID:         "",
 		Values:     nil,
@@ -30,12 +30,12 @@ func NewZAddArgs(stream, minId, Id string, maxLen, Limit int64, vals any) *redis
 	args.Values = vals
 
 	defer func() {
-		args := &redis.XAddArgs{
+		args = &redis.XAddArgs{
 			Stream:     "",
 			NoMkStream: false,
 			MaxLen:     0,
 			MinID:      "",
-			Approx:     false,
+			Approx:     true,
 			Limit:      0,
 			ID:         "",
 			Values:     nil,
