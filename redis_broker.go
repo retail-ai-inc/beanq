@@ -274,37 +274,42 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	switch msg.MoodType {
 	case SEQUENTIAL:
 		idempotencyKey := strings.Join([]string{t.prefix, "idempotency", msg.Id}, ":")
-		exist, err := t.client.Exists(ctx, idempotencyKey).Result()
-		if err != nil {
-			return fmt.Errorf("[RedisBroker.enqueue] exist key error:%w", err)
-		}
-		// Idempotency check
-		if exist > 0 {
-			return fmt.Errorf("[RedisBroker.enqueue] check id: %w, idempotencyKey:%s", ErrorIdempotent, idempotencyKey)
-		}
-
-		_, err = t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.SetEX(ctx, idempotencyKey, xid.New().String(), time.Hour*2)
-
-			streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-			if dynamicOn {
-				pipeliner.XAdd(ctx, &redis.XAddArgs{
-					Stream: "dynamic_discovery:" + msg.Channel,
-					Values: map[string]interface{}{"streamKey": streamKey},
-					MinID:  "",
-					ID:     "*",
-					MaxLen: t.maxLen,
-					Limit:  0,
-				})
+		err := t.client.Watch(ctx, func(tx *redis.Tx) error {
+			exist, err := tx.Exists(ctx, idempotencyKey).Result()
+			if err != nil {
+				return fmt.Errorf("[RedisBroker.enqueue] exist key error:%w", err)
 			}
-			xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
-			pipeliner.XAdd(ctx, xAddArgs)
+			// Idempotency check
+			if exist > 0 {
+				return fmt.Errorf("[RedisBroker.enqueue] check id: %w, idempotencyKey:%s", ErrorIdempotent, idempotencyKey)
+			}
+
+			_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+				pipeliner.SetEX(ctx, idempotencyKey, xid.New().String(), time.Hour*2)
+
+				streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
+				if dynamicOn {
+					pipeliner.XAdd(ctx, &redis.XAddArgs{
+						Stream: "dynamic_discovery:" + msg.Channel,
+						Values: map[string]interface{}{"streamKey": streamKey},
+						MinID:  "",
+						ID:     "*",
+						MaxLen: t.maxLen,
+						Limit:  0,
+					})
+				}
+				xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
+				pipeliner.XAdd(ctx, xAddArgs)
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("[RedisBroker.enqueue] pipeline:%w", err)
+			}
 			return nil
-		})
+		}, idempotencyKey)
 		if err != nil {
-			return fmt.Errorf("[RedisBroker.enqueue] pipeline:%w", err)
+			return fmt.Errorf("[RedisBroker.enqueue] SEQUENTIAL watch error:%w", err)
 		}
-		return nil
 	case NORMAL:
 		exist, err := t.filter.Add(ctx, MakeFilter(t.prefix), msg.Id)
 		if err != nil {
