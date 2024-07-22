@@ -18,6 +18,7 @@ type (
 		dynamicConsuming(subType subscribeType, channel string, subscribe IConsumeHandle, dynamicKey string)
 
 		monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error)
+		setCaptureException(fn func(ctx context.Context, err any))
 	}
 )
 

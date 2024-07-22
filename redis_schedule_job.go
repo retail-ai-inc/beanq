@@ -165,7 +165,7 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 
 		if err != nil {
 			if !errors.Is(err, Unexpired) {
-				captureException(ctx, err)
+				t.broker.captureException(ctx, err)
 			}
 			continue
 		}
@@ -212,7 +212,7 @@ func (t *scheduleJob) execute(ctx context.Context, vals []string, channel, topic
 	// begin to execute consumer's datas
 	for _, vv := range vals {
 		if err := doTask(ctx, vv); err != nil {
-			captureException(ctx, err)
+			t.broker.captureException(ctx, err)
 			continue
 		}
 	}

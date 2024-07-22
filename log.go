@@ -94,7 +94,7 @@ func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
 	for _, log := range t.logs {
 		nlog := log
 		if err := nlog.Archive(ctx, result); err != nil {
-			captureException(ctx, err)
+			t.pool.captureException(ctx, err)
 		}
 	}
 	return nil

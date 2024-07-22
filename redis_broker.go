@@ -61,6 +61,8 @@ type (
 		maxLen              int64
 		config              *BeanqConfig
 		failKey, successKey string
+
+		captureException func(ctx context.Context, err any)
 	}
 )
 
@@ -119,8 +121,16 @@ func newRedisBroker(config *BeanqConfig) IBroker {
 	broker.logJob = NewLog(asyncPool, logs...)
 	broker.filter = broker
 	broker.scheduleJob = broker.newScheduleJob()
+	broker.captureException = defaultCaptureException
 
 	return broker
+}
+
+func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err any)) {
+	if handler != nil {
+		t.captureException = handler
+		t.asyncPool.captureException = handler
+	}
 }
 
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
@@ -289,14 +299,14 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) {
 				if time.Since(expTime).Seconds() >= 3600*2 {
 					err := t.client.ZRem(ctx, key, v.Member).Err()
 					if err != nil {
-						captureException(ctx, err)
+						t.captureException(ctx, err)
 					}
 					continue
 				}
 				if time.Since(expTime).Seconds() >= 60*30 && frac*1000 <= 2 {
 					err := t.client.ZRem(ctx, key, v.Member).Err()
 					if err != nil {
-						captureException(ctx, err)
+						t.captureException(ctx, err)
 					}
 					continue
 				}
@@ -529,7 +539,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	t.once.Do(func() {
 		err := t.logJob.Obsoletes(ctx)
 		if err != nil {
-			captureException(ctx, err)
+			t.captureException(ctx, err)
 		}
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
@@ -546,7 +556,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 
 	err := t.client.XGroupCreateMkStream(ctx, discoveryStreamName, groupName, "0").Err()
 	if err != nil && !errors.Is(err, redis.Nil) && err.Error() != "BUSYGROUP Consumer Group name already exists" {
-		captureException(ctx, err)
+		t.captureException(ctx, err)
 		return
 	}
 
@@ -559,7 +569,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 			Block:    0,
 		}).Result()
 		if err != nil {
-			captureException(ctx, err)
+			t.captureException(ctx, err)
 			continue
 		}
 
@@ -577,7 +587,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 					handler := t.addDynamicConsumer(subType, channel, topic, subscribe, dynamicStream, dynamicKey)
 					// consume data
 					if err := t.worker(ctx, handler); err != nil {
-						captureException(ctx, err)
+						t.captureException(ctx, err)
 						continue
 					}
 					// REFERENCE: https://redis.io/commands/xclaim/
@@ -600,7 +610,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	for key, cs := range t.consumerHandlers {
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
-			captureException(ctx, err)
+			t.captureException(ctx, err)
 		}
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {

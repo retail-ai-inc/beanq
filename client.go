@@ -85,6 +85,8 @@ type (
 		Retry     int           `json:"retry"`
 		Priority  float64       `json:"priority"`
 		TimeToRun time.Duration `json:"timeToRun"`
+
+		captureException func(ctx context.Context, err any)
 	}
 
 	dynamicOption struct {
@@ -93,6 +95,7 @@ type (
 	}
 
 	DynamicOption func(option *dynamicOption)
+	ClientOption  func(client *Client)
 )
 
 var (
@@ -104,7 +107,7 @@ var (
 	port     = flag.String("port", "", "Mongo port")
 )
 
-func New(config *BeanqConfig) *Client {
+func New(config *BeanqConfig, options ...ClientOption) *Client {
 	// init config,Will merge default options
 	config.init()
 
@@ -136,20 +139,37 @@ func New(config *BeanqConfig) *Client {
 		Priority:  config.Priority,
 		TimeToRun: config.TimeToRun,
 	}
-	client.broker = NewBroker(config)
+
+	for _, option := range options {
+		option(client)
+	}
+
+	broker := NewBroker(config)
+	if client.captureException != nil {
+		broker.setCaptureException(client.captureException)
+	}
+
+	client.broker = broker
 	return client
+}
+
+func WithCaptureExceptionOption(handler func(ctx context.Context, err any)) ClientOption {
+	return func(client *Client) {
+		client.captureException = handler
+	}
 }
 
 func (c *Client) BQ() *BQClient {
 	bqc := &BQClient{
 		client: &Client{
-			broker:    c.broker,
-			Topic:     c.Topic,
-			Channel:   c.Channel,
-			MaxLen:    c.MaxLen,
-			Retry:     c.Retry,
-			Priority:  c.Priority,
-			TimeToRun: c.TimeToRun,
+			broker:           c.broker,
+			Topic:            c.Topic,
+			Channel:          c.Channel,
+			MaxLen:           c.MaxLen,
+			Retry:            c.Retry,
+			Priority:         c.Priority,
+			TimeToRun:        c.TimeToRun,
+			captureException: c.captureException,
 		},
 
 		dynamicOption: &dynamicOption{},
