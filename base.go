@@ -190,10 +190,10 @@ func randDuration(center time.Duration) time.Duration {
 	return time.Duration(math.Abs(float64(ri + jitter)))
 }
 
-func HashKey(id []byte, pare uint64) uint64 {
+func HashKey(id []byte, flake uint64) uint64 {
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(id))
+	_, _ = h.Write(id)
 	hashKey := h.Sum64()
-	hashKey = hashKey % pare
+	hashKey = hashKey % flake
 	return hashKey
 }

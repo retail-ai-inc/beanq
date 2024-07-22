@@ -17,7 +17,7 @@ type (
 		addDynamicConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle, streamKey, dynamicKey string) *RedisHandle
 		dynamicConsuming(subType subscribeType, channel string, subscribe IConsumeHandle, dynamicKey string)
 
-		monitorStream(ctx context.Context, channel, topic, id string) (any, error)
+		monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error)
 	}
 )
 
