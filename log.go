@@ -4,9 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/json"
-	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
 type (
@@ -62,10 +60,12 @@ const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"
 
+	StatusPrepare   Status = "prepare"
+	StatusPublished Status = "published"
+	StatusPending   Status = "pending"
+	StatusReceived  Status = "received"
 	StatusSuccess   Status = "success"
 	StatusFailed    Status = "failed"
-	StatusPending   Status = "pending"
-	StatusExecuting Status = "executing"
 
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"
@@ -80,10 +80,10 @@ type ILog interface {
 
 type Log struct {
 	logs []ILog
-	pool *ants.Pool
+	pool *asyncPool
 }
 
-func NewLog(pool *ants.Pool, logs ...ILog) *Log {
+func NewLog(pool *asyncPool, logs ...ILog) *Log {
 	return &Log{
 		logs: logs,
 		pool: pool,
@@ -94,7 +94,7 @@ func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
 	for _, log := range t.logs {
 		nlog := log
 		if err := nlog.Archive(ctx, result); err != nil {
-			logger.New().Error(err)
+			t.pool.captureException(ctx, err)
 		}
 	}
 	return nil

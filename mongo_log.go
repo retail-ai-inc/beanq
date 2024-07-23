@@ -3,6 +3,7 @@ package beanq
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"go.mongodb.org/mongo-driver/bson"
@@ -57,9 +58,13 @@ func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 // Archive save log
 func (t *MongoLog) Archive(ctx context.Context, result *ConsumerResult) error {
 	data := bson.M{
-		"level": result.Level,
-		"type":  result.Info,
-		"data":  result,
+		"sid":       result.Id,
+		"status":    result.Status,
+		"level":     result.Level,
+		"type":      result.Info,
+		"data":      result,
+		"createdAt": time.Now(),
+		"updatedAt": time.Now(),
 	}
 	if _, err := t.database.Collection(MongoCollection).InsertOne(ctx, data); err != nil {
 		return err

@@ -1,5 +1,5 @@
-.PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
- 		sequential sequential-publisher sequential-consumer sequential-publisher-ack clean
+GOPATH=$(shell go env GOPATH)
+GOLANGCI_LINT_VERSION=v1.55.2
 
 delay: delay-publisher delay-consumer
 
@@ -89,3 +89,14 @@ clean:
 	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
 
 	@echo "done!"
+
+lint: ## run all the lint tools, install golangci-lint if not exist
+ifeq (,$(wildcard $(GOPATH)/bin/golangci-lint))
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null
+	$(GOPATH)/bin/golangci-lint run
+else
+	$(GOPATH)/bin/golangci-lint run
+endif
+
+.PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
+ 		sequential sequential-publisher sequential-consumer sequential-publisher-ack clean

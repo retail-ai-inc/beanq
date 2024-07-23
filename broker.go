@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/panjf2000/ants/v2"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
@@ -16,10 +15,10 @@ type (
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle
 		addDynamicConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle, streamKey, dynamicKey string) *RedisHandle
-		deadLetter(ctx context.Context, handle IHandle) error
 		dynamicConsuming(subType subscribeType, channel string, subscribe IConsumeHandle, dynamicKey string)
 
 		monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error)
+		setCaptureException(fn func(ctx context.Context, err any))
 	}
 )
 
@@ -33,14 +32,9 @@ func NewBroker(config *BeanqConfig) IBroker {
 
 	brokerOnce.Do(
 		func() {
-			pool, err := ants.NewPool(config.ConsumerPoolSize, ants.WithPreAlloc(true), ants.WithNonblocking(true))
-			if err != nil {
-				logger.New().With("", err).Panic("goroutine pool error")
-			}
-
 			switch config.Broker {
 			case "redis":
-				broker = newRedisBroker(config, pool)
+				broker = newRedisBroker(config)
 			default:
 				logger.New().Panic("not support broker type:", config.Broker)
 			}

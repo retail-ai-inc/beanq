@@ -55,7 +55,6 @@ type (
 		Topic        string
 		DelayChannel string
 		DelayTopic   string
-		orderKey     string
 		Channel      string
 		MaxLen       int64
 		Priority     float64
@@ -157,12 +156,12 @@ type IHandle interface {
 	Topic() string
 	Check(ctx context.Context) error
 	Process(ctx context.Context)
-	Schedule(ctx context.Context)
+	Schedule(ctx context.Context) error
 	DeadLetter(ctx context.Context) error
 }
 
 // VolatileLFU ...
 type VolatileLFU interface {
 	Add(ctx context.Context, key, member string) (bool, error)
-	Delete(ctx context.Context, key string)
+	Delete(ctx context.Context, key string) error
 }

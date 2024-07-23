@@ -153,37 +153,30 @@ func (t ZapLogger) With(key string, val any) ZapLogger {
 
 func (t ZapLogger) Info(i ...any) {
 	t.logger.With(t.zapFields...).Info(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) Debug(i ...any) {
 	t.logger.With(t.zapFields...).Debug(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) Warn(i ...any) {
 	t.logger.With(t.zapFields...).Warn(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) Error(i ...any) {
 	t.logger.With(t.zapFields...).Error(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) DPanic(i ...any) {
 	t.logger.With(t.zapFields...).DPanic(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) Panic(i ...any) {
 	t.logger.With(t.zapFields...).Panic(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) Fatal(i ...any) {
 	t.logger.With(t.zapFields...).Fatal(fmt.Sprint(i...))
-	return
 }
 
 func (t ZapLogger) Sync() error {
