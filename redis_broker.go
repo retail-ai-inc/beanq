@@ -351,16 +351,6 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
-	// TODO Transaction consistency should be considered here.
-
-	// after idempotency check, before publish
-	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		result := &ConsumerResult{}
-		result.FillInfoByMessage(msg)
-		result.Status = StatusPrepare
-		return t.logJob.Archives(ctx, result)
-	})
-
 	switch msg.MoodType {
 	case PUB_SUB:
 		idempotencyKey := strings.Join([]string{t.prefix, "idempotency", msg.Id}, ":")
@@ -374,6 +364,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 			if exist > 0 {
 				return fmt.Errorf("[RedisBroker.enqueue] check id: %w, idempotencyKey:%s", ErrorIdempotent, idempotencyKey)
 			}
+
+			// record status, after idempotency check, before publish
+			t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+				result := &ConsumerResult{}
+				result.FillInfoByMessage(msg)
+				result.Status = StatusPrepare
+				return t.logJob.Archives(ctx, result)
+			})
 
 			_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 				pipeliner.SetEX(ctx, idempotencyKey, xid.New().String(), time.Hour*2)
