@@ -272,7 +272,7 @@ func (t *RedisBroker) Add(ctx context.Context, key, member string) (bool, error)
 }
 
 // Delete delete expire id
-func (t *RedisBroker) Delete(ctx context.Context, key string) {
+func (t *RedisBroker) Delete(ctx context.Context, key string) error {
 	ticker := time.NewTicker(30 * time.Second)
 	defer func() {
 		ticker.Stop()
@@ -280,10 +280,8 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.New().Info("UniqueId Obsolete Task Stop")
-			return
+			return fmt.Errorf("UniqueId Obsolete Task Stop: %w", ctx.Err())
 		case <-ticker.C:
-
 			cmd := t.client.ZRangeByScoreWithScores(ctx, key, &redis.ZRangeBy{
 				Min:    "-inf",
 				Max:    "+inf",
@@ -296,7 +294,6 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) {
 			}
 
 			for _, v := range val {
-
 				floor := math.Floor(v.Score)
 				frac := v.Score - floor
 				expTime := cast.ToTime(cast.ToInt(floor))
@@ -549,8 +546,7 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 		}
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			t.filter.Delete(ctx, MakeFilter(t.prefix))
-			return nil
+			return t.filter.Delete(ctx, MakeFilter(t.prefix))
 		})
 
 		logger.New().Info("Beanq dynamic consuming Start")
@@ -637,8 +633,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	})
 
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		t.filter.Delete(ctx, MakeFilter(t.prefix))
-		return nil
+		return t.filter.Delete(ctx, MakeFilter(t.prefix))
 	})
 
 	logger.New().Info("Beanq Start")
