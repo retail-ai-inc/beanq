@@ -446,7 +446,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
-	deadline := time.Minute
+	deadline := time.Second * 5
 	deadlineTimer := time.NewTimer(deadline)
 	defer deadlineTimer.Stop()
 
