@@ -402,6 +402,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 				return fmt.Errorf("[RedisBroker.enqueue] check id: %w, idempotencyKey:%s", ErrorIdempotent, idempotencyKey)
 			}
 
+			// record status, after idempotency check, before publish
+			t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+				result := &ConsumerResult{}
+				result.FillInfoByMessage(msg)
+				result.Status = StatusPrepare
+				return t.logJob.Archives(ctx, result)
+			})
+
 			_, err = tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 				pipeliner.SetEX(ctx, idempotencyKey, xid.New().String(), time.Hour*2)
 
