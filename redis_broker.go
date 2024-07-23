@@ -195,6 +195,11 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 
 // Archive log
 func (t *RedisBroker) Archive(ctx context.Context, result *ConsumerResult) error {
+	// redis only record result data
+	if result.Status != StatusFailed && result.Status != StatusSuccess {
+		return nil
+	}
+
 	now := time.Now()
 	if result.AddTime == "" {
 		result.AddTime = now.Format(timex.DateTime)
