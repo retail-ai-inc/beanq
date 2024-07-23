@@ -353,14 +353,6 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 	// TODO Transaction consistency should be considered here.
 
-	// after idempotency check, before publish
-	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		result := &ConsumerResult{}
-		result.FillInfoByMessage(msg)
-		result.Status = StatusPrepare
-		return t.logJob.Archives(ctx, result)
-	})
-
 	switch msg.MoodType {
 	case PUB_SUB:
 
@@ -377,6 +369,15 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 				return fmt.Errorf("[RedisBroker.enqueue] ZRank error:%w", err)
 			}
 		}
+
+		// record status, after idempotency check, before publish
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+			result := &ConsumerResult{}
+			result.FillInfoByMessage(msg)
+			result.Status = StatusPrepare
+			return t.logJob.Archives(ctx, result)
+		})
+
 		if err := t.client.ZIncrBy(ctx, key, incr, member).Err(); err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] ZIncrBy error:%w", err)
 		}
