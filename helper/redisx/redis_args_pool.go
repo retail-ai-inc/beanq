@@ -45,17 +45,6 @@ func NewZAddArgs(stream, minId, Id string, maxLen, Limit int64, vals any) *redis
 	return args
 }
 
-var redisXReadGroupArgsPool = &sync.Pool{New: func() any {
-	return &redis.XReadGroupArgs{
-		Group:    "",
-		Consumer: "",
-		Streams:  nil,
-		Count:    0,
-		Block:    0,
-		NoAck:    false,
-	}
-}}
-
 func NewReadGroupArgs(group, consumer string, streams []string, count int64, block time.Duration) *redis.XReadGroupArgs {
 	return &redis.XReadGroupArgs{
 		Group:    group,

@@ -21,7 +21,6 @@ func TestNewLog(t *testing.T) {
 	}
 
 	NewWithConfig(cfg).With("a", errors.New("aa")).Error(errors.New("err"))
-	return
 
 	for i := 0; i < 100; i++ {
 		if i <= 10 {

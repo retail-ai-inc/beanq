@@ -620,8 +620,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 		}
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			cs.Schedule(ctx)
-			return nil
+			return cs.Schedule(ctx)
 		})
 
 		// REFERENCE: https://redis.io/commands/xclaim/
@@ -663,14 +662,12 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 	done := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
-		select {
-		case <-sigs:
-			_ = t.client.Close()
-			t.asyncPool.Release()
-			cancel()
-			_ = logger.New().Sync()
-			done <- true
-		}
+		<-sigs
+		_ = t.client.Close()
+		t.asyncPool.Release()
+		cancel()
+		_ = logger.New().Sync()
+		done <- true
 	}()
 	return done
 }

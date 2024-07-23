@@ -493,8 +493,6 @@ type (
 		payload        []byte
 		moodType       MoodType
 		executeTime    time.Time
-
-		isUnique bool
 	}
 
 	// Subscribe command:subscribe
@@ -503,7 +501,6 @@ type (
 		moodType       MoodType
 
 		subscribeType subscribeType
-		broker        IBroker
 		handle        IConsumeHandle
 	}
 )

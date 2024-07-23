@@ -138,7 +138,6 @@ func doTimeout(ctx context.Context, f func() error) error {
 			}
 		}()
 		errCh <- f()
-		return
 	}()
 
 	select {
