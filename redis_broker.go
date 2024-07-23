@@ -56,7 +56,7 @@ type (
 		consumerHandlers    []IHandle
 		logJob              *Log
 		once                *sync.Once
-		asyncPool           *AsyncPool
+		asyncPool           *asyncPool
 		prefix              string
 		maxLen              int64
 		config              *BeanqConfig
@@ -98,7 +98,7 @@ func newRedisBroker(config *BeanqConfig) IBroker {
 		logger.New().Fatal(err.Error())
 	}
 
-	asyncPool := NewAsyncPool(config.ConsumerPoolSize)
+	asyncPool := newAsyncPool(config.ConsumerPoolSize)
 
 	broker := &RedisBroker{
 		client:             client,

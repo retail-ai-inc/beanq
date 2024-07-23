@@ -9,12 +9,12 @@ import (
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
-type AsyncPool struct {
+type asyncPool struct {
 	pool             *ants.Pool
 	captureException func(ctx context.Context, err any)
 }
 
-func NewAsyncPool(poolSize int) *AsyncPool {
+func newAsyncPool(poolSize int) *asyncPool {
 	pool, err := ants.NewPool(
 		poolSize,
 		ants.WithPreAlloc(true))
@@ -22,13 +22,13 @@ func NewAsyncPool(poolSize int) *AsyncPool {
 		logger.New().With("", err).Panic("goroutine pool error")
 	}
 
-	return &AsyncPool{
+	return &asyncPool{
 		pool:             pool,
 		captureException: defaultCaptureException,
 	}
 }
 
-func (a *AsyncPool) Execute(ctx context.Context, fn func(c context.Context) error, durations ...time.Duration) {
+func (a *asyncPool) Execute(ctx context.Context, fn func(c context.Context) error, durations ...time.Duration) {
 	var (
 		c      context.Context
 		cancel context.CancelFunc
@@ -58,7 +58,7 @@ func (a *AsyncPool) Execute(ctx context.Context, fn func(c context.Context) erro
 	}
 }
 
-func (a *AsyncPool) Release() {
+func (a *asyncPool) Release() {
 	a.pool.Release()
 }
 

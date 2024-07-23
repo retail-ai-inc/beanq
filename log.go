@@ -80,10 +80,10 @@ type ILog interface {
 
 type Log struct {
 	logs []ILog
-	pool *AsyncPool
+	pool *asyncPool
 }
 
-func NewLog(pool *AsyncPool, logs ...ILog) *Log {
+func NewLog(pool *asyncPool, logs ...ILog) *Log {
 	return &Log{
 		logs: logs,
 		pool: pool,
