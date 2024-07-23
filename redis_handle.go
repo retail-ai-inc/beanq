@@ -68,6 +68,7 @@ func (t *RedisHandle) Process(ctx context.Context) {
 	}
 }
 
+// nolint: unused
 func (t *RedisHandle) pubSubscribe(ctx context.Context) {
 	defer t.close()
 
