@@ -610,6 +610,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	for key, cs := range t.consumerHandlers {
+		cs := cs
 		// consume data
 		if err := t.worker(ctx, cs); err != nil {
 			t.captureException(ctx, err)
