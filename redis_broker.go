@@ -462,7 +462,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		}},
 		errGroupPool: &sync.Pool{New: func() any {
 			group := new(errgroup.Group)
-			group.SetLimit(3)
+			group.SetLimit(2)
 			return group
 		}},
 		once: sync.Once{},
