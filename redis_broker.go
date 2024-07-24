@@ -348,23 +348,22 @@ func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic stri
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
-	// TODO Transaction consistency should be considered here.
 
 	switch msg.MoodType {
 	case PUB_SUB:
 
 		key := MakeFilter(t.prefix)
 		member := msg.Id
-
 		streamKey := MakeStreamKey(pubSubscribe, t.prefix, msg.Channel, msg.Topic)
-
 		incr := 0.001
-		if err := t.client.ZRank(ctx, key, member).Err(); err != nil {
-			if errors.Is(err, redis.Nil) {
-				incr = float64(time.Now().Unix()) + incr
-			} else {
-				return fmt.Errorf("[RedisBroker.enqueue] ZRank error:%w", err)
-			}
+
+		cmd := t.client.ZScore(ctx, key, member)
+		if cmd.Val() > 0 {
+			t.client.ZIncrBy(ctx, key, incr, member)
+			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
+		}
+		if err := cmd.Err(); err != nil && !errors.Is(err, redis.Nil) {
+			return fmt.Errorf("[RedisBroker.enqueue] error: %w", err)
 		}
 
 		// record status, after idempotency check, before publish
@@ -375,27 +374,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 			return t.logJob.Archives(ctx, result)
 		})
 
-		if err := t.client.ZIncrBy(ctx, key, incr, member).Err(); err != nil {
-			return fmt.Errorf("[RedisBroker.enqueue] ZIncrBy error:%w", err)
-		}
-		timer := timex.TimerPool.Get(15 * time.Millisecond)
-		defer timex.TimerPool.Put(timer)
-		var index int64 = 0
-		for {
-			select {
-			case <-ctx.Done():
-				return fmt.Errorf("[RedisBroker.enqueue] Context error:%w", ctx.Err())
-			case <-timer.C:
-				timer.Reset(time.Duration(rand.Int63n(15)+30) * time.Millisecond)
-				if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())).Err(); err != nil {
-					if index < 3 {
-						index++
-						continue
-					}
-					return fmt.Errorf("[RedisBroker.enqueue] XAdd error:%w", err)
-				}
-				return nil
-			}
+		incr = float64(time.Now().Unix()) + incr
+		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.ZIncrBy(ctx, key, incr, member)
+			pipeliner.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap()))
+			return nil
+		})
+		if err != nil {
+			return err
 		}
 	case SEQUENTIAL:
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
