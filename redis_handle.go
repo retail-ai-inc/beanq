@@ -447,29 +447,37 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
-	deadline := time.Minute
+	deadline := time.Second * 5
 	deadlineTimer := time.NewTimer(deadline)
 	defer deadlineTimer.Stop()
+
+	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+	deadLetterTicker := time.NewTicker(t.deadLetterTickerDur)
+	defer deadLetterTicker.Stop()
+	r := t.resultPool.Get().(*ConsumerResult)
+	defer func() {
+		t.resultPool.Put(r)
+	}()
 
 	for {
 		timer.Reset(duration)
 		select {
-		case <-deadlineTimer.C:
-			// No new message before deadline
-			return
 		case <-ctx.Done():
 			logger.New().Info("Sequential Task Stop")
 			return
+		case <-deadlineTimer.C:
+			// No new message before deadline
+			return
 		case <-timer.C:
-			results, err := t.broker.client.XRangeN(ctx, stream, "-", "+", 100).Result()
+			count, err := t.broker.client.XLen(ctx, stream).Result()
 			if err != nil {
 				t.broker.captureException(ctx, err)
 				continue
 			}
-
-			if len(results) == 0 {
+			if count == 0 {
 				continue
 			}
+
 			// If there is new messages, reset the deadline.
 			deadlineTimer.Reset(deadline)
 
@@ -557,9 +565,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 							return nil
 						})
 
+						// fix data race
+						clone := *result
 						group.TryGo(func() error {
-							// fix data race
-							clone := *result
 							return t.broker.logJob.Archives(ctx, &clone)
 						})
 
@@ -570,6 +578,47 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					}
 				}
 			}()
+		case <-deadLetterTicker.C:
+			pendings := t.broker.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+				Stream: streamKey,
+				Group:  t.channel,
+				Start:  "-",
+				End:    "+",
+				Count:  100,
+			}).Val()
+
+			if len(pendings) <= 0 {
+				continue
+			}
+
+			for _, pending := range pendings {
+				// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
+				if pending.Idle > t.deadLetterIdleTime {
+					val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+					if len(val) <= 0 {
+						// the message is not in stream, but in the pending list. need to ack it.
+						t.broker.client.XAck(ctx, streamKey, t.channel, pending.ID)
+						continue
+					}
+
+					msg := messageToStruct(val[0])
+					r.FillInfoByMessage(msg)
+					r.EndTime = time.Now()
+					r.Retry = msg.Retry
+
+					r.RunTime = r.EndTime.Sub(r.BeginTime).String()
+					r.Level = ErrLevel
+					r.Info = "too long pending"
+
+					if err := t.broker.logJob.Archives(ctx, r); err != nil {
+						t.broker.captureException(ctx, err)
+					}
+
+					if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
+						t.broker.captureException(ctx, err)
+					}
+				}
+			}
 		}
 	}
 }
@@ -667,10 +716,10 @@ func (t *RedisHandle) close() error {
 			return nil
 		}
 	default:
+		close(t.closeCh)
 		if t.streamKey != "" {
 			t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
 		}
-		close(t.closeCh)
 	}
 
 	return nil

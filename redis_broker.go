@@ -563,6 +563,12 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
 			Consumer: consumerName,
@@ -578,9 +584,11 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 		consumerDicKey := MakeDynamicKey(t.prefix, channel)
 		// handle
 		for _, stream := range streams {
+			var messageIDs []string
 			for _, message := range stream.Messages {
 				// ack
 				t.client.XAck(ctx, discoveryStreamName, groupName, message.ID)
+				messageIDs = append(messageIDs, message.ID)
 				dynamicStream := message.Values["streamKey"].(string)
 				v, _ := t.consumerHandlerDic.LoadOrStore(consumerDicKey, newConcurrentHandlerMap())
 				handlerMap := v.(*concurrentHandlerMap)
@@ -600,6 +608,13 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 					})
 
 					handlerMap.Set(dynamicStream, handler)
+				}
+			}
+
+			// delete data from `stream`
+			if len(messageIDs) > 0 {
+				if err = t.client.XDel(ctx, discoveryStreamName, messageIDs...).Err(); err != nil {
+					t.captureException(ctx, fmt.Errorf("del message error: %w", err))
 				}
 			}
 		}
@@ -659,9 +674,9 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-sigs
+		cancel()
 		_ = t.client.Close()
 		t.asyncPool.Release()
-		cancel()
 		_ = logger.New().Sync()
 		done <- true
 	}()
