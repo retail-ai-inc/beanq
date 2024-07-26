@@ -152,12 +152,13 @@ func (t *RedisHandle) pubSubscribe(ctx context.Context) {
 					}
 					return nil
 				})
-
+				group.TryGo(func() error {
+					id := HashKey([]byte(message.Id), 50)
+					streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
+					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, vv.Values)).Err()
+				})
 				group.TryGo(func() error {
 					_, err := client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-						id := HashKey([]byte(message.Id), 50)
-						streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
-						pipeliner.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, vv.Values))
 						pipeliner.XAck(ctx, stream, t.channel, vv.ID)
 						pipeliner.XDel(ctx, stream, vv.ID)
 						return nil
