@@ -668,7 +668,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				r.FillInfoByMessage(msg)
 				r.EndTime = time.Now()
 				r.Retry = msg.Retry
-
+				r.Status = StatusDeadLetter
 				r.RunTime = r.EndTime.Sub(r.BeginTime).String()
 				r.Level = ErrLevel
 				r.Info = "too long pending"
