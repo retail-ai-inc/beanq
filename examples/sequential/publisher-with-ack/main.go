@@ -63,7 +63,7 @@ func main() {
 	}
 
 	// this is a single check for ACK
-	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
+	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
 	if err != nil {
 		panic(err)
 	}
