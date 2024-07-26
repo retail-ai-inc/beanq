@@ -185,36 +185,35 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.startConsuming(ctx)
 }
 
-func (c *Client) getAckStatus(ctx context.Context, channel, topic, id string, needPending bool) (*ConsumerResult, error) {
-	data, err := c.broker.checkStatus(ctx, channel, topic, id)
+func (c *Client) getAckStatus(ctx context.Context, channel, id string, needPending bool) (*ConsumerResult, error) {
+	data, err := c.broker.checkStatus(ctx, channel, id)
 	if err != nil {
 		return nil, err
 	}
-	var consumerResult = &ConsumerResult{}
 
 	if data == "" {
-		if needPending {
-			message, _ := c.broker.getMessageInQueue(ctx, channel, topic, id)
-			if message != nil {
-				consumerResult.FillInfoByMessage(message)
-				consumerResult.Status = StatusPending
-				return consumerResult, nil
-			}
-		}
-
 		return nil, nil
 	}
+	var consumerResult ConsumerResult
 
 	err = json.Unmarshal([]byte(data), &consumerResult)
 	if err != nil {
 		return nil, err
 	}
 
-	return consumerResult, nil
+	if needPending {
+		return &consumerResult, nil
+	}
+
+	if consumerResult.Status != StatusSuccess && consumerResult.Status != StatusFailed {
+		return nil, nil
+	}
+
+	return &consumerResult, nil
 }
 
-func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*ConsumerResult, error) {
-	return c.getAckStatus(ctx, channel, topic, id, true)
+func (c *Client) CheckAckStatus(ctx context.Context, channel, id string) (*ConsumerResult, error) {
+	return c.getAckStatus(ctx, channel, id, true)
 }
 
 // Ping this method can be called by user for checking the status of broker
@@ -569,7 +568,7 @@ func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
 
 	var pullAcknowledgement = func() (*ConsumerResult, error) {
 		// no need check pending status
-		result, err := s.client.getAckStatus(s.ctx, s.channel, s.topic, s.id, false)
+		result, err := s.client.getAckStatus(s.ctx, s.channel, s.id, false)
 		if err != nil {
 			return nil, err
 		}

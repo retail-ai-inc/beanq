@@ -550,11 +550,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 							Limit:      0,
 							Values:     vv.Values,
 						})
-						// set result for ack
-						_, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
-						if err != nil {
-							t.broker.captureException(ctx, err)
-						}
 
 						cancel()
 						group.TryGo(func() error {
@@ -605,7 +600,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					r.FillInfoByMessage(msg)
 					r.EndTime = time.Now()
 					r.Retry = msg.Retry
-
+					r.Status = StatusDeadLetter
 					r.RunTime = r.EndTime.Sub(r.BeginTime).String()
 					r.Level = ErrLevel
 					r.Info = "too long pending"
