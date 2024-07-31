@@ -360,7 +360,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 			result := &ConsumerResult{}
 			result.FillInfoByMessage(msg)
 			result.Status = StatusPrepare
-			return t.logJob.Archives(ctx, result)
+			return t.logJob.Archives(ctx, *result)
 		})
 
 		if err := t.client.ZIncrBy(ctx, key, incr, member).Err(); err != nil {
@@ -423,7 +423,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		result := &ConsumerResult{}
 		result.FillInfoByMessage(msg)
 		result.Status = StatusPublished
-		return t.logJob.Archives(ctx, result)
+		return t.logJob.Archives(ctx, *result)
 	})
 
 	return nil

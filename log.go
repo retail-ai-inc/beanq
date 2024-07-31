@@ -91,10 +91,10 @@ func NewLog(pool *asyncPool, logs ...ILog) *Log {
 	}
 }
 
-func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
+func (t *Log) Archives(ctx context.Context, result ConsumerResult) error {
 	for _, log := range t.logs {
 		nlog := log
-		if err := nlog.Archive(ctx, result); err != nil {
+		if err := nlog.Archive(ctx, &result); err != nil {
 			t.pool.captureException(ctx, err)
 		}
 	}
