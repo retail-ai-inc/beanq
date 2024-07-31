@@ -146,8 +146,7 @@ func (t *RedisHandle) pubSubscribe(ctx context.Context) {
 				client := rh.broker.client
 
 				group.TryGo(func() error {
-					clone := *result
-					if err := rh.broker.logJob.Archives(ctx, &clone); err != nil {
+					if err := rh.broker.logJob.Archives(ctx, *result); err != nil {
 						return fmt.Errorf("log error:%w", err)
 					}
 					return nil
@@ -269,8 +268,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 					return nil
 				})
 				group.TryGo(func() error {
-					clone := *result
-					return rh.broker.logJob.Archives(ctx, &clone)
+					return rh.broker.logJob.Archives(ctx, *result)
 				})
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
@@ -333,7 +331,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 						t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
 							clone.Status = StatusFailed
 							clone.Info = FlagInfo(fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack()))
-							return t.broker.logJob.Archives(ctx, &clone)
+							return t.broker.logJob.Archives(ctx, clone)
 						})
 						t.broker.captureException(ctx, p)
 					}
@@ -353,9 +351,8 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				result.BeginTime = time.Now()
 
 				// receive the message
-				clone := *result
 				t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-					return t.broker.logJob.Archives(ctx, &clone)
+					return t.broker.logJob.Archives(ctx, *result)
 				})
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -407,10 +404,9 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					}
 					return nil
 				})
-				clone = *result
 				group.TryGo(func() error {
 					// set the execution result
-					return rh.broker.logJob.Archives(ctx, &clone)
+					return rh.broker.logJob.Archives(ctx, *result)
 				})
 				if err := group.Wait(); err != nil {
 					t.broker.captureException(ctx, err)
@@ -506,9 +502,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						result.BeginTime = time.Now()
 
 						t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-							// fix data race
-							clone := *result
-							return t.broker.logJob.Archives(ctx, &clone)
+							return t.broker.logJob.Archives(ctx, *result)
 						})
 
 						sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -561,9 +555,8 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						})
 
 						// fix data race
-						clone := *result
 						group.TryGo(func() error {
-							return t.broker.logJob.Archives(ctx, &clone)
+							return t.broker.logJob.Archives(ctx, *result)
 						})
 
 						if err := group.Wait(); err != nil {
@@ -605,7 +598,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					r.Level = ErrLevel
 					r.Info = "too long pending"
 
-					if err := t.broker.logJob.Archives(ctx, r); err != nil {
+					if err := t.broker.logJob.Archives(ctx, *r); err != nil {
 						t.broker.captureException(ctx, err)
 					}
 
@@ -673,7 +666,7 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				r.Level = ErrLevel
 				r.Info = "too long pending"
 
-				if err := t.broker.logJob.Archives(ctx, r); err != nil {
+				if err := t.broker.logJob.Archives(ctx, *r); err != nil {
 					t.broker.captureException(ctx, err)
 				}
 
