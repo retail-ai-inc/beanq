@@ -195,7 +195,14 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 
 // Archive log
 func (t *RedisBroker) Archive(ctx context.Context, result *ConsumerResult) error {
-	// redis only record result data
+	// update status
+	// keep 6 hours for cache
+	_, err := t.client.SetEX(ctx, MakeStatusKey(t.prefix, result.Channel, result.Id), result, time.Hour*6).Result()
+	if err != nil {
+		t.captureException(ctx, err)
+	}
+
+	// only record result data for 'success' and 'fail' log.
 	if result.Status != StatusFailed && result.Status != StatusSuccess {
 		return nil
 	}
@@ -317,8 +324,8 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) error {
 	}
 }
 
-func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id string) (string, error) {
-	stringCmd := t.client.Get(ctx, strings.Join([]string{t.prefix, channel, topic, "status", id}, ":"))
+func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (string, error) {
+	stringCmd := t.client.Get(ctx, MakeStatusKey(t.prefix, channel, id))
 	if stringCmd.Err() != nil {
 		if errors.Is(stringCmd.Err(), redis.Nil) {
 			return "", nil
@@ -326,25 +333,6 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, topic string, id
 		return "", stringCmd.Err()
 	}
 	return stringCmd.Val(), nil
-}
-
-func (t *RedisBroker) getMessageInQueue(ctx context.Context, channel, topic string, id string) (*Message, error) {
-	streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, channel, topic)
-	results, err := t.client.XRangeN(ctx, streamKey, "-", "+", 100).Result()
-	if err != nil {
-		if errors.Is(err, redis.Nil) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	for _, result := range results {
-		message := messageToStruct(result)
-		if message.Id == id {
-			return message, nil
-		}
-	}
-	return nil, nil
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
@@ -371,7 +359,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 			result := &ConsumerResult{}
 			result.FillInfoByMessage(msg)
 			result.Status = StatusPrepare
-			return t.logJob.Archives(ctx, result)
+			return t.logJob.Archives(ctx, *result)
 		})
 
 		incr = float64(time.Now().Unix()) + incr
@@ -421,7 +409,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		result := &ConsumerResult{}
 		result.FillInfoByMessage(msg)
 		result.Status = StatusPublished
-		return t.logJob.Archives(ctx, result)
+		return t.logJob.Archives(ctx, *result)
 	})
 
 	return nil
@@ -549,6 +537,12 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	}
 
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		streams, err := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    groupName,
 			Consumer: consumerName,
@@ -564,9 +558,11 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 		consumerDicKey := MakeDynamicKey(t.prefix, channel)
 		// handle
 		for _, stream := range streams {
+			var messageIDs []string
 			for _, message := range stream.Messages {
 				// ack
 				t.client.XAck(ctx, discoveryStreamName, groupName, message.ID)
+				messageIDs = append(messageIDs, message.ID)
 				dynamicStream := message.Values["streamKey"].(string)
 				v, _ := t.consumerHandlerDic.LoadOrStore(consumerDicKey, newConcurrentHandlerMap())
 				handlerMap := v.(*concurrentHandlerMap)
@@ -586,6 +582,13 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 					})
 
 					handlerMap.Set(dynamicStream, handler)
+				}
+			}
+
+			// delete data from `stream`
+			if len(messageIDs) > 0 {
+				if err = t.client.XDel(ctx, discoveryStreamName, messageIDs...).Err(); err != nil {
+					t.captureException(ctx, fmt.Errorf("del message error: %w", err))
 				}
 			}
 		}
@@ -645,9 +648,9 @@ func (t *RedisBroker) waitSignal(cancel context.CancelFunc) <-chan bool {
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		<-sigs
+		cancel()
 		_ = t.client.Close()
 		t.asyncPool.Release()
-		cancel()
 		_ = logger.New().Sync()
 		done <- true
 	}()

@@ -60,12 +60,13 @@ const (
 	SuccessInfo FlagInfo = "success"
 	FailedInfo  FlagInfo = "failed"
 
-	StatusPrepare   Status = "prepare"
-	StatusPublished Status = "published"
-	StatusPending   Status = "pending"
-	StatusReceived  Status = "received"
-	StatusSuccess   Status = "success"
-	StatusFailed    Status = "failed"
+	StatusPrepare    Status = "prepare"
+	StatusPublished  Status = "published"
+	StatusPending    Status = "pending"
+	StatusReceived   Status = "received"
+	StatusSuccess    Status = "success"
+	StatusFailed     Status = "failed"
+	StatusDeadLetter Status = "dead_letter"
 
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"
@@ -90,10 +91,10 @@ func NewLog(pool *asyncPool, logs ...ILog) *Log {
 	}
 }
 
-func (t *Log) Archives(ctx context.Context, result *ConsumerResult) error {
+func (t *Log) Archives(ctx context.Context, result ConsumerResult) error {
 	for _, log := range t.logs {
 		nlog := log
-		if err := nlog.Archive(ctx, result); err != nil {
+		if err := nlog.Archive(ctx, &result); err != nil {
 			t.pool.captureException(ctx, err)
 		}
 	}
