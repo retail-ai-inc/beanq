@@ -133,7 +133,7 @@ func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err 
 	}
 }
 
-func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (map[string]any, error) {
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (*ConsumerResult, error) {
 
 	hid := HashKey(stringx.StringToByte(id), 50)
 	key := strings.Join([]string{t.prefix, channel, topic, cast.ToString(hid)}, ":")
@@ -185,7 +185,15 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 					if err := t.client.XDel(ctx, key, message.ID).Err(); err != nil {
 						return nil, fmt.Errorf("[RedisBroker.monitor] XDel error:%w", err)
 					}
-					return message.Values, nil
+					result := new(ConsumerResult)
+					msg := messageToStruct(message.Values)
+					result.FillInfoByMessage(msg)
+					status := StatusSuccess
+					if v, ok := message.Values["status"]; ok {
+						status = v.(string)
+					}
+					result.Status = status
+					return result, nil
 				}
 			}
 			lastId = message.ID
@@ -365,7 +373,9 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		incr = float64(time.Now().Unix()) + incr
 		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			pipeliner.ZIncrBy(ctx, key, incr, member)
-			pipeliner.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap()))
+			message := msg.ToMap()
+			message["status"] = StatusPrepare
+			pipeliner.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message))
 			return nil
 		})
 		if err != nil {

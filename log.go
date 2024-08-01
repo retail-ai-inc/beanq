@@ -10,7 +10,7 @@ import (
 type (
 	FlagInfo string
 	LevelMsg string
-	Status   string
+	Status   = string
 
 	ConsumerResult struct {
 		Status  Status

@@ -28,7 +28,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/stringx"
@@ -271,35 +270,12 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
-func (b *BQClient) PPublishInSequential(ctx context.Context, channel, topic string, payload []byte) *SequentialCmd {
-	cmd := &Publish{
-		channel:  channel,
-		topic:    topic,
-		payload:  payload,
-		moodType: PUB_SUB,
-	}
-	sequentialCmd := &SequentialCmd{
-		err:     nil,
-		channel: channel,
-		topic:   topic,
-		ctx:     ctx,
-		client:  b.client,
-	}
-	if err := b.process(cmd); err != nil {
-		sequentialCmd.err = err
-	} else {
-		sequentialCmd.id = b.id
-	}
-
-	return sequentialCmd
-}
-
 func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
 	cmd := &Publish{
 		channel:  channel,
 		topic:    topic,
 		payload:  payload,
-		moodType: SEQUENTIAL,
+		moodType: PUB_SUB,
 	}
 	sequentialCmd := &SequentialCmd{
 		err:     nil,
@@ -444,9 +420,9 @@ func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandl
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
-		moodType:      SEQUENTIAL,
+		moodType:      PUB_SUB,
 		handle:        handle,
-		subscribeType: sequentialSubscribe,
+		subscribeType: pubSubscribe,
 	}
 	if err := t(cmd); err != nil {
 		return nil, err
@@ -467,20 +443,6 @@ func (t cmdAble) PPublish(channel, topic string, payload []byte) error {
 		return err
 	}
 	return nil
-}
-
-func (t cmdAble) PSubscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	cmd := &Subscribe{
-		channel:       channel,
-		topic:         topic,
-		moodType:      PUB_SUB,
-		handle:        handle,
-		subscribeType: pubSubscribe,
-	}
-	if err := t(cmd); err != nil {
-		return nil, err
-	}
-	return cmd, nil
 }
 
 func (t cmdAble) PUnSubscribe() {}
@@ -536,8 +498,8 @@ func (s *SequentialCmd) Error() error {
 	return s.err
 }
 
-// test pub/sub
-func (s *SequentialCmd) WaitingPubAck(ctx context.Context, id string) (any, error) {
+// WaitingAck ...
+func (s *SequentialCmd) WaitingAck(ctx context.Context, id string) (*ConsumerResult, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -546,54 +508,6 @@ func (s *SequentialCmd) WaitingPubAck(ctx context.Context, id string) (any, erro
 		return nil, err
 	}
 	return nack, nil
-}
-
-// WaitingAck ...
-func (s *SequentialCmd) WaitingAck() (ack *ConsumerResult, err error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-	pollIntervalBase := 5 * time.Millisecond
-	maxInterval := 500 * time.Millisecond
-	nextPollInterval := func() time.Duration {
-		// Add 10% jitter.
-		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
-		// Double and clamp for next time.
-		pollIntervalBase *= 2
-		if pollIntervalBase > maxInterval {
-			pollIntervalBase = maxInterval
-		}
-		return interval
-	}
-
-	var pullAcknowledgement = func() (*ConsumerResult, error) {
-		// no need check pending status
-		result, err := s.client.getAckStatus(s.ctx, s.channel, s.id, false)
-		if err != nil {
-			return nil, err
-		}
-
-		return result, nil
-	}
-
-	timer := time.NewTimer(nextPollInterval())
-	defer timer.Stop()
-	for {
-		if ack, err = pullAcknowledgement(); err != nil {
-			return ack, err
-		}
-		if ack != nil {
-			return ack, nil
-		}
-
-		select {
-		case <-s.ctx.Done():
-			return nil, s.ctx.Err()
-		case <-timer.C:
-			// pull the data from global
-			timer.Reset(nextPollInterval())
-		}
-	}
 }
 
 func DynamicKeyOpt(key string) DynamicOption {
