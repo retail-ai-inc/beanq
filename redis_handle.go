@@ -146,16 +146,17 @@ func (t *RedisHandle) pubSubscribe(ctx context.Context) {
 				client := rh.broker.client
 
 				group.TryGo(func() error {
-					clone := *result
-					if err := rh.broker.logJob.Archives(ctx, &clone); err != nil {
+					if err := rh.broker.logJob.Archives(ctx, *result); err != nil {
 						return fmt.Errorf("log error:%w", err)
 					}
 					return nil
 				})
 				group.TryGo(func() error {
 					id := HashKey([]byte(message.Id), 50)
+					val := vv.Values
+					val["status"] = result.Status
 					streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
-					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, vv.Values)).Err()
+					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
 				})
 				group.TryGo(func() error {
 					_, err := client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
@@ -258,8 +259,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 					return nil
 				})
 				group.TryGo(func() error {
-					clone := *result
-					return rh.broker.logJob.Archives(ctx, &clone)
+					return rh.broker.logJob.Archives(ctx, *result)
 				})
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
@@ -322,7 +322,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 						t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
 							clone.Status = StatusFailed
 							clone.Info = FlagInfo(fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack()))
-							return t.broker.logJob.Archives(ctx, &clone)
+							return t.broker.logJob.Archives(ctx, clone)
 						})
 						t.broker.captureException(ctx, p)
 					}
@@ -342,9 +342,8 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				result.BeginTime = time.Now()
 
 				// receive the message
-				clone := *result
 				t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-					return t.broker.logJob.Archives(ctx, &clone)
+					return t.broker.logJob.Archives(ctx, *result)
 				})
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -396,10 +395,9 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					}
 					return nil
 				})
-				clone = *result
 				group.TryGo(func() error {
 					// set the execution result
-					return rh.broker.logJob.Archives(ctx, &clone)
+					return rh.broker.logJob.Archives(ctx, *result)
 				})
 				if err := group.Wait(); err != nil {
 					t.broker.captureException(ctx, err)
@@ -436,29 +434,37 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 	timer := time.NewTimer(duration)
 	defer timer.Stop()
 
-	deadline := time.Minute
+	deadline := time.Second * 5
 	deadlineTimer := time.NewTimer(deadline)
 	defer deadlineTimer.Stop()
+
+	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+	deadLetterTicker := time.NewTicker(t.deadLetterTickerDur)
+	defer deadLetterTicker.Stop()
+	r := t.resultPool.Get().(*ConsumerResult)
+	defer func() {
+		t.resultPool.Put(r)
+	}()
 
 	for {
 		timer.Reset(duration)
 		select {
-		case <-deadlineTimer.C:
-			// No new message before deadline
-			return
 		case <-ctx.Done():
 			logger.New().Info("Sequential Task Stop")
 			return
+		case <-deadlineTimer.C:
+			// No new message before deadline
+			return
 		case <-timer.C:
-			results, err := t.broker.client.XRangeN(ctx, stream, "-", "+", 100).Result()
+			count, err := t.broker.client.XLen(ctx, stream).Result()
 			if err != nil {
 				t.broker.captureException(ctx, err)
 				continue
 			}
-
-			if len(results) == 0 {
+			if count == 0 {
 				continue
 			}
+
 			// If there is new messages, reset the deadline.
 			deadlineTimer.Reset(deadline)
 
@@ -487,9 +493,7 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 						result.BeginTime = time.Now()
 
 						t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-							// fix data race
-							clone := *result
-							return t.broker.logJob.Archives(ctx, &clone)
+							return t.broker.logJob.Archives(ctx, *result)
 						})
 
 						sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -531,11 +535,6 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 							Limit:      0,
 							Values:     vv.Values,
 						})
-						// set result for ack
-						_, err = t.broker.client.SetNX(ctx, strings.Join([]string{t.broker.prefix, t.channel, t.topic, "status", result.Id}, ":"), result, time.Hour).Result()
-						if err != nil {
-							t.broker.captureException(ctx, err)
-						}
 
 						cancel()
 						group.TryGo(func() error {
@@ -546,10 +545,9 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 							return nil
 						})
 
+						// fix data race
 						group.TryGo(func() error {
-							// fix data race
-							clone := *result
-							return t.broker.logJob.Archives(ctx, &clone)
+							return t.broker.logJob.Archives(ctx, *result)
 						})
 
 						if err := group.Wait(); err != nil {
@@ -559,6 +557,47 @@ func (t *RedisHandle) runSequentialSubscribe(ctx context.Context) {
 					}
 				}
 			}()
+		case <-deadLetterTicker.C:
+			pendings := t.broker.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+				Stream: streamKey,
+				Group:  t.channel,
+				Start:  "-",
+				End:    "+",
+				Count:  100,
+			}).Val()
+
+			if len(pendings) <= 0 {
+				continue
+			}
+
+			for _, pending := range pendings {
+				// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
+				if pending.Idle > t.deadLetterIdleTime {
+					val := t.broker.client.XRangeN(ctx, streamKey, pending.ID, "+", 1).Val()
+					if len(val) <= 0 {
+						// the message is not in stream, but in the pending list. need to ack it.
+						t.broker.client.XAck(ctx, streamKey, t.channel, pending.ID)
+						continue
+					}
+
+					msg := messageToStruct(val[0])
+					r.FillInfoByMessage(msg)
+					r.EndTime = time.Now()
+					r.Retry = msg.Retry
+					r.Status = StatusDeadLetter
+					r.RunTime = r.EndTime.Sub(r.BeginTime).String()
+					r.Level = ErrLevel
+					r.Info = "too long pending"
+
+					if err := t.broker.logJob.Archives(ctx, *r); err != nil {
+						t.broker.captureException(ctx, err)
+					}
+
+					if err := t.broker.client.XDel(ctx, streamKey, val[0].ID).Err(); err != nil {
+						t.broker.captureException(ctx, err)
+					}
+				}
+			}
 		}
 	}
 }
@@ -613,12 +652,12 @@ func (t *RedisHandle) DeadLetter(ctx context.Context) error {
 				r.FillInfoByMessage(msg)
 				r.EndTime = time.Now()
 				r.Retry = msg.Retry
-
+				r.Status = StatusDeadLetter
 				r.RunTime = r.EndTime.Sub(r.BeginTime).String()
 				r.Level = ErrLevel
 				r.Info = "too long pending"
 
-				if err := t.broker.logJob.Archives(ctx, r); err != nil {
+				if err := t.broker.logJob.Archives(ctx, *r); err != nil {
 					t.broker.captureException(ctx, err)
 				}
 
@@ -656,10 +695,10 @@ func (t *RedisHandle) close() error {
 			return nil
 		}
 	default:
+		close(t.closeCh)
 		if t.streamKey != "" {
 			t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
 		}
-		close(t.closeCh)
 	}
 
 	return nil

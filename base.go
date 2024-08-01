@@ -82,6 +82,11 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 	return makeKey(prefix, channel, topic, stream)
 }
 
+// MakeStatusKey create key for type string
+func MakeStatusKey(prefix, channel, id string) string {
+	return makeKey(prefix, channel, "status", id)
+}
+
 // MakeDynamicKey create key for dynamic
 func MakeDynamicKey(prefix, channel string) string {
 	if channel == "" {
