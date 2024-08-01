@@ -151,29 +151,20 @@ func (t *RedisHandle) pubSubscribe(ctx context.Context) {
 					}
 					return nil
 				})
-
 				group.TryGo(func() error {
-					// join in hash stream
 					id := HashKey([]byte(message.Id), 50)
+					val := vv.Values
+					val["status"] = result.Status
 					streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
-					addCmd := client.XAdd(
-						ctx,
-						redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, vv.Values),
-					)
-					if err := addCmd.Err(); err != nil {
-						return fmt.Errorf("add flake error:%w", err)
-					}
-					return nil
+					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
 				})
-
 				group.TryGo(func() error {
-					if err := client.XAck(ctx, stream, t.channel, vv.ID).Err(); err != nil {
-						return fmt.Errorf("ack error:%w", err)
-					}
-					if err := client.XDel(ctx, stream, vv.ID).Err(); err != nil {
-						return fmt.Errorf("xdel error:%w", err)
-					}
-					return nil
+					_, err := client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+						pipeliner.XAck(ctx, stream, t.channel, vv.ID)
+						pipeliner.XDel(ctx, stream, vv.ID)
+						return nil
+					})
+					return err
 				})
 
 				if err := group.Wait(); err != nil {

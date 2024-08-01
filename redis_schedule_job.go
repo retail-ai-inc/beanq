@@ -161,7 +161,7 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 			}
 			return Unexpired
 
-		})
+		}, timeUnit)
 
 		if err != nil {
 			if !errors.Is(err, Unexpired) {
