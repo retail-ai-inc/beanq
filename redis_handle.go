@@ -319,12 +319,12 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					if p := recover(); p != nil {
 						// receive the message
 						clone := *result
-						t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
+						rh.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
 							clone.Status = StatusFailed
 							clone.Info = FlagInfo(fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack()))
-							return t.broker.logJob.Archives(ctx, clone)
+							return rh.broker.logJob.Archives(ctx, clone)
 						})
-						t.broker.captureException(ctx, p)
+						rh.broker.captureException(ctx, p)
 					}
 				}()
 
@@ -342,8 +342,8 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				result.BeginTime = time.Now()
 
 				// receive the message
-				t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-					return t.broker.logJob.Archives(ctx, *result)
+				rh.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
+					return rh.broker.logJob.Archives(ctx, *result)
 				})
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
@@ -386,7 +386,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				})
 
 				group.TryGo(func() error {
-					if err := client.XAck(ctx, stream, t.channel, vv.ID).Err(); err != nil {
+					if err := client.XAck(ctx, stream, rh.channel, vv.ID).Err(); err != nil {
 						return err
 					}
 					if err := client.XDel(ctx, stream, vv.ID).Err(); err != nil {
@@ -399,7 +399,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					return rh.broker.logJob.Archives(ctx, *result)
 				})
 				if err := group.Wait(); err != nil {
-					t.broker.captureException(ctx, err)
+					rh.broker.captureException(ctx, err)
 					return
 				}
 			}(msg, t)
