@@ -151,9 +151,9 @@ func (t *RedisHandle) pubSubscribe(ctx context.Context) {
 					}
 					return nil
 				})
+				val := vv.Values
 				group.TryGo(func() error {
 					id := HashKey([]byte(message.Id), 50)
-					val := vv.Values
 					val["status"] = result.Status
 					streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
 					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
@@ -286,7 +286,6 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, 20, 1*time.Minute)
 
 	for {
-
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 		if err := cmd.Err(); err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -309,7 +308,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 
 		var wait sync.WaitGroup
 		for _, msg := range messages {
-
+			msg := msg
 			wait.Add(1)
 			go func(vv redis.XMessage, rh *RedisHandle) {
 				result := rh.resultPool.Get().(*ConsumerResult)
@@ -342,10 +341,11 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				result.BeginTime = time.Now()
 
 				// receive the message
+				clone := *result
 				rh.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-					return rh.broker.logJob.Archives(ctx, *result)
-				})
 
+					return rh.broker.logJob.Archives(ctx, clone)
+				})
 				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
 
 				retry, err := RetryInfo(sessionCtx, func() error {
@@ -376,6 +376,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				cancel()
 				// ------------------------
 				client := rh.broker.client
+
 				group.TryGo(func() error {
 					// join in hash stream
 					id := HashKey([]byte(message.Id), 50)
