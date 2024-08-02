@@ -186,8 +186,8 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	for {
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 		if err := cmd.Err(); err != nil {
-			if errors.Is(err, context.Canceled) {
-				logger.New().Info("Main Task Stop")
+			if errors.Is(err, context.Canceled) || errors.Is(err, redis.ErrClosed) {
+				logger.New().Info("Channel:", t.channel, " Topic:", t.topic, " Main Task Stop")
 				return
 			}
 			if !errors.Is(err, redis.Nil) {
@@ -288,8 +288,8 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 	for {
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
 		if err := cmd.Err(); err != nil {
-			if errors.Is(err, context.Canceled) {
-				logger.New().Info("Pub/Sub Task Stop")
+			if errors.Is(err, context.Canceled) || errors.Is(err, redis.ErrClosed) {
+				logger.New().Info("Channel:", t.channel, " Topic:", t.topic, " Pub/Sub Task Stop")
 				return
 			}
 			if !errors.Is(err, redis.Nil) {
