@@ -379,11 +379,10 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				group.TryGo(func() error {
 					// join in hash stream
 					id := HashKey([]byte(message.Id), 50)
-					addCmd := client.XAdd(
-						ctx,
-						redisx.NewZAddArgs(strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":"), "", "*", 100, 0, vv.Values),
-					)
-					return addCmd.Err()
+					val := vv.Values
+					val["status"] = result.Status
+					streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
+					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
 				})
 
 				group.TryGo(func() error {
