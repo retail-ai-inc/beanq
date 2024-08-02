@@ -310,7 +310,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 		for _, msg := range messages {
 			msg := msg
 			wait.Add(1)
-			go func(vv redis.XMessage, rh *RedisHandle) {
+			go func(id string, vv map[string]any, rh *RedisHandle) {
 				result := rh.resultPool.Get().(*ConsumerResult)
 				group := rh.errGroupPool.Get().(*errgroup.Group)
 
@@ -334,7 +334,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 
 				}()
 
-				message := messageToStruct(vv.Values)
+				message := messageToStruct(vv)
 
 				result.FillInfoByMessage(message)
 				result.Status = StatusReceived
@@ -377,20 +377,23 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				// ------------------------
 				client := rh.broker.client
 
-				group.TryGo(func() error {
-					// join in hash stream
-					id := HashKey([]byte(message.Id), 50)
-					val := vv.Values
-					val["status"] = result.Status
-					streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(id)}, ":")
-					return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
-				})
+				{
+					// Deep copy of `val` variable from `vv` and scope control
+					val := deepCopyMap(vv)
+					group.TryGo(func() error {
+						// join in hash stream
+						hid := HashKey([]byte(message.Id), 50)
+						val["status"] = result.Status
+						streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(hid)}, ":")
+						return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
+					})
+				}
 
 				group.TryGo(func() error {
-					if err := client.XAck(ctx, stream, rh.channel, vv.ID).Err(); err != nil {
+					if err := client.XAck(ctx, stream, rh.channel, id).Err(); err != nil {
 						return err
 					}
-					if err := client.XDel(ctx, stream, vv.ID).Err(); err != nil {
+					if err := client.XDel(ctx, stream, id).Err(); err != nil {
 						return err
 					}
 					return nil
@@ -403,7 +406,7 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					rh.broker.captureException(ctx, err)
 					return
 				}
-			}(msg, t)
+			}(msg.ID, msg.Values, t)
 		}
 		wait.Wait()
 	}
