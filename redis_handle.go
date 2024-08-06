@@ -59,12 +59,10 @@ func (t *RedisHandle) Topic() string {
 
 func (t *RedisHandle) Process(ctx context.Context) {
 	switch t.subscribeType {
-	case pubSubscribe:
-		t.pubSeqSubscribe(ctx)
 	case normalSubscribe:
 		t.runSubscribe(ctx)
 	case sequentialSubscribe:
-		t.runSequentialSubscribe(ctx)
+		t.pubSeqSubscribe(ctx)
 	}
 }
 

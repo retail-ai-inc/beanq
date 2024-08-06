@@ -346,11 +346,11 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (stri
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 
 	switch msg.MoodType {
-	case PUB_SUB:
+	case SEQUENTIAL:
 
 		key := MakeFilter(t.prefix)
 		member := msg.Id
-		streamKey := MakeStreamKey(pubSubscribe, t.prefix, msg.Channel, msg.Topic)
+		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 		incr := 0.001
 
 		cmd := t.client.ZScore(ctx, key, member)
@@ -380,24 +380,6 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		})
 		if err != nil {
 			return err
-		}
-	case SEQUENTIAL:
-		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-
-		if dynamicOn {
-			err := t.client.XAdd(ctx, &redis.XAddArgs{
-				Stream: "dynamic_discovery:" + msg.Channel,
-				Values: map[string]interface{}{"streamKey": streamKey},
-			}).Err()
-			if err != nil {
-				return fmt.Errorf("[RedisBroker.enqueue] seq adding dynamic key error:%w", err)
-			}
-		}
-
-		xAddArgs := redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, msg.ToMap())
-		err := t.client.XAdd(ctx, xAddArgs).Err()
-		if err != nil {
-			return fmt.Errorf("[RedisBroker.enqueue] seq xadd error:%w", err)
 		}
 	case NORMAL:
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())

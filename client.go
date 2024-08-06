@@ -41,7 +41,6 @@ type subscribeType int
 const (
 	normalSubscribe     = subscribeType(1)
 	sequentialSubscribe = subscribeType(2)
-	pubSubscribe        = subscribeType(3)
 )
 
 // MoodType message type
@@ -59,7 +58,6 @@ const (
 	NORMAL     MoodType = "normal"
 	DELAY      MoodType = "delay"
 	SEQUENTIAL MoodType = "sequential"
-	PUB_SUB    MoodType = "pub_sub"
 )
 
 type (
@@ -275,7 +273,7 @@ func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *S
 		channel:     channel,
 		topic:       topic,
 		payload:     payload,
-		moodType:    PUB_SUB,
+		moodType:    SEQUENTIAL,
 		executeTime: time.Now(),
 	}
 	sequentialCmd := &SequentialCmd{
@@ -421,9 +419,9 @@ func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandl
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
-		moodType:      PUB_SUB,
+		moodType:      SEQUENTIAL,
 		handle:        handle,
-		subscribeType: pubSubscribe,
+		subscribeType: sequentialSubscribe,
 	}
 	if err := t(cmd); err != nil {
 		return nil, err
@@ -437,7 +435,7 @@ func (t cmdAble) PPublish(channel, topic string, payload []byte) error {
 		topic:       topic,
 		payload:     payload,
 		executeTime: time.Now(),
-		moodType:    PUB_SUB,
+		moodType:    SEQUENTIAL,
 	}
 
 	if err := t(cmd); err != nil {
