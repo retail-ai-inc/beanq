@@ -54,7 +54,7 @@ func main() {
 		b, _ := json.Marshal(m)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
-		result, err := pub.BQ().WithContext(ctx).PublishInSequential("delay-channel", "order-topic", b).WaitingAck(ctx, cast.ToString(i))
+		result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("delay-channel", "order-topic", b).WaitingAck(ctx, cast.ToString(i))
 		if err != nil {
 			logger.New().Error(err)
 		} else {

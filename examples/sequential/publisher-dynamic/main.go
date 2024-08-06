@@ -86,7 +86,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
 
-		r, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PPublishInSequential(ctx, "default-delay-channel", "mynewstream", b).WaitingPubAck(ctx, cast.ToString(i))
+		r, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingAck(ctx, cast.ToString(i))
 		if err != nil {
 			logger.New().Error(err)
 		}

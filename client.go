@@ -272,10 +272,11 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 
 func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
 	cmd := &Publish{
-		channel:  channel,
-		topic:    topic,
-		payload:  payload,
-		moodType: PUB_SUB,
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
+		moodType:    PUB_SUB,
+		executeTime: time.Now(),
 	}
 	sequentialCmd := &SequentialCmd{
 		err:     nil,

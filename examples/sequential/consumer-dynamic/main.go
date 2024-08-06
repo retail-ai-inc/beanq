@@ -83,7 +83,7 @@ func main() {
 	// }()
 
 	ctx := context.Background()
-	_, err := csm.BQ().WithContext(ctx).PSubscribe("default-delay-channel", "mynewstream", beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("default-delay-channel", "mynewstream", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			// time.Sleep(time.Second * time.Duration(rand.Int63n(5)))
 			logger.New().Info("default handler ", message.Id)

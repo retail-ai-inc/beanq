@@ -201,3 +201,11 @@ func HashKey(id []byte, flake uint64) uint64 {
 	hashKey = hashKey % flake
 	return hashKey
 }
+
+func deepCopyMap(oldMap map[string]any) map[string]any {
+	newMap := make(map[string]any, len(oldMap))
+	for key, val := range oldMap {
+		newMap[key] = val
+	}
+	return newMap
+}
