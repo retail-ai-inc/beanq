@@ -305,7 +305,11 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 
 		b.waitAck = cmd.moodType == SEQUENTIAL
-
+		if cmd.moodType == SEQUENTIAL {
+			if b.id == "" {
+				return errors.New("please configure a unique ID")
+			}
+		}
 		// make message
 		message := &Message{
 			Topic:       topic,

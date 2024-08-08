@@ -8,8 +8,8 @@ import (
 )
 
 type (
-	FlagInfo string
-	LevelMsg string
+	FlagInfo = string
+	LevelMsg = string
 	Status   = string
 
 	ConsumerResult struct {

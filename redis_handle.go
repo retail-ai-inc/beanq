@@ -62,7 +62,7 @@ func (t *RedisHandle) Process(ctx context.Context) {
 	case normalSubscribe:
 		t.runSubscribe(ctx)
 	case sequentialSubscribe:
-		t.pubSeqSubscribe(ctx)
+		t.runSeqSubscribe(ctx)
 	}
 }
 
@@ -277,7 +277,7 @@ func (t *RedisHandle) Schedule(ctx context.Context) error {
 	return nil
 }
 
-func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
+func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 	defer t.close()
 
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
@@ -309,8 +309,11 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 			msg := msg
 			wait.Add(1)
 			go func(id string, vv map[string]any, rh *RedisHandle) {
-				result := rh.resultPool.Get().(*ConsumerResult)
+				result1 := rh.resultPool.Get().(*ConsumerResult)
 				group := rh.errGroupPool.Get().(*errgroup.Group)
+
+				message := messageToStruct(vv)
+				result := result1.FillInfoByMessage(message)
 
 				defer func() {
 					if p := recover(); p != nil {
@@ -318,34 +321,43 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 						clone := *result
 						rh.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
 							clone.Status = StatusFailed
-							clone.Info = FlagInfo(fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack()))
+							clone.Info = fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack())
 							return rh.broker.logJob.Archives(ctx, clone)
 						})
 						rh.broker.captureException(ctx, p)
 					}
-				}()
-
-				defer func() {
 					wait.Done()
 					rh.errGroupPool.Put(group)
 					rh.resultPool.Put(result)
-
 				}()
 
-				message := messageToStruct(vv)
+				ch := make(chan ConsumerResult, 2)
+				// Collaborative synchronization of data to prevent data pollution
+				go func(nch chan ConsumerResult) {
+					index := 0
+					for {
+						if index == 2 {
+							return
+						}
+						select {
+						case v, ok := <-nch:
+							if ok {
+								index++
+								if err := rh.broker.logJob.Archives(ctx, v); err != nil {
+									rh.broker.captureException(ctx, err)
+								}
+							}
+						}
+					}
+				}(ch)
 
-				result.FillInfoByMessage(message)
 				result.Status = StatusReceived
 				result.BeginTime = time.Now()
 
 				// receive the message
-				clone := *result
-				rh.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
+				ch <- *result
 
-					return rh.broker.logJob.Archives(ctx, clone)
-				})
 				sessionCtx, cancel := context.WithTimeout(context.Background(), message.TimeToRun)
-
 				retry, err := RetryInfo(sessionCtx, func() error {
 					if err := rh.subscribe.Handle(sessionCtx, message); err != nil {
 						if h, ok := rh.subscribe.(IConsumeCancel); ok {
@@ -356,15 +368,14 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 					return nil
 				}, message.Retry)
 
+				result.Status = StatusSuccess
 				if err != nil {
 					if h, ok := rh.subscribe.(IConsumeError); ok {
 						h.Error(sessionCtx, err)
 					}
 					result.Level = ErrLevel
-					result.Info = FlagInfo(err.Error())
+					result.Info = err.Error()
 					result.Status = StatusFailed
-				} else {
-					result.Status = StatusSuccess
 				}
 
 				result.EndTime = time.Now()
@@ -374,36 +385,22 @@ func (t *RedisHandle) pubSeqSubscribe(ctx context.Context) {
 				cancel()
 				// ------------------------
 				client := rh.broker.client
-
-				{
-					// Deep copy of `val` variable from `vv` and scope control
-					val := deepCopyMap(vv)
-					group.TryGo(func() error {
-						// join in hash stream
-						hid := HashKey([]byte(message.Id), 50)
-						val["status"] = result.Status
-						streamkey := strings.Join([]string{rh.broker.prefix, rh.channel, rh.topic, cast.ToString(hid)}, ":")
-						return client.XAdd(ctx, redisx.NewZAddArgs(streamkey, "", "*", rh.broker.maxLen, 0, val)).Err()
+				group.TryGo(func() error {
+					_, err := client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+						pipeliner.XAck(ctx, stream, rh.channel, id)
+						pipeliner.XDel(ctx, stream, id)
+						return nil
 					})
-				}
+					return err
+				})
+				// result of execute
+				ch <- *result
 
-				group.TryGo(func() error {
-					if err := client.XAck(ctx, stream, rh.channel, id).Err(); err != nil {
-						return err
-					}
-					if err := client.XDel(ctx, stream, id).Err(); err != nil {
-						return err
-					}
-					return nil
-				})
-				group.TryGo(func() error {
-					// set the execution result
-					return rh.broker.logJob.Archives(ctx, *result)
-				})
 				if err := group.Wait(); err != nil {
 					rh.broker.captureException(ctx, err)
 					return
 				}
+
 			}(msg.ID, msg.Values, t)
 		}
 		wait.Wait()

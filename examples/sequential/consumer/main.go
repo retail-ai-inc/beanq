@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
@@ -137,7 +138,12 @@ func main() {
 	if err != nil {
 		logger.New().Error(err)
 	}
-
+	go func() {
+		for {
+			time.Sleep(3 * time.Second)
+			fmt.Println(runtime.NumGoroutine())
+		}
+	}()
 	// _, err = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", &seqCustomer{
 	// 	metadata: "I am a custom",
 	// })
