@@ -129,23 +129,32 @@ func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err 
 	}
 }
 
-func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (*ConsumerResult, error) {
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (*Message, error) {
 
-	// key := strings.Join([]string{t.prefix, "status", id}, ":")
+	key := strings.Join([]string{t.prefix, "status", id}, ":")
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
-			// cmd := t.client.HGetAll(ctx, key)
-			// fmt.Printf("--------值：%+v \n", cmd.Val())
-			return nil, nil
+			cmd := t.client.HGetAll(ctx, key)
+			if err := cmd.Err(); err != nil {
+				return nil, err
+			}
+			val := cmd.Val()
+			if v, ok := val["status"]; ok {
+				if v != StatusSuccess && v != StatusFailed {
+					continue
+				}
+			}
+			msg := messageToStruct(cmd.Val())
+			return msg, nil
 		}
 	}
 }
 
 // Archive log
-func (t *RedisBroker) Archive(ctx context.Context, result *ConsumerResult) error {
+func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 	// update status
 	// keep 6 hours for cache
 	key := strings.Join([]string{t.prefix, "status", result.Id}, ":")
@@ -270,21 +279,29 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) error {
 	}
 }
 
-func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (string, error) {
-	stringCmd := t.client.Get(ctx, MakeStatusKey(t.prefix, channel, id))
-	if stringCmd.Err() != nil {
-		if errors.Is(stringCmd.Err(), redis.Nil) {
-			return "", nil
+func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Message, error) {
+
+	key := strings.Join([]string{t.prefix, "status", id}, ":")
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+			cmd := t.client.HGetAll(ctx, key)
+			if err := cmd.Err(); err != nil {
+				return nil, err
+			}
+			val := cmd.Val()
+			msg := messageToStruct(val)
+			return msg, nil
 		}
-		return "", stringCmd.Err()
 	}
-	return stringCmd.Val(), nil
 }
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 
-	result := &ConsumerResult{}
-	result.FillInfoByMessage(msg)
+	// result := &ConsumerResult{}
+	// result.FillInfoByMessage(msg)
 
 	switch msg.MoodType {
 	case SEQUENTIAL:
@@ -297,8 +314,9 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		}
 
 		// record status, after idempotency check, before publish
-		result.Status = StatusPrepare
-		if err := t.logJob.Archives(ctx, *result); err != nil {
+		// result.Status = StatusPrepare
+		msg.Status = StatusPrepare
+		if err := t.logJob.Archives(ctx, *msg); err != nil {
 			return err
 		}
 
@@ -327,8 +345,9 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	}
 
 	// publish success
-	result.Status = StatusPublished
-	if err := t.logJob.Archives(ctx, *result); err != nil {
+	// result.Status = StatusPublished
+	msg.Status = StatusPublished
+	if err := t.logJob.Archives(ctx, *msg); err != nil {
 		return err
 	}
 

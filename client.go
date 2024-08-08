@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -182,35 +181,8 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.startConsuming(ctx)
 }
 
-func (c *Client) getAckStatus(ctx context.Context, channel, id string, needPending bool) (*ConsumerResult, error) {
-	data, err := c.broker.checkStatus(ctx, channel, id)
-	if err != nil {
-		return nil, err
-	}
-
-	if data == "" {
-		return nil, nil
-	}
-	var consumerResult ConsumerResult
-
-	err = json.Unmarshal([]byte(data), &consumerResult)
-	if err != nil {
-		return nil, err
-	}
-
-	if needPending {
-		return &consumerResult, nil
-	}
-
-	if consumerResult.Status != StatusSuccess && consumerResult.Status != StatusFailed {
-		return nil, nil
-	}
-
-	return &consumerResult, nil
-}
-
-func (c *Client) CheckAckStatus(ctx context.Context, channel, id string) (*ConsumerResult, error) {
-	return c.getAckStatus(ctx, channel, id, true)
+func (c *Client) CheckAckStatus(ctx context.Context, channel, id string) (*Message, error) {
+	return c.broker.checkStatus(ctx, channel, id)
 }
 
 // Ping this method can be called by user for checking the status of broker
@@ -502,7 +474,7 @@ func (s *SequentialCmd) Error() error {
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck(ctx context.Context, id string) (*ConsumerResult, error) {
+func (s *SequentialCmd) WaitingAck(ctx context.Context, id string) (*Message, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

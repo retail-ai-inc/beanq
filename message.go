@@ -37,6 +37,7 @@ type (
 		Id           string        `json:"id"`
 		Topic        string        `json:"topic"`
 		Channel      string        `json:"channel"`
+		Consumer     string        `json:"consumer"`
 		MaxLen       int64         `json:"maxLen"`
 		Retry        int           `json:"retry"`
 		PendingRetry int64         `json:"pendingRetry"`
@@ -46,6 +47,12 @@ type (
 		ExecuteTime  time.Time     `json:"executeTime"`
 		TimeToRun    time.Duration `json:"timeToRun"`
 		MoodType     MoodType      `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
+		Status       Status        `json:"status"`
+		Level        LevelMsg      `json:"level"`
+		Info         FlagInfo      `json:"info"`
+		RunTime      string        `json:"runTime"`
+		BeginTime    time.Time     `json:"beginTime"`
+		EndTime      time.Time     `json:"endTime"`
 	}
 )
 
@@ -130,6 +137,68 @@ func (data MessageM) ToMessage() *Message {
 	return msg
 }
 
+type MessageS map[string]string
+
+func (data MessageS) ToMessage() *Message {
+
+	msg := Message{}
+	for k, v := range data {
+		if k == "id" {
+			msg.Id = v
+		}
+		if k == "topic" {
+			msg.Topic = v
+		}
+		if k == "channel" {
+			msg.Channel = v
+		}
+		if k == "consumer" {
+			msg.Consumer = v
+		}
+		if k == "retry" {
+			msg.Retry = cast.ToInt(v)
+		}
+		if k == "pendingRetry" {
+			msg.PendingRetry = cast.ToInt64(v)
+		}
+		if k == "priority" {
+			msg.Priority = cast.ToFloat64(v)
+		}
+		if k == "payload" {
+			msg.Payload = v
+		}
+		if k == "addTime" {
+			msg.AddTime = v
+		}
+		if k == "executeTime" {
+			msg.ExecuteTime = cast.ToTime(v)
+		}
+		if k == "moodType" {
+			msg.MoodType = MoodType(v)
+		}
+		if k == "status" {
+			msg.Status = v
+		}
+		if k == "level" {
+			msg.Level = v
+		}
+		if k == "info" {
+			msg.Info = v
+		}
+		if k == "runTime" {
+			msg.RunTime = v
+		}
+		if k == "beginTime" {
+			msg.BeginTime = cast.ToTime(v)
+		}
+		if k == "endTime" {
+			msg.EndTime = cast.ToTime(v)
+		}
+	}
+
+	return &msg
+}
+
 // If possible, more data type judgments need to be added
 func messageToStruct(message any) *Message {
 	msg := new(Message)
@@ -138,6 +207,8 @@ func messageToStruct(message any) *Message {
 		msg = MessageM(xmsg.Values).ToMessage()
 	case map[string]any:
 		msg = MessageM(xmsg).ToMessage()
+	case map[string]string:
+		msg = MessageS(xmsg).ToMessage()
 	}
 	return msg
 }

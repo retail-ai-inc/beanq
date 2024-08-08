@@ -56,7 +56,7 @@ func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 }
 
 // Archive save log
-func (t *MongoLog) Archive(ctx context.Context, result *ConsumerResult) error {
+func (t *MongoLog) Archive(ctx context.Context, result *Message) error {
 	data := bson.M{
 		"sid":       result.Id,
 		"status":    result.Status,
