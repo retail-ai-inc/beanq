@@ -124,6 +124,7 @@ func main() {
 
 	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
+			message.Response = fmt.Sprintf("test val,id=%+v", message.Id)
 			log.Println("default handler ", message.Id)
 			return nil
 		},

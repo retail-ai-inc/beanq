@@ -178,6 +178,7 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 				"channel":      result.Channel,
 				"consumer":     result.Consumer,
 				"moodType":     result.MoodType,
+				"response":     result.Response,
 			})
 			pipeliner.Expire(ctx, key, 6*time.Hour)
 			return nil

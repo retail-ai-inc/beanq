@@ -53,6 +53,7 @@ type (
 		RunTime      string        `json:"runTime"`
 		BeginTime    time.Time     `json:"beginTime"`
 		EndTime      time.Time     `json:"endTime"`
+		Response     any           `json:"response"`
 	}
 )
 
@@ -132,6 +133,8 @@ func (data MessageM) ToMessage() *Message {
 				dur, _ := strconv.Atoi(v)
 				msg.TimeToRun = time.Duration(dur)
 			}
+		case "response":
+			msg.Response = val
 		}
 	}
 	return msg
@@ -193,6 +196,9 @@ func (data MessageS) ToMessage() *Message {
 		}
 		if k == "endTime" {
 			msg.EndTime = cast.ToTime(v)
+		}
+		if k == "response" {
+			msg.Response = v
 		}
 	}
 
