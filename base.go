@@ -115,10 +115,6 @@ func MakeLogKey(prefix, resultType string) string {
 	return makeKey(prefix, "logs", resultType)
 }
 
-func MakeHealthKey(prefix string) string {
-	return makeKey(prefix, "health_checker")
-}
-
 func MakeTimeUnit(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "time_unit")
 }

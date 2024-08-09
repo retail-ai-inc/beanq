@@ -129,9 +129,9 @@ func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err 
 	}
 }
 
-func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id string) (*Message, error) {
+func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*Message, error) {
 
-	key := strings.Join([]string{t.prefix, "status", id}, ":")
+	key := MakeStatusKey(t.prefix, channel, id)
 	for {
 		select {
 		case <-ctx.Done():
@@ -157,8 +157,7 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, topic, id stri
 func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 	// update status
 	// keep 6 hours for cache
-	key := strings.Join([]string{t.prefix, "status", result.Id}, ":")
-
+	key := MakeStatusKey(t.prefix, result.Channel, result.Id)
 	if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
 		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			pipeliner.HMSet(ctx, key, map[string]any{
@@ -300,21 +299,18 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Mes
 
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 
-	// result := &ConsumerResult{}
-	// result.FillInfoByMessage(msg)
-
 	switch msg.MoodType {
 	case SEQUENTIAL:
 
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
-		key := strings.Join([]string{t.prefix, "status", msg.Id}, ":")
+
+		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
 		if t.client.HExists(ctx, key, "id").Val() {
 			t.client.HIncrBy(ctx, key, "score", 1)
 			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
 		}
 
 		// record status, after idempotency check, before publish
-		// result.Status = StatusPrepare
 		msg.Status = StatusPrepare
 		if err := t.logJob.Archives(ctx, *msg); err != nil {
 			return err
@@ -345,7 +341,6 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	}
 
 	// publish success
-	// result.Status = StatusPublished
 	msg.Status = StatusPublished
 	if err := t.logJob.Archives(ctx, *msg); err != nil {
 		return err

@@ -474,11 +474,11 @@ func (s *SequentialCmd) Error() error {
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck(ctx context.Context, id string) (*Message, error) {
+func (s *SequentialCmd) WaitingAck() (*Message, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	nack, err := s.client.broker.monitorStream(ctx, s.channel, s.topic, id)
+	nack, err := s.client.broker.monitorStream(s.ctx, s.channel, s.id)
 	if err != nil {
 		return nil, err
 	}
