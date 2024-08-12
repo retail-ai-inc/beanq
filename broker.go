@@ -9,14 +9,14 @@ import (
 
 type (
 	IBroker interface {
-		checkStatus(ctx context.Context, channel, id string) (string, error)
+		checkStatus(ctx context.Context, channel, id string) (*Message, error)
 		enqueue(ctx context.Context, msg *Message, dynamicOn bool) error
 		startConsuming(ctx context.Context)
 		addConsumer(subscribeType subscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle
 		addDynamicConsumer(subType subscribeType, channel, topic string, subscribe IConsumeHandle, streamKey, dynamicKey string) *RedisHandle
 		dynamicConsuming(subType subscribeType, channel string, subscribe IConsumeHandle, dynamicKey string)
 
-		monitorStream(ctx context.Context, channel, topic, id string) (*ConsumerResult, error)
+		monitorStream(ctx context.Context, channel, id string) (*Message, error)
 		setCaptureException(fn func(ctx context.Context, err any))
 	}
 )

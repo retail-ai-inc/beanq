@@ -164,6 +164,9 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		}, timeUnit)
 
 		if err != nil {
+			if errors.Is(err, redis.ErrClosed) {
+				continue
+			}
 			if !errors.Is(err, Unexpired) {
 				t.broker.captureException(ctx, err)
 			}

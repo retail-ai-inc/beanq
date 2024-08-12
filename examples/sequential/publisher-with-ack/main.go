@@ -47,25 +47,31 @@ func main() {
 
 	config := initCnf()
 	pub := beanq.New(config)
+	wait := sync.WaitGroup{}
 
-	m := make(map[string]any)
-	for i := 0; i < 20; i++ {
-		m["delayMsg"] = "new msg" + cast.ToString(i)
-		b, _ := json.Marshal(m)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-		defer cancel()
-		result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("delay-channel", "order-topic", b).WaitingAck(ctx, cast.ToString(i))
-		if err != nil {
-			logger.New().Error(err)
-		} else {
-			log.Println(result)
-		}
+	for i := 0; i < 5; i++ {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			m := make(map[string]any)
+			m["delayMsg"] = "new msg" + cast.ToString(i)
+			b, _ := json.Marshal(m)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+			defer cancel()
+			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
+			if err != nil {
+				logger.New().Error(err)
+			} else {
+				log.Printf("%+v \n", result)
+			}
+		}()
+
 	}
-
+	wait.Wait()
 	// this is a single check for ACK
-	result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
-	if err != nil {
-		panic(err)
-	}
-	log.Println(result)
+	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// log.Println(result)
 }

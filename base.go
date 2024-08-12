@@ -76,9 +76,7 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 	if subType == sequentialSubscribe {
 		stream = "sequential_stream"
 	}
-	if subType == pubSubscribe {
-		stream = "pubsub_stream"
-	}
+
 	return makeKey(prefix, channel, topic, stream)
 }
 
@@ -115,10 +113,6 @@ func MakeDeadLetterStreamKey(prefix, channel, topic string) string {
 
 func MakeLogKey(prefix, resultType string) string {
 	return makeKey(prefix, "logs", resultType)
-}
-
-func MakeHealthKey(prefix string) string {
-	return makeKey(prefix, "health_checker")
 }
 
 func MakeTimeUnit(prefix, channel, topic string) string {
@@ -200,12 +194,4 @@ func HashKey(id []byte, flake uint64) uint64 {
 	hashKey := h.Sum64()
 	hashKey = hashKey % flake
 	return hashKey
-}
-
-func deepCopyMap(oldMap map[string]any) map[string]any {
-	newMap := make(map[string]any, len(oldMap))
-	for key, val := range oldMap {
-		newMap[key] = val
-	}
-	return newMap
 }
