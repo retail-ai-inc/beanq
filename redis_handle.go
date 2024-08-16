@@ -360,13 +360,26 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), result.TimeToRun)
 				retry, err := RetryInfo(sessionCtx, func() error {
+					var globalErr error
 					if err := rh.subscribe.Handle(sessionCtx, result); err != nil {
-						if h, ok := rh.subscribe.(IConsumeCancel); ok {
-							return h.Cancel(sessionCtx, result)
+						if errors.Is(err, NilHandle) {
+							globalErr = errors.Join(globalErr, nil)
+						} else {
+							globalErr = errors.Join(globalErr, err)
+							if h, ok := rh.subscribe.(IConsumeCancel); ok {
+								if err := h.Cancel(sessionCtx, result); err != nil {
+
+									if errors.Is(err, NilCancel) {
+										globalErr = errors.Join(globalErr, nil)
+									} else {
+										globalErr = errors.Join(globalErr, err)
+									}
+
+								}
+							}
 						}
-						return err
 					}
-					return nil
+					return globalErr
 				}, result.Retry)
 
 				result.Status = StatusSuccess

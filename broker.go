@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -44,6 +45,10 @@ func NewBroker(config *BeanqConfig) IBroker {
 }
 
 // consumer...
+var (
+	NilHandle = errors.New("beanq:handle is nil")
+	NilCancel = errors.New("beanq:cancel is nil")
+)
 
 type (
 	IConsumeHandle interface {
@@ -77,14 +82,14 @@ func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {
 		return c.DoHandle(ctx, message)
 	}
-	return nil
+	return NilHandle
 }
 
 func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {
 	if c.DoCancel != nil {
 		return c.DoCancel(ctx, message)
 	}
-	return nil
+	return NilCancel
 }
 
 func (c DefaultHandle) Error(ctx context.Context, err error) {

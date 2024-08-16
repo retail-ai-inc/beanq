@@ -51,20 +51,23 @@ func main() {
 
 	for i := 0; i < 5; i++ {
 		wait.Add(1)
-		go func() {
+		go func(i1 int) {
 			defer wait.Done()
+			id := cast.ToString(i1)
+
 			m := make(map[string]any)
-			m["delayMsg"] = "new msg" + cast.ToString(i)
+			m["delayMsg"] = "new msg" + id
+
 			b, _ := json.Marshal(m)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 			defer cancel()
-			result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
+			result, err := pub.BQ().WithContext(ctx).SetId(id).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
 			if err != nil {
 				logger.New().Error(err)
 			} else {
 				log.Printf("%+v \n", result)
 			}
-		}()
+		}(i)
 
 	}
 	wait.Wait()

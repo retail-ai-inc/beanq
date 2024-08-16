@@ -141,13 +141,18 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*M
 			if err := cmd.Err(); err != nil {
 				return nil, err
 			}
+
 			val := cmd.Val()
+			if len(val) <= 0 {
+				continue
+			}
+
 			if v, ok := val["status"]; ok {
 				if v != StatusSuccess && v != StatusFailed {
 					continue
 				}
 			}
-			msg := messageToStruct(cmd.Val())
+			msg := messageToStruct(val)
 			return msg, nil
 		}
 	}
