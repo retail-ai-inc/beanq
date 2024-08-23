@@ -303,7 +303,7 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 				cancel()
 				// result of execute
 				ch <- *result
-				// ------------------------
+
 				client := rh.broker.client
 				group.TryGo(func() error {
 					_, err := client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {

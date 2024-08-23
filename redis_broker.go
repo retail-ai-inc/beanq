@@ -272,7 +272,7 @@ func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error
 		}); err != nil {
 			t.captureException(ctx, err)
 		}
-		
+
 	}
 }
 
@@ -365,29 +365,23 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
-		if t.client.HExists(ctx, key, "id").Val() {
-			t.client.HIncrBy(ctx, key, "score", 1)
+
+		script := redis.NewScript(redisx.HashDuplicateIdLua)
+		if err := script.Run(ctx, t.client, []string{key}).Err(); err != nil {
 			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
 		}
 
 		// record status, after idempotency check, before publish
 		msg.Status = StatusPrepare
 		if err := t.Archive(ctx, msg); err != nil {
-
-		}
-		// if err := t.logJob.Archives(ctx, *msg); err != nil {
-		// 	return err
-		// }
-
-		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			message := msg.ToMap()
-			message["status"] = StatusPublished
-			pipeliner.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message))
-			return nil
-		})
-		if err != nil {
 			return err
 		}
+		message := msg.ToMap()
+		message["status"] = StatusPublished
+		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message)).Err(); err != nil {
+			return err
+		}
+
 	case NORMAL:
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
 		err := t.client.XAdd(ctx, xAddArgs).Err()
@@ -406,7 +400,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	// publish success
 	msg.Status = StatusPublished
 	if err := t.Archive(ctx, msg); err != nil {
-
+		return err
 	}
 
 	return nil
