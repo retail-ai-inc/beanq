@@ -154,7 +154,6 @@ func (t *BeanqConfig) init() {
 type IHandle interface {
 	Channel() string
 	Topic() string
-	Check(ctx context.Context) error
 	Process(ctx context.Context)
 	Schedule(ctx context.Context) error
 	DeadLetter(ctx context.Context) error

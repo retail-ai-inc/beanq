@@ -30,14 +30,11 @@ func newAsyncPool(poolSize int) *asyncPool {
 
 func (a *asyncPool) Execute(ctx context.Context, fn func(c context.Context) error, durations ...time.Duration) {
 	var (
-		c      context.Context
 		cancel context.CancelFunc
 	)
 	if len(durations) > 0 {
-		c, cancel = context.WithTimeout(context.TODO(), durations[0])
+		ctx, cancel = context.WithTimeout(ctx, durations[0])
 		defer cancel()
-	} else {
-		c = context.TODO()
 	}
 
 	err := a.pool.Submit(func() {
@@ -47,7 +44,7 @@ func (a *asyncPool) Execute(ctx context.Context, fn func(c context.Context) erro
 			}
 		}()
 
-		e := fn(c)
+		e := fn(ctx)
 		if e != nil {
 			a.captureException(ctx, e)
 		}

@@ -130,7 +130,7 @@ func main() {
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
 			log.Println("default cancel ", message.Id)
-			return nil
+			return beanq.NilCancel
 		},
 		DoError: func(ctx context.Context, err error) {
 			log.Println("default error ", err)

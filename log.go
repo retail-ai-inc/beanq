@@ -76,7 +76,7 @@ type ILog interface {
 	// Archive log
 	Archive(ctx context.Context, result *Message) error
 	// Obsolete ,if log has expired ,then delete it
-	Obsolete(ctx context.Context)
+	Obsolete(ctx context.Context, data []map[string]any) error
 }
 
 type Log struct {
@@ -101,12 +101,12 @@ func (t *Log) Archives(ctx context.Context, result Message) error {
 	return nil
 }
 
-func (t *Log) Obsoletes(ctx context.Context) error {
+func (t *Log) Obsoletes(ctx context.Context, datas []map[string]any) error {
 
 	for _, log := range t.logs {
 		nlog := log
 		go func() {
-			nlog.Obsolete(ctx)
+			nlog.Obsolete(ctx, datas)
 		}()
 	}
 	return nil

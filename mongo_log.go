@@ -2,8 +2,8 @@ package beanq
 
 import (
 	"context"
+	"fmt"
 	"strings"
-	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"go.mongodb.org/mongo-driver/bson"
@@ -57,23 +57,19 @@ func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 
 // Archive save log
 func (t *MongoLog) Archive(ctx context.Context, result *Message) error {
-	data := bson.M{
-		"sid":       result.Id,
-		"status":    result.Status,
-		"level":     result.Level,
-		"type":      result.Info,
-		"data":      result,
-		"createdAt": time.Now(),
-		"updatedAt": time.Now(),
-	}
-	if _, err := t.database.Collection(MongoCollection).InsertOne(ctx, data); err != nil {
-		return err
-	}
 	return nil
 }
 
 // Obsolete log
 // If you don't want to implement an elimination strategy, you can skip implementing the method
-func (t *MongoLog) Obsolete(ctx context.Context) {
+func (t *MongoLog) Obsolete(ctx context.Context, data []map[string]any) error {
 
+	datas := make(bson.A, 0, len(data))
+	for _, v := range data {
+		datas = append(datas, bson.M(v))
+	}
+	if _, err := t.database.Collection(MongoCollection).InsertMany(ctx, datas); err != nil {
+		return fmt.Errorf("Mongo Error:%w \n", err)
+	}
+	return nil
 }

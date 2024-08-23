@@ -127,7 +127,7 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		case <-closeCh:
 			return nil
 		case <-ctx.Done():
-			logger.New().Info("Schedule Task Stop")
+			logger.New().Info("Channel:[", channel, "]Topic:[", topic, "],Schedule Task Stop")
 			return nil
 		case <-timer.C:
 

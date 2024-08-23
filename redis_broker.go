@@ -38,6 +38,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
@@ -108,7 +109,6 @@ func newRedisBroker(config *BeanqConfig) IBroker {
 		successKey:         MakeLogKey(config.Redis.Prefix, "success"),
 	}
 	var logs []ILog
-	logs = append(logs, broker)
 	if config.History.On {
 		mongoLog := NewMongoLog(ctx, config)
 		logs = append(logs, mongoLog)
@@ -159,32 +159,36 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*M
 }
 
 // Archive log
+
 func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 	// update status
 	// keep 6 hours for cache
 	key := MakeStatusKey(t.prefix, result.Channel, result.Id)
+
+	val := map[string]any{
+		"id":           result.Id,
+		"status":       result.Status,
+		"level":        result.Level,
+		"info":         result.Info,
+		"payload":      result.Payload,
+		"pendingRetry": result.PendingRetry,
+		"retry":        result.Retry,
+		"priority":     result.Priority,
+		"addTime":      result.AddTime,
+		"runTime":      result.RunTime,
+		"beginTime":    result.BeginTime,
+		"endTime":      result.EndTime,
+		"executeTime":  result.ExecuteTime,
+		"topic":        result.Topic,
+		"channel":      result.Channel,
+		"consumer":     result.Consumer,
+		"moodType":     result.MoodType,
+		"response":     result.Response,
+	}
+
 	if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
 		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.HMSet(ctx, key, map[string]any{
-				"id":           result.Id,
-				"status":       result.Status,
-				"level":        result.Level,
-				"info":         result.Info,
-				"payload":      result.Payload,
-				"pendingRetry": result.PendingRetry,
-				"retry":        result.Retry,
-				"priority":     result.Priority,
-				"addTime":      result.AddTime,
-				"runTime":      result.RunTime,
-				"beginTime":    result.BeginTime,
-				"endTime":      result.EndTime,
-				"executeTime":  result.ExecuteTime,
-				"topic":        result.Topic,
-				"channel":      result.Channel,
-				"consumer":     result.Consumer,
-				"moodType":     result.MoodType,
-				"response":     result.Response,
-			})
+			pipeliner.HMSet(ctx, key, val)
 			pipeliner.Expire(ctx, key, 6*time.Hour)
 			return nil
 		})
@@ -192,33 +196,83 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 	}, key); err != nil {
 		return err
 	}
+	// log for mongo to batch saving
+	logStream := strings.Join([]string{t.prefix, "logs"}, ":")
+	if err := t.client.XAdd(ctx, &redis.XAddArgs{
+		Stream:     logStream,
+		NoMkStream: false,
+		MaxLen:     20000,
+		Approx:     false,
+		ID:         "*",
+		Values:     val,
+	}).Err(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 // Obsolete log
-func (t *RedisBroker) Obsolete(ctx context.Context) {
+func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error {
 
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	timer := timex.TimerPool.Get(5 * time.Second)
+	defer timex.TimerPool.Put(timer)
 
+	key := strings.Join([]string{t.prefix, "logs"}, ":")
+	logGroup := "log-group"
 	for {
 		// check state
 		select {
 		case <-ctx.Done():
 			logger.New().Info("Redis Obsolete Stop")
-			return
-		case <-ticker.C:
+			return nil
+		case <-timer.C:
+		}
+		timer.Reset(5 * time.Second)
+		result, err := t.client.XReadGroup(ctx, redisx.NewReadGroupArgs(logGroup, key, []string{key, ">"}, 200, 0)).Result()
+		if err != nil {
+			if strings.Contains(err.Error(), "NOGROUP No such") {
+				if err := t.client.XGroupCreateMkStream(ctx, key, logGroup, "0").Err(); err != nil {
+					t.captureException(ctx, err)
+					return nil
+				}
+				continue
+			}
+			if errors.Is(err, context.Canceled) {
+				logger.New().Info("Redis Obsolete Stop")
+				return nil
+			}
+			if !errors.Is(err, redis.Nil) && !errors.Is(err, redis.ErrClosed) {
+				t.captureException(ctx, err)
+			}
+			continue
+		}
+		if len(result) <= 0 {
+			continue
+		}
+		messages := result[0].Messages
+		datas := make([]map[string]any, 0, len(messages))
+		ids := make([]string, 0, len(messages))
+
+		for _, v := range messages {
+			if v.ID != "" {
+				ids = append(ids, v.ID)
+				datas = append(datas, v.Values)
+			}
 		}
 
-		// delete fail logs
-		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			return t.client.ZRemRangeByScore(ctx, t.failKey, "0", cast.ToString(time.Now().UnixMilli())).Err()
-		})
-
-		// delete success logs
-		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			return t.client.ZRemRangeByScore(ctx, t.successKey, "0", cast.ToString(time.Now().UnixMilli())).Err()
-		})
+		if err := t.logJob.Obsoletes(ctx, datas); err != nil {
+			t.captureException(ctx, err)
+			continue
+		}
+		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.XAck(ctx, key, logGroup, ids...)
+			pipeliner.XDel(ctx, key, ids...)
+			return nil
+		}); err != nil {
+			t.captureException(ctx, err)
+		}
+		
 	}
 }
 
@@ -286,7 +340,7 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) error {
 
 func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Message, error) {
 
-	key := strings.Join([]string{t.prefix, "status", id}, ":")
+	key := MakeStatusKey(t.prefix, channel, id)
 	for {
 		select {
 		case <-ctx.Done():
@@ -318,9 +372,12 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 		// record status, after idempotency check, before publish
 		msg.Status = StatusPrepare
-		if err := t.logJob.Archives(ctx, *msg); err != nil {
-			return err
+		if err := t.Archive(ctx, msg); err != nil {
+
 		}
+		// if err := t.logJob.Archives(ctx, *msg); err != nil {
+		// 	return err
+		// }
 
 		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			message := msg.ToMap()
@@ -348,8 +405,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 	// publish success
 	msg.Status = StatusPublished
-	if err := t.logJob.Archives(ctx, *msg); err != nil {
-		return err
+	if err := t.Archive(ctx, msg); err != nil {
+
 	}
 
 	return nil
@@ -454,10 +511,10 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	// monitor signal
 	t.waitSignal(cancel)
 	t.once.Do(func() {
-		err := t.logJob.Obsoletes(ctx)
-		if err != nil {
-			t.captureException(ctx, err)
-		}
+		// err := t.logJob.Obsoletes(ctx)
+		// if err != nil {
+		// 	t.captureException(ctx, err)
+		// }
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 			return t.filter.Delete(ctx, MakeFilter(t.prefix))
@@ -559,11 +616,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	}
 
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		return t.logJob.Obsoletes(ctx)
-	})
-
-	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		return t.filter.Delete(ctx, MakeFilter(t.prefix))
+		return t.Obsolete(ctx, nil)
 	})
 
 	logger.New().Info("Beanq Start")
@@ -572,9 +625,6 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
-	if err := handle.Check(ctx); err != nil {
-		return err
-	}
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 		handle.Process(ctx)
 		return nil
