@@ -93,9 +93,9 @@ clean:
 lint: ## run all the lint tools, install golangci-lint if not exist
 ifeq (,$(wildcard $(GOPATH)/bin/golangci-lint))
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null
-	$(GOPATH)/bin/golangci-lint run
+	$(GOPATH)/bin/golangci-lint --verbose run
 else
-	$(GOPATH)/bin/golangci-lint run
+	$(GOPATH)/bin/golangci-lint --verbose run
 endif
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
