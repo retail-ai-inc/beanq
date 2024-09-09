@@ -65,7 +65,7 @@ type (
 
 var ErrorIdempotent = errors.New("duplicate id")
 
-func newRedisBroker(config *BeanqConfig) IBroker {
+func newRedisBroker(config *BeanqConfig) *RedisBroker {
 
 	ctx := context.Background()
 

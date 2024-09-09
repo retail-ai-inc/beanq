@@ -107,11 +107,12 @@ func main() {
 	// 		return nil
 	// 	})
 	//
-	// 	err := wf.WithRollbackResultHandler(func(taskID string, err error) {
+	// 	err := wf.WithRollbackResultHandler(func(taskID string, err error) error {
 	// 		if err == nil {
-	// 			return
+	// 			return nil
 	// 		}
 	// 		log.Printf("%s rollback error: %v\n", taskID, err)
+	// 		return nil
 	// 	}).Run()
 	// 	if err != nil {
 	// 		return err

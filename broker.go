@@ -73,7 +73,7 @@ type (
 )
 
 func (c WorkflowHandler) Handle(ctx context.Context, message *Message) error {
-	workflow := NewWorkflow(message)
+	workflow := NewWorkflow(ctx, message)
 
 	return c(ctx, workflow)
 }

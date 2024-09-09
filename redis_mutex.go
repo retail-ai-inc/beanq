@@ -8,13 +8,13 @@ package beanq
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -33,6 +33,55 @@ var ErrLockAlreadyExpired = errors.New("failed to unlock, lock was already expir
 
 // A DelayFunc is used to decide the amount of time to wait between retries.
 type DelayFunc func(tries int) time.Duration
+
+type MuxClient struct {
+	expireTime time.Duration
+	prefix     string
+	client     redis.UniversalClient
+}
+
+func NewMuxClient(config *BeanqConfig) *MuxClient {
+	return &MuxClient{
+		expireTime: time.Second * 8,
+		prefix:     config.Redis.Prefix,
+		client:     newRedisBroker(config).client,
+	}
+}
+
+func (p *MuxClient) SetExpireTime(expireTime time.Duration) *MuxClient {
+	p.expireTime = expireTime
+	return p
+}
+
+func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
+	pools := []redis.UniversalClient{
+		p.client,
+	}
+	m := &Mutex{
+		name:   strings.Join([]string{p.prefix, "mutex", name}, ":"),
+		expiry: p.expireTime,
+		tries:  32,
+		delayFunc: func(tries int) time.Duration {
+			return time.Duration(rand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
+		},
+		genValueFunc:  genValue,
+		driftFactor:   0.01,
+		timeoutFactor: 0.1,
+		quorum:        len(pools)/2 + 1,
+		pools:         pools,
+	}
+
+	for _, o := range options {
+		o.Apply(m)
+	}
+
+	if m.shuffle {
+		rand.Shuffle(len(pools), func(i, j int) {
+			pools[i], pools[j] = pools[j], pools[i]
+		})
+	}
+	return m
+}
 
 // A Mutex is a distributed mutual exclusion lock.
 type Mutex struct {
