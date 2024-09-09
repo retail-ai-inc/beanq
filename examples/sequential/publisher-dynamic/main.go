@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -46,36 +47,36 @@ func initCnf() *beanq.BeanqConfig {
 }
 func main() {
 	//
-	// wait := sync.WaitGroup{}
-	// wait.Add(300)
-	// for i := 1; i <= 300; i++ {
-	// 	go func(ni int) {
-	// 		defer wait.Done()
-	//
-	// 		data := make(map[string]any)
-	// 		data["deviceUuid"] = "device_1"
-	// 		data["uuid"] = "test-" + cast.ToString(ni)
-	// 		data["amount"] = 700
-	// 		data["transactionType"] = 12
-	// 		data["cardId"] = "5732542140"
-	// 		data["retailerStoreId"] = 1
-	// 		data["retailerTerminalId"] = 111
-	// 		data["retailerCompanyId"] = 1
-	// 		now := time.Now()
-	// 		client := resty.New()
-	// 		resp, err := client.R().
-	// 			SetHeader("Content-Type", "application/json").
-	// 			SetBody(data).
-	// 			Post("http://127.0.0.1:8888/v1/prepaid/card/deposit")
-	// 		if err != nil {
-	// 			fmt.Printf("错误:%+v \n", err)
-	// 			return
-	// 		}
-	// 		fmt.Printf("返回值 ：%+v,耗时：%+v \n", string(resp.Body()), time.Now().Sub(now))
-	// 	}(i)
-	// }
-	// wait.Wait()
-	// return
+	wait := sync.WaitGroup{}
+	wait.Add(300)
+	for i := 1; i <= 300; i++ {
+		go func(ni int) {
+			defer wait.Done()
+
+			data := make(map[string]any)
+			data["deviceUuid"] = "device_1"
+			data["uuid"] = "test-" + cast.ToString(ni)
+			data["amount"] = 700
+			data["transactionType"] = 12
+			data["cardId"] = "5732542140"
+			data["retailerStoreId"] = 1
+			data["retailerTerminalId"] = 111
+			data["retailerCompanyId"] = 1
+			now := time.Now()
+			client := resty.New()
+			resp, err := client.R().
+				SetHeader("Content-Type", "application/json").
+				SetBody(data).
+				Post("http://127.0.0.1:8888/v1/prepaid/card/deposit")
+			if err != nil {
+				fmt.Printf("错误:%+v \n", err)
+				return
+			}
+			fmt.Printf("返回值 ：%+v,耗时：%+v \n", string(resp.Body()), time.Now().Sub(now))
+		}(i)
+	}
+	wait.Wait()
+	return
 
 	pub := beanq.New(initCnf())
 	for i := 0; i < 1000; i++ {

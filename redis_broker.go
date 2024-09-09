@@ -186,18 +186,40 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 		"response":     result.Response,
 	}
 
-	if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
-		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+	if t.client.HExists(ctx, key, "id").Val() {
+		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			v := t.client.HMGet(ctx, key, "status").Val()
+			if len(v) <= 0 {
+				return nil
+			}
+			if v[0].(string) == StatusSuccess {
+				return nil
+			}
+
+			pipeliner.HSet(ctx, key, "status", result.Status)
+			pipeliner.HSet(ctx, key, "level", result.Level)
+			pipeliner.HSet(ctx, key, "info", result.Info)
+			pipeliner.HSet(ctx, key, "runTime", result.RunTime)
+			pipeliner.HSet(ctx, key, "beginTime", result.BeginTime)
+			pipeliner.HSet(ctx, key, "endTime", result.EndTime)
+			pipeliner.HSet(ctx, key, "executeTime", result.ExecuteTime)
+			return nil
+		}); err != nil {
+			return err
+		}
+	} else {
+
+		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			pipeliner.HMSet(ctx, key, val)
 			pipeliner.Expire(ctx, key, 6*time.Hour)
 			return nil
-		})
-		return err
-	}, key); err != nil {
-		return err
+		}); err != nil {
+			return err
+		}
 	}
+
 	// log for mongo to batch saving
-	logStream := strings.Join([]string{t.prefix, "logs"}, ":")
+	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 	if err := t.client.XAdd(ctx, &redis.XAddArgs{
 		Stream:     logStream,
 		NoMkStream: false,
@@ -366,16 +388,11 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
 
-		script := redis.NewScript(redisx.HashDuplicateIdLua)
-		if err := script.Run(ctx, t.client, []string{key}).Err(); err != nil {
+		if t.client.HExists(ctx, key, "id").Val() {
+			t.client.HIncrBy(ctx, key, "score", 1)
 			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
 		}
 
-		// record status, after idempotency check, before publish
-		msg.Status = StatusPrepare
-		if err := t.Archive(ctx, msg); err != nil {
-			return err
-		}
 		message := msg.ToMap()
 		message["status"] = StatusPublished
 		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message)).Err(); err != nil {
@@ -399,9 +416,12 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 	// publish success
 	msg.Status = StatusPublished
-	if err := t.Archive(ctx, msg); err != nil {
-		return err
-	}
+	t.asyncPool.Execute(ctx, func(c context.Context) error {
+		if err := t.Archive(ctx, msg); err != nil {
+			return err
+		}
+		return nil
+	})
 
 	return nil
 }
@@ -441,7 +461,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		}},
 		errGroupPool: &sync.Pool{New: func() any {
 			group := new(errgroup.Group)
-			group.SetLimit(3)
+			group.SetLimit(2)
 			return group
 		}},
 		once: sync.Once{},

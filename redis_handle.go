@@ -13,7 +13,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/timex"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -173,7 +172,7 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 	defer t.close()
 
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
-	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, 20, 1*time.Minute)
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, 20, 10*time.Second)
 
 	for {
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
@@ -218,11 +217,11 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 				defer func() {
 					if p := recover(); p != nil {
 						// receive the message
-						clone := *result
+						clone := result
 						rh.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
 							clone.Status = StatusFailed
 							clone.Info = fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack())
-							return rh.broker.logJob.Archives(ctx, clone)
+							return rh.broker.Archive(ctx, clone)
 						})
 						rh.broker.captureException(ctx, p)
 					}
@@ -230,37 +229,8 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 					rh.errGroupPool.Put(group)
 				}()
 
-				ch := make(chan Message, 2)
-				// Collaborative synchronization of data to prevent data pollution
-				go func(nch chan Message) {
-					index := 0
-					// Goroutine cleaning,to prevent goroutine non release
-					timer := timex.TimerPool.Get(30 * time.Second)
-					defer timex.TimerPool.Put(timer)
-
-					for {
-						if index == 2 {
-							return
-						}
-						select {
-						case <-timer.C:
-							return
-						case v, ok := <-nch:
-							if ok {
-								index++
-								if err := rh.broker.Archive(ctx, &v); err != nil {
-									rh.broker.captureException(ctx, err)
-								}
-							}
-						}
-					}
-				}(ch)
-
 				result.Status = StatusReceived
 				result.BeginTime = time.Now()
-
-				// receive the message
-				ch <- *result
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), result.TimeToRun)
 				retry, err := RetryInfo(sessionCtx, func() error {
@@ -301,8 +271,6 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 				result.RunTime = result.EndTime.Sub(result.BeginTime).String()
 
 				cancel()
-				// result of execute
-				ch <- *result
 
 				client := rh.broker.client
 				group.TryGo(func() error {
@@ -313,7 +281,12 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 					})
 					return err
 				})
-
+				group.TryGo(func() error {
+					if err := rh.broker.Archive(ctx, result); err != nil {
+						return err
+					}
+					return nil
+				})
 				if err := group.Wait(); err != nil {
 					rh.broker.captureException(ctx, err)
 					return
