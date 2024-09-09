@@ -8,13 +8,14 @@ package beanq
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
+	mRand "math/rand"
 	"strings"
 	"time"
 
@@ -62,7 +63,7 @@ func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
 		expiry: p.expireTime,
 		tries:  32,
 		delayFunc: func(tries int) time.Duration {
-			return time.Duration(rand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
+			return time.Duration(mRand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
 		},
 		genValueFunc:  genValue,
 		driftFactor:   0.01,
@@ -76,7 +77,7 @@ func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
 	}
 
 	if m.shuffle {
-		rand.Shuffle(len(pools), func(i, j int) {
+		mRand.Shuffle(len(pools), func(i, j int) {
 			pools[i], pools[j] = pools[j], pools[i]
 		})
 	}
