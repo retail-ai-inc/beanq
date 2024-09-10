@@ -33,12 +33,16 @@ type Workflow struct {
 	wfMux                 WFMux
 }
 
-type TaskStatus int
+type TaskStatus struct {
+	status    int
+	statement []byte
+	err       error
+}
 
-type TaskRecordFunc func(gid string, taskID string, status TaskStatus, err error)
+type TaskRecordFunc func(gid string, taskID string, status TaskStatus)
 
-func (t TaskStatus) String() string {
-	switch t {
+func (t *TaskStatus) Status() string {
+	switch t.status {
 	case ExecuteSuccess:
 		return "execute success"
 	case ExecuteFailed:
@@ -48,12 +52,24 @@ func (t TaskStatus) String() string {
 	case RollbackFailed:
 		return "rollback failed"
 	default:
-		return strconv.Itoa(int(t))
+		return strconv.Itoa(t.status)
 	}
 }
 
+func (t *TaskStatus) String() string {
+	return fmt.Sprintf("[status:%s; statement:%s]\n", t.Status(), t.Statement())
+}
+
+func (t *TaskStatus) Error() error {
+	return t.err
+}
+
+func (t *TaskStatus) Statement() string {
+	return string(t.statement)
+}
+
 const (
-	ExecuteSuccess TaskStatus = iota + 1
+	ExecuteSuccess = iota + 1
 	ExecuteFailed
 	RollbackSuccess
 	RollbackFailed
@@ -116,14 +132,11 @@ func (w *Workflow) CurrentTask() Task {
 	return w.currentTask
 }
 
-func (w *Workflow) TrackRecord(gid string, taskID string, status TaskStatus, err error) {
-	if err == nil {
-		err = errors.New(status.String())
-	}
-	logger.New().Error(fmt.Sprintf("workflow record: %s:%s:%d, memo: %v", gid, taskID, status, err))
+func (w *Workflow) TrackRecord(gid string, taskID string, status TaskStatus) {
+	logger.New().Error(fmt.Sprintf("workflow record: %s:%s, memo: %v", gid, taskID, status.String()))
 
 	if w.trackRecordFunc != nil {
-		w.trackRecordFunc(gid, taskID, status, err)
+		w.trackRecordFunc(gid, taskID, status)
 	}
 }
 
@@ -146,8 +159,11 @@ func (w *Workflow) Run() (err error) {
 						err = fmt.Errorf("%v", e)
 					}
 					w.results[index] = err
-
-					w.TrackRecord(w.gid, task.ID(), ExecuteFailed, err)
+					w.TrackRecord(w.gid, task.ID(), TaskStatus{
+						status:    ExecuteFailed,
+						statement: task.Statement(),
+						err:       err,
+					})
 					w.rollback(index)
 				}
 			}()
@@ -155,7 +171,11 @@ func (w *Workflow) Run() (err error) {
 			w.currentTask = task
 			if err = task.Execute(); err == nil {
 				w.results[index] = nil
-				w.TrackRecord(w.gid, task.ID(), ExecuteSuccess, nil)
+				w.TrackRecord(w.gid, task.ID(), TaskStatus{
+					status:    ExecuteSuccess,
+					statement: task.Statement(),
+					err:       nil,
+				})
 			}
 		}()
 
@@ -179,12 +199,20 @@ func (w *Workflow) rollback(from int) {
 						err = fmt.Errorf("%v", e)
 					}
 
-					w.TrackRecord(w.gid, task.ID(), RollbackFailed, err)
+					w.TrackRecord(w.gid, task.ID(), TaskStatus{
+						status:    RollbackFailed,
+						statement: task.Statement(),
+						err:       err,
+					})
 
 					if w.rollbackResultHandler != nil {
 						err = w.rollbackResultHandler(task.ID(), err)
 						if err != nil {
-							w.TrackRecord(w.gid, task.ID(), RollbackResultProcessFailed, err)
+							w.TrackRecord(w.gid, task.ID(), TaskStatus{
+								status:    RollbackResultProcessFailed,
+								statement: task.Statement(),
+								err:       err,
+							})
 						}
 					}
 				}
@@ -192,7 +220,11 @@ func (w *Workflow) rollback(from int) {
 
 			err = task.Rollback()
 			if err == nil {
-				w.TrackRecord(w.gid, task.ID(), RollbackSuccess, nil)
+				w.TrackRecord(w.gid, task.ID(), TaskStatus{
+					status:    RollbackSuccess,
+					statement: task.Statement(),
+					err:       nil,
+				})
 			}
 			return err
 		}(i)
@@ -211,6 +243,7 @@ type Task interface {
 	ID() string
 	Execute() error
 	Rollback() error
+	Statement() []byte
 }
 
 // BaseTask ...
@@ -219,6 +252,7 @@ type BaseTask struct {
 	wf           *Workflow
 	executeFunc  func(task Task) error
 	rollbackFunc func(task Task) error
+	statement    []byte
 }
 
 func (t *BaseTask) ID() string {
@@ -247,4 +281,13 @@ func (t *BaseTask) OnExecute(fn func(task Task) error) *BaseTask {
 func (t *BaseTask) OnRollback(fn func(task Task) error) *BaseTask {
 	t.rollbackFunc = fn
 	return t
+}
+
+func (t *BaseTask) WithRecordStatement(statement []byte) *BaseTask {
+	t.statement = statement
+	return t
+}
+
+func (t *BaseTask) Statement() []byte {
+	return t.statement
 }
