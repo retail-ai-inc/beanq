@@ -134,7 +134,7 @@ func (w *Workflow) CurrentTask() Task {
 }
 
 func (w *Workflow) TrackRecord(gid string, taskID string, status TaskStatus) {
-	logger.New().Error(fmt.Sprintf("workflow record: %s:%s, memo: %v", gid, taskID, status.String()))
+	logger.New().Info(fmt.Sprintf("workflow record: %s:%s, memo: %v", gid, taskID, status.String()))
 
 	if w.trackRecordFunc != nil {
 		w.trackRecordFunc(gid, taskID, status)
