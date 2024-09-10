@@ -41,12 +41,17 @@ type MuxClient struct {
 	client     redis.UniversalClient
 }
 
-func NewMuxClient(config *BeanqConfig) *MuxClient {
+func NewMuxClient(client redis.UniversalClient) *MuxClient {
 	return &MuxClient{
 		expireTime: time.Second * 8,
-		prefix:     config.Redis.Prefix,
-		client:     newRedisBroker(config).client,
+		prefix:     "mutex",
+		client:     client,
 	}
+}
+
+func (p *MuxClient) SetPrefix(prefix string) *MuxClient {
+	p.prefix = prefix
+	return p
 }
 
 func (p *MuxClient) SetExpireTime(expireTime time.Duration) *MuxClient {
@@ -59,7 +64,7 @@ func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
 		p.client,
 	}
 	m := &Mutex{
-		name:   strings.Join([]string{p.prefix, "mutex", name}, ":"),
+		name:   strings.Join([]string{p.prefix, name}, ":"),
 		expiry: p.expireTime,
 		tries:  32,
 		delayFunc: func(tries int) time.Duration {

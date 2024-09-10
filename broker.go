@@ -10,6 +10,7 @@ import (
 
 type (
 	IBroker interface {
+		driver() any
 		checkStatus(ctx context.Context, channel, id string) (*Message, error)
 		enqueue(ctx context.Context, msg *Message, dynamicOn bool) error
 		startConsuming(ctx context.Context)
@@ -44,6 +45,13 @@ func NewBroker(config *BeanqConfig) IBroker {
 	return broker
 }
 
+func GetBrokerDriver[T any]() T {
+	if broker == nil {
+		logger.New().Panic("the broker has not been initialized yet")
+	}
+	return broker.driver().(T)
+}
+
 // consumer...
 var (
 	NilHandle = errors.New("beanq:handle is nil")
@@ -74,7 +82,6 @@ type (
 
 func (c WorkflowHandler) Handle(ctx context.Context, message *Message) error {
 	workflow := NewWorkflow(ctx, message)
-
 	return c(ctx, workflow)
 }
 
