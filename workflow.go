@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	errors2 "github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 )
 
@@ -143,7 +144,7 @@ func (w *Workflow) TrackRecord(gid string, taskID string, status TaskStatus) {
 func (w *Workflow) Run() (err error) {
 	if w.wfMux != nil {
 		if err := w.wfMux.LockContext(w.ctx); err != nil {
-			return err
+			return errors2.WithStack(err)
 		}
 		defer func() {
 			if _, err := w.wfMux.UnlockContext(w.ctx); err != nil {
