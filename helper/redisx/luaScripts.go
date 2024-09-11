@@ -18,3 +18,6 @@ const HashDuplicateIdLua = `
 
 	return {success = true}
 `
+const SaveHMSet = `
+
+`

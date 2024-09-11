@@ -148,7 +148,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 					return nil
 				})
 				group.TryGo(func() error {
-					return rh.broker.logJob.Archives(ctx, *result)
+					return rh.broker.Archive(ctx, result)
 				})
 				if err := group.Wait(); err != nil {
 					logger.New().Error(err)
@@ -172,7 +172,7 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 	defer t.close()
 
 	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
-	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, 20, 10*time.Second)
+	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
@@ -209,7 +209,6 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 			msg := msg
 			wait.Add(1)
 			go func(id string, vv map[string]any, rh *RedisHandle) {
-
 				group := rh.errGroupPool.Get().(*errgroup.Group)
 
 				result := messageToStruct(vv)
@@ -229,7 +228,6 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 					rh.errGroupPool.Put(group)
 				}()
 
-				result.Status = StatusReceived
 				result.BeginTime = time.Now()
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), result.TimeToRun)
@@ -274,10 +272,13 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 
 				client := rh.broker.client
 				group.TryGo(func() error {
-					_, err := client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-						pipeliner.XAck(ctx, stream, rh.channel, id)
-						pipeliner.XDel(ctx, stream, id)
-						return nil
+					err := client.Watch(ctx, func(tx *redis.Tx) error {
+						_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+							pipeliner.XAck(ctx, stream, rh.channel, id)
+							pipeliner.XDel(ctx, stream, id)
+							return nil
+						})
+						return err
 					})
 					return err
 				})
@@ -291,7 +292,6 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 					rh.broker.captureException(ctx, err)
 					return
 				}
-
 			}(msg.ID, msg.Values, t)
 		}
 		wait.Wait()

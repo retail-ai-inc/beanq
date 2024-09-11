@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"github.com/retail-ai-inc/beanq/helper/logger"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/helper/json"
@@ -106,7 +107,9 @@ func (t *Log) Obsoletes(ctx context.Context, datas []map[string]any) error {
 	for _, log := range t.logs {
 		nlog := log
 		go func() {
-			_ = nlog.Obsolete(ctx, datas)
+			if err := nlog.Obsolete(ctx, datas); err != nil {
+				logger.New().Error(err)
+			}
 		}()
 	}
 	return nil

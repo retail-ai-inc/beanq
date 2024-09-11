@@ -132,12 +132,17 @@ func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err 
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*Message, error) {
 
 	key := MakeStatusKey(t.prefix, channel, id)
+	timer := timex.TimerPool.Get(500 * time.Millisecond)
+	defer timex.TimerPool.Put(timer)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		default:
+		case <-timer.C:
+			timer.Reset(500 * time.Millisecond)
 			cmd := t.client.HGetAll(ctx, key)
+
 			if err := cmd.Err(); err != nil {
 				return nil, err
 			}
@@ -164,6 +169,8 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 	// update status
 	// keep 6 hours for cache
 	key := MakeStatusKey(t.prefix, result.Channel, result.Id)
+	// log for mongo to batch saving
+	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 
 	val := map[string]any{
 		"id":           result.Id,
@@ -186,40 +193,40 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 		"response":     result.Response,
 	}
 
-	if t.client.HExists(ctx, key, "id").Val() {
-		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			v := t.client.HMGet(ctx, key, "status").Val()
-			if len(v) <= 0 {
-				return nil
-			}
-			if v[0].(string) == StatusSuccess {
-				return nil
-			}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
 
-			pipeliner.HSet(ctx, key, "status", result.Status)
-			pipeliner.HSet(ctx, key, "level", result.Level)
-			pipeliner.HSet(ctx, key, "info", result.Info)
-			pipeliner.HSet(ctx, key, "runTime", result.RunTime)
-			pipeliner.HSet(ctx, key, "beginTime", result.BeginTime)
-			pipeliner.HSet(ctx, key, "endTime", result.EndTime)
-			pipeliner.HSet(ctx, key, "executeTime", result.ExecuteTime)
-			return nil
-		}); err != nil {
-			return err
-		}
-	} else {
+	fmt.Printf("池状态:%+v \n", t.client.PoolStats())
 
+	keyLen := t.client.HLen(ctx, key).Val()
+
+	if keyLen == 0 {
 		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			pipeliner.HMSet(ctx, key, val)
 			pipeliner.Expire(ctx, key, 6*time.Hour)
 			return nil
 		}); err != nil {
+			fmt.Printf("err:%+v \n", err)
 			return err
+		}
+	} else {
+		v := t.client.HGet(ctx, key, "status").Val()
+		if !strings.EqualFold(v, StatusSuccess) {
+			if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+				pipeliner.HSet(ctx, key, "status", result.Status)
+				pipeliner.HSet(ctx, key, "level", result.Level)
+				pipeliner.HSet(ctx, key, "info", result.Info)
+				pipeliner.HSet(ctx, key, "runTime", result.RunTime)
+				pipeliner.HSet(ctx, key, "beginTime", result.BeginTime)
+				pipeliner.HSet(ctx, key, "endTime", result.EndTime)
+				pipeliner.HSet(ctx, key, "executeTime", result.ExecuteTime)
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
 	}
 
-	// log for mongo to batch saving
-	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 	if err := t.client.XAdd(ctx, &redis.XAddArgs{
 		Stream:     logStream,
 		NoMkStream: false,
@@ -237,10 +244,14 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 // Obsolete log
 func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error {
 
+	if t.config.History.On == false {
+		return nil
+	}
+
 	timer := timex.TimerPool.Get(5 * time.Second)
 	defer timex.TimerPool.Put(timer)
 
-	key := strings.Join([]string{t.prefix, "logs"}, ":")
+	key := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 	logGroup := "log-group"
 	for {
 		// check state
