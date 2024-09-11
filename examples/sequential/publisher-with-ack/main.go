@@ -65,7 +65,7 @@ func main() {
 			if err != nil {
 				logger.New().Error(err, m)
 			} else {
-				log.Printf("ID:%+v,状态：%+v \n", result.Id, result.Status)
+				log.Printf("ID:%+v \n", result.Id)
 			}
 		}(i)
 

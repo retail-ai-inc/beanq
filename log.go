@@ -75,7 +75,7 @@ const (
 
 type ILog interface {
 	// Archive log
-	Archive(ctx context.Context, result *Message) error
+	Archive(ctx context.Context, result *Message, isSequential bool) error
 	// Obsolete ,if log has expired ,then delete it
 	Obsolete(ctx context.Context, data []map[string]any) error
 }
@@ -95,7 +95,7 @@ func NewLog(pool *asyncPool, logs ...ILog) *Log {
 func (t *Log) Archives(ctx context.Context, result Message) error {
 	for _, log := range t.logs {
 		nlog := log
-		if err := nlog.Archive(ctx, &result); err != nil {
+		if err := nlog.Archive(ctx, &result, false); err != nil {
 			t.pool.captureException(ctx, err)
 		}
 	}

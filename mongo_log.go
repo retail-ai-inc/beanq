@@ -16,8 +16,6 @@ type MongoLog struct {
 	collection string
 }
 
-const MongoCollection string = "logs"
-
 func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 
 	historyCfg := config.History
@@ -58,7 +56,7 @@ func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 }
 
 // Archive save log
-func (t *MongoLog) Archive(ctx context.Context, result *Message) error {
+func (t *MongoLog) Archive(ctx context.Context, result *Message, isSequential bool) error {
 	return nil
 }
 
