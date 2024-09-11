@@ -196,8 +196,6 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	fmt.Printf("池状态:%+v \n", t.client.PoolStats())
-
 	keyLen := t.client.HLen(ctx, key).Val()
 
 	if keyLen == 0 {
@@ -244,7 +242,7 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 // Obsolete log
 func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error {
 
-	if t.config.History.On == false {
+	if !t.config.History.On {
 		return nil
 	}
 
