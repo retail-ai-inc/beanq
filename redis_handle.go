@@ -58,6 +58,34 @@ func (t *RedisHandle) Process(ctx context.Context) {
 	}
 }
 
+func (t *RedisHandle) retry(ctx context.Context, message *Message, handle *RedisHandle) (int, error) {
+
+	retry, err := RetryInfo(ctx, func() error {
+		var globalErr error
+		if err := handle.subscribe.Handle(ctx, message); err != nil {
+			if errors.Is(err, NilHandle) {
+				globalErr = errors.Join(globalErr, nil)
+			} else {
+				globalErr = errors.Join(globalErr, err)
+				if h, ok := handle.subscribe.(IConsumeCancel); ok {
+					if err := h.Cancel(ctx, message); err != nil {
+
+						if errors.Is(err, NilCancel) {
+							globalErr = errors.Join(globalErr, nil)
+						} else {
+							globalErr = errors.Join(globalErr, err)
+						}
+
+					}
+				}
+			}
+		}
+		return globalErr
+	}, message.Retry)
+
+	return retry, err
+}
+
 func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	channel := t.channel
 	topic := t.topic
@@ -119,29 +147,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 				result.Status = StatusReceived
 				result.BeginTime = time.Now()
 				sessionCtx, cancel := context.WithTimeout(context.Background(), nmessage.TimeToRun)
-
-				retry, err := RetryInfo(sessionCtx, func() error {
-					var globalErr error
-					if err := rh.subscribe.Handle(sessionCtx, result); err != nil {
-						if errors.Is(err, NilHandle) {
-							globalErr = errors.Join(globalErr, nil)
-						} else {
-							globalErr = errors.Join(globalErr, err)
-							if h, ok := rh.subscribe.(IConsumeCancel); ok {
-								if err := h.Cancel(sessionCtx, result); err != nil {
-
-									if errors.Is(err, NilCancel) {
-										globalErr = errors.Join(globalErr, nil)
-									} else {
-										globalErr = errors.Join(globalErr, err)
-									}
-
-								}
-							}
-						}
-					}
-					return globalErr
-				}, result.Retry)
+				retry, err := t.retry(sessionCtx, result, rh)
 
 				if err != nil {
 					if h, ok := rh.subscribe.(IConsumeError); ok {
@@ -253,28 +259,8 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 				result.BeginTime = time.Now()
 
 				sessionCtx, cancel := context.WithTimeout(context.Background(), result.TimeToRun)
-				retry, err := RetryInfo(sessionCtx, func() error {
-					var globalErr error
-					if err := rh.subscribe.Handle(sessionCtx, result); err != nil {
-						if errors.Is(err, NilHandle) {
-							globalErr = errors.Join(globalErr, nil)
-						} else {
-							globalErr = errors.Join(globalErr, err)
-							if h, ok := rh.subscribe.(IConsumeCancel); ok {
-								if err := h.Cancel(sessionCtx, result); err != nil {
 
-									if errors.Is(err, NilCancel) {
-										globalErr = errors.Join(globalErr, nil)
-									} else {
-										globalErr = errors.Join(globalErr, err)
-									}
-
-								}
-							}
-						}
-					}
-					return globalErr
-				}, result.Retry)
+				retry, err := t.retry(sessionCtx, result, rh)
 
 				result.Status = StatusSuccess
 				if err != nil {
