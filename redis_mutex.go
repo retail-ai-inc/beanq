@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	mRand "math/rand"
 	"strings"
 	"time"
 
@@ -33,6 +34,60 @@ var ErrLockAlreadyExpired = errors.New("failed to unlock, lock was already expir
 
 // A DelayFunc is used to decide the amount of time to wait between retries.
 type DelayFunc func(tries int) time.Duration
+
+type MuxClient struct {
+	expireTime time.Duration
+	prefix     string
+	client     redis.UniversalClient
+}
+
+func NewMuxClient(client redis.UniversalClient) *MuxClient {
+	return &MuxClient{
+		expireTime: time.Second * 8,
+		prefix:     "mutex",
+		client:     client,
+	}
+}
+
+func (p *MuxClient) SetPrefix(prefix string) *MuxClient {
+	p.prefix = prefix
+	return p
+}
+
+func (p *MuxClient) SetExpireTime(expireTime time.Duration) *MuxClient {
+	p.expireTime = expireTime
+	return p
+}
+
+func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
+	pools := []redis.UniversalClient{
+		p.client,
+	}
+	m := &Mutex{
+		name:   strings.Join([]string{p.prefix, name}, ":"),
+		expiry: p.expireTime,
+		tries:  32,
+		delayFunc: func(tries int) time.Duration {
+			return time.Duration(mRand.Intn(maxRetryDelayMilliSec-minRetryDelayMilliSec)+minRetryDelayMilliSec) * time.Millisecond
+		},
+		genValueFunc:  genValue,
+		driftFactor:   0.01,
+		timeoutFactor: 0.1,
+		quorum:        len(pools)/2 + 1,
+		pools:         pools,
+	}
+
+	for _, o := range options {
+		o.Apply(m)
+	}
+
+	if m.shuffle {
+		mRand.Shuffle(len(pools), func(i, j int) {
+			pools[i], pools[j] = pools[j], pools[i]
+		})
+	}
+	return m
+}
 
 // A Mutex is a distributed mutual exclusion lock.
 type Mutex struct {
