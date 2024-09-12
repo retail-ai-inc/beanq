@@ -31,7 +31,7 @@ const (
 		redis.call('HSET', key, field, value)
 	end
 
-	local ttl = 3600*tonumber(KEYS[2])
+	local ttl = 3600*6
 	redis.call('EXPIRE',key,ttl)
 
 	return true

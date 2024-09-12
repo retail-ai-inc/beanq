@@ -194,8 +194,7 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential
 		// status saved in redis,6 hour
 		key := MakeStatusKey(t.prefix, result.Channel, result.Id)
 		script := redis.NewScript(lua.SaveHSet)
-		ttl := cast.ToString(rand.Int63n(4) + 2)
-		if err := script.Run(ctx, t.client, []string{key, ttl}, val).Err(); err != nil {
+		if err := script.Run(ctx, t.client, []string{key}, val).Err(); err != nil {
 			return err
 		}
 	}
