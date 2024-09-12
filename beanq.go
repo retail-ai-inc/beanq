@@ -64,6 +64,7 @@ type (
 		On    bool
 		Mongo struct {
 			Database              string
+			Collection            string
 			UserName              string
 			Password              string
 			Host                  string
@@ -138,6 +139,9 @@ func (t *BeanqConfig) init() {
 	}
 	if t.TimeToRun == 0 {
 		t.TimeToRun = DefaultOptions.TimeToRun
+	}
+	if t.History.Mongo.Collection == "" {
+		t.History.Mongo.Collection = "event_logs"
 	}
 	if t.History.Mongo.ConnectTimeOut == 0 {
 		t.History.Mongo.ConnectTimeOut = 10 * time.Second

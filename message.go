@@ -34,26 +34,26 @@ import (
 
 type (
 	Message struct {
-		Id           string        `json:"id"`
-		Topic        string        `json:"topic"`
-		Channel      string        `json:"channel"`
-		Consumer     string        `json:"consumer"`
-		MaxLen       int64         `json:"maxLen"`
-		Retry        int           `json:"retry"`
-		PendingRetry int64         `json:"pendingRetry"`
-		Priority     float64       `json:"priority"`
-		Payload      string        `json:"payload"`
-		AddTime      string        `json:"addTime"`
-		ExecuteTime  time.Time     `json:"executeTime"`
-		TimeToRun    time.Duration `json:"timeToRun"`
-		MoodType     MoodType      `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
-		Status       Status        `json:"status"`
-		Level        LevelMsg      `json:"level"`
-		Info         FlagInfo      `json:"info"`
-		RunTime      string        `json:"runTime"`
-		BeginTime    time.Time     `json:"beginTime"`
-		EndTime      time.Time     `json:"endTime"`
-		Response     any           `json:"response"`
+		Id           string        `json:"id" redis:"id"`
+		Topic        string        `json:"topic" redis:"topic"`
+		Channel      string        `json:"channel" redis:"channel"`
+		Consumer     string        `json:"consumer" redis:"consumer"`
+		MaxLen       int64         `json:"maxLen" redis:"maxLen"`
+		Retry        int           `json:"retry" redis:"retry"`
+		PendingRetry int64         `json:"pendingRetry" redis:"pendingRetry"`
+		Priority     float64       `json:"priority" redis:"priority"`
+		Payload      string        `json:"payload" redis:"payload"`
+		AddTime      string        `json:"addTime" redis:"addTime"`
+		ExecuteTime  time.Time     `json:"executeTime" redis:"executeTime"`
+		TimeToRun    time.Duration `json:"timeToRun" redis:"timeToRun"`
+		MoodType     MoodType      `json:"moodType" redis:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
+		Status       Status        `json:"status" redis:"status"`
+		Level        LevelMsg      `json:"level" redis:"level"`
+		Info         FlagInfo      `json:"info" redis:"info"`
+		RunTime      string        `json:"runTime" redis:"runTime"`
+		BeginTime    time.Time     `json:"beginTime" redis:"beginTime"`
+		EndTime      time.Time     `json:"endTime" redis:"endTime"`
+		Response     any           `json:"response" redis:"response"`
 	}
 )
 

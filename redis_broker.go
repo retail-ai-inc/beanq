@@ -136,12 +136,15 @@ func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err 
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*Message, error) {
 
 	key := MakeStatusKey(t.prefix, channel, id)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
+
 			cmd := t.client.HGetAll(ctx, key)
+
 			if err := cmd.Err(); err != nil {
 				return nil, err
 			}
@@ -163,10 +166,10 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*M
 }
 
 // Archive log
-func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
-	// update status
-	// keep 6 hours for cache
-	key := MakeStatusKey(t.prefix, result.Channel, result.Id)
+func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential bool) error {
+
+	// log for mongo to batch saving
+	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 
 	val := map[string]any{
 		"id":           result.Id,
@@ -189,40 +192,16 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 		"response":     result.Response,
 	}
 
-	if t.client.HExists(ctx, key, "id").Val() {
-		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			v := t.client.HMGet(ctx, key, "status").Val()
-			if len(v) <= 0 {
-				return nil
-			}
-			if v[0].(string) == StatusSuccess {
-				return nil
-			}
-
-			pipeliner.HSet(ctx, key, "status", result.Status)
-			pipeliner.HSet(ctx, key, "level", result.Level)
-			pipeliner.HSet(ctx, key, "info", result.Info)
-			pipeliner.HSet(ctx, key, "runTime", result.RunTime)
-			pipeliner.HSet(ctx, key, "beginTime", result.BeginTime)
-			pipeliner.HSet(ctx, key, "endTime", result.EndTime)
-			pipeliner.HSet(ctx, key, "executeTime", result.ExecuteTime)
-			return nil
-		}); err != nil {
-			return err
-		}
-	} else {
-
-		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.HMSet(ctx, key, val)
-			pipeliner.Expire(ctx, key, 6*time.Hour)
-			return nil
-		}); err != nil {
+	if isSequential {
+		// status saved in redis,6 hour
+		key := MakeStatusKey(t.prefix, result.Channel, result.Id)
+		script := redis.NewScript(redisx.SaveHSet)
+		if err := script.Run(ctx, t.client, []string{key}, val).Err(); err != nil {
 			return err
 		}
 	}
 
-	// log for mongo to batch saving
-	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
+	// write job log into redis
 	if err := t.client.XAdd(ctx, &redis.XAddArgs{
 		Stream:     logStream,
 		NoMkStream: false,
@@ -240,10 +219,14 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
 // Obsolete log
 func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error {
 
+	if !t.config.History.On {
+		return nil
+	}
+
 	timer := timex.TimerPool.Get(5 * time.Second)
 	defer timex.TimerPool.Put(timer)
 
-	key := strings.Join([]string{t.prefix, "logs"}, ":")
+	key := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 	logGroup := "log-group"
 	for {
 		// check state
@@ -382,6 +365,43 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Mes
 	}
 }
 
+// save log into redis stream
+func (t *RedisBroker) enqueueLog(ctx context.Context, msg *Message) error {
+	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
+
+	val := map[string]any{
+		"id":           msg.Id,
+		"status":       msg.Status,
+		"level":        msg.Level,
+		"info":         msg.Info,
+		"payload":      msg.Payload,
+		"pendingRetry": msg.PendingRetry,
+		"retry":        msg.Retry,
+		"priority":     msg.Priority,
+		"addTime":      msg.AddTime,
+		"runTime":      msg.RunTime,
+		"beginTime":    msg.BeginTime,
+		"endTime":      msg.EndTime,
+		"executeTime":  msg.ExecuteTime,
+		"topic":        msg.Topic,
+		"channel":      msg.Channel,
+		"consumer":     msg.Consumer,
+		"moodType":     msg.MoodType,
+		"response":     msg.Response,
+	}
+
+	if err := t.client.XAdd(ctx, &redis.XAddArgs{
+		Stream:     logStream,
+		NoMkStream: false,
+		MaxLen:     20000,
+		Approx:     false,
+		ID:         "*",
+		Values:     val,
+	}).Err(); err != nil {
+		return err
+	}
+	return nil
+}
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 
 	switch msg.MoodType {
@@ -416,15 +436,10 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	default:
 		return errors.New("[RedisBroker.enqueue] unknown:" + msg.MoodType.String())
 	}
-
-	// publish success
 	msg.Status = StatusPublished
-	t.asyncPool.Execute(ctx, func(c context.Context) error {
-		if err := t.Archive(ctx, msg); err != nil {
-			return err
-		}
-		return nil
-	})
+	if err := t.enqueueLog(ctx, msg); err != nil {
+		return err
+	}
 
 	return nil
 }

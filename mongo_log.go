@@ -12,10 +12,9 @@ import (
 )
 
 type MongoLog struct {
-	database *mongo.Database
+	database   *mongo.Database
+	collection string
 }
-
-const MongoCollection string = "logs"
 
 func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 
@@ -51,12 +50,13 @@ func NewMongoLog(ctx context.Context, config *BeanqConfig) *MongoLog {
 	}
 
 	return &MongoLog{
-		database: client.Database(historyCfg.Mongo.Database),
+		database:   client.Database(historyCfg.Mongo.Database),
+		collection: historyCfg.Mongo.Collection,
 	}
 }
 
 // Archive save log
-func (t *MongoLog) Archive(ctx context.Context, result *Message) error {
+func (t *MongoLog) Archive(ctx context.Context, result *Message, isSequential bool) error {
 	return nil
 }
 
@@ -68,7 +68,7 @@ func (t *MongoLog) Obsolete(ctx context.Context, data []map[string]any) error {
 	for _, v := range data {
 		datas = append(datas, bson.M(v))
 	}
-	if _, err := t.database.Collection(MongoCollection).InsertMany(ctx, datas); err != nil {
+	if _, err := t.database.Collection(t.collection).InsertMany(ctx, datas); err != nil {
 		return fmt.Errorf("Mongo Error:%w \n", err)
 	}
 	return nil

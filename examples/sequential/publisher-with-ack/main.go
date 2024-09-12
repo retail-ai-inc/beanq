@@ -49,7 +49,7 @@ func main() {
 	pub := beanq.New(config)
 	wait := sync.WaitGroup{}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 300; i++ {
 		wait.Add(1)
 		go func(i1 int) {
 			defer wait.Done()
@@ -63,9 +63,9 @@ func main() {
 			defer cancel()
 			result, err := pub.BQ().WithContext(ctx).SetId(id).PublishInSequential("delay-channel", "order-topic", b).WaitingAck()
 			if err != nil {
-				logger.New().Error(err)
+				logger.New().Error(err, m)
 			} else {
-				log.Printf("%+v \n", result)
+				log.Printf("ID:%+v \n", result.Id)
 			}
 		}(i)
 
