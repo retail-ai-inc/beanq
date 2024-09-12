@@ -188,15 +188,22 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential
 		"moodType":     result.MoodType,
 		"response":     result.Response,
 	}
+	// status saved in redis,max 6 hour,min 2 hour
+	expireTime := cast.ToDuration(rand.Int63n(4)+2) * time.Hour
+	
 	if isSequential {
 		key := MakeStatusKey(t.prefix, result.Channel, result.Id)
 		// write job state into redis
-		// keep 6 hours for cache
-		if _, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.HMSet(ctx, key, val)
-			pipeliner.Expire(ctx, key, 6*time.Hour)
+		if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
+			if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+				pipeliner.HMSet(ctx, key, val)
+				pipeliner.Expire(ctx, key, expireTime)
+				return nil
+			}); err != nil {
+				return err
+			}
 			return nil
-		}); err != nil {
+		}, key); err != nil {
 			return err
 		}
 	}
