@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/retail-ai-inc/beanq/helper/redisx/lua"
 	"math"
 	"math/rand"
 	"os"
@@ -192,8 +193,9 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential
 	if isSequential {
 		// status saved in redis,6 hour
 		key := MakeStatusKey(t.prefix, result.Channel, result.Id)
-		script := redis.NewScript(redisx.SaveHSet)
-		if err := script.Run(ctx, t.client, []string{key}, val).Err(); err != nil {
+		script := redis.NewScript(lua.SaveHSet)
+		ttl := cast.ToString(rand.Int63n(4) + 2)
+		if err := script.Run(ctx, t.client, []string{key, ttl}, val).Err(); err != nil {
 			return err
 		}
 	}
@@ -408,11 +410,10 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
 
-		if t.client.HExists(ctx, key, "id").Val() {
-			t.client.HIncrBy(ctx, key, "score", 1)
-			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
+		script := redis.NewScript(lua.HashDuplicateId)
+		if err := script.Run(ctx, t.client, []string{key}).Err(); err != nil {
+			return err
 		}
-
 		message := msg.ToMap()
 		message["status"] = StatusPublished
 		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message)).Err(); err != nil {
