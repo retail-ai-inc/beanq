@@ -66,7 +66,7 @@ type (
 
 var ErrorIdempotent = errors.New("duplicate id")
 
-func newRedisBroker(config *BeanqConfig) IBroker {
+func newRedisBroker(config *BeanqConfig) *RedisBroker {
 
 	ctx := context.Background()
 
@@ -123,6 +123,10 @@ func newRedisBroker(config *BeanqConfig) IBroker {
 	return broker
 }
 
+func (t *RedisBroker) driver() any {
+	return t.client
+}
+
 func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err any)) {
 	if handler != nil {
 		t.captureException = handler
@@ -163,7 +167,6 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*M
 }
 
 // Archive log
-
 func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential bool) error {
 
 	// log for mongo to batch saving
