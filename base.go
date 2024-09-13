@@ -126,6 +126,15 @@ func MakeSubKey(prefix, channel, topic string) string {
 	return makeKey(prefix, channel, topic, "subKey")
 }
 
+const (
+	// BeanqLogicGroup it's for beanq-logic-log,multiple consumers can consume those data
+	BeanqLogicGroup = "beanq-logic-group"
+)
+
+func MakeLogicKey(prefix string) string {
+	return makeKey(prefix, "beanq-logic-log")
+}
+
 func doTimeout(ctx context.Context, f func() error) error {
 	errCh := make(chan error, 1)
 	go func() {
