@@ -645,11 +645,84 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 			return t.Obsolete(ctx, nil)
 		})
+		t.asyncPool.Execute(ctx, func(c context.Context) error {
+			t.logicLogDeadLetter(ctx)
+			return nil
+		})
 	}
 
 	logger.New().Info("Beanq Start")
 	// monitor signal
 	<-t.waitSignal(cancel)
+}
+
+func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
+
+	duration := 10 * time.Second
+	timer := timex.TimerPool.Get(duration)
+	defer timex.TimerPool.Put(timer)
+	streamKey := MakeLogicKey(t.prefix)
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.New().Info("Logic Job Stop")
+			return
+		case <-timer.C:
+			timer.Reset(duration)
+			cmd := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+				Stream: streamKey,
+				Group:  BeanqLogicGroup,
+				Idle:   15 * time.Minute, //if message has been reading,but still not complete after 15 minutes,then it is dead letter message
+				Start:  "-",
+				End:    "+",
+				Count:  100,
+			})
+
+			results, err := cmd.Result()
+			if err != nil {
+				t.captureException(ctx, err)
+				continue
+			}
+			if len(results) <= 0 {
+				continue
+			}
+			for _, result := range results {
+				r, err := t.client.XRangeN(ctx, streamKey, result.ID, result.ID, 1).Result()
+				if err != nil {
+					t.captureException(ctx, err)
+					continue
+				}
+				if len(r) <= 0 {
+					continue
+				}
+				val := r[0].Values
+				pendingRetry := 0
+				if v, ok := val["pendingRetry"]; ok {
+					pendingRetry = cast.ToInt(v) + 1
+				}
+				val["pendingRetry"] = pendingRetry
+
+				if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
+					if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+						pipeliner.XAck(ctx, streamKey, BeanqLogicGroup, result.ID)
+						pipeliner.XDel(ctx, streamKey, result.ID)
+						pipeliner.XAdd(ctx, &redis.XAddArgs{
+							Stream: streamKey,
+							Values: val,
+						})
+						return nil
+					}); err != nil {
+						return err
+					}
+					return nil
+				}, streamKey); err != nil {
+					t.captureException(ctx, err)
+				}
+			}
+		}
+	}
+
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
