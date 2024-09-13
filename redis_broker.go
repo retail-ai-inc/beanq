@@ -26,6 +26,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/retail-ai-inc/beanq/helper/redisx/lua"
 	"math"
 	"math/rand"
 	"os"
@@ -38,6 +39,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
@@ -64,7 +66,7 @@ type (
 
 var ErrorIdempotent = errors.New("duplicate id")
 
-func newRedisBroker(config *BeanqConfig) IBroker {
+func newRedisBroker(config *BeanqConfig) *RedisBroker {
 
 	ctx := context.Background()
 
@@ -108,7 +110,6 @@ func newRedisBroker(config *BeanqConfig) IBroker {
 		successKey:         MakeLogKey(config.Redis.Prefix, "success"),
 	}
 	var logs []ILog
-	logs = append(logs, broker)
 	if config.History.On {
 		mongoLog := NewMongoLog(ctx, config)
 		logs = append(logs, mongoLog)
@@ -122,6 +123,10 @@ func newRedisBroker(config *BeanqConfig) IBroker {
 	return broker
 }
 
+func (t *RedisBroker) driver() any {
+	return t.client
+}
+
 func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err any)) {
 	if handler != nil {
 		t.captureException = handler
@@ -132,88 +137,151 @@ func (t *RedisBroker) setCaptureException(handler func(ctx context.Context, err 
 func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*Message, error) {
 
 	key := MakeStatusKey(t.prefix, channel, id)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
+
 			cmd := t.client.HGetAll(ctx, key)
+
 			if err := cmd.Err(); err != nil {
 				return nil, err
 			}
+
 			val := cmd.Val()
+			if len(val) <= 0 {
+				continue
+			}
+
 			if v, ok := val["status"]; ok {
 				if v != StatusSuccess && v != StatusFailed {
 					continue
 				}
 			}
-			msg := messageToStruct(cmd.Val())
+			msg := messageToStruct(val)
 			return msg, nil
 		}
 	}
 }
 
 // Archive log
-func (t *RedisBroker) Archive(ctx context.Context, result *Message) error {
-	// update status
-	// keep 6 hours for cache
-	key := MakeStatusKey(t.prefix, result.Channel, result.Id)
-	if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
-		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.HMSet(ctx, key, map[string]any{
-				"id":           result.Id,
-				"status":       result.Status,
-				"level":        result.Level,
-				"info":         result.Info,
-				"payload":      result.Payload,
-				"pendingRetry": result.PendingRetry,
-				"retry":        result.Retry,
-				"priority":     result.Priority,
-				"addTime":      result.AddTime,
-				"runTime":      result.RunTime,
-				"beginTime":    result.BeginTime,
-				"endTime":      result.EndTime,
-				"executeTime":  result.ExecuteTime,
-				"topic":        result.Topic,
-				"channel":      result.Channel,
-				"consumer":     result.Consumer,
-				"moodType":     result.MoodType,
-				"response":     result.Response,
-			})
-			pipeliner.Expire(ctx, key, 6*time.Hour)
-			return nil
-		})
-		return err
-	}, key); err != nil {
+func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential bool) error {
+
+	// log for mongo to batch saving
+	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
+
+	val := map[string]any{
+		"id":           result.Id,
+		"status":       result.Status,
+		"level":        result.Level,
+		"info":         result.Info,
+		"payload":      result.Payload,
+		"pendingRetry": result.PendingRetry,
+		"retry":        result.Retry,
+		"priority":     result.Priority,
+		"addTime":      result.AddTime,
+		"runTime":      result.RunTime,
+		"beginTime":    result.BeginTime,
+		"endTime":      result.EndTime,
+		"executeTime":  result.ExecuteTime,
+		"topic":        result.Topic,
+		"channel":      result.Channel,
+		"consumer":     result.Consumer,
+		"moodType":     result.MoodType,
+		"response":     result.Response,
+	}
+
+	if isSequential {
+		// status saved in redis,6 hour
+		key := MakeStatusKey(t.prefix, result.Channel, result.Id)
+		script := redis.NewScript(lua.SaveHSet)
+		if err := script.Run(ctx, t.client, []string{key}, val).Err(); err != nil {
+			return err
+		}
+	}
+
+	// write job log into redis
+	if err := t.client.XAdd(ctx, &redis.XAddArgs{
+		Stream:     logStream,
+		NoMkStream: false,
+		MaxLen:     20000,
+		Approx:     false,
+		ID:         "*",
+		Values:     val,
+	}).Err(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 // Obsolete log
-func (t *RedisBroker) Obsolete(ctx context.Context) {
+func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error {
 
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
+	if !t.config.History.On {
+		return nil
+	}
 
+	timer := timex.TimerPool.Get(5 * time.Second)
+	defer timex.TimerPool.Put(timer)
+
+	key := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
+	logGroup := "log-group"
 	for {
 		// check state
 		select {
 		case <-ctx.Done():
 			logger.New().Info("Redis Obsolete Stop")
-			return
-		case <-ticker.C:
+			return nil
+		case <-timer.C:
+		}
+		timer.Reset(5 * time.Second)
+		result, err := t.client.XReadGroup(ctx, redisx.NewReadGroupArgs(logGroup, key, []string{key, ">"}, 200, 0)).Result()
+		if err != nil {
+			if strings.Contains(err.Error(), "NOGROUP No such") {
+				if err := t.client.XGroupCreateMkStream(ctx, key, logGroup, "0").Err(); err != nil {
+					t.captureException(ctx, err)
+					return nil
+				}
+				continue
+			}
+			if errors.Is(err, context.Canceled) {
+				logger.New().Info("Redis Obsolete Stop")
+				return nil
+			}
+			if !errors.Is(err, redis.Nil) && !errors.Is(err, redis.ErrClosed) {
+				t.captureException(ctx, err)
+			}
+			continue
+		}
+		if len(result) <= 0 {
+			continue
+		}
+		messages := result[0].Messages
+		datas := make([]map[string]any, 0, len(messages))
+		ids := make([]string, 0, len(messages))
+
+		for _, v := range messages {
+			if v.ID != "" {
+				ids = append(ids, v.ID)
+				datas = append(datas, v.Values)
+			}
 		}
 
-		// delete fail logs
-		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			return t.client.ZRemRangeByScore(ctx, t.failKey, "0", cast.ToString(time.Now().UnixMilli())).Err()
-		})
+		if err := t.logJob.Obsoletes(ctx, datas); err != nil {
+			t.captureException(ctx, err)
+			continue
+		}
+		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.XAck(ctx, key, logGroup, ids...)
+			pipeliner.XDel(ctx, key, ids...)
+			return nil
+		}); err != nil {
+			t.captureException(ctx, err)
+		}
 
-		// delete success logs
-		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			return t.client.ZRemRangeByScore(ctx, t.successKey, "0", cast.ToString(time.Now().UnixMilli())).Err()
-		})
 	}
 }
 
@@ -281,7 +349,7 @@ func (t *RedisBroker) Delete(ctx context.Context, key string) error {
 
 func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Message, error) {
 
-	key := strings.Join([]string{t.prefix, "status", id}, ":")
+	key := MakeStatusKey(t.prefix, channel, id)
 	for {
 		select {
 		case <-ctx.Done():
@@ -298,6 +366,43 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Mes
 	}
 }
 
+// save log into redis stream
+func (t *RedisBroker) enqueueLog(ctx context.Context, msg *Message) error {
+	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
+
+	val := map[string]any{
+		"id":           msg.Id,
+		"status":       msg.Status,
+		"level":        msg.Level,
+		"info":         msg.Info,
+		"payload":      msg.Payload,
+		"pendingRetry": msg.PendingRetry,
+		"retry":        msg.Retry,
+		"priority":     msg.Priority,
+		"addTime":      msg.AddTime,
+		"runTime":      msg.RunTime,
+		"beginTime":    msg.BeginTime,
+		"endTime":      msg.EndTime,
+		"executeTime":  msg.ExecuteTime,
+		"topic":        msg.Topic,
+		"channel":      msg.Channel,
+		"consumer":     msg.Consumer,
+		"moodType":     msg.MoodType,
+		"response":     msg.Response,
+	}
+
+	if err := t.client.XAdd(ctx, &redis.XAddArgs{
+		Stream:     logStream,
+		NoMkStream: false,
+		MaxLen:     20000,
+		Approx:     false,
+		ID:         "*",
+		Values:     val,
+	}).Err(); err != nil {
+		return err
+	}
+	return nil
+}
 func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool) error {
 
 	switch msg.MoodType {
@@ -306,26 +411,17 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		streamKey := MakeStreamKey(sequentialSubscribe, t.prefix, msg.Channel, msg.Topic)
 
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
-		if t.client.HExists(ctx, key, "id").Val() {
-			t.client.HIncrBy(ctx, key, "score", 1)
-			return fmt.Errorf("[RedisBroker.enqueue] check id: %w", ErrorIdempotent)
-		}
 
-		// record status, after idempotency check, before publish
-		msg.Status = StatusPrepare
-		if err := t.logJob.Archives(ctx, *msg); err != nil {
+		script := redis.NewScript(lua.HashDuplicateId)
+		if err := script.Run(ctx, t.client, []string{key}).Err(); err != nil {
+			return err
+		}
+		message := msg.ToMap()
+		message["status"] = StatusPublished
+		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message)).Err(); err != nil {
 			return err
 		}
 
-		_, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			message := msg.ToMap()
-			message["status"] = StatusPublished
-			pipeliner.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message))
-			return nil
-		})
-		if err != nil {
-			return err
-		}
 	case NORMAL:
 		xAddArgs := redisx.NewZAddArgs(MakeStreamKey(normalSubscribe, t.prefix, msg.Channel, msg.Topic), "", "*", t.maxLen, 0, msg.ToMap())
 		err := t.client.XAdd(ctx, xAddArgs).Err()
@@ -340,10 +436,8 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 	default:
 		return errors.New("[RedisBroker.enqueue] unknown:" + msg.MoodType.String())
 	}
-
-	// publish success
 	msg.Status = StatusPublished
-	if err := t.logJob.Archives(ctx, *msg); err != nil {
+	if err := t.enqueueLog(ctx, msg); err != nil {
 		return err
 	}
 
@@ -385,7 +479,7 @@ func (t *RedisBroker) addConsumer(subType subscribeType, channel, topic string, 
 		}},
 		errGroupPool: &sync.Pool{New: func() any {
 			group := new(errgroup.Group)
-			group.SetLimit(3)
+			group.SetLimit(2)
 			return group
 		}},
 		once: sync.Once{},
@@ -449,10 +543,10 @@ func (t *RedisBroker) dynamicConsuming(subType subscribeType, channel string, su
 	// monitor signal
 	t.waitSignal(cancel)
 	t.once.Do(func() {
-		err := t.logJob.Obsoletes(ctx)
-		if err != nil {
-			t.captureException(ctx, err)
-		}
+		// err := t.logJob.Obsoletes(ctx)
+		// if err != nil {
+		// 	t.captureException(ctx, err)
+		// }
 
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 			return t.filter.Delete(ctx, MakeFilter(t.prefix))
@@ -554,11 +648,7 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 	}
 
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		return t.logJob.Obsoletes(ctx)
-	})
-
-	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		return t.filter.Delete(ctx, MakeFilter(t.prefix))
+		return t.Obsolete(ctx, nil)
 	})
 
 	logger.New().Info("Beanq Start")
@@ -567,9 +657,6 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
-	if err := handle.Check(ctx); err != nil {
-		return err
-	}
 	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 		handle.Process(ctx)
 		return nil

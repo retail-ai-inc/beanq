@@ -24,7 +24,6 @@ package beanq
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"hash/fnv"
 	"math"
@@ -82,7 +81,7 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 
 // MakeStatusKey create key for type string
 func MakeStatusKey(prefix, channel, id string) string {
-	return makeKey(prefix, channel, "status", id)
+	return makeKey(prefix, channel, "=-status-=", id)
 }
 
 // MakeDynamicKey create key for dynamic
@@ -150,12 +149,10 @@ func doTimeout(ctx context.Context, f func() error) error {
 // RetryInfo retry=0 means no retries, but it will be executed at least once.
 func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error) {
 	for i = 0; i <= retry; i++ {
-		e := doTimeout(ctx, f)
-		if e == nil {
+		err = doTimeout(ctx, f)
+		if err == nil {
 			return
 		}
-
-		err = errors.Join(err, e)
 
 		waitTime := jitterBackoff(500*time.Millisecond, time.Second, i)
 		select {

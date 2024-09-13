@@ -88,7 +88,7 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 
 	err = t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
 
-		_, err := tx.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+		_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 
 			// set value
 			if err := pipeliner.ZAdd(ctx, setKey, &redis.Z{Score: priority, Member: bt}).Err(); err != nil {
@@ -127,7 +127,7 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		case <-closeCh:
 			return nil
 		case <-ctx.Done():
-			logger.New().Info("Schedule Task Stop")
+			logger.New().Info("Channel:[", channel, "]Topic:[", topic, "],Schedule Task Stop")
 			return nil
 		case <-timer.C:
 

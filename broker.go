@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/retail-ai-inc/beanq/helper/logger"
@@ -9,6 +10,7 @@ import (
 
 type (
 	IBroker interface {
+		driver() any
 		checkStatus(ctx context.Context, channel, id string) (*Message, error)
 		enqueue(ctx context.Context, msg *Message, dynamicOn bool) error
 		startConsuming(ctx context.Context)
@@ -43,7 +45,18 @@ func NewBroker(config *BeanqConfig) IBroker {
 	return broker
 }
 
+func GetBrokerDriver[T any]() T {
+	if broker == nil {
+		logger.New().Panic("the broker has not been initialized yet")
+	}
+	return broker.driver().(T)
+}
+
 // consumer...
+var (
+	NilHandle = errors.New("beanq:handle is nil")
+	NilCancel = errors.New("beanq:cancel is nil")
+)
 
 type (
 	IConsumeHandle interface {
@@ -68,8 +81,7 @@ type (
 )
 
 func (c WorkflowHandler) Handle(ctx context.Context, message *Message) error {
-	workflow := NewWorkflow(message)
-
+	workflow := NewWorkflow(ctx, message)
 	return c(ctx, workflow)
 }
 
@@ -77,14 +89,14 @@ func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {
 		return c.DoHandle(ctx, message)
 	}
-	return nil
+	return NilHandle
 }
 
 func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {
 	if c.DoCancel != nil {
 		return c.DoCancel(ctx, message)
 	}
-	return nil
+	return NilCancel
 }
 
 func (c DefaultHandle) Error(ctx context.Context, err error) {
