@@ -15,7 +15,7 @@ const (
 		if type(hresult) == 'table' and hresult.err then
 			return {err = hresult.err}
 		end
-		return {err = "duplicate id"}
+		return false
 	end
 
 	return true

@@ -409,7 +409,11 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 		script := redis.NewScript(lua.HashDuplicateId)
 		if err := script.Run(ctx, t.client, []string{key}).Err(); err != nil {
-			return err
+			if !errors.Is(err, redis.Nil) {
+				return err
+			} else {
+				return fmt.Errorf("[RedisBroker.enqueue] unique verification error:%w", errors.New("duplicate id"))
+			}
 		}
 		message := msg.ToMap()
 		message["status"] = StatusPublished
@@ -676,12 +680,13 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 			cmd := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
 				Stream: streamKey,
 				Group:  BeanqLogicGroup,
-				Idle:   15 * time.Minute, //if message has been reading,but still not complete after 15 minutes,then it is dead letter message
-				Start:  minId,
-				End:    "+",
-				Count:  100,
+				//Idle parameter need redis6.2.0
+				//if message has been reading,but still not complete after 15 minutes,then it is dead letter message
+				//Idle:   15 * time.Minute,
+				Start: minId,
+				End:   "+",
+				Count: 100,
 			})
-
 			results, err := cmd.Result()
 			if err != nil {
 				t.captureException(ctx, err)
@@ -692,6 +697,10 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 				continue
 			}
 			for _, result := range results {
+				minId = result.ID
+				if result.Idle < 15*time.Minute {
+					continue
+				}
 				// add lock
 				logicLock := MakeLogicLock(t.prefix, result.ID)
 				script := redis.NewScript(lua.AddLogicLock)
@@ -699,7 +708,6 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 					continue
 				}
 
-				minId = result.ID
 				r, err := t.client.XRangeN(ctx, streamKey, result.ID, result.ID, 1).Result()
 				if err != nil {
 					t.captureException(ctx, err)
