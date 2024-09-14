@@ -135,6 +135,10 @@ func MakeLogicKey(prefix string) string {
 	return makeKey(prefix, "beanq-logic-log")
 }
 
+func MakeLogicLock(prefix, id string) string {
+	return makeKey(prefix, "beanq-logic-uniqueid", id)
+}
+
 func doTimeout(ctx context.Context, f func() error) error {
 	errCh := make(chan error, 1)
 	go func() {

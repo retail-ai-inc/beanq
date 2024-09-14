@@ -642,9 +642,11 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 		t.consumerHandlers[key] = nil
 	}
 	if t.config.History.On {
+		//consume logs
 		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
 			return t.Obsolete(ctx, nil)
 		})
+		//if consumption fails,then retry again via dead letter
 		t.asyncPool.Execute(ctx, func(c context.Context) error {
 			t.logicLogDeadLetter(ctx)
 			return nil
@@ -662,6 +664,7 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 	timer := timex.TimerPool.Get(duration)
 	defer timex.TimerPool.Put(timer)
 	streamKey := MakeLogicKey(t.prefix)
+	minId := "-"
 
 	for {
 		select {
@@ -674,7 +677,7 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 				Stream: streamKey,
 				Group:  BeanqLogicGroup,
 				Idle:   15 * time.Minute, //if message has been reading,but still not complete after 15 minutes,then it is dead letter message
-				Start:  "-",
+				Start:  minId,
 				End:    "+",
 				Count:  100,
 			})
@@ -685,9 +688,18 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 				continue
 			}
 			if len(results) <= 0 {
+				minId = "-"
 				continue
 			}
 			for _, result := range results {
+				// add lock
+				logicLock := MakeLogicLock(t.prefix, result.ID)
+				script := redis.NewScript(lua.AddLogicLock)
+				if v := script.Run(ctx, t.client, []string{logicLock}).Val(); v.(int64) == 1 {
+					continue
+				}
+
+				minId = result.ID
 				r, err := t.client.XRangeN(ctx, streamKey, result.ID, result.ID, 1).Result()
 				if err != nil {
 					t.captureException(ctx, err)
@@ -717,6 +729,10 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 					}
 					return nil
 				}, streamKey); err != nil {
+					t.captureException(ctx, err)
+				}
+				//release lock
+				if err := t.client.Del(ctx, logicLock).Err(); err != nil {
 					t.captureException(ctx, err)
 				}
 			}
