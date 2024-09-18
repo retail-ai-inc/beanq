@@ -15,7 +15,7 @@ const (
 		if type(hresult) == 'table' and hresult.err then
 			return {err = hresult.err}
 		end
-		return {err = "duplicate id"}
+		return false
 	end
 
 	return true
@@ -35,5 +35,15 @@ const (
 	redis.call('EXPIRE',key,ttl)
 
 	return true
+`
+	AddLogicLock = `
+	local key = KEYS[1]
+	local val = redis.call('GET',key)
+	if val == '1' then
+		return 1
+	end
+
+	redis.call('SETEX',key,20,'1')
+	return 0
 `
 )
