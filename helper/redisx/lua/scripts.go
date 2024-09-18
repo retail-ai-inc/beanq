@@ -15,10 +15,10 @@ const (
 		if type(hresult) == 'table' and hresult.err then
 			return {err = hresult.err}
 		end
-		return false
+		return 1
 	end
 
-	return true
+	return 0
 `
 
 	SaveHSet = `

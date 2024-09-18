@@ -26,7 +26,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/helper/redisx/lua"
 	"math"
 	"math/rand"
 	"os"
@@ -39,6 +38,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
+	"github.com/retail-ai-inc/beanq/helper/redisx/lua"
 	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
 	"github.com/spf13/cast"
@@ -64,7 +64,7 @@ type (
 	}
 )
 
-var ErrorIdempotent = errors.New("duplicate id")
+var ErrIdempotent = bqError("duplicate id")
 
 func newRedisBroker(config *BeanqConfig) *RedisBroker {
 
@@ -408,13 +408,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
 
 		script := redis.NewScript(lua.HashDuplicateId)
-		if err := script.Run(ctx, t.client, []string{key}).Err(); err != nil {
-			if !errors.Is(err, redis.Nil) {
-				return err
-			} else {
-				return fmt.Errorf("[RedisBroker.enqueue] unique verification error:%w", errors.New("duplicate id"))
-			}
+		exist, err := script.Run(ctx, t.client, []string{key}).Bool()
+		if err != nil {
+			return err
 		}
+		if exist {
+			return fmt.Errorf("idempotency check: %w", ErrIdempotent)
+		}
+
 		message := msg.ToMap()
 		message["status"] = StatusPublished
 		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message)).Err(); err != nil {
