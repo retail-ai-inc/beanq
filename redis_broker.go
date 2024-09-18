@@ -170,8 +170,7 @@ func (t *RedisBroker) monitorStream(ctx context.Context, channel, id string) (*M
 func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential bool) error {
 
 	// log for mongo to batch saving
-	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
-
+	logStream := MakeLogicKey(t.prefix)
 	val := map[string]any{
 		"id":           result.Id,
 		"status":       result.Status,
@@ -220,15 +219,11 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential
 // Obsolete log
 func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error {
 
-	if !t.config.History.On {
-		return nil
-	}
-
 	timer := timex.TimerPool.Get(5 * time.Second)
 	defer timex.TimerPool.Put(timer)
 
-	key := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
-	logGroup := "log-group"
+	key := MakeLogicKey(t.prefix)
+
 	for {
 		// check state
 		select {
@@ -238,10 +233,10 @@ func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error
 		case <-timer.C:
 		}
 		timer.Reset(5 * time.Second)
-		result, err := t.client.XReadGroup(ctx, redisx.NewReadGroupArgs(logGroup, key, []string{key, ">"}, 200, 0)).Result()
+		result, err := t.client.XReadGroup(ctx, redisx.NewReadGroupArgs(BeanqLogicGroup, key, []string{key, ">"}, 200, 0)).Result()
 		if err != nil {
 			if strings.Contains(err.Error(), "NOGROUP No such") {
-				if err := t.client.XGroupCreateMkStream(ctx, key, logGroup, "0").Err(); err != nil {
+				if err := t.client.XGroupCreateMkStream(ctx, key, BeanqLogicGroup, "0").Err(); err != nil {
 					t.captureException(ctx, err)
 					return nil
 				}
@@ -275,7 +270,7 @@ func (t *RedisBroker) Obsolete(ctx context.Context, data []map[string]any) error
 			continue
 		}
 		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.XAck(ctx, key, logGroup, ids...)
+			pipeliner.XAck(ctx, key, BeanqLogicGroup, ids...)
 			pipeliner.XDel(ctx, key, ids...)
 			return nil
 		}); err != nil {
@@ -368,8 +363,8 @@ func (t *RedisBroker) checkStatus(ctx context.Context, channel, id string) (*Mes
 
 // save log into redis stream
 func (t *RedisBroker) enqueueLog(ctx context.Context, msg *Message) error {
-	logStream := strings.Join([]string{t.prefix, "beanq-topic-logs"}, ":")
 
+	logStream := MakeLogicKey(t.prefix)
 	val := map[string]any{
 		"id":           msg.Id,
 		"status":       msg.Status,
@@ -651,14 +646,108 @@ func (t *RedisBroker) startConsuming(ctx context.Context) {
 
 		t.consumerHandlers[key] = nil
 	}
-
-	t.asyncPool.Execute(ctx, func(ctx context.Context) error {
-		return t.Obsolete(ctx, nil)
-	})
+	if t.config.History.On {
+		//consume logs
+		t.asyncPool.Execute(ctx, func(ctx context.Context) error {
+			return t.Obsolete(ctx, nil)
+		})
+		//if consumption fails,then retry again via dead letter
+		t.asyncPool.Execute(ctx, func(c context.Context) error {
+			t.logicLogDeadLetter(ctx)
+			return nil
+		})
+	}
 
 	logger.New().Info("Beanq Start")
 	// monitor signal
 	<-t.waitSignal(cancel)
+}
+
+func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
+
+	duration := 10 * time.Second
+	timer := timex.TimerPool.Get(duration)
+	defer timex.TimerPool.Put(timer)
+	streamKey := MakeLogicKey(t.prefix)
+	minId := "-"
+
+	for {
+		select {
+		case <-ctx.Done():
+			logger.New().Info("Logic Job Stop")
+			return
+		case <-timer.C:
+			timer.Reset(duration)
+			cmd := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+				Stream: streamKey,
+				Group:  BeanqLogicGroup,
+				//Idle parameter need redis6.2.0
+				//if message has been reading,but still not complete after 15 minutes,then it is dead letter message
+				//Idle:   15 * time.Minute,
+				Start: minId,
+				End:   "+",
+				Count: 100,
+			})
+			results, err := cmd.Result()
+			if err != nil {
+				t.captureException(ctx, err)
+				continue
+			}
+			if len(results) <= 0 {
+				minId = "-"
+				continue
+			}
+			for _, result := range results {
+				minId = result.ID
+				if result.Idle < 15*time.Minute {
+					continue
+				}
+				// add lock
+				logicLock := MakeLogicLock(t.prefix, result.ID)
+				script := redis.NewScript(lua.AddLogicLock)
+				if v := script.Run(ctx, t.client, []string{logicLock}).Val(); v.(int64) == 1 {
+					continue
+				}
+
+				r, err := t.client.XRangeN(ctx, streamKey, result.ID, result.ID, 1).Result()
+				if err != nil {
+					t.captureException(ctx, err)
+					continue
+				}
+				if len(r) <= 0 {
+					continue
+				}
+				val := r[0].Values
+				pendingRetry := 0
+				if v, ok := val["pendingRetry"]; ok {
+					pendingRetry = cast.ToInt(v) + 1
+				}
+				val["pendingRetry"] = pendingRetry
+
+				if err := t.client.Watch(ctx, func(tx *redis.Tx) error {
+					if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+						pipeliner.XAck(ctx, streamKey, BeanqLogicGroup, result.ID)
+						pipeliner.XDel(ctx, streamKey, result.ID)
+						pipeliner.XAdd(ctx, &redis.XAddArgs{
+							Stream: streamKey,
+							Values: val,
+						})
+						return nil
+					}); err != nil {
+						return err
+					}
+					return nil
+				}, streamKey); err != nil {
+					t.captureException(ctx, err)
+				}
+				//release lock
+				if err := t.client.Del(ctx, logicLock).Err(); err != nil {
+					t.captureException(ctx, err)
+				}
+			}
+		}
+	}
+
 }
 
 func (t *RedisBroker) worker(ctx context.Context, handle IHandle) error {
