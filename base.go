@@ -76,7 +76,7 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 		stream = "sequential_stream"
 	}
 
-	return makeKey(prefix, channel, topic, stream)
+	return makeKey(prefix, channel, topic, stream, "stream")
 }
 
 // MakeStatusKey create key for type string
