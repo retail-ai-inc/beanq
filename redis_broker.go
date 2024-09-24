@@ -38,7 +38,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/helper/logger"
 	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/redisx/lua"
 	"github.com/retail-ai-inc/beanq/helper/timex"
 	"github.com/rs/xid"
 	"github.com/spf13/cast"
@@ -195,8 +194,7 @@ func (t *RedisBroker) Archive(ctx context.Context, result *Message, isSequential
 	if isSequential {
 		// status saved in redis,6 hour
 		key := MakeStatusKey(t.prefix, result.Channel, result.Id)
-		script := redis.NewScript(lua.SaveHSet)
-		if err := script.Run(ctx, t.client, []string{key}, val).Err(); err != nil {
+		if err := redisx.SaveHSetScript.Run(ctx, t.client, []string{key}, val).Err(); err != nil {
 			return err
 		}
 	}
@@ -407,8 +405,7 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
 
-		script := redis.NewScript(lua.HashDuplicateId)
-		exist, err := script.Run(ctx, t.client, []string{key}).Bool()
+		exist, err := redisx.HashDuplicateIdScript.Run(ctx, t.client, []string{key}).Bool()
 		if err != nil {
 			return err
 		}
@@ -704,8 +701,8 @@ func (t *RedisBroker) logicLogDeadLetter(ctx context.Context) {
 				}
 				// add lock
 				logicLock := MakeLogicLock(t.prefix, result.ID)
-				script := redis.NewScript(lua.AddLogicLock)
-				if v := script.Run(ctx, t.client, []string{logicLock}).Val(); v.(int64) == 1 {
+
+				if v := redisx.AddLogicLockScript.Run(ctx, t.client, []string{logicLock}).Val(); v.(int64) == 1 {
 					continue
 				}
 
