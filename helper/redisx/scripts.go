@@ -1,4 +1,4 @@
-package lua
+package redisx
 
 import (
 	_ "embed"
@@ -6,15 +6,15 @@ import (
 )
 
 var (
-	//go:embed hashDuplicate.lua
+	//go:embed lua/hashDuplicate.lua
 	hashDuplicateIdLua    string
 	HashDuplicateIdScript = redis.NewScript(hashDuplicateIdLua)
 
-	//go:embed addLogicLock.lua
+	//go:embed lua/addLogicLock.lua
 	addLogicLockLua    string
 	AddLogicLockScript = redis.NewScript(addLogicLockLua)
 
-	//go:embed saveHSet.lua
+	//go:embed lua/saveHSet.lua
 	saveHsetLua    string
 	SaveHSetScript = redis.NewScript(saveHsetLua)
 )
