@@ -59,14 +59,24 @@ func NewWorkflow(ctx context.Context, message *Message) *Workflow {
 	}
 }
 
-func (w *Workflow) SetRecordErrorHandler(handler func(error)) {
-	if w.record != nil {
-		w.record.setErrorHandler(handler)
+func (w *Workflow) Init(opts ...func(workflow *Workflow)) {
+	for _, opt := range opts {
+		opt(w)
 	}
 }
 
-func (w *Workflow) SetMux(mux WFMux) {
-	w.wfMux = mux
+func WfOptionRecordErrorHandler(handler func(error)) func(workflow *Workflow) {
+	return func(workflow *Workflow) {
+		if workflow.record != nil {
+			workflow.record.setErrorHandler(handler)
+		}
+	}
+}
+
+func WfOptionMux(mux WFMux) func(workflow *Workflow) {
+	return func(workflow *Workflow) {
+		workflow.wfMux = mux
+	}
 }
 
 func (w *Workflow) SetGid(gid string) {
@@ -376,39 +386,37 @@ func (w *WorkflowRecord) setErrorHandler(handler func(error)) {
 func (w *WorkflowRecord) Write(ctx context.Context, data any) {
 	if w.async {
 		w.asyncPool.Execute(context.Background(), func(c context.Context) error {
-			w.SyncWrite(c, data)
-			return nil
+			return w.SyncWrite(c, data)
 		})
 		return
 	}
 
-	w.SyncWrite(ctx, data)
+	w.errorHandler(w.SyncWrite(ctx, data))
 }
 
-func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) {
+func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) error {
 	if !w.on || w.mongoCollection == nil {
 		logger.New().Info(fmt.Sprintf("workflow record data: %+v", data))
-		return
+		return nil
 	}
 
 	for i := 0; i <= w.retry; i++ {
 		_, err := w.mongoCollection.InsertOne(ctx, data)
 		if err == nil {
-			return
+			return nil
 		}
 		if i == w.retry {
-			w.errorHandler(fmt.Errorf("[workflow recored] write error: %w", err))
-			return
+			return fmt.Errorf("[workflow recored] write error: %w", err)
 		}
 
 		waitTime := jitterBackoff(500*time.Millisecond, time.Second, i)
 		select {
 		case <-time.After(waitTime):
 		case <-ctx.Done():
-			w.errorHandler(fmt.Errorf("[workflow recored] context error: %w", ctx.Err()))
-			return
+			return fmt.Errorf("[workflow recored] context error: %w", ctx.Err())
 		}
 	}
+	return nil
 }
 
 type TaskStatus struct {
