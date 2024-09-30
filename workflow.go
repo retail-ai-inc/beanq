@@ -108,35 +108,31 @@ func (w *Workflow) CurrentTask() Task {
 }
 
 func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
-	if w.record != nil {
-		var data = struct {
-			Id        primitive.ObjectID `bson:"_id"`
-			Channel   string             `bson:"Channel"`
-			Topic     string             `bson:"Topic"`
-			MessageID string             `bson:"MessageId"`
-			GID       string             `bson:"Gid"`
-			TaskID    string             `bson:"TaskId"`
-			Status    string             `bson:"Status"`
-			Statement string             `bson:"Statement"`
-			CreatedAt time.Time          `bson:"CreatedAt"`
-			UpdatedAt time.Time          `bson:"UpdatedAt"`
-		}{
-			Id:        primitive.NewObjectID(),
-			Channel:   w.message.Channel,
-			Topic:     w.message.Topic,
-			MessageID: w.message.Id,
-			GID:       w.gid,
-			TaskID:    taskID,
-			Status:    status.Status(),
-			Statement: status.Statement(),
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
-		}
-
-		w.record.Write(w.ctx, data)
-	} else {
-		logger.New().Info(fmt.Sprintf("workflow track record: %s:%s, memo: %v", w.gid, taskID, status.String()))
+	var data = struct {
+		Id        primitive.ObjectID `bson:"_id"`
+		Channel   string             `bson:"Channel"`
+		Topic     string             `bson:"Topic"`
+		MessageID string             `bson:"MessageId"`
+		GID       string             `bson:"Gid"`
+		TaskID    string             `bson:"TaskId"`
+		Status    string             `bson:"Status"`
+		Statement string             `bson:"Statement"`
+		CreatedAt time.Time          `bson:"CreatedAt"`
+		UpdatedAt time.Time          `bson:"UpdatedAt"`
+	}{
+		Id:        primitive.NewObjectID(),
+		Channel:   w.message.Channel,
+		Topic:     w.message.Topic,
+		MessageID: w.message.Id,
+		GID:       w.gid,
+		TaskID:    taskID,
+		Status:    status.Status(),
+		Statement: status.Statement(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
+
+	w.record.Write(w.ctx, data)
 }
 
 func (w *Workflow) Run() (err error) {
@@ -391,6 +387,7 @@ func (w *WorkflowRecord) Write(ctx context.Context, data any) {
 
 func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) {
 	if !w.on || w.mongoCollection == nil {
+		logger.New().Info(fmt.Sprintf("workflow record data: %+v", data))
 		return
 	}
 
