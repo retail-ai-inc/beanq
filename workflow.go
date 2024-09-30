@@ -60,7 +60,9 @@ func NewWorkflow(ctx context.Context, message *Message) *Workflow {
 }
 
 func (w *Workflow) SetRecordErrorHandler(handler func(error)) {
-	w.record.errorHandler = handler
+	if w.record != nil {
+		w.record.setErrorHandler(handler)
+	}
 }
 
 func (w *Workflow) SetMux(mux WFMux) {
@@ -105,24 +107,35 @@ func (w *Workflow) CurrentTask() Task {
 	return w.currentTask
 }
 
-func (w *Workflow) TrackRecord(gid string, taskID string, status TaskStatus) {
+func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
 	if w.record != nil {
 		var data = struct {
 			Id        primitive.ObjectID `bson:"_id"`
+			Channel   string             `bson:"Channel"`
+			Topic     string             `bson:"Topic"`
+			MessageID string             `bson:"MessageId"`
 			GID       string             `bson:"Gid"`
 			TaskID    string             `bson:"TaskId"`
 			Status    string             `bson:"Status"`
 			Statement string             `bson:"Statement"`
+			CreatedAt time.Time          `bson:"CreatedAt"`
+			UpdatedAt time.Time          `bson:"UpdatedAt"`
 		}{
-			GID:       gid,
+			Id:        primitive.NewObjectID(),
+			Channel:   w.message.Channel,
+			Topic:     w.message.Topic,
+			MessageID: w.message.Id,
+			GID:       w.gid,
 			TaskID:    taskID,
 			Status:    status.Status(),
 			Statement: status.Statement(),
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
 		}
 
-		w.record.Write(context.TODO(), data)
+		w.record.Write(w.ctx, data)
 	} else {
-		logger.New().Info(fmt.Sprintf("workflow track record: %s:%s, memo: %v", gid, taskID, status.String()))
+		logger.New().Info(fmt.Sprintf("workflow track record: %s:%s, memo: %v", w.gid, taskID, status.String()))
 	}
 }
 
@@ -145,7 +158,7 @@ func (w *Workflow) Run() (err error) {
 						err = fmt.Errorf("%v", e)
 					}
 					w.results[index] = err
-					w.TrackRecord(w.gid, task.ID(), TaskStatus{
+					w.TrackRecord(task.ID(), TaskStatus{
 						status:    ExecuteFailed,
 						statement: task.Statement(),
 						err:       err,
@@ -157,7 +170,7 @@ func (w *Workflow) Run() (err error) {
 			w.currentTask = task
 			if err = task.Execute(); err == nil {
 				w.results[index] = nil
-				w.TrackRecord(w.gid, task.ID(), TaskStatus{
+				w.TrackRecord(task.ID(), TaskStatus{
 					status:    ExecuteSuccess,
 					statement: task.Statement(),
 					err:       nil,
@@ -185,7 +198,7 @@ func (w *Workflow) rollback(from int) {
 						err = fmt.Errorf("%v", e)
 					}
 
-					w.TrackRecord(w.gid, task.ID(), TaskStatus{
+					w.TrackRecord(task.ID(), TaskStatus{
 						status:    RollbackFailed,
 						statement: task.Statement(),
 						err:       err,
@@ -194,7 +207,7 @@ func (w *Workflow) rollback(from int) {
 					if w.onRollbackResult != nil {
 						err = w.onRollbackResult(task.ID(), err)
 						if err != nil {
-							w.TrackRecord(w.gid, task.ID(), TaskStatus{
+							w.TrackRecord(task.ID(), TaskStatus{
 								status:    RollbackResultProcessFailed,
 								statement: task.Statement(),
 								err:       err,
@@ -206,7 +219,7 @@ func (w *Workflow) rollback(from int) {
 
 			err = task.Rollback()
 			if err == nil {
-				w.TrackRecord(w.gid, task.ID(), TaskStatus{
+				w.TrackRecord(task.ID(), TaskStatus{
 					status:    RollbackSuccess,
 					statement: task.Statement(),
 					err:       nil,
@@ -281,8 +294,10 @@ func (t *BaseTask) Statement() []byte {
 type WorkflowRecord struct {
 	on              bool
 	retry           int
+	async           bool
 	errorHandler    func(error)
 	mongoCollection *mongo.Collection
+	asyncPool       *asyncPool
 }
 
 var workflowRecordOnce sync.Once
@@ -292,6 +307,7 @@ func NewWorkflowRecord() *WorkflowRecord {
 	var config struct {
 		On    bool
 		Retry int
+		Async bool
 		Mongo *struct {
 			Database              string
 			Collection            string
@@ -305,7 +321,7 @@ func NewWorkflowRecord() *WorkflowRecord {
 		}
 	}
 	workflowRecordOnce.Do(func() {
-		err := viper.UnmarshalKey("workflow", &config)
+		err := viper.UnmarshalKey("queue.workflow.record", &config)
 		if err != nil {
 			logger.New().Info("no workflow configration, ignoring the record")
 		}
@@ -313,9 +329,11 @@ func NewWorkflowRecord() *WorkflowRecord {
 		workflowRecord = &WorkflowRecord{
 			on:    config.On,
 			retry: config.Retry,
+			async: config.Async,
 			errorHandler: func(err error) {
 				logger.New().Error(err)
 			},
+			asyncPool: newAsyncPool(-1),
 		}
 
 		if config.On && config.Mongo != nil && config.Mongo.Database != "" {
@@ -352,7 +370,26 @@ func NewWorkflowRecord() *WorkflowRecord {
 	return workflowRecord
 }
 
+func (w *WorkflowRecord) setErrorHandler(handler func(error)) {
+	w.errorHandler = handler
+	w.asyncPool.captureException = func(ctx context.Context, err any) {
+		handler(fmt.Errorf("%+v", err))
+	}
+}
+
 func (w *WorkflowRecord) Write(ctx context.Context, data any) {
+	if w.async {
+		w.asyncPool.Execute(context.Background(), func(c context.Context) error {
+			w.SyncWrite(c, data)
+			return nil
+		})
+		return
+	}
+
+	w.SyncWrite(ctx, data)
+}
+
+func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) {
 	if !w.on || w.mongoCollection == nil {
 		return
 	}
