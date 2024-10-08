@@ -15,9 +15,19 @@ type asyncPool struct {
 }
 
 func newAsyncPool(poolSize int) *asyncPool {
-	pool, err := ants.NewPool(
-		poolSize,
-		ants.WithPreAlloc(true))
+	var (
+		pool *ants.Pool
+		err  error
+	)
+
+	if poolSize < 0 {
+		pool, err = ants.NewPool(-1)
+	} else {
+		pool, err = ants.NewPool(
+			poolSize,
+			ants.WithPreAlloc(true))
+	}
+
 	if err != nil {
 		logger.New().With("", err).Panic("goroutine pool error")
 	}
