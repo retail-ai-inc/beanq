@@ -29,8 +29,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/helper/stringx"
-	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/retail-ai-inc/beanq/v3/helper/stringx"
+	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/rs/xid"
 )
 

@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/retail-ai-inc/beanq"
-	"github.com/retail-ai-inc/beanq/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/viper"
 )
 

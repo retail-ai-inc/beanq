@@ -28,7 +28,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/helper/json"
+	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/spf13/cast"
 )
 

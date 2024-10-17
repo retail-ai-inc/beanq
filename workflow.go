@@ -10,7 +10,7 @@ import (
 	"time"
 
 	errorstack "github.com/pkg/errors"
-	"github.com/retail-ai-inc/beanq/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
