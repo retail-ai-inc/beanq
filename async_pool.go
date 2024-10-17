@@ -6,7 +6,7 @@ import (
 
 	"github.com/panjf2000/ants/v2"
 	"github.com/pkg/errors"
-	"github.com/retail-ai-inc/beanq/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )
 
 type asyncPool struct {

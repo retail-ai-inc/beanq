@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/retail-ai-inc/beanq/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

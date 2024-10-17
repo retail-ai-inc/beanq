@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/helper/stringx"
+	"github.com/retail-ai-inc/beanq/v3/helper/stringx"
 )
 
 func makeKey(keys ...string) string {

@@ -36,9 +36,9 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/helper/logger"
-	"github.com/retail-ai-inc/beanq/helper/redisx"
-	"github.com/retail-ai-inc/beanq/helper/timex"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/redisx"
+	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/rs/xid"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
