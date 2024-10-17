@@ -1,4 +1,4 @@
-module github.com/retail-ai-inc/beanq
+module github.com/retail-ai-inc/beanq/v3
 
 go 1.20
 
