@@ -124,7 +124,7 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 		for _, message := range messages {
 			wait.Add(1)
 			go func(msg redis.XMessage, rh *RedisHandle) {
-				result := messageToStruct(msg)
+				result := messageToStruct(&msg)
 				group := rh.errGroupPool.Get().(*errgroup.Group)
 				defer func() {
 					if p := recover(); p != nil {
@@ -142,11 +142,9 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 					rh.resultPool.Put(result)
 				}()
 
-				nmessage := messageToStruct(msg.Values)
-
 				result.Status = StatusReceived
 				result.BeginTime = time.Now()
-				sessionCtx, cancel := context.WithTimeout(context.Background(), nmessage.TimeToRun)
+				sessionCtx, cancel := context.WithTimeout(context.Background(), result.TimeToRun)
 				retry, err := t.retry(sessionCtx, result, rh)
 
 				if err != nil {
