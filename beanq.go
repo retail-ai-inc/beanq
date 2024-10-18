@@ -123,10 +123,10 @@ func (t *BeanqConfig) init() {
 		t.MinConsumers = DefaultOptions.MinConsumers
 	}
 	if t.Channel == "" {
-		t.Channel = DefaultOptions.DefaultDelayChannel
+		t.Channel = DefaultOptions.DefaultChannel
 	}
 	if t.Topic == "" {
-		t.Topic = DefaultOptions.DefaultDelayTopic
+		t.Topic = DefaultOptions.DefaultTopic
 	}
 	if t.DelayChannel == "" {
 		t.DelayChannel = DefaultOptions.DefaultDelayChannel
