@@ -154,7 +154,10 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 					return Unexpired
 				}
 				currentString = cast.ToString(currentMilliSecond + 1)
-				if err := tx.ZRem(ctx, timeUnit, val[0]).Err(); err != nil {
+				if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+					pipeliner.ZRem(ctx, timeUnit, val[0])
+					return nil
+				}); err != nil {
 					return err
 				}
 				return nil
