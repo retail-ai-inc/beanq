@@ -219,23 +219,10 @@ func messageToStruct(message any) *Message {
 	return msg
 }
 
-// Customized function
-func jsonToMessage(dataStr string) (*Message, error) {
+func JsonTo[T Message | map[string]any](data string, m *T) error {
 
-	msg := new(Message)
-	reader := strings.NewReader(dataStr)
-	jn := json.NewDecoder(reader)
-	if err := jn.Decode(msg); err != nil {
-		return nil, err
+	if err := json.NewDecoder(strings.NewReader(data)).Decode(m); err != nil {
+		return err
 	}
-
-	return msg, nil
-}
-
-func jsonToMap(data string) (map[string]any, error) {
-	m := make(map[string]any)
-	if err := json.NewDecoder(strings.NewReader(data)).Decode(&m); err != nil {
-		return nil, err
-	}
-	return m, nil
+	return nil
 }

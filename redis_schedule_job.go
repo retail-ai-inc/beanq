@@ -132,11 +132,13 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 				return nil
 			}
 			for _, val := range vals {
-				data, err := jsonToMap(val)
-				if err != nil {
+
+				var data = make(map[string]any)
+				if err := JsonTo(val, &data); err != nil {
 					logger.New().Error("Data Format Error:", err)
 					continue
 				}
+
 				if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 					pipeliner.XAdd(ctx, &redis.XAddArgs{
 						Stream: streamKey,
