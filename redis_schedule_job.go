@@ -24,7 +24,7 @@ package beanq
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -90,10 +90,6 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 	return err
 }
 
-var (
-	Unexpired = errors.New("unexpired")
-)
-
 func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh chan struct{}) error {
 
 	var (
@@ -115,6 +111,11 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 
 		}
 		timer.Reset(1 * time.Second)
+		//lock
+		lockId := strings.Join([]string{t.broker.prefix, channel, topic, "lock"}, ":")
+		if v := redisx.AddLogicLockScript.Run(ctx, t.broker.client, []string{lockId}).Val(); v.(int64) == 1 {
+			continue
+		}
 
 		timeOutKey := cast.ToString(time.Now().UnixMilli() + 1)
 
@@ -153,6 +154,10 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 		}, zSetKey, streamKey)
 		if err != nil {
 			logger.New().Error("Schedule Job Error:", err)
+		}
+		//release lock
+		if err := t.broker.client.Del(ctx, lockId).Err(); err != nil {
+			logger.New().Error("Schedule Lock Error", err)
 		}
 	}
 }
