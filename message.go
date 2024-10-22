@@ -231,3 +231,11 @@ func jsonToMessage(dataStr string) (*Message, error) {
 
 	return msg, nil
 }
+
+func jsonToMap(data string) (map[string]any, error) {
+	m := make(map[string]any)
+	if err := json.NewDecoder(strings.NewReader(data)).Decode(&m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
