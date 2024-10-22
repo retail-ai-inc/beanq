@@ -147,7 +147,8 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 					pipeliner.ZRem(ctx, zSetKey, val)
 					return nil
 				}); err != nil {
-					return err
+					logger.New().Error("Schedule Pipeline Error:", err)
+					continue
 				}
 			}
 			return nil
