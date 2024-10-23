@@ -24,7 +24,7 @@ package beanq
 
 import (
 	"context"
-	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,7 +34,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/redisx"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -79,47 +78,26 @@ func (t *scheduleJob) enqueue(ctx context.Context, msg *Message) error {
 	}
 	msgExecuteTime := msg.ExecuteTime.UnixMilli()
 
-	priority := msg.Priority / 1e3
-	priority = cast.ToFloat64(msgExecuteTime) + priority
-	timeUnit := cast.ToFloat64(msgExecuteTime)
+	priorityScore := msg.Priority / 1e3
+	priorityScore = cast.ToFloat64(msgExecuteTime) + priorityScore
 
-	setKey := MakeZSetKey(t.broker.prefix, msg.Channel, msg.Topic)
-	timeUnitKey := MakeTimeUnit(t.broker.prefix, msg.Channel, msg.Topic)
+	zSetKey := MakeZSetKey(t.broker.prefix, msg.Channel, msg.Topic)
 
-	err = t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-
-		_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-
-			// set value
-			if err := pipeliner.ZAdd(ctx, setKey, &redis.Z{Score: priority, Member: bt}).Err(); err != nil {
-				return err
-			}
-			// set time unit
-			if err := pipeliner.ZAdd(ctx, timeUnitKey, &redis.Z{Score: timeUnit, Member: timeUnit}).Err(); err != nil {
-				return err
-			}
-			return nil
-		})
-
+	if err := t.broker.client.ZAdd(ctx, zSetKey, &redis.Z{Score: priorityScore, Member: bt}).Err(); err != nil {
 		return err
-
-	}, setKey, timeUnitKey)
+	}
 
 	return err
 }
 
-var (
-	Unexpired = errors.New("unexpired")
-)
-
 func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh chan struct{}) error {
 
 	var (
-		timeUnit      = MakeTimeUnit(t.broker.prefix, channel, topic)
-		currentString string // millisecond string
+		zSetKey   = MakeZSetKey(t.broker.prefix, channel, topic)
+		streamKey = MakeStreamKey(normalSubscribe, t.broker.prefix, channel, topic)
 	)
 
-	timer := timex.TimerPool.Get(1 * time.Second)
+	timer := timex.TimerPool.Get(500 * time.Millisecond)
 	defer timex.TimerPool.Put(timer)
 
 	for {
@@ -133,93 +111,57 @@ func (t *scheduleJob) run(ctx context.Context, channel, topic string, closeCh ch
 
 		}
 		timer.Reset(1 * time.Second)
+		//lock
+		lockId := strings.Join([]string{t.broker.prefix, channel, topic, "lock"}, ":")
+		if v := redisx.AddLogicLockScript.Run(ctx, t.broker.client, []string{lockId}).Val(); v.(int64) == 1 {
+			continue
+		}
+
+		timeOutKey := cast.ToString(time.Now().UnixMilli() + 1)
 
 		err := t.broker.client.Watch(ctx, func(tx *redis.Tx) error {
-			val, err := tx.ZRangeByScore(ctx, timeUnit, &redis.ZRangeBy{
-				Min:    "-inf",
-				Max:    "+inf",
-				Offset: 0,
-				Count:  1,
+			vals, err := tx.ZRevRangeByScore(ctx, zSetKey, &redis.ZRangeBy{
+				Min:   "0",
+				Max:   timeOutKey,
+				Count: 100,
 			}).Result()
 			if err != nil {
 				return err
 			}
-
-			if len(val) > 0 {
-				currentMilliSecond, err := cast.ToInt64E(val[0])
-				if err != nil {
-					return err
-				}
-				if currentMilliSecond > time.Now().UnixMilli() {
-					return Unexpired
-				}
-				currentString = cast.ToString(currentMilliSecond + 1)
-				if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-					pipeliner.ZRem(ctx, timeUnit, val[0])
-					return nil
-				}); err != nil {
-					return err
-				}
+			if len(vals) <= 0 {
 				return nil
 			}
-			return Unexpired
+			for _, val := range vals {
 
-		}, timeUnit)
+				var data = make(map[string]any)
+				if err := JsonTo(val, &data); err != nil {
+					logger.New().Error("Data Format Error:", err)
+					continue
+				}
 
-		if err != nil {
-			if errors.Is(err, redis.ErrClosed) {
-				continue
+				if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+					pipeliner.XAdd(ctx, &redis.XAddArgs{
+						Stream: streamKey,
+						Approx: false,
+						Limit:  0,
+						ID:     "*",
+						Values: data,
+					})
+					pipeliner.ZRem(ctx, zSetKey, val)
+					return nil
+				}); err != nil {
+					logger.New().Error("Schedule Pipeline Error:", err)
+					continue
+				}
 			}
-			if !errors.Is(err, Unexpired) {
-				t.broker.captureException(ctx, err)
-			}
-			continue
-		}
-
-		zRangeBy := &redis.ZRangeBy{Min: defaultScheduleJobConfig.scoreMin, Max: currentString}
-		key := MakeZSetKey(t.broker.prefix, channel, topic)
-		cmd := t.broker.client.ZRevRangeByScore(ctx, key, zRangeBy)
-		val := cmd.Val()
-
-		if len(val) <= 0 {
-			continue
-		}
-		t.broker.asyncPool.Execute(ctx, func(ctx context.Context) error {
-			t.execute(ctx, val, channel, topic)
 			return nil
-		})
-	}
-}
-
-func (t *scheduleJob) execute(ctx context.Context, vals []string, channel, topic string) {
-
-	var zsetKey = MakeZSetKey(t.broker.prefix, channel, topic)
-
-	doTask := func(ctx context.Context, vv string) error {
-
-		msg, err := jsonToMessage(vv)
+		}, zSetKey, streamKey)
 		if err != nil {
-			return err
+			logger.New().Error("Schedule Job Error:", err)
 		}
-
-		group := t.scheduleErrGroupPool.Get().(*errgroup.Group)
-		group.TryGo(func() error {
-			return t.sendToStream(ctx, msg)
-		})
-		group.TryGo(func() error {
-			return t.broker.client.ZRem(ctx, zsetKey, vv).Err()
-		})
-		if err := group.Wait(); err != nil {
-			return err
-		}
-		t.scheduleErrGroupPool.Put(group)
-		return nil
-	}
-	// begin to execute consumer's datas
-	for _, vv := range vals {
-		if err := doTask(ctx, vv); err != nil {
-			t.broker.captureException(ctx, err)
-			continue
+		//release lock
+		if err := t.broker.client.Del(ctx, lockId).Err(); err != nil {
+			logger.New().Error("Schedule Lock Error", err)
 		}
 	}
 }

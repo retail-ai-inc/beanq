@@ -1,4 +1,6 @@
 local key = KEYS[1]
+local streamKey = KEYS[2]
+local fields = ARGV
 
 local result = redis.pcall('HEXISTS',key,'id')
 
@@ -13,5 +15,13 @@ if result == 1 then
     end
     return 1
 end
+
+local message = {}
+for i = 1, #fields, 2 do
+    table.insert(message, fields[i])
+    table.insert(message, fields[i+1])
+end
+
+local id = redis.call('XADD', streamKey, '*', unpack(message))
 
 return 0

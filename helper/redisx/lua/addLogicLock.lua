@@ -4,5 +4,5 @@ if val == '1' then
     return 1
 end
 
-redis.call('SETEX',key,20,'1')
+redis.call('SETEX',key,60,'1')
 return 0

@@ -405,18 +405,14 @@ func (t *RedisBroker) enqueue(ctx context.Context, msg *Message, dynamicOn bool)
 
 		key := MakeStatusKey(t.prefix, msg.Channel, msg.Id)
 
-		exist, err := redisx.HashDuplicateIdScript.Run(ctx, t.client, []string{key}).Bool()
+		message := msg.ToMap()
+		message["status"] = StatusPublished
+		exist, err := redisx.HashDuplicateIdScript.Run(ctx, t.client, []string{key, streamKey}, message).Bool()
 		if err != nil {
 			return err
 		}
 		if exist {
 			return fmt.Errorf("idempotency check: %w", ErrIdempotent)
-		}
-
-		message := msg.ToMap()
-		message["status"] = StatusPublished
-		if err := t.client.XAdd(ctx, redisx.NewZAddArgs(streamKey, "", "*", t.maxLen, 0, message)).Err(); err != nil {
-			return err
 		}
 
 	case NORMAL:

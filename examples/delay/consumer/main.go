@@ -51,7 +51,7 @@ func main() {
 
 	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			logger.New().With("delay-channel", "delay-topic").Info(message.Payload)
+			logger.New().With("delay-channel", "delay-topic--------").Info(message.Payload)
 			return nil
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
