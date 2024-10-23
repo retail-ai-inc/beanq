@@ -41,6 +41,12 @@ func makeKey(keys ...string) string {
 
 }
 
+// In Redis cluster mode, if using Lua scripts, multiple keys needs to be in the same slot,so need use `hash tag`.
+// Disadvantage: Excessive `hash tag` can cause data imbalance and affect performance.
+func makeSlotPrefix(channel string) string {
+	return strings.Join([]string{"{", channel, "}"}, "")
+}
+
 // MakeListKey create redis key for type :list
 func MakeListKey(prefix, channel, topic string) string {
 	if channel == "" {
@@ -60,7 +66,7 @@ func MakeZSetKey(prefix, channel, topic string) string {
 	if topic == "" {
 		topic = DefaultOptions.DefaultTopic
 	}
-	return makeKey(prefix, channel, topic, "zset")
+	return makeKey(prefix, makeSlotPrefix(channel), topic, "zset")
 }
 
 // MakeStreamKey create key for type stream
@@ -75,13 +81,12 @@ func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string 
 	if subType == sequentialSubscribe {
 		stream = "sequential_stream"
 	}
-
-	return makeKey(prefix, channel, topic, stream, "stream")
+	return makeKey(prefix, makeSlotPrefix(channel), topic, stream, "stream")
 }
 
 // MakeStatusKey create key for type string
 func MakeStatusKey(prefix, channel, id string) string {
-	return makeKey(prefix, channel, "=-status-=", id)
+	return makeKey(prefix, makeSlotPrefix(channel), "=-status-=", id)
 }
 
 // MakeDynamicKey create key for dynamic
