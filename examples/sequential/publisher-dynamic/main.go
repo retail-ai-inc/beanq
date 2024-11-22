@@ -107,9 +107,9 @@ func main() {
 	// 		now := time.Now()
 	//
 	// 		pub := beanq.New(config)
-	// 		result, err := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingPubAck()
-	// 		if err != nil {
-	// 			logger.New().Error(err)
+	// 		result, berr := pub.BQ().WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("default-delay-channel", "mynewstream", b).WaitingPubAck()
+	// 		if berr != nil {
+	// 			logger.New().Error(berr)
 	// 		} else {
 	// 			logger.New().Info(result)
 	// 		}
@@ -119,9 +119,9 @@ func main() {
 	// select {}
 
 	// this is a single check for ACK
-	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
-	// if err != nil {
-	// 	panic(err)
+	// result, berr := pub.CheckAckStatus(context.Background(), "delay-channel", "order-topic", "cp0smosf6ntt0aqcpgtg")
+	// if berr != nil {
+	// 	panic(berr)
 	// }
 	// log.Println(result)
 }

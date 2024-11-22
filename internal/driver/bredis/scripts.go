@@ -1,4 +1,4 @@
-package redisx
+package bredis
 
 import (
 	_ "embed"
@@ -6,15 +6,15 @@ import (
 )
 
 var (
-	//go:embed lua/hashDuplicate.lua
+	//go:embed scripts/hashDuplicate.lua
 	hashDuplicateIdLua    string
 	HashDuplicateIdScript = redis.NewScript(hashDuplicateIdLua)
 
-	//go:embed lua/addLogicLock.lua
+	//go:embed scripts/addLogicLock.lua
 	addLogicLockLua    string
 	AddLogicLockScript = redis.NewScript(addLogicLockLua)
 
-	//go:embed lua/saveHSet.lua
+	//go:embed scripts/saveHSet.lua
 	saveHsetLua    string
 	SaveHSetScript = redis.NewScript(saveHsetLua)
 )

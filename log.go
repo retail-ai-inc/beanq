@@ -2,7 +2,9 @@ package beanq
 
 import (
 	"context"
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
@@ -14,23 +16,24 @@ type (
 	Status   = string
 
 	ConsumerResult struct {
-		Status  Status
-		Id      string
-		Level   LevelMsg
-		Info    FlagInfo
-		Payload any
-
-		PendingRetry             int64
-		Retry                    int
-		Priority                 float64
-		AddTime                  string
-		ExpireTime               time.Time
-		RunTime                  string
-		BeginTime                time.Time
-		EndTime                  time.Time
-		ExecuteTime              time.Time
-		Topic, Channel, Consumer string
-		MoodType                 MoodType
+		ExpireTime   time.Time
+		ExecuteTime  time.Time
+		EndTime      time.Time
+		BeginTime    time.Time
+		Payload      any
+		Info         bstatus.FlagInfo
+		AddTime      string
+		Status       bstatus.Status
+		RunTime      string
+		Level        bstatus.LevelMsg
+		Id           string
+		Topic        string
+		Channel      string
+		Consumer     string
+		MoodType     btype.MoodType
+		Retry        int
+		Priority     float64
+		PendingRetry int64
 	}
 )
 
@@ -81,8 +84,8 @@ type ILog interface {
 }
 
 type Log struct {
-	logs []ILog
 	pool *asyncPool
+	logs []ILog
 }
 
 func NewLog(pool *asyncPool, logs ...ILog) *Log {

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"math/rand"
 	"runtime/debug"
 	"strings"
@@ -12,33 +15,28 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/redisx"
 	"golang.org/x/sync/errgroup"
 )
 
 type RedisHandle struct {
-	broker        *RedisBroker
-	streamKey     string
-	dynamicKey    string
-	channel       string
-	topic         string
-	subscribeType subscribeType
-	subscribe     IConsumeHandle
-
-	deadLetterTickerDur time.Duration
+	subscribe           IConsumeHandle
+	wg                  *sync.WaitGroup
+	closeCh             chan struct{}
+	errGroupPool        *sync.Pool
+	broker              *RedisBroker
+	resultPool          *sync.Pool
+	streamKey           string
+	dynamicKey          string
+	channel             string
+	topic               string
 	deadLetterIdleTime  time.Duration
-
-	scheduleTickerDur time.Duration
-
-	jobMaxRetry  int
-	minConsumers int64
-	timeOut      time.Duration
-
-	wg           *sync.WaitGroup
-	resultPool   *sync.Pool
-	errGroupPool *sync.Pool
-	once         sync.Once
-	closeCh      chan struct{}
+	minConsumers        int64
+	timeOut             time.Duration
+	jobMaxRetry         int
+	scheduleTickerDur   time.Duration
+	deadLetterTickerDur time.Duration
+	subscribeType       btype.SubscribeType
+	once                sync.Once
 }
 
 func (t *RedisHandle) Channel() string {
@@ -51,16 +49,16 @@ func (t *RedisHandle) Topic() string {
 
 func (t *RedisHandle) Process(ctx context.Context) {
 	switch t.subscribeType {
-	case normalSubscribe:
+	case btype.NormalSubscribe:
 		t.runSubscribe(ctx)
-	case sequentialSubscribe:
+	case btype.SequentialSubscribe:
 		t.runSeqSubscribe(ctx)
 	}
 }
 
 func (t *RedisHandle) retry(ctx context.Context, message *Message, handle *RedisHandle) (int, error) {
 
-	retry, err := RetryInfo(ctx, func() error {
+	retry, err := tool.RetryInfo(ctx, func() error {
 		var globalErr error
 		if err := handle.subscribe.Handle(ctx, message); err != nil {
 			if errors.Is(err, NilHandle) {
@@ -89,8 +87,8 @@ func (t *RedisHandle) retry(ctx context.Context, message *Message, handle *Redis
 func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	channel := t.channel
 	topic := t.topic
-	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, channel, topic)
-	readGroupArgs := redisx.NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.minConsumers, 10*time.Second)
+	streamKey := tool.MakeStreamKey(t.subscribeType, t.broker.prefix, channel, topic)
+	readGroupArgs := bredis.NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
@@ -186,19 +184,11 @@ func (t *RedisHandle) runSubscribe(ctx context.Context) {
 	}
 }
 
-func (t *RedisHandle) Schedule(ctx context.Context) error {
-	err := t.broker.scheduleJob.run(ctx, t.channel, t.topic, t.closeCh)
-	if err != nil {
-		return fmt.Errorf("[RedisHandle.Schedule] run error: %w", err)
-	}
-	return nil
-}
-
 func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 	defer t.close()
 
-	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
-	readGroupArgs := redisx.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, t.minConsumers, 10*time.Second)
+	streamKey := tool.MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+	readGroupArgs := bredis.NewReadGroupArgs(t.channel, streamKey, []string{streamKey, ">"}, t.minConsumers, 10*time.Second)
 
 	for {
 		cmd := t.broker.client.XReadGroup(ctx, readGroupArgs)
@@ -305,7 +295,7 @@ func (t *RedisHandle) runSeqSubscribe(ctx context.Context) {
 
 // DeadLetter Please refer to https://redis.io/docs/latest/commands/xclaim/
 func (t *RedisHandle) DeadLetter(ctx context.Context) error {
-	streamKey := MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
+	streamKey := tool.MakeStreamKey(t.subscribeType, t.broker.prefix, t.channel, t.topic)
 	ticker := time.NewTicker(t.deadLetterTickerDur)
 	defer ticker.Stop()
 	r := t.resultPool.Get().(*ConsumerResult)
@@ -380,7 +370,7 @@ func (t *RedisHandle) close() error {
 	default:
 		close(t.closeCh)
 		if t.streamKey != "" {
-			t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
+			//t.broker.deleteConcurrentHandler(t.channel, t.streamKey)
 		}
 	}
 

@@ -98,5 +98,24 @@ else
 	$(GOPATH)/bin/golangci-lint --verbose run
 endif
 
+.PHONY: vet
+vet: ## Field Alignment
+ifeq (,$(wildcard $(GOPATH)/bin/fieldalignment))
+	go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
+	go vet -vettool=$(GOPATH)/bin/fieldalignment ./... || exit 0
+else
+	go vet -vettool=$(GOPATH)/bin/fieldalignment ./... || exit 0
+endif
+
+.PHONY: vet-fix
+vet-fix: ##If fixed, the annotation for struct fields will be removed
+ifeq (,$(wildcard $(GOPATH)/bin/fieldalignment))
+	go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest
+	$(GOPATH)/bin/fieldalignment -fix ./... || exit 0
+else
+	$(GOPATH)/bin/fieldalignment -fix ./... || exit 0
+endif
+
+
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
  		sequential sequential-publisher sequential-consumer sequential-publisher-ack clean

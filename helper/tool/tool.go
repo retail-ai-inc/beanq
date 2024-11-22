@@ -1,38 +1,17 @@
-// MIT License
-
-// Copyright The RAI Inc.
-// The RAI Authors
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-
-// The above copyright notice and this permission notice shall be included in all
-// copies or substantial portions of the Software.
-
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-package beanq
+package tool
 
 import (
-	"context"
 	"fmt"
+	"github.com/retail-ai-inc/beanq/v3/helper/json"
+	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"golang.org/x/net/context"
 	"hash/fnv"
 	"math"
 	"math/rand"
 	"runtime/debug"
 	"strings"
 	"time"
-
-	"github.com/retail-ai-inc/beanq/v3/helper/stringx"
 )
 
 func makeKey(keys ...string) string {
@@ -44,10 +23,10 @@ func makeKey(keys ...string) string {
 // MakeListKey create redis key for type :list
 func MakeListKey(prefix, channel, topic string) string {
 	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
+		channel = boptions.DefaultOptions.DefaultChannel
 	}
 	if topic == "" {
-		topic = DefaultOptions.DefaultTopic
+		topic = boptions.DefaultOptions.DefaultTopic
 	}
 	return makeKey(prefix, channel, topic, "list")
 }
@@ -55,25 +34,28 @@ func MakeListKey(prefix, channel, topic string) string {
 // MakeZSetKey create redis key for type sorted set
 func MakeZSetKey(prefix, channel, topic string) string {
 	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
+		channel = boptions.DefaultOptions.DefaultChannel
 	}
 	if topic == "" {
-		topic = DefaultOptions.DefaultTopic
+		topic = boptions.DefaultOptions.DefaultTopic
 	}
 	return makeKey(prefix, channel, topic, "zset")
 }
 
 // MakeStreamKey create key for type stream
-func MakeStreamKey(subType subscribeType, prefix, channel, topic string) string {
+func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) string {
 	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
+		channel = boptions.DefaultOptions.DefaultChannel
 	}
 	if topic == "" {
-		topic = DefaultOptions.DefaultTopic
+		topic = boptions.DefaultOptions.DefaultTopic
 	}
 	stream := "normal_stream"
-	if subType == sequentialSubscribe {
+	if subType == btype.SequentialSubscribe {
 		stream = "sequential_stream"
+	}
+	if subType == btype.DelaySubscribe {
+		stream = "delay_stream"
 	}
 
 	return makeKey(prefix, channel, topic, stream, "stream")
@@ -87,7 +69,7 @@ func MakeStatusKey(prefix, channel, id string) string {
 // MakeDynamicKey create key for dynamic
 func MakeDynamicKey(prefix, channel string) string {
 	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
+		channel = boptions.DefaultOptions.DefaultChannel
 	}
 
 	return makeKey(prefix, channel, "dynamic")
@@ -97,17 +79,6 @@ func MakeDynamicKey(prefix, channel string) string {
 func GetChannelAndTopicFromStreamKey(streamKey string) (channel, topic string) {
 	s := strings.SplitN(streamKey, ":", 4)[1:3]
 	return s[0], s[1]
-}
-
-// MakeDeadLetterStreamKey create key for type stream,mainly dead letter
-func MakeDeadLetterStreamKey(prefix, channel, topic string) string {
-	if channel == "" {
-		channel = DefaultOptions.DefaultChannel
-	}
-	if topic == "" {
-		topic = DefaultOptions.DefaultTopic
-	}
-	return makeKey(prefix, channel, topic, "dead_letter_stream")
 }
 
 func MakeLogKey(prefix, resultType string) string {
@@ -127,12 +98,20 @@ func MakeSubKey(prefix, channel, topic string) string {
 }
 
 const (
-	// BeanqLogicGroup it's for beanq-logic-log,multiple consumers can consume those data
-	BeanqLogicGroup = "beanq-logic-group"
+	// BeanqLogGroup it's for beanq-logic-log,multiple consumers can consume those data
+	BeanqLogGroup = "beanq-log-group"
+
+	BeanqDeadLetterGroup    = "beanq-dead-letter-group"
+	BeanqDeadLetterConsumer = "dead-letter-consumer"
 )
 
 func MakeLogicKey(prefix string) string {
 	return makeKey(prefix, "beanq-logic-log")
+}
+
+// MakeDeadLetterStreamKey create key for type stream,mainly dead letter
+func MakeDeadLetterKey(prefix string) string {
+	return makeKey(prefix, "beanq-dead-letter-log")
 }
 
 func MakeLogicLock(prefix, id string) string {
@@ -144,7 +123,7 @@ func doTimeout(ctx context.Context, f func() error) error {
 	go func() {
 		defer func() {
 			if ne := recover(); ne != nil {
-				errCh <- fmt.Errorf("error:%+v,stack:%s", ne, stringx.ByteToString(debug.Stack()))
+				errCh <- fmt.Errorf("error:%+v,stack:%s", ne, string(debug.Stack()))
 				return
 			}
 		}()
@@ -167,7 +146,7 @@ func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error
 			return
 		}
 
-		waitTime := jitterBackoff(500*time.Millisecond, time.Second, i)
+		waitTime := JitterBackoff(500*time.Millisecond, time.Second, i)
 		select {
 		case <-time.After(waitTime):
 		case <-ctx.Done():
@@ -177,7 +156,7 @@ func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error
 	return
 }
 
-func jitterBackoff(min, max time.Duration, attempt int) time.Duration {
+func JitterBackoff(min, max time.Duration, attempt int) time.Duration {
 	base := float64(min)
 	capLevel := float64(max)
 
@@ -204,4 +183,12 @@ func HashKey(id []byte, flake uint64) uint64 {
 	hashKey := h.Sum64()
 	hashKey = hashKey % flake
 	return hashKey
+}
+
+func JsonDecode[T map[string]any | map[string]string](data string, m *T) error {
+
+	if err := json.NewDecoder(strings.NewReader(data)).Decode(m); err != nil {
+		return err
+	}
+	return nil
 }
