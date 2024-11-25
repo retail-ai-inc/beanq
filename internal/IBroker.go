@@ -27,6 +27,8 @@ type (
 	IProcessLog interface {
 		AddLog(ctx context.Context, data map[string]any) error
 	}
+	// IMigrateLog migrate redis log to other db
+	// for example: to mongodb
 	IMigrateLog interface {
 		Migrate(ctx context.Context, data []map[string]any) error
 	}

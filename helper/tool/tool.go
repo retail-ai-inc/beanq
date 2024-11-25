@@ -20,17 +20,6 @@ func makeKey(keys ...string) string {
 
 }
 
-// MakeListKey create redis key for type :list
-func MakeListKey(prefix, channel, topic string) string {
-	if channel == "" {
-		channel = boptions.DefaultOptions.DefaultChannel
-	}
-	if topic == "" {
-		topic = boptions.DefaultOptions.DefaultTopic
-	}
-	return makeKey(prefix, channel, topic, "list")
-}
-
 // MakeZSetKey create redis key for type sorted set
 func MakeZSetKey(prefix, channel, topic string) string {
 	if channel == "" {
@@ -81,41 +70,13 @@ func GetChannelAndTopicFromStreamKey(streamKey string) (channel, topic string) {
 	return s[0], s[1]
 }
 
-func MakeLogKey(prefix, resultType string) string {
-	return makeKey(prefix, "logs", resultType)
-}
-
-func MakeTimeUnit(prefix, channel, topic string) string {
-	return makeKey(prefix, channel, topic, "time_unit")
-}
-
-func MakeFilter(prefix string) string {
-	return makeKey(prefix, "filter")
-}
-
-func MakeSubKey(prefix, channel, topic string) string {
-	return makeKey(prefix, channel, topic, "subKey")
-}
-
 const (
 	// BeanqLogGroup it's for beanq-logic-log,multiple consumers can consume those data
 	BeanqLogGroup = "beanq-log-group"
-
-	BeanqDeadLetterGroup    = "beanq-dead-letter-group"
-	BeanqDeadLetterConsumer = "dead-letter-consumer"
 )
 
 func MakeLogicKey(prefix string) string {
 	return makeKey(prefix, "beanq-logic-log")
-}
-
-// MakeDeadLetterStreamKey create key for type stream,mainly dead letter
-func MakeDeadLetterKey(prefix string) string {
-	return makeKey(prefix, "beanq-dead-letter-log")
-}
-
-func MakeLogicLock(prefix, id string) string {
-	return makeKey(prefix, "beanq-logic-uniqueid", id)
 }
 
 func doTimeout(ctx context.Context, f func() error) error {

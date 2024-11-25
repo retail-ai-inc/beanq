@@ -113,11 +113,6 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 		option(client)
 	}
 
-	//broker := NewBroker(config)
-	//if client.captureException != nil {
-	//	broker.setCaptureException(client.captureException)
-	//}
-
 	client.broker = NewBroker(config)
 	return client
 }
@@ -297,7 +292,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 
 		if b.dynamicOption.on {
-			//b.client.broker.dynamicConsuming(cmd.subscribeType, channel, cmd.handle, b.dynamicOption.key)
+
 		} else {
 			if err := b.client.broker.AddConsumer(cmd.moodType, channel, topic, cmd.handle); err != nil {
 				return err

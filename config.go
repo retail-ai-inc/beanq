@@ -23,7 +23,6 @@
 package beanq
 
 import (
-	"context"
 	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
 	"time"
 )
@@ -153,19 +152,4 @@ func (t *BeanqConfig) init() {
 	if t.History.Mongo.MaxConnectionLifeTime == 0 {
 		t.History.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
-}
-
-// IHandle consumer ,after broker
-type IHandle interface {
-	Channel() string
-	Topic() string
-	Process(ctx context.Context)
-	Schedule(ctx context.Context) error
-	DeadLetter(ctx context.Context) error
-}
-
-// VolatileLFU ...
-type VolatileLFU interface {
-	Add(ctx context.Context, key, member string) (bool, error)
-	Delete(ctx context.Context, key string) error
 }

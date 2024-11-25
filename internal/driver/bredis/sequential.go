@@ -19,6 +19,7 @@ type Sequential struct {
 }
 
 func NewSequential(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Sequential {
+
 	return &Sequential{
 		base: Base{
 			client:         client,
@@ -67,6 +68,7 @@ func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
 }
 
 func (t *Sequential) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
+
 	go func() {
 		t.base.DeadLetter(ctx, channel, topic)
 	}()

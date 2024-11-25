@@ -38,7 +38,6 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 		select {
 		case <-ctx.Done():
 			_ = t.client.Close()
-			logger.New().Info("Redis Obsolete Stop")
 			return nil
 		case <-timer.C:
 		}
