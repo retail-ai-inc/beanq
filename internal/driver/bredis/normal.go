@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 	"sync"
+	"time"
 )
 
 type Normal struct {
@@ -17,16 +18,17 @@ type Normal struct {
 	maxLen int64
 }
 
-func NewNormal(client redis.UniversalClient, prefix string, maxLen int64) *Normal {
+func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, deadLetterIdle time.Duration) *Normal {
 
 	return &Normal{
 		maxLen: maxLen,
 		base: Base{
-			client:        client,
-			IProcessLog:   NewProcessLog(client, prefix),
-			subType:       btype.NormalSubscribe,
-			prefix:        prefix,
-			blockDuration: DefaultBlockDuration,
+			client:         client,
+			IProcessLog:    NewProcessLog(client, prefix),
+			subType:        btype.NormalSubscribe,
+			prefix:         prefix,
+			deadLetterIdle: deadLetterIdle,
+			blockDuration:  DefaultBlockDuration,
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},

@@ -19,16 +19,16 @@ import (
 	"time"
 )
 
-func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, moodType btype.MoodType) public.IBroker {
+func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, deadLetterIdle time.Duration, moodType btype.MoodType) public.IBroker {
 
 	if moodType == btype.NORMAL {
-		return NewNormal(client, prefix, maxLen)
+		return NewNormal(client, prefix, maxLen, deadLetterIdle)
 	}
 	if moodType == btype.SEQUENTIAL {
-		return NewSequential(client, prefix)
+		return NewSequential(client, prefix, deadLetterIdle)
 	}
 	if moodType == btype.DELAY {
-		return NewSchedule(client, prefix)
+		return NewSchedule(client, prefix, deadLetterIdle)
 	}
 	return nil
 }
@@ -36,12 +36,13 @@ func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, moo
 type (
 	BlockDuration func() time.Duration
 	Base          struct {
-		client redis.UniversalClient
+		errGroup sync.Pool
+		client   redis.UniversalClient
 		public.IProcessLog
-		prefix        string
-		subType       btype.SubscribeType
-		blockDuration BlockDuration
-		errGroup      sync.Pool
+		blockDuration  BlockDuration
+		prefix         string
+		subType        btype.SubscribeType
+		deadLetterIdle time.Duration
 	}
 )
 
@@ -54,9 +55,10 @@ var (
 func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
-	deadLetterKey := tool.MakeDeadLetterKey(t.prefix)
+	logicKey := tool.MakeLogicKey(t.prefix)
+	deadLetterKey := strings.Join([]string{streamKey, "dead_letter_lock"}, ":")
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(DefaultBlockDuration())
 	defer ticker.Stop()
 
 	r := t.errGroup.Get().(*errgroup.Group)
@@ -64,10 +66,9 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		t.errGroup.Put(r)
 	}()
 
-	var deadLetterIdleTime = 20 * time.Second
+	deadLetterIdleTime := t.deadLetterIdle
 
 	for {
-		// check state
 		select {
 
 		case <-ctx.Done():
@@ -76,79 +77,57 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		case <-ticker.C:
 
 		}
-		//t.client.XPending()
+		if v := AddLogicLockScript.Run(ctx, t.client, []string{deadLetterKey}).Val(); v.(int64) == 1 {
+			continue
+		}
+
 		pendings := t.client.XPendingExt(ctx, &redis.XPendingExtArgs{
 			Stream:   streamKey,
 			Group:    channel,
 			Consumer: streamKey,
 			Start:    "-",
 			End:      "+",
-			Count:    100,
+			Count:    1,
 		}).Val()
-
-		if len(pendings) <= 0 {
+		length := len(pendings)
+		if length <= 0 {
+			if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+				logger.New().Error(err)
+			}
 			continue
 		}
-		ids := make([]string, 0, len(pendings))
-		readStreams := make([][]string, 0, len(pendings))
-		for _, pending := range pendings {
-			// if pending idle  > pending duration(20 * time.Minute),then add it into dead_letter_stream
-			if pending.Idle > deadLetterIdleTime {
-				ids = append(ids, pending.ID)
-				readStreams = append(readStreams, []string{streamKey, pending.ID})
-			}
-
-		}
-		fmt.Printf("stream:%+v \n", readStreams)
-		//t.client.XGroupCreateMkStream(ctx, deadLetterKey, tool.BeanqLogGroup, "0")
-
-		//t.client.XGroupCreateMkStream(ctx, deadLetterKey, tool.BeanqDeadLetterGroup, "0")
-
-		//v1 := t.client.XRead(ctx, &redis.XReadArgs{
-		//	Streams: readStreams,
-		//	Count:   int64(len(readStreams)),
-		//}).Val()
-		//fmt.Printf("数据：%+v \n", v1)
-
-		//cmd := t.client.XClaim(ctx, &redis.XClaimArgs{
-		//	Stream:   deadLetterKey,
-		//	Group:    tool.BeanqDeadLetterGroup,
-		//	Consumer: tool.BeanqDeadLetterConsumer,
-		//	Messages: ids,
-		//	MinIdle:  10 * time.Second,
-		//})
-		//result, _ := cmd.Result()
-		//fmt.Printf("result:%+v \n", result)
-		//fmt.Printf("cmd:%+v \n", cmd.String())
-		//fmt.Printf("%+v \n", pendings)
-
-		//v := t.client.XReadGroup(ctx, &redis.XReadGroupArgs{
-		//	Group:    tool.BeanqDeadLetterGroup,
-		//	Consumer: tool.BeanqDeadLetterConsumer,
-		//	Streams:  []string{deadLetterKey},
-		//	Count:    10,
-		//}).Val()
-		//fmt.Printf("vvvvv:%+v \n", v)
 
 		watcher := func(tx *redis.Tx) error {
+
+			pending := pendings[0]
 			_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-				//t.client.XClaim(ctx, &redis.XClaimArgs{
-				//	Stream:   deadLetterKey,
-				//	Group:    tool.BeanqLogGroup,
-				//	Consumer: tool.BeanqDeadLetterConsumer,
-				//	Messages: ids,
-				//})
-				//t.client.XAck(ctx, streamKey, channel, ids...)
-				//t.client.XDel(ctx, streamKey, ids...)
+
+				if pending.Idle > deadLetterIdleTime {
+
+					rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
+					if len(rangeV) <= 0 {
+						return nil
+					}
+					val := rangeV[0].Values
+					val["type"] = "dead_letter"
+					t.client.XAdd(ctx, &redis.XAddArgs{
+						Stream: logicKey,
+						Values: val,
+					})
+				}
+				t.client.XAck(ctx, streamKey, channel, pending.ID)
+				t.client.XDel(ctx, streamKey, pending.ID)
 				return nil
 			})
 			return err
 		}
 
-		if err := t.client.Watch(ctx, watcher, deadLetterKey, streamKey); err != nil {
-			fmt.Println(err)
+		if err := t.client.Watch(ctx, watcher, streamKey, logicKey); err != nil {
+			logger.New().Error(err)
 		}
-		continue
+		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+			logger.New().Error(err)
+		}
 	}
 }
 
@@ -219,9 +198,9 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 
 func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallBack) error {
 
-	//id := stream.Id
-	//stm := stream.Stream
-	//channel := stream.Channel
+	id := stream.Id
+	stm := stream.Stream
+	channel := stream.Channel
 
 	var val map[string]any
 	val = stream.Data
@@ -258,8 +237,8 @@ func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler publ
 	// ------------------------
 	group.TryGo(func() error {
 		_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			//pipeliner.XAck(ctx, stm, channel, id)
-			//pipeliner.XDel(ctx, stm, id)
+			pipeliner.XAck(ctx, stm, channel, id)
+			pipeliner.XDel(ctx, stm, id)
 			return nil
 		})
 		return err

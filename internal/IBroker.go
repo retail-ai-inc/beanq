@@ -27,6 +27,9 @@ type (
 	IProcessLog interface {
 		AddLog(ctx context.Context, data map[string]any) error
 	}
+	IMigrateLog interface {
+		Migrate(ctx context.Context, data []map[string]any) error
+	}
 )
 
 // IStatus check the status of the message based on the ID

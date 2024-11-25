@@ -7,36 +7,20 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/driver/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )
 
-type (
-	IBroker interface {
-		driver() any
-
-		enqueue(ctx context.Context, msg *Message, dynamicOn bool) error
-		addConsumer(subscribeType btype.SubscribeType, channel, topic string, subscribe IConsumeHandle) *RedisHandle
-		addDynamicConsumer(subType btype.SubscribeType, channel, topic string, subscribe IConsumeHandle, streamKey, dynamicKey string) *RedisHandle
-		dynamicConsuming(subType btype.SubscribeType, channel string, subscribe IConsumeHandle, dynamicKey string)
-
-		monitorStream(ctx context.Context, channel, id string) (*Message, error)
-		setCaptureException(fn func(ctx context.Context, err any))
-	}
-)
-
 var (
 	brokerOnce sync.Once
 	broker     Broker
-	rdb        redis.UniversalClient
-	rdbOnce    sync.Once
 )
 
 type Handler struct {
@@ -56,51 +40,18 @@ type Broker struct {
 	handlers []Handler
 }
 
-func NewRedisClient(config *BeanqConfig) redis.UniversalClient {
-
-	rdbOnce.Do(func() {
-		ctx := context.Background()
-
-		hosts := strings.Split(config.Redis.Host, ",")
-		for i, h := range hosts {
-			hs := strings.Split(h, ":")
-			if len(hs) == 1 {
-				hosts[i] = strings.Join([]string{h, config.Redis.Port}, ":")
-			}
-		}
-
-		rdb = redis.NewUniversalClient(&redis.UniversalOptions{
-			Addrs:        hosts,
-			Password:     config.Redis.Password,
-			DB:           config.Redis.Database,
-			MaxRetries:   config.Redis.MaxRetries,
-			DialTimeout:  config.Redis.DialTimeout,
-			ReadTimeout:  config.Redis.ReadTimeout,
-			WriteTimeout: config.Redis.WriteTimeout,
-			PoolSize:     config.Redis.PoolSize,
-			MinIdleConns: config.Redis.MinIdleConnections,
-			PoolTimeout:  config.Redis.PoolTimeout,
-			PoolFIFO:     false,
-		})
-
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			logger.New().Fatal(err.Error())
-		}
-	})
-
-	return rdb
-}
-
 func NewBroker(config *BeanqConfig) *Broker {
 
 	brokerOnce.Do(func() {
 		switch config.Broker {
 		case "redis":
+			cfg := config.Redis
+			client := bredis.NewRdb(cfg.Host, cfg.Port,
+				cfg.Password, cfg.Database,
+				cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections)
 
-			client := NewRedisClient(config)
-
-			broker.status = bredis.NewStatus(client, config.Redis.Prefix)
-			broker.log = bredis.NewProcessLog(client, config.Redis.Prefix)
+			broker.status = bredis.NewStatus(client, cfg.Prefix)
+			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
@@ -130,7 +81,12 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 	// redis broker
 
 	if t.config.Broker == "redis" {
-		bk = bredis.SwitchBroker(NewRedisClient(t.config), t.config.Redis.Prefix, t.config.MaxLen, moodType)
+		cfg := t.config.Redis
+		client := bredis.NewRdb(cfg.Host, cfg.Port,
+			cfg.Password, cfg.Database,
+			cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections)
+
+		bk = bredis.SwitchBroker(client, t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
 	}
 
 	if err := bk.Enqueue(ctx, data); err != nil {
@@ -172,11 +128,36 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 		},
 	}
 	if t.config.Broker == "redis" {
-		handler.brokerImpl = bredis.SwitchBroker(NewRedisClient(t.config), t.config.Redis.Prefix, t.config.MaxLen, moodType)
+		cfg := t.config.Redis
+		client := bredis.NewRdb(cfg.Host, cfg.Port,
+			cfg.Password, cfg.Database,
+			cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections)
+
+		handler.brokerImpl = bredis.SwitchBroker(client, t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
 	}
 	t.handlers = append(t.handlers, handler)
 
 	return nil
+}
+
+func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
+
+	var migrate public.IMigrateLog
+	if t.config.Broker == "redis" {
+		if t.config.History.On {
+			mongo := t.config.Mongo
+			migrate = bmongo.NewMongoLog(ctx, mongo.Host, mongo.Port, mongo.ConnectTimeOut, mongo.MaxConnectionLifeTime, mongo.MaxConnectionPoolSize, mongo.Database, mongo.Collection, mongo.UserName, mongo.Password)
+		}
+
+		cfg := t.config.Redis
+		client := bredis.NewRdb(cfg.Host, cfg.Port,
+			cfg.Password, cfg.Database,
+			cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections)
+
+		migrate = bredis.NewLog(client, t.config.Redis.Prefix, migrate)
+	}
+	return migrate.Migrate(ctx, nil)
+
 }
 
 func (t *Broker) Start(ctx context.Context) {
@@ -189,9 +170,10 @@ func (t *Broker) Start(ctx context.Context) {
 			hdl2.brokerImpl.Dequeue(ctx, hdl2.channel, hdl2.topic, hdl2.do)
 		}(hdl)
 	}
-	//dead letter
 	//move logs from redis to mongo
-
+	go func() {
+		_ = t.Migrate(ctx, nil)
+	}()
 	logger.New().Info("Beanq Start")
 	// monitor signal
 	<-t.WaitSignal(cancel)
@@ -220,6 +202,7 @@ func GetBrokerDriver[T any]() T {
 		logger.New().Panic("the broker has not been initialized yet")
 	}
 	if broker.config.Broker == "redis" {
+		var rdb redis.UniversalClient
 		return rdb.(T)
 	}
 	return errors.New("unknow driver").(T)

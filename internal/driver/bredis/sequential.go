@@ -11,20 +11,22 @@ import (
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 	"sync"
+	"time"
 )
 
 type Sequential struct {
 	base Base
 }
 
-func NewSequential(client redis.UniversalClient, prefix string) *Sequential {
+func NewSequential(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Sequential {
 	return &Sequential{
 		base: Base{
-			client:        client,
-			IProcessLog:   NewProcessLog(client, prefix),
-			subType:       btype.SequentialSubscribe,
-			prefix:        prefix,
-			blockDuration: DefaultBlockDuration,
+			client:         client,
+			IProcessLog:    NewProcessLog(client, prefix),
+			subType:        btype.SequentialSubscribe,
+			prefix:         prefix,
+			deadLetterIdle: deadLetterIdle,
+			blockDuration:  DefaultBlockDuration,
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},

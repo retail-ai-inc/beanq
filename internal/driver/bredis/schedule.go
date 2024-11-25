@@ -25,14 +25,15 @@ type (
 	PreWork func(ctx context.Context, prefix string, channel, topic string)
 )
 
-func NewSchedule(client redis.UniversalClient, prefix string) *Schedule {
+func NewSchedule(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Schedule {
 	work := &Schedule{
 		base: Base{
-			client:        client,
-			IProcessLog:   NewProcessLog(client, prefix),
-			subType:       btype.DelaySubscribe,
-			prefix:        prefix,
-			blockDuration: DefaultBlockDuration,
+			client:         client,
+			IProcessLog:    NewProcessLog(client, prefix),
+			subType:        btype.DelaySubscribe,
+			prefix:         prefix,
+			deadLetterIdle: deadLetterIdle,
+			blockDuration:  DefaultBlockDuration,
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},

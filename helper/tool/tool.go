@@ -1,11 +1,11 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
-	"golang.org/x/net/context"
 	"hash/fnv"
 	"math"
 	"math/rand"
