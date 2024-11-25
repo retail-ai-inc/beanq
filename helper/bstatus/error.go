@@ -13,4 +13,7 @@ func (BqError) BQError() string {
 	return "beanq error"
 }
 
-var ErrIdempotent = BqError("duplicate id")
+var (
+	ErrIdempotent     = BqError("duplicate id")
+	BrokerDriverError = BqError("broker driver error, please check")
+)

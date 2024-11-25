@@ -377,23 +377,6 @@ func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandl
 	return cmd, nil
 }
 
-func (t cmdAble) PPublish(channel, topic string, payload []byte) error {
-	cmd := &Publish{
-		channel:     channel,
-		topic:       topic,
-		payload:     payload,
-		executeTime: time.Now(),
-		moodType:    btype.SEQUENTIAL,
-	}
-
-	if err := t(cmd); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t cmdAble) PUnSubscribe() {}
-
 type (
 	// Publish command:publish
 	Publish struct {

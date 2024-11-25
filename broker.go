@@ -72,12 +72,14 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 	}
 
 	var bk public.IBroker
-	// redis broker
 
+	// redis broker
 	if t.config.Broker == "redis" {
 		bk = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
 	}
-
+	if bk == nil {
+		return bstatus.BrokerDriverError
+	}
 	if err := bk.Enqueue(ctx, data); err != nil {
 		return err
 	}
