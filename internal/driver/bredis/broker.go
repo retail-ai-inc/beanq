@@ -177,7 +177,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 						vv["status"] = bstatus.StatusFailed
 						vv["info"] = fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack())
 						if err := t.AddLog(ctx, vv); err != nil {
-
+							logger.New().Error(err)
 						}
 					}
 					wait.Done()
@@ -202,8 +202,7 @@ func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler publ
 	stm := stream.Stream
 	channel := stream.Channel
 
-	var val map[string]any
-	val = stream.Data
+	val := stream.Data
 
 	group := t.errGroup.Get().(*errgroup.Group)
 	defer func() {

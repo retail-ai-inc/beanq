@@ -58,7 +58,7 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 				return nil
 			}
 			if !errors.Is(err, redis.Nil) && !errors.Is(err, redis.ErrClosed) {
-				//t.captureException(ctx, err)
+				logger.New().Error(err)
 			}
 			continue
 		}
@@ -78,7 +78,6 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 
 		if err := t.log.Migrate(ctx, datas); err != nil {
 			logger.New().Error(err)
-			//t.captureException(ctx, err)
 			continue
 		}
 		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
@@ -86,7 +85,7 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 			pipeliner.XDel(ctx, key, ids...)
 			return nil
 		}); err != nil {
-			//t.captureException(ctx, err)
+			logger.New().Error(err)
 		}
 	}
 }
