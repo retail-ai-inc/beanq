@@ -28,11 +28,14 @@ func MakeZSetKey(prefix, channel, topic string) string {
 	if topic == "" {
 		topic = boptions.DefaultOptions.DefaultTopic
 	}
+	channel = strings.Join([]string{"{", channel}, "")
+	topic = strings.Join([]string{topic, "}"}, "")
 	return makeKey(prefix, channel, topic, "zset")
 }
 
 // MakeStreamKey create key for type stream
 func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) string {
+
 	if channel == "" {
 		channel = boptions.DefaultOptions.DefaultChannel
 	}
@@ -46,13 +49,18 @@ func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) s
 	if subType == btype.DelaySubscribe {
 		stream = "delay_stream"
 	}
-
+	channel = strings.Join([]string{"{", channel}, "")
+	topic = strings.Join([]string{topic, "}"}, "")
 	return makeKey(prefix, channel, topic, stream, "stream")
 }
 
 // MakeStatusKey create key for type string
 func MakeStatusKey(prefix, channel, id string) string {
-	return makeKey(prefix, channel, "=-status-=", id)
+
+	channel = strings.Join([]string{"{", channel}, "")
+	status := strings.Join([]string{"=-status-=", "}"}, "")
+
+	return makeKey(prefix, channel, status, id)
 }
 
 // MakeDynamicKey create key for dynamic

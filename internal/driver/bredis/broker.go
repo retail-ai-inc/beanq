@@ -97,24 +97,23 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			continue
 		}
 
+		pending := pendings[0]
+		if pending.Idle > deadLetterIdleTime {
+
+			rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
+			if len(rangeV) <= 0 {
+				t.client.Del(ctx, deadLetterKey)
+				continue
+			}
+			val := rangeV[0].Values
+			val["type"] = "dead_letter"
+			t.client.XAdd(ctx, &redis.XAddArgs{
+				Stream: logicKey,
+				Values: val,
+			})
+		}
 		watcher := func(tx *redis.Tx) error {
-
-			pending := pendings[0]
 			_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-
-				if pending.Idle > deadLetterIdleTime {
-
-					rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
-					if len(rangeV) <= 0 {
-						return nil
-					}
-					val := rangeV[0].Values
-					val["type"] = "dead_letter"
-					t.client.XAdd(ctx, &redis.XAddArgs{
-						Stream: logicKey,
-						Values: val,
-					})
-				}
 				t.client.XAck(ctx, streamKey, channel, pending.ID)
 				t.client.XDel(ctx, streamKey, pending.ID)
 				return nil

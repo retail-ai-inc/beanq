@@ -132,19 +132,20 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 				return nil
 			}
 
-			if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-
-				delvals := make([]string, len(vals))
-				for _, val := range vals {
-
-					data := make(map[string]any, 0)
-					if err := tool.JsonDecode(val, &data); err != nil {
-						if err := t.base.AddLog(ctx, map[string]any{"moodType": btype.DELAY, "data": val, "addTime": time.Now()}); err != nil {
-							logger.New().Error("AddLog Error:", err)
-						}
-						continue
+			datas := make([]map[string]any, 0)
+			for _, val := range vals {
+				data := make(map[string]any, 0)
+				if err := tool.JsonDecode(val, &data); err != nil {
+					if err := t.base.AddLog(ctx, map[string]any{"moodType": btype.DELAY, "data": val, "addTime": time.Now()}); err != nil {
+						logger.New().Error("AddLog Error:", err)
 					}
-					delvals = append(delvals, val)
+					continue
+				}
+				datas = append(datas, data)
+			}
+
+			if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+				for _, data := range datas {
 					pipeliner.XAdd(ctx, &redis.XAddArgs{
 						Stream: streamKey,
 						Approx: false,
@@ -153,7 +154,7 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 						Values: data,
 					})
 				}
-				pipeliner.ZRem(ctx, zSetKey, delvals)
+				pipeliner.ZRem(ctx, zSetKey, vals)
 				return nil
 			}); err != nil {
 				return err
