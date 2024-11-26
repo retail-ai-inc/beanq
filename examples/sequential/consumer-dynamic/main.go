@@ -63,15 +63,15 @@ func (t *seqCustomer) Error(ctx context.Context, err error) {
 var index atomic.Int32
 
 func main() {
-	// f, err := os.Create("trace.out")
-	// if err != nil {
-	// 	panic(err)
+	// f, berr := os.Create("trace.out")
+	// if berr != nil {
+	// 	panic(berr)
 	// }
 	// // defer f.Close()
 	//
-	// err = trace.Start(f)
-	// if err != nil {
-	// 	panic(err)
+	// berr = trace.Start(f)
+	// if berr != nil {
+	// 	panic(berr)
 	// }
 	// defer trace.Stop()
 
@@ -101,7 +101,7 @@ func main() {
 		logger.New().Error(err)
 	}
 	csm.Wait(ctx)
-	/*_, err := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+	/*_, berr := csm.BQ().WithContext(ctx).Dynamic().SubscribeSequential("delay-channel", "*", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
 			index.Add(1)
 			wf.NewTask().OnRollback(func(task beanq.Task) error {
 				if index.Load()%3 == 0 {
@@ -116,15 +116,15 @@ func main() {
 				time.Sleep(time.Second * 2)
 				return nil
 			})
-			if err != nil {
-				logger.New().Error(err)
+			if berr != nil {
+				logger.New().Error(berr)
 			}
 		}()
 
 		go func() {
 			defer wg.Done()
 			ctx := context.Background()
-			_, err := csm.BQ().WithContext(ctx).Dynamic(beanq.DynamicKeyOpt("same-key")).SubscribeSequential("other-channel", "*", beanq.DefaultHandle{
+			_, berr := csm.BQ().WithContext(ctx).Dynamic(beanq.DynamicKeyOpt("same-key")).SubscribeSequential("other-channel", "*", beanq.DefaultHandle{
 				DoHandle: func(ctx context.Context, message *beanq.Message) error {
 					time.Sleep(time.Second * time.Duration(rand.Int63n(4)))
 					logger.New().Info("default2 handler ", message.Id, message.Topic)
@@ -134,12 +134,12 @@ func main() {
 					logger.New().Info("default2 cancel ", message.Id)
 					return nil
 				},
-				DoError: func(ctx context.Context, err error) {
-					logger.New().Info("default2 error ", err)
+				DoError: func(ctx context.Context, berr error) {
+					logger.New().Info("default2 error ", berr)
 				},
 			})
-			if err != nil {
-				logger.New().Error(err)
+			if berr != nil {
+				logger.New().Error(berr)
 			}
 		}()
 

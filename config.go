@@ -23,7 +23,7 @@
 package beanq
 
 import (
-	"context"
+	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
 	"time"
 )
 
@@ -61,7 +61,6 @@ type (
 		TimeToRun    time.Duration
 	}
 	History struct {
-		On    bool
 		Mongo struct {
 			Database              string
 			Collection            string
@@ -73,14 +72,15 @@ type (
 			MaxConnectionPoolSize uint64
 			MaxConnectionLifeTime time.Duration
 		}
+		On bool
 	}
 	BeanqConfig struct {
-		Health                   Health        `json:"health"`
-		DebugLog                 DebugLog      `json:"debugLog"`
-		Broker                   string        `json:"broker"`
+		Health   Health   `json:"health"`
+		Broker   string   `json:"broker"`
+		DebugLog DebugLog `json:"debugLog"`
+		History
+		Queue
 		Redis                    Redis         `json:"redis"`
-		ConsumerPoolSize         int           `json:"consumerPoolSize"`
-		JobMaxRetries            int           `json:"jobMaxRetries"`
 		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
 		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
 		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
@@ -88,57 +88,57 @@ type (
 		PublishTimeOut           time.Duration `json:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
 		MinConsumers             int64         `json:"minConsumers"`
-		Queue
-		History
+		JobMaxRetries            int           `json:"jobMaxRetries"`
+		ConsumerPoolSize         int           `json:"consumerPoolSize"`
 	}
 )
 
 func (t *BeanqConfig) init() {
 	if t.ConsumerPoolSize == 0 {
-		t.ConsumerPoolSize = DefaultOptions.ConsumerPoolSize
+		t.ConsumerPoolSize = boptions.DefaultOptions.ConsumerPoolSize
 	}
 	if t.JobMaxRetries < 0 {
-		t.JobMaxRetries = DefaultOptions.JobMaxRetry
+		t.JobMaxRetries = boptions.DefaultOptions.JobMaxRetry
 	}
 	if t.DeadLetterIdleTime == 0 {
-		t.DeadLetterIdleTime = DefaultOptions.DeadLetterIdle
+		t.DeadLetterIdleTime = boptions.DefaultOptions.DeadLetterIdle
 	}
 	if t.DeadLetterTicker == 0 {
-		t.DeadLetterTicker = DefaultOptions.DeadLetterTicker
+		t.DeadLetterTicker = boptions.DefaultOptions.DeadLetterTicker
 	}
 
 	if t.KeepSuccessJobsInHistory == 0 {
-		t.KeepSuccessJobsInHistory = DefaultOptions.KeepSuccessJobsInHistory
+		t.KeepSuccessJobsInHistory = boptions.DefaultOptions.KeepSuccessJobsInHistory
 	}
 	if t.KeepFailedJobsInHistory == 0 {
-		t.KeepFailedJobsInHistory = DefaultOptions.KeepFailedJobsInHistory
+		t.KeepFailedJobsInHistory = boptions.DefaultOptions.KeepFailedJobsInHistory
 	}
 	if t.PublishTimeOut == 0 {
-		t.PublishTimeOut = DefaultOptions.PublishTimeOut
+		t.PublishTimeOut = boptions.DefaultOptions.PublishTimeOut
 	}
 	if t.ConsumeTimeOut == 0 {
-		t.ConsumeTimeOut = DefaultOptions.ConsumeTimeOut
+		t.ConsumeTimeOut = boptions.DefaultOptions.ConsumeTimeOut
 	}
 	if t.MinConsumers == 0 {
-		t.MinConsumers = DefaultOptions.MinConsumers
+		t.MinConsumers = boptions.DefaultOptions.MinConsumers
 	}
 	if t.Channel == "" {
-		t.Channel = DefaultOptions.DefaultChannel
+		t.Channel = boptions.DefaultOptions.DefaultChannel
 	}
 	if t.Topic == "" {
-		t.Topic = DefaultOptions.DefaultTopic
+		t.Topic = boptions.DefaultOptions.DefaultTopic
 	}
 	if t.DelayChannel == "" {
-		t.DelayChannel = DefaultOptions.DefaultDelayChannel
+		t.DelayChannel = boptions.DefaultOptions.DefaultDelayChannel
 	}
 	if t.DelayTopic == "" {
-		t.DelayTopic = DefaultOptions.DefaultDelayTopic
+		t.DelayTopic = boptions.DefaultOptions.DefaultDelayTopic
 	}
 	if t.MaxLen == 0 {
-		t.MaxLen = DefaultOptions.DefaultMaxLen
+		t.MaxLen = boptions.DefaultOptions.DefaultMaxLen
 	}
 	if t.TimeToRun == 0 {
-		t.TimeToRun = DefaultOptions.TimeToRun
+		t.TimeToRun = boptions.DefaultOptions.TimeToRun
 	}
 	if t.History.Mongo.Collection == "" {
 		t.History.Mongo.Collection = "event_logs"
@@ -152,19 +152,4 @@ func (t *BeanqConfig) init() {
 	if t.History.Mongo.MaxConnectionLifeTime == 0 {
 		t.History.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
-}
-
-// IHandle consumer ,after broker
-type IHandle interface {
-	Channel() string
-	Topic() string
-	Process(ctx context.Context)
-	Schedule(ctx context.Context) error
-	DeadLetter(ctx context.Context) error
-}
-
-// VolatileLFU ...
-type VolatileLFU interface {
-	Add(ctx context.Context, key, member string) (bool, error)
-	Delete(ctx context.Context, key string) error
 }

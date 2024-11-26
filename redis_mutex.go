@@ -13,6 +13,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"io"
 	mRand "math/rand"
 	"strings"
@@ -23,21 +24,21 @@ import (
 )
 
 // ErrFailed is the error resulting if Redsync fails to acquire the lock after exhausting all retries.
-var ErrFailed = bqError("failed to acquire lock")
+var ErrFailed = bstatus.BqError("failed to acquire lock")
 
 // ErrExtendFailed is the error resulting if Redsync fails to extend the lock.
-var ErrExtendFailed = bqError("failed to extend lock")
+var ErrExtendFailed = bstatus.BqError("failed to extend lock")
 
 // ErrLockAlreadyExpired is the error resulting if trying to unlock the lock which already expired.
-var ErrLockAlreadyExpired = bqError("failed to unlock, lock was already expired")
+var ErrLockAlreadyExpired = bstatus.BqError("failed to unlock, lock was already expired")
 
 // A DelayFunc is used to decide the amount of time to wait between retries.
 type DelayFunc func(tries int) time.Duration
 
 type MuxClient struct {
-	expireTime time.Duration
-	prefix     string
 	client     redis.UniversalClient
+	prefix     string
+	expireTime time.Duration
 }
 
 func NewMuxClient(client redis.UniversalClient) *MuxClient {
@@ -90,25 +91,20 @@ func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
 
 // A Mutex is a distributed mutual exclusion lock.
 type Mutex struct {
-	name   string
-	expiry time.Duration
-
-	tries     int
-	delayFunc DelayFunc
-
+	until         time.Time
+	delayFunc     DelayFunc
+	genValueFunc  func() (string, error)
+	name          string
+	value         string
+	pools         []redis.UniversalClient
+	tries         int
 	driftFactor   float64
 	timeoutFactor float64
-
-	quorum int
-
-	genValueFunc  func() (string, error)
-	value         string
-	until         time.Time
+	quorum        int
+	expiry        time.Duration
 	shuffle       bool
 	failFast      bool
 	setNXOnExtend bool
-
-	pools []redis.UniversalClient
 }
 
 // Name returns mutex name (i.e. the Redis key).
@@ -313,9 +309,9 @@ func (m *Mutex) touch(ctx context.Context, client redis.UniversalClient, value s
 
 func (m *Mutex) actOnPoolsAsync(actFn func(client redis.UniversalClient) (bool, error)) (int, error) {
 	type result struct {
+		err      error
 		node     int
 		statusOK bool
-		err      error
 	}
 
 	ch := make(chan result, len(m.pools))
@@ -372,9 +368,9 @@ const (
 
 // Script encapsulates the source, hash and key count for a Lua script.
 type Script struct {
-	KeyCount int
 	Src      string
 	Hash     string
+	KeyCount int
 }
 
 // NewScript returns a new script object. If keyCount is greater than or equal
@@ -385,7 +381,7 @@ type Script struct {
 func NewScript(keyCount int, src string) *Script {
 	h := sha1.New()
 	_, _ = io.WriteString(h, src)
-	return &Script{keyCount, src, hex.EncodeToString(h.Sum(nil))}
+	return &Script{src, hex.EncodeToString(h.Sum(nil)), keyCount}
 }
 
 func noErrNil(err error) error {

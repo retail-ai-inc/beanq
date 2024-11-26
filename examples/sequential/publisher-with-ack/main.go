@@ -72,9 +72,9 @@ func main() {
 	}
 	wait.Wait()
 	// this is a single check for ACK
-	// result, err := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
-	// if err != nil {
-	// 	panic(err)
+	// result, berr := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
+	// if berr != nil {
+	// 	panic(berr)
 	// }
 	// log.Println(result)
 }

@@ -1,4 +1,4 @@
-package redisx
+package bredis
 
 import (
 	"sync"
@@ -53,37 +53,4 @@ func NewReadGroupArgs(group, consumer string, streams []string, count int64, blo
 		Count:    count,
 		Block:    block,
 	}
-}
-
-var xAutoClaimPool = &sync.Pool{New: func() any {
-	return &redis.XAutoClaimArgs{
-		Stream:   "",
-		Group:    "",
-		MinIdle:  0,
-		Start:    "",
-		Count:    0,
-		Consumer: "",
-	}
-}}
-
-func NewAutoClaimArgs(stream, group string, minIdle time.Duration, start string, count int64, consumer string) *redis.XAutoClaimArgs {
-	args := xAutoClaimPool.Get().(*redis.XAutoClaimArgs)
-	args.Stream = stream
-	args.Group = group
-	args.MinIdle = minIdle
-	args.Start = start
-	args.Count = count
-	args.Consumer = consumer
-	defer func() {
-		args = &redis.XAutoClaimArgs{
-			Stream:   "",
-			Group:    "",
-			MinIdle:  0,
-			Start:    "",
-			Count:    0,
-			Consumer: "",
-		}
-		xAutoClaimPool.Put(args)
-	}()
-	return args
 }

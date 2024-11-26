@@ -20,7 +20,7 @@ func TestNewLog(t *testing.T) {
 		Pre:         "",
 	}
 
-	NewWithConfig(cfg).With("a", errors.New("aa")).Error(errors.New("err"))
+	NewWithConfig(cfg).With("a", errors.New("aa")).Error(errors.New("berr"))
 
 	for i := 0; i < 100; i++ {
 		if i <= 10 {
@@ -30,17 +30,17 @@ func TestNewLog(t *testing.T) {
 		}
 		if i > 10 && i < 30 {
 			go func() {
-				NewWithConfig(cfg).With("bb", 10).With("err", errors.New("this is an error")).Info("bb info")
+				NewWithConfig(cfg).With("bb", 10).With("berr", errors.New("this is an error")).Info("bb info")
 			}()
 		}
 		if i > 30 && i < 50 {
 			go func() {
-				NewWithConfig(cfg).With("cc", 10).With("err", errors.New("this is an error")).Info("cc info")
+				NewWithConfig(cfg).With("cc", 10).With("berr", errors.New("this is an error")).Info("cc info")
 			}()
 		}
 		if i > 50 {
 			go func() {
-				NewWithConfig(cfg).With("dd", 10).With("err", errors.New("this is an error")).Info("dd info")
+				NewWithConfig(cfg).With("dd", 10).With("berr", errors.New("this is an error")).Info("dd info")
 			}()
 		}
 

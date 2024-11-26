@@ -66,7 +66,7 @@ func main() {
 	csm := beanq.New(config)
 
 	ctx := context.Background()
-	// _, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+	// _, berr := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
 	// 	index++
 	// 	fmt.Println("index:", index)
 	// 	wf.NewTask().OnRollback(func(task beanq.Task) error {
@@ -106,20 +106,20 @@ func main() {
 	// 		return nil
 	// 	})
 	//
-	// 	err := wf.OnRollbackResult(func(taskID string, err error) error {
-	// 		if err == nil {
+	// 	berr := wf.OnRollbackResult(func(taskID string, berr error) error {
+	// 		if berr == nil {
 	// 			return nil
 	// 		}
-	// 		log.Printf("%s rollback error: %v\n", taskID, err)
+	// 		log.Printf("%s rollback error: %v\n", taskID, berr)
 	// 		return nil
 	// 	}).Run()
-	// 	if err != nil {
-	// 		return err
+	// 	if berr != nil {
+	// 		return berr
 	// 	}
 	// 	return nil
 	// }))
-	// if err != nil {
-	// 	logger.New().Error(err)
+	// if berr != nil {
+	// 	logger.New().Error(berr)
 	// }
 
 	_, err := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.DefaultHandle{
@@ -145,11 +145,11 @@ func main() {
 	//		fmt.Println(runtime.NumGoroutine())
 	//	}
 	// }()
-	// _, err = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", &seqCustomer{
+	// _, berr = csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", &seqCustomer{
 	// 	metadata: "I am a custom",
 	// })
-	// if err != nil {
-	// 	logger.New().Error(err)
+	// if berr != nil {
+	// 	logger.New().Error(berr)
 	// }
 	// begin to consume information
 	csm.Wait(ctx)
