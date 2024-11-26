@@ -34,11 +34,11 @@ type Handler struct {
 }
 
 type Broker struct {
-	config   *BeanqConfig
 	status   public.IStatus
 	log      public.IProcessLog
-	handlers []Handler
 	client   any
+	config   *BeanqConfig
+	handlers []Handler
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
