@@ -50,6 +50,17 @@ var (
 	DefaultBlockDuration BlockDuration = func() time.Duration {
 		return time.Duration(rand.Int63n(9)+1) * time.Second
 	}
+
+	baseWatcher = func(ctx context.Context, stream, channel, id string) func(tx *redis.Tx) error {
+		return func(tx *redis.Tx) error {
+			_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+				pipeliner.XAck(ctx, stream, channel, id)
+				pipeliner.XDel(ctx, stream, id)
+				return nil
+			})
+			return err
+		}
+	}
 )
 
 func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
@@ -68,15 +79,15 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 
 	deadLetterIdleTime := t.deadLetterIdle
 
-	for {
-		select {
+	for range ticker.C {
 
+		select {
 		case <-ctx.Done():
 			_ = t.client.Close()
 			return
-		case <-ticker.C:
-
+		default:
 		}
+
 		if v := AddLogicLockScript.Run(ctx, t.client, []string{deadLetterKey}).Val(); v.(int64) == 1 {
 			continue
 		}
@@ -112,16 +123,8 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 				Values: val,
 			})
 		}
-		watcher := func(tx *redis.Tx) error {
-			_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-				t.client.XAck(ctx, streamKey, channel, pending.ID)
-				t.client.XDel(ctx, streamKey, pending.ID)
-				return nil
-			})
-			return err
-		}
 
-		if err := t.client.Watch(ctx, watcher, streamKey, logicKey); err != nil {
+		if err := t.client.Watch(ctx, baseWatcher(ctx, streamKey, channel, pending.ID), streamKey); err != nil {
 			logger.New().Error(err)
 		}
 		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {

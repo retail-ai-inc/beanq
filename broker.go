@@ -38,7 +38,7 @@ type Broker struct {
 	log      public.IProcessLog
 	client   any
 	config   *BeanqConfig
-	handlers []Handler
+	handlers []*Handler
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
@@ -121,7 +121,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 	if t.config.Broker == "redis" {
 		handler.brokerImpl = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
 	}
-	t.handlers = append(t.handlers, handler)
+	t.handlers = append(t.handlers, &handler)
 
 	return nil
 }
@@ -129,6 +129,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 
 	var migrate public.IMigrateLog
+
 	if t.config.Broker == "redis" {
 		if t.config.History.On {
 			mongo := t.config.Mongo
@@ -136,6 +137,7 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 		}
 		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
 	}
+
 	return migrate.Migrate(ctx, nil)
 
 }
@@ -144,11 +146,12 @@ func (t *Broker) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	for _, handler := range t.handlers {
-		hdl := handler
+	for key, handler := range t.handlers {
+		hdl := *handler
 		go func(hdl2 Handler) {
 			hdl2.brokerImpl.Dequeue(ctx, hdl2.channel, hdl2.topic, hdl2.do)
 		}(hdl)
+		t.handlers[key] = nil
 	}
 	//move logs from redis to mongo
 	go func() {
