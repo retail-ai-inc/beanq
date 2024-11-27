@@ -75,7 +75,7 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 
 	// redis broker
 	if t.config.Broker == "redis" {
-		bk = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
+		bk = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.MinConsumers, t.config.DeadLetterIdleTime, moodType)
 	}
 	if bk == nil {
 		return bstatus.BrokerDriverError
@@ -119,7 +119,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 		},
 	}
 	if t.config.Broker == "redis" {
-		handler.brokerImpl = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
+		handler.brokerImpl = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.MinConsumers, t.config.DeadLetterIdleTime, moodType)
 	}
 	t.handlers = append(t.handlers, &handler)
 

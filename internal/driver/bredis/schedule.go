@@ -28,7 +28,7 @@ type (
 	PreWork func(ctx context.Context, prefix string, channel, topic string)
 )
 
-func NewSchedule(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Schedule {
+func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Schedule {
 	work := &Schedule{
 		base: Base{
 			client:         client,
@@ -40,6 +40,7 @@ func NewSchedule(client redis.UniversalClient, prefix string, deadLetterIdle tim
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
+			consumers: consumerCount,
 		},
 	}
 	work.watcher = work.Watcher

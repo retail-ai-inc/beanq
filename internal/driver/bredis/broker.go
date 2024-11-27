@@ -19,16 +19,16 @@ import (
 	"time"
 )
 
-func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, deadLetterIdle time.Duration, moodType btype.MoodType) public.IBroker {
+func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration, moodType btype.MoodType) public.IBroker {
 
 	if moodType == btype.NORMAL {
-		return NewNormal(client, prefix, maxLen, deadLetterIdle)
+		return NewNormal(client, prefix, maxLen, consumerCount, deadLetterIdle)
 	}
 	if moodType == btype.SEQUENTIAL {
-		return NewSequential(client, prefix, deadLetterIdle)
+		return NewSequential(client, prefix, consumerCount, deadLetterIdle)
 	}
 	if moodType == btype.DELAY {
-		return NewSchedule(client, prefix, deadLetterIdle)
+		return NewSchedule(client, prefix, consumerCount, deadLetterIdle)
 	}
 	return nil
 }
@@ -43,6 +43,7 @@ type (
 		prefix         string
 		subType        btype.SubscribeType
 		deadLetterIdle time.Duration
+		consumers      int64
 	}
 )
 
@@ -141,7 +142,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 
-	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, 10, t.blockDuration())
+	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
 
 	for {
 

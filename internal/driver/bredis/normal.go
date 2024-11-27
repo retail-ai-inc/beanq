@@ -18,7 +18,7 @@ type Normal struct {
 	maxLen int64
 }
 
-func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, deadLetterIdle time.Duration) *Normal {
+func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration) *Normal {
 
 	return &Normal{
 		maxLen: maxLen,
@@ -32,6 +32,7 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, deadLe
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
+			consumers: consumerCount,
 		},
 	}
 }

@@ -18,7 +18,7 @@ type Sequential struct {
 	base Base
 }
 
-func NewSequential(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Sequential {
+func NewSequential(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Sequential {
 
 	return &Sequential{
 		base: Base{
@@ -31,6 +31,7 @@ func NewSequential(client redis.UniversalClient, prefix string, deadLetterIdle t
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
+			consumers: consumerCount,
 		},
 	}
 }
