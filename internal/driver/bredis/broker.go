@@ -51,17 +51,6 @@ var (
 	DefaultBlockDuration BlockDuration = func() time.Duration {
 		return time.Duration(rand.Int63n(9)+1) * time.Second
 	}
-
-	baseWatcher = func(ctx context.Context, stream, channel, id string) func(tx *redis.Tx) error {
-		return func(tx *redis.Tx) error {
-			_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-				pipeliner.XAck(ctx, stream, channel, id)
-				pipeliner.XDel(ctx, stream, id)
-				return nil
-			})
-			return err
-		}
-	}
 )
 
 func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
@@ -125,7 +114,11 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			})
 		}
 
-		if err := t.client.Watch(ctx, baseWatcher(ctx, streamKey, channel, pending.ID), streamKey); err != nil {
+		if _, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.XAck(ctx, streamKey, channel, pending.ID)
+			pipeliner.XDel(ctx, streamKey, pending.ID)
+			return nil
+		}); err != nil {
 			logger.New().Error(err)
 		}
 		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
