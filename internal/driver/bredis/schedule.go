@@ -19,8 +19,8 @@ import (
 type (
 	Schedule struct {
 		preWork PreWork
-		base    Base
 		watcher Watcher
+		base    Base
 	}
 	// Watcher redis transaction
 	Watcher func(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error

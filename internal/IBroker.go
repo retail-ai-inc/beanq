@@ -36,5 +36,5 @@ type (
 
 // IStatus check the status of the message based on the ID
 type IStatus interface {
-	Status(ctx context.Context, channel, id string) (map[string]string, error)
+	Status(ctx context.Context, channel, topic, id string) (map[string]string, error)
 }

@@ -55,12 +55,12 @@ func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) s
 }
 
 // MakeStatusKey create key for type string
-func MakeStatusKey(prefix, channel, id string) string {
+func MakeStatusKey(prefix, channel, topic, id string) string {
 
 	channel = strings.Join([]string{"{", channel}, "")
-	status := strings.Join([]string{"=-status-=", "}"}, "")
+	topic = strings.Join([]string{topic, "}"}, "")
 
-	return makeKey(prefix, channel, status, id)
+	return makeKey(prefix, channel, topic, "=-status-=", id)
 }
 
 // MakeDynamicKey create key for dynamic

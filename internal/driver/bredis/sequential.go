@@ -53,7 +53,7 @@ func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
 
 	streamKey := tool.MakeStreamKey(t.base.subType, t.base.prefix, channel, topic)
 
-	key := tool.MakeStatusKey(t.base.prefix, channel, id)
+	key := tool.MakeStatusKey(t.base.prefix, channel, topic, id)
 
 	exist, err := HashDuplicateIdScript.Run(ctx, t.base.client, []string{key, streamKey}, data).Bool()
 

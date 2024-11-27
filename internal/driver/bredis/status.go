@@ -19,9 +19,9 @@ func NewStatus(client redis.UniversalClient, prefix string) *Status {
 	}
 }
 
-func (t *Status) Status(ctx context.Context, channel, id string) (map[string]string, error) {
+func (t *Status) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {
 
-	key := tool.MakeStatusKey(t.prefix, channel, id)
+	key := tool.MakeStatusKey(t.prefix, channel, topic, id)
 
 	for {
 		select {

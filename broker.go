@@ -96,9 +96,9 @@ func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.C
 
 }
 
-func (t *Broker) Status(ctx context.Context, channel, id string) (map[string]string, error) {
+func (t *Broker) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {
 
-	data, err := t.status.Status(ctx, channel, id)
+	data, err := t.status.Status(ctx, channel, topic, id)
 	if err != nil {
 		// todo
 		return nil, err
