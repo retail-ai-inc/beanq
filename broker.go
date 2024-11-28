@@ -37,6 +37,7 @@ type Broker struct {
 	status   public.IStatus
 	log      public.IProcessLog
 	client   any
+	fac      public.IBrokerFactory
 	config   *BeanqConfig
 	handlers []*Handler
 }
@@ -54,6 +55,7 @@ func NewBroker(config *BeanqConfig) *Broker {
 			broker.status = bredis.NewStatus(client, cfg.Prefix)
 			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 			broker.client = client
+			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, cfg.MaxLen, config.DeadLetterIdleTime)
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}
@@ -71,12 +73,7 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	var bk public.IBroker
-
-	// redis broker
-	if t.config.Broker == "redis" {
-		bk = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.MinConsumers, t.config.DeadLetterIdleTime, moodType)
-	}
+	bk := t.fac.Mood(moodType)
 	if bk == nil {
 		return bstatus.BrokerDriverError
 	}
@@ -118,9 +115,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 			return subscribe.Handle(ctx, messageToStruct(message))
 		},
 	}
-	if t.config.Broker == "redis" {
-		handler.brokerImpl = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.MinConsumers, t.config.DeadLetterIdleTime, moodType)
-	}
+	handler.brokerImpl = t.fac.Mood(moodType)
 	t.handlers = append(t.handlers, &handler)
 
 	return nil

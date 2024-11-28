@@ -2,6 +2,7 @@ package public
 
 import (
 	"context"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 )
 
 // IBroker main job
@@ -19,6 +20,9 @@ type (
 	}
 	IDeadLetter interface {
 		DeadLetter(ctx context.Context, channel, topic string)
+	}
+	IBrokerFactory interface {
+		Mood(moodType btype.MoodType) IBroker
 	}
 )
 

@@ -19,16 +19,34 @@ import (
 	"time"
 )
 
-func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration, moodType btype.MoodType) public.IBroker {
+type RdbBroker struct {
+	client         redis.UniversalClient
+	prefix         string
+	maxLen         int64
+	consumers      int64
+	deadLetterIdle time.Duration
+}
+
+func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, duration time.Duration) *RdbBroker {
+	return &RdbBroker{
+		client:         client,
+		prefix:         prefix,
+		maxLen:         maxLen,
+		consumers:      consumers,
+		deadLetterIdle: duration,
+	}
+}
+
+func (t *RdbBroker) Mood(moodType btype.MoodType) public.IBroker {
 
 	if moodType == btype.NORMAL {
-		return NewNormal(client, prefix, maxLen, consumerCount, deadLetterIdle)
+		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle)
 	}
 	if moodType == btype.SEQUENTIAL {
-		return NewSequential(client, prefix, consumerCount, deadLetterIdle)
+		return NewSequential(t.client, t.prefix, t.consumers, t.deadLetterIdle)
 	}
 	if moodType == btype.DELAY {
-		return NewSchedule(client, prefix, consumerCount, deadLetterIdle)
+		return NewSchedule(t.client, t.prefix, t.consumers, t.deadLetterIdle)
 	}
 	return nil
 }
