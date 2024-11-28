@@ -34,11 +34,12 @@ type Handler struct {
 }
 
 type Broker struct {
-	config   *BeanqConfig
 	status   public.IStatus
 	log      public.IProcessLog
-	handlers []Handler
 	client   any
+	fac      public.IBrokerFactory
+	config   *BeanqConfig
+	handlers []*Handler
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
@@ -54,6 +55,7 @@ func NewBroker(config *BeanqConfig) *Broker {
 			broker.status = bredis.NewStatus(client, cfg.Prefix)
 			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 			broker.client = client
+			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, cfg.MaxLen, config.DeadLetterIdleTime)
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}
@@ -71,13 +73,10 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	var bk public.IBroker
-	// redis broker
-
-	if t.config.Broker == "redis" {
-		bk = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
+	bk := t.fac.Mood(moodType)
+	if bk == nil {
+		return bstatus.BrokerDriverError
 	}
-
 	if err := bk.Enqueue(ctx, data); err != nil {
 		return err
 	}
@@ -94,9 +93,9 @@ func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.C
 
 }
 
-func (t *Broker) Status(ctx context.Context, channel, id string) (map[string]string, error) {
+func (t *Broker) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {
 
-	data, err := t.status.Status(ctx, channel, id)
+	data, err := t.status.Status(ctx, channel, topic, id)
 	if err != nil {
 		// todo
 		return nil, err
@@ -116,10 +115,8 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 			return subscribe.Handle(ctx, messageToStruct(message))
 		},
 	}
-	if t.config.Broker == "redis" {
-		handler.brokerImpl = bredis.SwitchBroker(t.client.(redis.UniversalClient), t.config.Redis.Prefix, t.config.MaxLen, t.config.DeadLetterIdleTime, moodType)
-	}
-	t.handlers = append(t.handlers, handler)
+	handler.brokerImpl = t.fac.Mood(moodType)
+	t.handlers = append(t.handlers, &handler)
 
 	return nil
 }
@@ -127,6 +124,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 
 	var migrate public.IMigrateLog
+
 	if t.config.Broker == "redis" {
 		if t.config.History.On {
 			mongo := t.config.Mongo
@@ -134,6 +132,7 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 		}
 		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
 	}
+
 	return migrate.Migrate(ctx, nil)
 
 }
@@ -142,11 +141,12 @@ func (t *Broker) Start(ctx context.Context) {
 
 	ctx, cancel := context.WithCancel(ctx)
 
-	for _, handler := range t.handlers {
-		hdl := handler
+	for key, handler := range t.handlers {
+		hdl := *handler
 		go func(hdl2 Handler) {
 			hdl2.brokerImpl.Dequeue(ctx, hdl2.channel, hdl2.topic, hdl2.do)
 		}(hdl)
+		t.handlers[key] = nil
 	}
 	//move logs from redis to mongo
 	go func() {

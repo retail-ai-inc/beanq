@@ -8,13 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"strings"
-	"sync"
 	"time"
-)
-
-var (
-	mgo     mongo.Client
-	mgoOnce sync.Once
 )
 
 type MongoLog struct {
@@ -29,31 +23,29 @@ func NewMongoLog(ctx context.Context,
 	database, collection, userName, password string,
 ) *MongoLog {
 
-	mgoOnce.Do(func() {
-		uri := strings.Join([]string{"mongodb://", host, port}, "")
+	uri := strings.Join([]string{"mongodb://", host, port}, "")
 
-		opts := options.Client().ApplyURI(uri).
-			SetConnectTimeout(connectTimeOut).
-			SetMaxConnIdleTime(maxConnectionLifeTime).
-			SetMaxPoolSize(maxConnectionPoolSize)
+	opts := options.Client().ApplyURI(uri).
+		SetConnectTimeout(connectTimeOut).
+		SetMaxConnIdleTime(maxConnectionLifeTime).
+		SetMaxPoolSize(maxConnectionPoolSize)
 
-		if userName != "" && password != "" {
-			auth := options.Credential{
-				AuthSource: database,
-				Username:   userName,
-				Password:   password,
-			}
-			opts.SetAuth(auth)
+	if userName != "" && password != "" {
+		auth := options.Credential{
+			AuthSource: database,
+			Username:   userName,
+			Password:   password,
 		}
+		opts.SetAuth(auth)
+	}
 
-		mgo, err := mongo.Connect(ctx, opts)
-		if err != nil {
-			logger.New().Fatal(err)
-		}
-		if err := mgo.Ping(ctx, nil); err != nil {
-			logger.New().Fatal(err)
-		}
-	})
+	mgo, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		logger.New().Fatal(err)
+	}
+	if err := mgo.Ping(ctx, nil); err != nil {
+		logger.New().Fatal(err)
+	}
 
 	return &MongoLog{
 		database:   mgo.Database(database),

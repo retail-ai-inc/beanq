@@ -75,10 +75,13 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 			}
 		}
 
-		if err := t.log.Migrate(ctx, datas); err != nil {
-			logger.New().Error(err)
-			continue
+		if t.log != nil {
+			if err := t.log.Migrate(ctx, datas); err != nil {
+				logger.New().Error(err)
+				continue
+			}
 		}
+
 		if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
 			pipeliner.XAck(ctx, key, tool.BeanqLogGroup, ids...)
 			pipeliner.XDel(ctx, key, ids...)

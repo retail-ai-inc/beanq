@@ -19,16 +19,34 @@ import (
 	"time"
 )
 
-func SwitchBroker(client redis.UniversalClient, prefix string, maxLen int64, deadLetterIdle time.Duration, moodType btype.MoodType) public.IBroker {
+type RdbBroker struct {
+	client         redis.UniversalClient
+	prefix         string
+	maxLen         int64
+	consumers      int64
+	deadLetterIdle time.Duration
+}
+
+func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, duration time.Duration) *RdbBroker {
+	return &RdbBroker{
+		client:         client,
+		prefix:         prefix,
+		maxLen:         maxLen,
+		consumers:      consumers,
+		deadLetterIdle: duration,
+	}
+}
+
+func (t *RdbBroker) Mood(moodType btype.MoodType) public.IBroker {
 
 	if moodType == btype.NORMAL {
-		return NewNormal(client, prefix, maxLen, deadLetterIdle)
+		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle)
 	}
 	if moodType == btype.SEQUENTIAL {
-		return NewSequential(client, prefix, deadLetterIdle)
+		return NewSequential(t.client, t.prefix, t.consumers, t.deadLetterIdle)
 	}
 	if moodType == btype.DELAY {
-		return NewSchedule(client, prefix, deadLetterIdle)
+		return NewSchedule(t.client, t.prefix, t.consumers, t.deadLetterIdle)
 	}
 	return nil
 }
@@ -43,6 +61,7 @@ type (
 		prefix         string
 		subType        btype.SubscribeType
 		deadLetterIdle time.Duration
+		consumers      int64
 	}
 )
 
@@ -68,15 +87,15 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 
 	deadLetterIdleTime := t.deadLetterIdle
 
-	for {
-		select {
+	for range ticker.C {
 
+		select {
 		case <-ctx.Done():
 			_ = t.client.Close()
 			return
-		case <-ticker.C:
-
+		default:
 		}
+
 		if v := AddLogicLockScript.Run(ctx, t.client, []string{deadLetterKey}).Val(); v.(int64) == 1 {
 			continue
 		}
@@ -97,32 +116,27 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			continue
 		}
 
-		watcher := func(tx *redis.Tx) error {
+		pending := pendings[0]
+		if pending.Idle > deadLetterIdleTime {
 
-			pending := pendings[0]
-			_, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-
-				if pending.Idle > deadLetterIdleTime {
-
-					rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
-					if len(rangeV) <= 0 {
-						return nil
-					}
-					val := rangeV[0].Values
-					val["type"] = "dead_letter"
-					t.client.XAdd(ctx, &redis.XAddArgs{
-						Stream: logicKey,
-						Values: val,
-					})
-				}
-				t.client.XAck(ctx, streamKey, channel, pending.ID)
-				t.client.XDel(ctx, streamKey, pending.ID)
-				return nil
+			rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
+			if len(rangeV) <= 0 {
+				t.client.Del(ctx, deadLetterKey)
+				continue
+			}
+			val := rangeV[0].Values
+			val["type"] = "dead_letter"
+			t.client.XAdd(ctx, &redis.XAddArgs{
+				Stream: logicKey,
+				Values: val,
 			})
-			return err
 		}
 
-		if err := t.client.Watch(ctx, watcher, streamKey, logicKey); err != nil {
+		if _, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.XAck(ctx, streamKey, channel, pending.ID)
+			pipeliner.XDel(ctx, streamKey, pending.ID)
+			return nil
+		}); err != nil {
 			logger.New().Error(err)
 		}
 		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
@@ -139,7 +153,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 
-	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, 10, t.blockDuration())
+	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
 
 	for {
 

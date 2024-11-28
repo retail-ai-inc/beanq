@@ -2,6 +2,7 @@ package public
 
 import (
 	"context"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 )
 
 // IBroker main job
@@ -20,6 +21,9 @@ type (
 	IDeadLetter interface {
 		DeadLetter(ctx context.Context, channel, topic string)
 	}
+	IBrokerFactory interface {
+		Mood(moodType btype.MoodType) IBroker
+	}
 )
 
 // IProcessLog process log
@@ -36,5 +40,5 @@ type (
 
 // IStatus check the status of the message based on the ID
 type IStatus interface {
-	Status(ctx context.Context, channel, id string) (map[string]string, error)
+	Status(ctx context.Context, channel, topic, id string) (map[string]string, error)
 }

@@ -149,9 +149,9 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.Start(ctx)
 }
 
-func (c *Client) CheckAckStatus(ctx context.Context, channel, id string) (*Message, error) {
+func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*Message, error) {
 
-	m, err := c.broker.Status(ctx, channel, id)
+	m, err := c.broker.Status(ctx, channel, topic, id)
 	if err != nil {
 		return nil, err
 	}
@@ -377,23 +377,6 @@ func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandl
 	return cmd, nil
 }
 
-func (t cmdAble) PPublish(channel, topic string, payload []byte) error {
-	cmd := &Publish{
-		channel:     channel,
-		topic:       topic,
-		payload:     payload,
-		executeTime: time.Now(),
-		moodType:    btype.SEQUENTIAL,
-	}
-
-	if err := t(cmd); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (t cmdAble) PUnSubscribe() {}
-
 type (
 	// Publish command:publish
 	Publish struct {
@@ -453,7 +436,7 @@ func (s *SequentialCmd) WaitingAck() (*Message, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	nack, err := s.client.broker.Status(s.ctx, s.channel, s.id)
+	nack, err := s.client.broker.Status(s.ctx, s.channel, s.topic, s.id)
 	if err != nil {
 		return nil, err
 	}

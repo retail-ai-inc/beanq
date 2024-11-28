@@ -32,15 +32,18 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 
 	if moodType == btype.SEQUENTIAL {
 
-		channel, id := "", ""
+		channel, id, topic := "", "", ""
 		if v, ok := data["channel"]; ok {
 			channel = cast.ToString(v)
 		}
 		if v, ok := data["id"]; ok {
 			id = cast.ToString(v)
 		}
+		if v, ok := data["topic"]; ok {
+			topic = cast.ToString(v)
+		}
 
-		key := tool.MakeStatusKey(t.prefix, channel, id)
+		key := tool.MakeStatusKey(t.prefix, channel, topic, id)
 		if err := SaveHSetScript.Run(ctx, t.client, []string{key}, data).Err(); err != nil {
 			return err
 		}

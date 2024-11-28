@@ -18,7 +18,7 @@ type Sequential struct {
 	base Base
 }
 
-func NewSequential(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Sequential {
+func NewSequential(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Sequential {
 
 	return &Sequential{
 		base: Base{
@@ -31,6 +31,7 @@ func NewSequential(client redis.UniversalClient, prefix string, deadLetterIdle t
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
+			consumers: consumerCount,
 		},
 	}
 }
@@ -53,7 +54,7 @@ func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
 
 	streamKey := tool.MakeStreamKey(t.base.subType, t.base.prefix, channel, topic)
 
-	key := tool.MakeStatusKey(t.base.prefix, channel, id)
+	key := tool.MakeStatusKey(t.base.prefix, channel, topic, id)
 
 	exist, err := HashDuplicateIdScript.Run(ctx, t.base.client, []string{key, streamKey}, data).Bool()
 

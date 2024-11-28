@@ -19,13 +19,16 @@ import (
 type (
 	Schedule struct {
 		preWork PreWork
+		watcher Watcher
 		base    Base
 	}
+	// Watcher redis transaction
+	Watcher func(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error
 	// PreWork Check if there are any messages that can be consumed
 	PreWork func(ctx context.Context, prefix string, channel, topic string)
 )
 
-func NewSchedule(client redis.UniversalClient, prefix string, deadLetterIdle time.Duration) *Schedule {
+func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Schedule {
 	work := &Schedule{
 		base: Base{
 			client:         client,
@@ -37,11 +40,60 @@ func NewSchedule(client redis.UniversalClient, prefix string, deadLetterIdle tim
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
+			consumers: consumerCount,
 		},
 	}
+	work.watcher = work.Watcher
 	work.preWork = work.PreWork
 
 	return work
+}
+
+func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error {
+
+	return func(tx *redis.Tx) error {
+
+		vals, err := tx.ZRevRangeByScore(ctx, zsetKey, &redis.ZRangeBy{
+			Min:   "0",
+			Max:   zsetMax,
+			Count: 100,
+		}).Result()
+		if err != nil {
+			return err
+		}
+		if len(vals) <= 0 {
+			return nil
+		}
+
+		datas := make([]map[string]any, 0)
+		for _, val := range vals {
+			data := make(map[string]any, 0)
+			if err := tool.JsonDecode(val, &data); err != nil {
+				if err := t.base.AddLog(ctx, map[string]any{"moodType": btype.DELAY, "data": val, "addTime": time.Now()}); err != nil {
+					logger.New().Error("AddLog Error:", err)
+				}
+				continue
+			}
+			datas = append(datas, data)
+		}
+
+		if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			for _, data := range datas {
+				pipeliner.XAdd(ctx, &redis.XAddArgs{
+					Stream: streamKey,
+					Approx: false,
+					Limit:  0,
+					ID:     "*",
+					Values: data,
+				})
+			}
+			pipeliner.ZRem(ctx, zsetKey, vals)
+			return nil
+		}); err != nil {
+			return err
+		}
+		return nil
+	}
 }
 
 func (t *Schedule) Enqueue(ctx context.Context, data map[string]any) error {
@@ -118,50 +170,8 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 		}
 
 		timeOutKey := cast.ToString(time.Now().UnixMilli() + 1)
-		watcher := func(tx *redis.Tx) error {
 
-			vals, err := tx.ZRevRangeByScore(ctx, zSetKey, &redis.ZRangeBy{
-				Min:   "0",
-				Max:   timeOutKey,
-				Count: 100,
-			}).Result()
-			if err != nil {
-				return err
-			}
-			if len(vals) <= 0 {
-				return nil
-			}
-
-			if _, err := tx.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-
-				delvals := make([]string, len(vals))
-				for _, val := range vals {
-
-					data := make(map[string]any, 0)
-					if err := tool.JsonDecode(val, &data); err != nil {
-						if err := t.base.AddLog(ctx, map[string]any{"moodType": btype.DELAY, "data": val, "addTime": time.Now()}); err != nil {
-							logger.New().Error("AddLog Error:", err)
-						}
-						continue
-					}
-					delvals = append(delvals, val)
-					pipeliner.XAdd(ctx, &redis.XAddArgs{
-						Stream: streamKey,
-						Approx: false,
-						Limit:  0,
-						ID:     "*",
-						Values: data,
-					})
-				}
-				pipeliner.ZRem(ctx, zSetKey, delvals)
-				return nil
-			}); err != nil {
-				return err
-			}
-			return nil
-		}
-
-		if err := t.base.client.Watch(ctx, watcher, zSetKey, streamKey); err != nil {
+		if err := t.base.client.Watch(ctx, t.watcher(ctx, timeOutKey, zSetKey, streamKey), zSetKey, streamKey); err != nil {
 			logger.New().Error("Schedule Job Error:", err)
 		}
 		//release lock
