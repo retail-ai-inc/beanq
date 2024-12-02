@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"github.com/retail-ai-inc/beanq/v3"
 	"github.com/spf13/viper"
 	"log"
@@ -40,5 +41,5 @@ func initCnf() beanq.BeanqConfig {
 func main() {
 	config := initCnf()
 	csm := beanq.New(&config)
-	csm.ServeHttp()
+	csm.ServeHttp(context.Background())
 }

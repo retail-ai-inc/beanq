@@ -104,6 +104,13 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	successKey := strings.Join([]string{prefix, "logs", "success"}, ":")
 	successCount := ZCard(r.Context(), t.client, successKey)
 
+	queues := make(map[string]any, 0)
+	queues["9:20:10"] = map[string]any{"ready": 10, "unacked": 20, "total": 30}
+	queues["9:20:20"] = map[string]any{"ready": 5, "unacked": 15, "total": 25}
+	queues["9:20:30"] = map[string]any{"ready": 1, "unacked": 10, "total": 20}
+	queues["9:20:40"] = map[string]any{"ready": 3, "unacked": 6, "total": 15}
+	queues["9:20:50"] = map[string]any{"ready": 4, "unacked": 8, "total": 18}
+
 	result.Data = map[string]any{
 		"queue_total":   keysLen,
 		"db_size":       dbSize,
@@ -119,6 +126,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		"memory":        memory,
 		"server":        server,
 		"persistence":   persistence,
+		"queues":        queues,
 	}
 	return result.Json(w, http.StatusOK)
 }

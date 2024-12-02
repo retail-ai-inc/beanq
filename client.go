@@ -170,7 +170,20 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) 
 //go:embed ui
 var views embed.FS
 
-func (c *Client) ServeHttp() {
+func (c *Client) ServeHttp(ctx context.Context) {
+
+	go func() {
+		timer := timex.TimerPool.Get(10 * time.Second)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+
+		}
+
+	}()
 
 	httpport := ":9090"
 	r := bwebframework.NewRouter()

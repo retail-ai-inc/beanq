@@ -18,6 +18,7 @@
       loginApi,
       userApi,
       dlqApi,
+      dashboardApi,
       //apis end
     },
 

@@ -2,6 +2,7 @@ package routers
 
 import (
 	"context"
+	"fmt"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
@@ -17,6 +18,7 @@ func MigrateMiddleWare(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 
 func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
+		fmt.Println(ctx.Request.URL)
 		ctx.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 		ctx.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';")
 		ctx.Writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
