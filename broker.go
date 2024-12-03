@@ -114,7 +114,16 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 		topic:    topic,
 		moodType: moodType,
 		do: func(ctx context.Context, message map[string]any) error {
-			return subscribe.Handle(ctx, messageToStruct(message))
+
+			var gerr error
+			msg := messageToStruct(message)
+			if err := subscribe.Handle(ctx, msg); err != nil {
+				gerr = errors.Join(gerr, err)
+				if h, ok := subscribe.(IConsumeCancel); ok {
+					gerr = errors.Join(gerr, h.Cancel(ctx, msg))
+				}
+			}
+			return gerr
 		},
 	}
 	handler.brokerImpl = t.fac.Mood(moodType)
