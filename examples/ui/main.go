@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"github.com/retail-ai-inc/beanq/v3"
 	"github.com/spf13/viper"
+	"golang.org/x/net/context"
 	"log"
 	"path/filepath"
 	"runtime"

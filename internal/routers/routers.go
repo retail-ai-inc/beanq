@@ -38,7 +38,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, x *mongox
 
 	r.Post("/login", HeaderRule(NewLogin(client, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt).Login))
 	r.Get("/clients", MigrateMiddleWare(NewClient(client, prefix).List))
-	r.Get("/dashboard", MigrateMiddleWare(NewDashboard(client, prefix).Info))
+	r.Get("/dashboard", MigrateMiddleWare(NewDashboard(client, x, prefix).Info))
 	r.Get("/event_log/list", MigrateMiddleWare(NewEventLog(client, x, prefix).List))
 	r.Get("/event_log/detail", MigrateMiddleWare(NewEventLog(client, x, prefix).Detail))
 	r.Post("/event_log/delete", MigrateMiddleWare(NewEventLog(client, x, prefix).Delete))

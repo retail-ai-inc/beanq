@@ -40,6 +40,7 @@ type Broker struct {
 	fac      public.IBrokerFactory
 	config   *BeanqConfig
 	handlers []*Handler
+	tool     *bredis.UITool
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
@@ -56,6 +57,7 @@ func NewBroker(config *BeanqConfig) *Broker {
 			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 			broker.client = client
 			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, cfg.MaxLen, config.DeadLetterIdleTime)
+			broker.tool = bredis.NewUITool(client, cfg.Prefix)
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}

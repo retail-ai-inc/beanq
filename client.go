@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
@@ -176,11 +177,17 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		timer := timex.TimerPool.Get(10 * time.Second)
 		defer timer.Stop()
 
-		select {
-		case <-ctx.Done():
-			return
-		case <-timer.C:
+		for range timer.C {
+			select {
+			case <-ctx.Done():
+				return
+			default:
 
+			}
+			timer.Reset(10 * time.Second)
+			if err := c.broker.tool.QueueMessage(ctx); err != nil {
+				logger.New().Error(err)
+			}
 		}
 
 	}()

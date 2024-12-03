@@ -65,16 +65,34 @@ let data = reactive({
   "keyspace": [],
   "memory": {},
   "queuedMessagesOption":{},
-  "messageRatesOption":{}
+  "messageRatesOption":{},
+  sse:null
 })
 
 onMounted(async () => {
 
-  let result = await dashboardApi.Total();
-  Object.assign(data, result.data);
+  if(data.sse){
+    data.sse.close();
+  }
+  data.sse = sseApi.Init("dashboard");
+  data.sse.onopen = () => {
+    console.log("success")
+  }
+  data.sse.addEventListener("dashboard",function (res) {
+    let result = JSON.parse(res.data);
+    if (result.code !== "0000"){
+      return
+    }
+    Object.assign(data, result.data);
 
-  data.queuedMessagesOption = dashboardApi.QueueLine(result.data.queues);
-  data.messageRatesOption = dashboardApi.MessageRateLine();
+    data.queuedMessagesOption = dashboardApi.QueueLine(result.data.queues);
+    data.messageRatesOption = dashboardApi.MessageRateLine(result.data.queues);
+  })
+  data.sse.onerror = (err)=>{
+    //useRe.push("/login");
+    console.log(err)
+  }
+
 })
 
 const {
@@ -89,7 +107,7 @@ const {
   keyspace,
   memory,
   queuedMessagesOption,
-  messageRatesOption
+  messageRatesOption,
 } = toRefs(data);
 </script>
 <style scoped>

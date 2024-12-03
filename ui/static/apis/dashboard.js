@@ -5,9 +5,7 @@ const dashboardApi = {
     QueueLine(queues){
 
         let vals = Object.values(queues);
-        let ready = [];
-        let unacked = [];
-        let total = [];
+        let ready = [],unacked = [],total = [];
 
         vals.forEach(function (val,ind) {
             ready.push(val["ready"]);
@@ -24,7 +22,7 @@ const dashboardApi = {
         let lineOpt = {};
         lineOpt.title = {
             text: 'Queued messages',
-            subtext: '(chart:last minute)(?)'
+            subtext: '(chart:last minute)(10s)'
         };
         lineOpt.tooltip = {
             trigger: 'axis'
@@ -59,6 +57,16 @@ const dashboardApi = {
     },
     MessageRateLine(values){
 
+
+        let xdata = Object.keys(values);
+        let ydata = Object.values(values);
+        let publish = [],confirm = [],deliver = [],redelivered = [],ack = [],get = [],nget = [];
+        ydata.forEach((val,ind)=>{
+            publish.push( parseInt( val["ready"] /10));
+            nget.push(parseInt(val["unacked"] / 10));
+        })
+        confirm = deliver = redelivered = ack = get = publish;
+
         let line = {};
         line.title = {
             text: 'Message rates',
@@ -68,7 +76,7 @@ const dashboardApi = {
             trigger: 'axis'
         };
         line.legend={
-            data: ['Publish', 'Confirm', 'Deliver', 'Redelivered', 'Acknowledge', 'Get', 'Get(noack)']
+            data: ['Publish', 'Confirm', 'Deliver', 'Redelivered', 'Acknowledge', 'Get(noack)']
         };
         line.grid = {
             left: '3%',
@@ -84,7 +92,7 @@ const dashboardApi = {
         line.xAxis = {
             type: 'category',
                 boundaryGap: false,
-                data: ['09:02:10', '09:02:20', '09:02:30', '09:02:40', '09:02:50', '09:03:00']
+                data: xdata
         };
         line.yAxis = {
             type: 'value',
@@ -101,37 +109,37 @@ const dashboardApi = {
             {
                 name: 'Publish',
                 type: 'line',
-                data: [120, 132, 101, 134, 90, 230]
+                data: publish
             },
             {
                 name: 'Confirm',
                 type: 'line',
-                data: [220, 182, 191, 234, 290, 330]
+                data: confirm
             },
             {
                 name: 'Deliver',
                 type: 'line',
-                data: [150, 232, 201, 154, 190, 330]
+                data: deliver
             },
             {
                 name: 'Redelivered',
                 type: 'line',
-                data: [320, 332, 301, 334, 390, 330]
+                data: redelivered
             },
             {
                 name: 'Acknowledge',
                 type: 'line',
-                data: [820, 932, 901, 934, 1290, 1330]
+                data: ack
             },
             {
                 name: 'Get',
                 type: 'line',
-                data: [820, 932, 901, 934, 1290, 1330]
+                data: get
             },
             {
                 name: 'Get(noack)',
                 type: 'line',
-                data: [820, 932, 901, 934, 1290, 1330]
+                data: nget
             }
         ];
         return line;

@@ -1,25 +1,29 @@
 package routers
 
 import (
+	"encoding/json"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/spf13/cast"
+	"github.com/spf13/viper"
 	"net/http"
 	"runtime"
 	"strings"
-
-	"github.com/spf13/viper"
+	"time"
 )
 
 type Dashboard struct {
 	client redis.UniversalClient
+	mog    *mongox.MongoX
 	prefix string
 }
 
-func NewDashboard(client redis.UniversalClient, prefix string) *Dashboard {
-	return &Dashboard{client: client, prefix: prefix}
+func NewDashboard(client redis.UniversalClient, x *mongox.MongoX, prefix string) *Dashboard {
+	return &Dashboard{client: client, mog: x, prefix: prefix}
 }
 
 func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
@@ -30,103 +34,156 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	w := ctx.Writer
 	r := ctx.Request
 
-	server, err := Server(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
-	}
-	persistence, err := Persistence(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
-	}
-	memory, err := Memory(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return nil
 	}
 
-	command, err := CommandStats(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	nctx := r.Context()
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		select {
+		case <-nctx.Done():
+			return nctx.Err()
+		default:
+
+		}
+		ticker.Reset(10 * time.Second)
+		server, err := Server(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+		persistence, err := Persistence(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+		memory, err := Memory(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+
+		command, err := CommandStats(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+
+		clients, err := Clients(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+		stats, err := Stats(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+
+		keyspace, err := KeySpace(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+
+		numCpu := runtime.NumCPU()
+
+		// get queue total
+		keys, err := Keys(r.Context(), t.client, strings.Join([]string{t.prefix, "*", "stream"}, ":"))
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+		keysLen := len(keys)
+
+		// db size
+		dbSize, err := DbSize(r.Context(), t.client)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "redis_info")
+			flusher.Flush()
+			return nil
+		}
+
+		// Queue Past 10 Minutes
+		prefix := viper.GetString("redis.prefix")
+		failKey := strings.Join([]string{prefix, "logs", "fail"}, ":")
+		failCount := ZCard(r.Context(), t.client, failKey)
+
+		successKey := strings.Join([]string{prefix, "logs", "success"}, ":")
+		successCount := ZCard(r.Context(), t.client, successKey)
+
+		//queue messages
+		queues := make(map[string]any, 0)
+		var qusData = struct {
+			Ready   int64  `json:"ready"`
+			Unacked int64  `json:"unacked"`
+			Total   int64  `json:"total"`
+			TimeKey string `json:"time"`
+		}{}
+		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
+		qus := t.client.ZRange(ctx.Request.Context(), totalkey, 0, -1).Val()
+		for _, s := range qus {
+			if err := json.NewDecoder(strings.NewReader(s)).Decode(&qusData); err != nil {
+				logger.New().Error(err)
+				continue
+			}
+			queues[qusData.TimeKey] = map[string]any{"ready": qusData.Ready, "unacked": qusData.Unacked, "total": qusData.Total}
+		}
+
+		result.Data = map[string]any{
+			"queue_total":   keysLen,
+			"db_size":       dbSize,
+			"num_cpu":       numCpu,
+			"fail_count":    failCount,
+			"success_count": successCount,
+			"used_memory":   cast.ToInt(memory["used_memory_rss"]) / 1024 / 1024,
+			"total_memory":  cast.ToInt(memory["total_system_memory"]) / 1024 / 1024,
+			"commands":      command,
+			"clients":       clients,
+			"stats":         stats,
+			"keyspace":      keyspace,
+			"memory":        memory,
+			"server":        server,
+			"persistence":   persistence,
+			"queues":        queues,
+		}
+		_ = result.EventMsg(w, "dashboard")
+		flusher.Flush()
 	}
-
-	clients, err := Clients(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
-	}
-	stats, err := Stats(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
-	}
-
-	keyspace, err := KeySpace(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusOK)
-	}
-
-	numCpu := runtime.NumCPU()
-
-	// get queue total
-	keys, err := Keys(r.Context(), t.client, strings.Join([]string{t.prefix, "*", "stream"}, ":"))
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
-
-	}
-	keysLen := len(keys)
-
-	// db size
-	dbSize, err := DbSize(r.Context(), t.client)
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
-	}
-
-	// Queue Past 10 Minutes
-	prefix := viper.GetString("redis.prefix")
-	failKey := strings.Join([]string{prefix, "logs", "fail"}, ":")
-	failCount := ZCard(r.Context(), t.client, failKey)
-
-	successKey := strings.Join([]string{prefix, "logs", "success"}, ":")
-	successCount := ZCard(r.Context(), t.client, successKey)
-
-	queues := make(map[string]any, 0)
-	queues["9:20:10"] = map[string]any{"ready": 10, "unacked": 20, "total": 30}
-	queues["9:20:20"] = map[string]any{"ready": 5, "unacked": 15, "total": 25}
-	queues["9:20:30"] = map[string]any{"ready": 1, "unacked": 10, "total": 20}
-	queues["9:20:40"] = map[string]any{"ready": 3, "unacked": 6, "total": 15}
-	queues["9:20:50"] = map[string]any{"ready": 4, "unacked": 8, "total": 18}
-
-	result.Data = map[string]any{
-		"queue_total":   keysLen,
-		"db_size":       dbSize,
-		"num_cpu":       numCpu,
-		"fail_count":    failCount,
-		"success_count": successCount,
-		"used_memory":   cast.ToInt(memory["used_memory_rss"]) / 1024 / 1024,
-		"total_memory":  cast.ToInt(memory["total_system_memory"]) / 1024 / 1024,
-		"commands":      command,
-		"clients":       clients,
-		"stats":         stats,
-		"keyspace":      keyspace,
-		"memory":        memory,
-		"server":        server,
-		"persistence":   persistence,
-		"queues":        queues,
-	}
-	return result.Json(w, http.StatusOK)
+	return nil
 }
