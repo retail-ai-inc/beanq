@@ -97,7 +97,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 		func() {
 			ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
@@ -109,7 +108,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 		func() {
 			ctx3, cancel3 := context.WithTimeout(context.Background(), 5*time.Second)
@@ -121,7 +119,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 		func() {
 			ctx4, cancel4 := context.WithTimeout(context.Background(), 5*time.Second)
@@ -133,7 +130,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 
 		func() {
@@ -146,7 +142,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 		func() {
 			ctx6, cancel6 := context.WithTimeout(context.Background(), 5*time.Second)
@@ -158,7 +153,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 		func() {
 			ctx7, cancel7 := context.WithTimeout(context.Background(), 5*time.Second)
@@ -170,7 +164,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 
 		numCpu := runtime.NumCPU()
@@ -186,7 +179,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 
 		keysLen := len(keys)
@@ -202,7 +194,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 				_ = result.EventMsg(w, "dashboard")
 				flusher.Flush()
 			}
-			return
 		}()
 
 		func() {
@@ -211,9 +202,11 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			failKey := strings.Join([]string{t.prefix, "logs", "fail"}, ":")
 			failCount, err = client.ZCard(ctx10, failKey)
 			if err != nil {
-
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, "dashboard")
+				flusher.Flush()
 			}
-			return
 		}()
 		func() {
 			ctx11, cancel11 := context.WithTimeout(context.Background(), 5*time.Second)
@@ -221,9 +214,11 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			successKey := strings.Join([]string{t.prefix, "logs", "success"}, ":")
 			successCount, err = client.ZCard(ctx11, successKey)
 			if err != nil {
-
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, "dashboard")
+				flusher.Flush()
 			}
-			return
 		}()
 
 		//queue messages

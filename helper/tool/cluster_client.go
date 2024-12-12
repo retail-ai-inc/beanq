@@ -6,14 +6,12 @@ import (
 	"github.com/spf13/cast"
 	"sort"
 	"strings"
-	"sync"
 )
 
 type (
 	ClusterClient struct {
 		client     *redis.ClusterClient
 		prefix     string
-		mux        sync.Mutex
 		nodeClient *redis.Client
 		nodeId     string
 	}
