@@ -61,9 +61,11 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 			}
 			continue
 		}
+
 		if len(result) <= 0 {
 			continue
 		}
+
 		messages := result[0].Messages
 		datas := make([]map[string]any, 0, len(messages))
 		ids := make([]string, 0, len(messages))

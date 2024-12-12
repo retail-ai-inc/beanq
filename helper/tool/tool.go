@@ -6,6 +6,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/spf13/cast"
 	"hash/fnv"
 	"math"
 	"math/rand"
@@ -160,4 +161,20 @@ func JsonDecode[T map[string]any | map[string]string](data string, m *T) error {
 		return err
 	}
 	return nil
+}
+
+// Commands
+// sort in reverse order based on the `usec_per_call` field
+type Commands []map[string]any
+
+func (t Commands) Len() int {
+	return len(t)
+}
+
+func (t Commands) Less(i, j int) bool {
+	return cast.ToFloat64(t[j]["usec_per_call"]) < cast.ToFloat64(t[i]["usec_per_call"])
+}
+
+func (t Commands) Swap(i, j int) {
+	t[j], t[i] = t[i], t[j]
 }

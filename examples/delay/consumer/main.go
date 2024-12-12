@@ -6,7 +6,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/viper"
 	"log"
-	"net/http"
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
@@ -76,9 +75,9 @@ func main() {
 	//	}
 	//}()
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	//go func() {
+	//	log.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
 
 	csm.Wait(ctx)
 

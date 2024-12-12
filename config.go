@@ -75,12 +75,20 @@ type (
 		On bool
 	}
 	BeanqConfig struct {
-		Health   Health   `json:"health"`
-		Broker   string   `json:"broker"`
-		DebugLog DebugLog `json:"debugLog"`
-		History
+		Account struct {
+			UserName string `json:"username"`
+			Password string `json:"password"`
+		} `json:"account"`
+		Health   Health `json:"health"`
+		Broker   string `json:"broker"`
+		Issuer   string `json:"issuer"`
+		Subject  string `json:"subject"`
+		JwtKey   string `json:"jwtKey"`
+		DebugLog `json:"debugLog"`
 		Queue
+		History                  `json:"history"`
 		Redis                    Redis         `json:"redis"`
+		ExpiresAt                time.Duration `json:"expiresAt"`
 		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
 		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
 		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`

@@ -1,0 +1,91 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>{{.Title}}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+        body{
+            background:#EDF2F7;
+        }
+        table{
+            background-color: #fff;
+        }
+        table td{
+            font-size: 14px;
+        }
+        .call{
+
+        }
+        .btn{
+            display: block;
+            width:8rem;height:2.2rem;background-color: #2D3748;color:#fff;
+            font-size: 12px;border-radius: 0.35rem;text-align: center;line-height: 2.2rem;
+            text-decoration:none
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background:#EDF2F7;">
+<table align="center" border="0" cellpadding="0" cellspacing="0" width="62%" style="border-collapse: collapse;">
+    <tr style="background:#EDF2F7">
+        <td style="text-align:center;font-weight: bold;font-size: 14px;height:4rem;line-height:4rem;"> Raicart</td>
+    </tr>
+</table>
+<table align="center" border="0" cellpadding="0" cellspacing="0" width="62%" style="border-collapse: collapse;border-radius: 5px;">
+    <tr style="">
+        <td style="color:#718096;padding:0.6rem;">Hi {{.Name}},</td>
+    </tr>
+    <tr style="">
+        <td style="color:#718096;padding:0.6rem;">You are invited to get access into Retail AI Dashboard. Please click the following button to Visit the dashboard.</td>
+    </tr>
+    <tr style="">
+        <td style="height: 6rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;">
+            <a class="btn" href="{{.Link}}">Retail AI Dashboard</a>
+        </td>
+    </tr>
+    <tr style="">
+        <td  style="color:#718096;padding:0.6rem 0.6rem;">The link will be expired in 24 hours.</td>
+    </tr>
+    <tr style="">
+        <td  style="color:#718096;padding:0.2rem 0.6rem;">Thanks for using RAI!</td>
+    </tr>
+    <tr style="">
+        <td  style="color:#718096;padding:0.2rem 0.6rem;">The RAI Team</td>
+    </tr>
+    <tr style="">
+        <td style="">
+            <hr style="
+                *margin: 0 auto;
+                border: 0;
+                color: #E8E5EF;
+                background-color: #E8E5EF;
+                width:96%;
+                margin-top:30px;margin-bottom: 30px;
+                height: 1px"/>
+        </td>
+    </tr>
+    <tr style="">
+        <td  style="color:#718096;padding:0.6rem 0.6rem;">
+            If you’re having trouble clicking the "Retail AI Dashboard" button, copy and paste the URL below into your web browser:
+        </td>
+    </tr>
+    <tr style="">
+        <td  style="color:#718096;padding:1rem 0.6rem 1.5rem 0.6rem;">
+            <a href="{{.Link}}" style="color:#3897E6">
+                {{.Link}}
+            </a>
+        </td>
+    </tr>
+</table>
+<table align="center" border="0" cellpadding="0" cellspacing="0" width="62%" style="border-collapse: collapse;">
+    <tr style="background:#EDF2F7">
+        <td style="text-align:center;font-size: 12px;height:4.5rem;line-height:4.5rem;color:#718096">
+            © 2024 Raicart. All rights reserved.
+        </td>
+    </tr>
+</table>
+</body>
+</html>

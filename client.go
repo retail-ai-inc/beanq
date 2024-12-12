@@ -24,10 +24,19 @@ package beanq
 
 import (
 	"context"
+	"embed"
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/routers"
+	"io/fs"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
@@ -157,6 +166,76 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) 
 	}
 
 	return MessageS(m).ToMessage(), nil
+}
+
+//go:embed ui
+var views embed.FS
+
+func (c *Client) ServeHttp(ctx context.Context) {
+
+	go func() {
+		timer := timex.TimerPool.Get(10 * time.Second)
+		defer timer.Stop()
+
+		for range timer.C {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+
+			}
+			timer.Reset(10 * time.Second)
+			if err := c.broker.tool.QueueMessage(ctx); err != nil {
+				logger.New().Error(err)
+			}
+		}
+
+	}()
+
+	httpport := ":9090"
+	r := bwebframework.NewRouter()
+	r.File("/", func(ctx *bwebframework.BeanContext) error {
+		fd, err := fs.Sub(views, "ui")
+		if err != nil {
+			log.Fatalf("static files error:%+v \n", err)
+		}
+		http.FileServer(http.FS(fd)).ServeHTTP(ctx.Writer, ctx.Request)
+		return nil
+	})
+
+	history := c.broker.config.History
+	var mog *mongox.MongoX
+	if history.On {
+		mog = mongox.NewMongo(
+			history.Mongo.Host,
+			history.Mongo.Port,
+			history.Mongo.UserName,
+			history.Mongo.Password,
+			history.Mongo.Database,
+			history.Mongo.Collection,
+			history.Mongo.ConnectTimeOut,
+			history.Mongo.MaxConnectionPoolSize,
+			history.Mongo.MaxConnectionLifeTime,
+		)
+	}
+
+	uiCfg := routers.Ui{
+		Issuer:    c.broker.config.Issuer,
+		Subject:   c.broker.config.Subject,
+		ExpiresAt: c.broker.config.ExpiresAt,
+		JwtKey:    c.broker.config.JwtKey,
+		Account: struct {
+			UserName string `json:"username"`
+			Password string `json:"password"`
+		}{
+			c.broker.config.Account.UserName, c.broker.config.Account.Password,
+		},
+	}
+	r = routers.NewRouters(r, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, uiCfg)
+	log.Printf("server start on port %+v", httpport)
+	if err := http.ListenAndServe(httpport, r); err != nil {
+		log.Fatalln(err)
+	}
 }
 
 // Ping this method can be called by user for checking the status of broker
