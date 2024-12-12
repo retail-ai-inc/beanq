@@ -8,6 +8,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/email"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/spf13/viper"
 	"log"
 	"net/http"
@@ -32,8 +33,12 @@ func (t *User) List(ctx *bwebframework.BeanContext) error {
 	r := ctx.Request
 	w := ctx.Writer
 
+	nodeId := r.Header.Get("nodeId")
+	client := tool.ClientFac(t.client, t.prefix, nodeId)
+
 	pattern := strings.Join([]string{viper.GetString("redis.prefix"), "users:*"}, ":")
-	keys, err := Keys(r.Context(), t.client, pattern)
+	keys, err := client.Keys(r.Context(), pattern)
+
 	if err != nil {
 		res.Code = berror.InternalServerErrorMsg
 		res.Msg = err.Error()

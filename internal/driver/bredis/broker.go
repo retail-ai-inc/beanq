@@ -125,7 +125,7 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 				continue
 			}
 			val := rangeV[0].Values
-			val["type"] = "dead_letter"
+			val["logType"] = bstatus.Dlq
 			t.client.XAdd(ctx, &redis.XAddArgs{
 				Stream: logicKey,
 				Values: val,

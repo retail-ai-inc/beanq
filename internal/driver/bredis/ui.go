@@ -27,9 +27,11 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 
 	streamkeys := t.client.Keys(ctx, strings.Join([]string{t.prefix, "*", ":stream"}, "")).Val()
 
-	var total int64 = 0
-	var pending int64 = 0
-	var ready int64 = 0
+	var (
+		total   int64
+		pending int64
+		ready   int64
+	)
 
 	for _, streamkey := range streamkeys {
 		val := t.client.XInfoGroups(ctx, streamkey).Val()

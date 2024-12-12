@@ -5,6 +5,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"net/http"
 	"strings"
 
@@ -47,8 +48,18 @@ func (t *Logs) List(ctx *bwebframework.BeanContext) error {
 	if dataType == "error" {
 		matchStr = strings.Join([]string{t.prefix, "logs", "fail"}, ":")
 	}
+
+	nodeId := r.Header.Get("nodeId")
+	client := tool.ClientFac(t.client, t.prefix, nodeId)
+
 	data := make(map[string]any)
-	count := ZCard(r.Context(), t.client, matchStr)
+	count, err := client.ZCard(r.Context(), matchStr)
+	if err != nil {
+		resultRes.Code = berror.InternalServerErrorCode
+		resultRes.Msg = err.Error()
+
+		return resultRes.Json(w, http.StatusInternalServerError)
+	}
 	data["total"] = count
 
 	keys, cursor, err := ZScan(r.Context(), t.client, matchStr, gCursor, "", 10)

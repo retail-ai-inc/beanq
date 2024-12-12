@@ -30,17 +30,17 @@ func NewRdb(host, port string, password string,
 		}
 
 		rdb = redis.NewUniversalClient(&redis.UniversalOptions{
-			Addrs:        hosts,
-			Password:     password,
-			DB:           database,
-			MaxRetries:   maxRetries,
-			DialTimeout:  dialTimeout,
-			ReadTimeout:  readTimeout,
-			WriteTimeout: writeTimeout,
-			PoolSize:     poolSize,
-			MinIdleConns: minIdleConns,
-			PoolTimeout:  poolTimeout,
-			PoolFIFO:     false,
+			Addrs:          hosts,
+			Password:       password,
+			DB:             database,
+			MaxRetries:     maxRetries,
+			DialTimeout:    dialTimeout,
+			ReadTimeout:    readTimeout,
+			WriteTimeout:   writeTimeout,
+			PoolSize:       poolSize,
+			MinIdleConns:   minIdleConns,
+			PoolTimeout:    poolTimeout,
+			RouteByLatency: true,
 		})
 
 		if err := rdb.Ping(ctx).Err(); err != nil {

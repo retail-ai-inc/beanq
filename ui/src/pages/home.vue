@@ -44,7 +44,8 @@
 </template>
 
 <script setup>
-import {ref, reactive, onMounted, toRefs,} from "vue";
+import {ref, reactive, onMounted,onUnmounted, toRefs,} from "vue";
+import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
 import Command from "./components/command.vue";
 import Client from "./components/client.vue";
@@ -66,9 +67,10 @@ let data = reactive({
   "memory": {},
   "queuedMessagesOption":{},
   "messageRatesOption":{},
+  "nodeId":"",
   sse:null
 })
-
+const useR = useRouter();
 onMounted(async () => {
 
   if(data.sse){
@@ -85,14 +87,19 @@ onMounted(async () => {
     }
     Object.assign(data, result.data);
 
+    sessionStorage.setItem("nodeId",data.nodeId);
+
     data.queuedMessagesOption = dashboardApi.QueueLine(result.data.queues);
     data.messageRatesOption = dashboardApi.MessageRateLine(result.data.queues);
   })
   data.sse.onerror = (err)=>{
-    //useRe.push("/login");
+    useR.push("/login");
     console.log(err)
   }
 
+})
+onUnmounted(()=>{
+  data.sse.close();
 })
 
 const {

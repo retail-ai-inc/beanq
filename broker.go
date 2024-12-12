@@ -39,8 +39,8 @@ type Broker struct {
 	client   any
 	fac      public.IBrokerFactory
 	config   *BeanqConfig
-	handlers []*Handler
 	tool     *bredis.UITool
+	handlers []*Handler
 }
 
 func NewBroker(config *BeanqConfig) *Broker {

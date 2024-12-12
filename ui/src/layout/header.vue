@@ -63,13 +63,25 @@
               </li>
             </ul>
           </li>
+
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle text-muted" role="button" data-bs-toggle="dropdown" aria-expanded="false">Nodes</a>
+            <ul class="dropdown-menu dropdown-menu-dark">
+              <li v-for="(item,key) in nodes" :key="key" :style="activeNodeId==item.NodeId?'background-color: #f8f9fa;color: #B197FC':''">
+                <a class="dropdown-item" @click="chooseNode(item)" href="javascript:;">{{item.Master}} - {{item.NodeId}}</a>
+              </li>
+            </ul>
+          </li>
+
         </ul>
+
         <span class="navbar-text" style="color:#fff">
           <div class="dropdown">
             <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="background: #212529;border: none;">
               Setting
             </button>
             <ul class="dropdown-menu">
+              <li><a class="dropdown-item" @click="optLog" href="javascript:;">Operation Log</a></li>
               <li><a class="dropdown-item" @click="userList" href="javascript:;">User</a></li>
               <li><a class="dropdown-item" @click="logout" href="javascript:;">Logout</a></li>
             </ul>
@@ -83,7 +95,12 @@
 <script setup>
 
 import {useRoute, useRouter} from 'vueRouter';
-import {ref, onMounted, watch} from "vue";
+import {ref,toRefs, onMounted, watch,reactive} from "vue";
+
+const data = reactive({
+  nodes:[],
+  activeNodeId:""
+})
 
 const route = ref('/admin/home');
 
@@ -91,12 +108,27 @@ const uroute = useRoute();
 const urouter = useRouter();
 
 
-onMounted(() => {
+onMounted(async () => {
+
+  const nodes = await dashboardApi.Nodes();
+  data.nodes = nodes.data;
+
+  let nodeId = sessionStorage.getItem("nodeId");
+  if(nodeId == ""){
+    nodeId = nodes.data[0].NodeId;
+  }
+  data.activeNodeId = nodeId;
+  sessionStorage.setItem("nodeId",nodeId);
+
   route.value = uroute.fullPath;
 })
 watch(() => uroute.fullPath, (newVal, oldVal) => {
   route.value = newVal;
 })
+
+function optLog(){
+  urouter.push("/admin/optLog");
+}
 
 function userList() {
   urouter.push("/admin/user")
@@ -107,6 +139,12 @@ function logout() {
   urouter.push("/login");
 }
 
+function chooseNode(item){
+  sessionStorage.setItem("nodeId",item.NodeId);
+  window.href.reload();
+}
+
+const {nodes,activeNodeId} = toRefs(data);
 
 </script>
 

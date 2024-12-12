@@ -3,6 +3,7 @@ package bredis
 import (
 	"context"
 	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/spf13/cast"
@@ -48,7 +49,7 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 			return err
 		}
 	}
-
+	data["logType"] = bstatus.Logic
 	// write job log into redis
 	if err := t.client.XAdd(ctx, &redis.XAddArgs{
 		Stream:     logStream,

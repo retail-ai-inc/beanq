@@ -1,6 +1,9 @@
 const dashboardApi = {
     Total(){
-        return request.get("dashboard")
+        return request.get("dashboard");
+    },
+    Nodes(){
+        return request.get("nodes");
     },
     QueueLine(queues){
 

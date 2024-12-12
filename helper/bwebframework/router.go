@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -83,7 +84,9 @@ func (t *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		if re := recover(); re != nil {
-			log.Printf("panic error: %+v \n", re)
+			byf := make([]byte, 1<<20)
+			stack := runtime.Stack(byf, false)
+			log.Printf("panic error: %+v,stack:%+v \n", re, string(byf[:stack]))
 		}
 	}()
 
@@ -97,8 +100,10 @@ func (t *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		strings.HasSuffix(pattern, ".vue") {
 		pattern = "/"
 		method = FILE
+	} else {
+		log.Printf("Method:%+v,UserAgent:%+v,URI:%+v \n", r.Method, r.UserAgent(), r.RequestURI)
 	}
-	log.Printf("Method:%+v,UserAgent:%+v,URI:%+v \n", r.Method, r.UserAgent(), r.RequestURI)
+
 	handle, b := t.match(pattern, method)
 	if b {
 		ctx := bCtx.Get().(*BeanContext)
@@ -108,7 +113,6 @@ func (t *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err := handle(ctx); err != nil {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = fmt.Fprintln(w, err)
 		}
 		return

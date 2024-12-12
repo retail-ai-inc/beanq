@@ -9,6 +9,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
+	"github.com/spf13/cast"
 	"net/http"
 	"strings"
 	"time"
@@ -153,4 +154,31 @@ func (t *Log) retryHandler(ctx context.Context, id, msgType string) error {
 		return err
 	}
 	return nil
+}
+
+func (t *Log) OptLogs(beanContext *bwebframework.BeanContext) error {
+
+	res, cancel := response.Get()
+	defer cancel()
+
+	w := beanContext.Writer
+	r := beanContext.Request
+
+	key := strings.Join([]string{t.prefix, "beanq-logic-log"}, ":")
+	result := t.client.XRangeN(r.Context(), key, "-", "+", 10).Val()
+	data := make([]map[string]any, 0, len(result))
+
+	for _, value := range result {
+		logType, ok := value.Values["logType"]
+		if !ok {
+			continue
+		}
+		if cast.ToString(logType) != "opt" {
+			continue
+		}
+		data = append(data, value.Values)
+
+	}
+	res.Data = data
+	return res.Json(w, http.StatusOK)
 }

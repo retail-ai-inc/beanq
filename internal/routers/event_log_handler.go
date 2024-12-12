@@ -3,6 +3,7 @@ package routers
 import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
@@ -43,6 +44,7 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 	status := query.Get("status")
 
 	filter := bson.M{}
+	filter["logType"] = bstatus.Logic
 	if id != "" {
 		filter["id"] = id
 	}

@@ -19,6 +19,7 @@
       userApi,
       dlqApi,
       dashboardApi,
+      logApi,
       //apis end
     },
 
@@ -61,7 +62,8 @@
           { path: 'log/detail/:id',component:()=>loadModule("./src/pages/log/detail.vue",options)},
           { path: 'redis', component: () => loadModule("./src/pages/redis/info.vue", options) },
           {path:'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
-          { path: 'user',component:()=>loadModule("./src/pages/user.vue",options)}
+          { path: 'user',component:()=>loadModule("./src/pages/user.vue",options)},
+          {path:'optLog',component:()=>loadModule("./src/pages/optLog.vue",options)}
         ]
   };
   // login route

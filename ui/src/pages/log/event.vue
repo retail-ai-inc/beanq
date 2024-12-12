@@ -253,8 +253,8 @@ function initEventSource(){
   data.sseEvent.onerror = (err)=>{
     console.log("event err----",err);
   }
-  data.sseEvent.addEventListener("event_log",async function(res){
-    let body = await JSON.parse(res.data);
+  data.sseEvent.addEventListener("event_log", function(res){
+    let body =  JSON.parse(res.data);
     data.eventLogs = body.data.data;
     data.page =  body.data.cursor;
     data.total = Math.ceil(body.data.total / data.pageSize);

@@ -21,3 +21,11 @@ const (
 	ErrLevel  LevelMsg = "error"
 	InfoLevel LevelMsg = "info"
 )
+
+type LogType = string
+
+const (
+	Dlq       LogType = "dlq"
+	Logic     LogType = "logic"
+	Operation LogType = "opt"
+)
