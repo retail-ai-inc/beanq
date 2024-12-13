@@ -11,7 +11,7 @@ type GoEmail struct {
 	dialer *gomail.Dialer
 }
 
-func NewEmail(host string, port int, username string, password string) *GoEmail {
+func NewGoEmail(host string, port int, username string, password string) *GoEmail {
 
 	dialer := gomail.NewDialer(host, port, username, password)
 	dialer.TLSConfig = &tls.Config{

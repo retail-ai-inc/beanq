@@ -96,16 +96,16 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 	}
 	go func(ctx2 context.Context) {
 
-		code, body, header, err := email.DefaultSend(ctx2, "BeanqUI Manager", account, &email.EmbedData{
-			Title: "Active Email",
-			Name:  account,
-			Link:  "", // website url
-		})
+		client, err := email.NewEmail(ctx2, viper.GetString("ui.sendGrid.key"))
 		if err != nil {
-			log.Printf("Send Email Error:%+v \n", err)
+			log.Printf("Email Error:%+v \n", err)
 		}
-		if code != 200 {
-			log.Printf("Code:%+v,Body:%+v,Header:%+v \n", code, body, header)
+		client.From("BeanqUI Manager")
+		client.To(account)
+		client.Subject("BeanqUI Manager")
+		_ = client.Body("Active Email", account, "")
+		if err := client.Send(); err != nil {
+			log.Printf("Send Email Error:%+v \n", err)
 		}
 
 	}(r.Context())

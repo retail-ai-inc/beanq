@@ -1,45 +1,63 @@
 package email
 
 import (
+	"context"
+	"errors"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
-	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 )
 
-// If possible, we can expand more fields
-type EmbedData struct {
-	Title string
-	Name  string
-	Link  string
+type SendGrid struct {
+	from    *mail.Email
+	to      *mail.Email
+	subject string
+	body    string
+	apiKey  string
+	ctx     context.Context
 }
 
-func DefaultSend(ctx context.Context, toName, toAddress string, data *EmbedData) (statusCode int, body string, headers map[string][]string, err error) {
-
-	from := mail.NewEmail(viper.GetString("email.fromName"), viper.GetString("email.fromAddress"))
-	to := mail.NewEmail(toName, toAddress)
-	key := viper.GetString("email.key")
-
-	return Send(ctx, from, to, key, data)
+func NewSendGrid(ctx context.Context, apiKey string) *SendGrid {
+	return &SendGrid{
+		apiKey: apiKey,
+		ctx:    ctx,
+	}
 }
 
-func Send(ctx context.Context, from, to *mail.Email, apiKey string, data *EmbedData) (statusCode int, body string, headers map[string][]string, err error) {
+func (t *SendGrid) From(from string) {
+	t.from = mail.NewEmail("Retail-AI", from)
+}
 
-	subject := "Active Email"
-	plainTextContent := ""
-	htmlContent, err := parseHtml(data)
+func (t *SendGrid) To(to string) {
+	t.to = mail.NewEmail("Retail-AI", to)
+}
+
+func (t *SendGrid) Subject(subject string) {
+	t.subject = subject
+}
+
+func (t *SendGrid) Body(title, name, link string) error {
+
+	body, err := parseHtml(map[string]any{"Title": title, "Name": name, "Link": link})
 	if err != nil {
-		return 0, "", nil, err
+		return err
 	}
+	t.body = body
+	return nil
+}
 
-	message := mail.NewSingleEmail(from, subject, to, plainTextContent, htmlContent)
+func (t *SendGrid) Send() error {
 
-	client := sendgrid.NewSendClient(apiKey)
-	response, err := client.SendWithContext(ctx, message)
+	message := mail.NewSingleEmail(t.from, t.subject, t.to, "", t.body)
+
+	client := sendgrid.NewSendClient(t.apiKey)
+	response, err := client.SendWithContext(t.ctx, message)
 
 	if err != nil {
-		return
+		return err
 	}
-	return response.StatusCode, response.Body, response.Headers, nil
+	if response.StatusCode != 200 {
+		return errors.New(response.Body)
+	}
+	return nil
 
 }
