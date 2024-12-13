@@ -1,17 +1,11 @@
 package email
 
 import (
-	"bytes"
-	"context"
-	_ "embed"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/viper"
-	"html/template"
+	"golang.org/x/net/context"
 )
-
-//go:embed email.html
-var emailTpl string
 
 // If possible, we can expand more fields
 type EmbedData struct {
@@ -48,18 +42,4 @@ func Send(ctx context.Context, from, to *mail.Email, apiKey string, data *EmbedD
 	}
 	return response.StatusCode, response.Body, response.Headers, nil
 
-}
-
-func parseHtml(data *EmbedData) (string, error) {
-
-	tpl, err := template.New("email-template").Parse(emailTpl)
-	if err != nil {
-		return "", err
-	}
-
-	var body bytes.Buffer
-	if err := tpl.Execute(&body, data); err != nil {
-		return "", err
-	}
-	return body.String(), nil
 }

@@ -8,7 +8,26 @@ import (
 	"testing"
 )
 
-func TestSend(t *testing.T) {
+func TestSendNormal(t *testing.T) {
+
+	ge := NewEmail("smtp.126.com", 25, "kllztt@126.com", "DSYcnDeJs2wnGHEW")
+
+	ge.From("kllztt@126.com")
+	ge.To("10223062kong_liangliang@cn.tre-inc.com")
+	ge.Subject("Retail AI Admin Invitation")
+	if err := ge.Body("Send Email", "10223062kong_liangliang@cn.tre-inc.com", "https://google.com"); err != nil {
+		fmt.Println(err)
+	}
+
+	if err := ge.Send(); err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println("success")
+	}
+
+}
+
+func TestSendGrid(t *testing.T) {
 
 	ctx := context.Background()
 	from := mail.NewEmail("Retail-AI", "noreply@retail-ai.jp")
