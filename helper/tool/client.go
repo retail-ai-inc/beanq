@@ -5,9 +5,9 @@ import (
 )
 
 type Client struct {
+	IClient
 	prefix string
 	nodeId string
-	IClient
 }
 
 func (t *Client) NodeId(ctx context.Context) string {

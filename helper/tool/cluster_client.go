@@ -8,10 +8,10 @@ import (
 
 type (
 	ClusterClient struct {
+		IClient
 		client *redis.ClusterClient
 		prefix string
 		nodeId string
-		IClient
 	}
 )
 
