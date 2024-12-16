@@ -192,7 +192,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	}()
 
-	httpport := ":9090"
+	httpport := c.broker.config.UI.Port
 	r := bwebframework.NewRouter()
 	r.File("/", func(ctx *bwebframework.BeanContext) error {
 		fd, err := fs.Sub(views, "ui")
