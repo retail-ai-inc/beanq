@@ -8,12 +8,12 @@ import (
 )
 
 type SendGrid struct {
+	ctx     context.Context
 	from    *mail.Email
 	to      *mail.Email
 	subject string
 	body    string
 	apiKey  string
-	ctx     context.Context
 }
 
 func NewSendGrid(ctx context.Context, apiKey string) *SendGrid {

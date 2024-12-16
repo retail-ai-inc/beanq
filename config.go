@@ -76,14 +76,6 @@ type (
 	}
 
 	UI struct {
-		Issuer  string `json:"issuer"`
-		Subject string `json:"subject"`
-		JwtKey  string `json:"jwtKey"`
-		Port    string `json:"port"`
-		Root    struct {
-			UserName string `json:"username"`
-			Password string `json:"password"`
-		} `json:"root"`
 		Stmt struct {
 			Host     string `json:"host"`
 			Port     string `json:"port"`
@@ -100,6 +92,15 @@ type (
 			FromName    string
 			FromAddress string
 		}
+		Root struct {
+			UserName string `json:"username"`
+			Password string `json:"password"`
+		} `json:"root"`
+		Issuer    string        `json:"issuer"`
+		Subject   string        `json:"subject"`
+		JwtKey    string        `json:"jwtKey"`
+		Port      string        `json:"port"`
+		ExpiresAt time.Duration `json:"expiresAt"`
 	}
 
 	BeanqConfig struct {
@@ -110,7 +111,6 @@ type (
 		Queue
 		History                  `json:"history"`
 		Redis                    Redis         `json:"redis"`
-		ExpiresAt                time.Duration `json:"expiresAt"`
 		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
 		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
 		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`

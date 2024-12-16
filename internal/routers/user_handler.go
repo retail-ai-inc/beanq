@@ -36,7 +36,7 @@ func (t *User) List(ctx *bwebframework.BeanContext) error {
 	nodeId := r.Header.Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
-	pattern := strings.Join([]string{viper.GetString("redis.prefix"), "users:*"}, ":")
+	pattern := strings.Join([]string{t.prefix, "users:*"}, ":")
 	keys, err := client.Keys(r.Context(), pattern)
 
 	if err != nil {
@@ -80,7 +80,7 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 
 	}
 
-	key := strings.Join([]string{viper.GetString("redis.prefix"), "users", account}, ":")
+	key := strings.Join([]string{t.prefix, "users", account}, ":")
 	data := make(map[string]any, 0)
 	data["account"] = account
 	data["password"] = password
