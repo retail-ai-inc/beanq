@@ -116,7 +116,7 @@ vet-fix: ##If fixed, the annotation for struct fields will be removed
 		go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest; \
 	fi
 	@$(if $(wildcard $(FIELDALIGNMENT_TOOL)),echo "Running fieldalignment -fix...";) \
-	$(GOPATH)/bin/fieldalignment -fix ./... || exit 0
+	$(FIELDALIGNMENT_TOOL) -fix ./... || exit 0
 
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
