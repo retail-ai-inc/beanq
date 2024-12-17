@@ -192,7 +192,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	}()
 
-	httpport := ":9090"
+	httpport := c.broker.config.UI.Port
 	r := bwebframework.NewRouter()
 	r.File("/", func(ctx *bwebframework.BeanContext) error {
 		fd, err := fs.Sub(views, "ui")
@@ -228,7 +228,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 			UserName string `json:"username"`
 			Password string `json:"password"`
 		}{
-			c.broker.config.Account.UserName, c.broker.config.Account.Password,
+			c.broker.config.UI.Root.UserName, c.broker.config.UI.Root.Password,
 		},
 	}
 	r = routers.NewRouters(r, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, uiCfg)

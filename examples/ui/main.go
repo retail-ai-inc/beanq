@@ -12,10 +12,10 @@ import (
 
 var (
 	configOnce sync.Once
-	bqConfig   beanq.BeanqConfig
+	bqConfig   *beanq.BeanqConfig
 )
 
-func initCnf() beanq.BeanqConfig {
+func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		var envPath string = "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
@@ -40,6 +40,6 @@ func initCnf() beanq.BeanqConfig {
 }
 func main() {
 	config := initCnf()
-	csm := beanq.New(&config)
+	csm := beanq.New(config)
 	csm.ServeHttp(context.Background())
 }

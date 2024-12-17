@@ -36,7 +36,7 @@ func (t *User) List(ctx *bwebframework.BeanContext) error {
 	nodeId := r.Header.Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
-	pattern := strings.Join([]string{viper.GetString("redis.prefix"), "users:*"}, ":")
+	pattern := strings.Join([]string{t.prefix, "users:*"}, ":")
 	keys, err := client.Keys(r.Context(), pattern)
 
 	if err != nil {
@@ -80,7 +80,7 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 
 	}
 
-	key := strings.Join([]string{viper.GetString("redis.prefix"), "users", account}, ":")
+	key := strings.Join([]string{t.prefix, "users", account}, ":")
 	data := make(map[string]any, 0)
 	data["account"] = account
 	data["password"] = password
@@ -96,16 +96,16 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 	}
 	go func(ctx2 context.Context) {
 
-		code, body, header, err := email.DefaultSend(ctx2, "BeanqUI Manager", account, &email.EmbedData{
-			Title: "Active Email",
-			Name:  account,
-			Link:  "", // website url
-		})
+		client, err := email.NewEmail(ctx2, viper.GetString("ui.sendGrid.key"))
 		if err != nil {
-			log.Printf("Send Email Error:%+v \n", err)
+			log.Printf("Email Error:%+v \n", err)
 		}
-		if code != 200 {
-			log.Printf("Code:%+v,Body:%+v,Header:%+v \n", code, body, header)
+		client.From("BeanqUI Manager")
+		client.To(account)
+		client.Subject("BeanqUI Manager")
+		_ = client.Body("Active Email", account, "")
+		if err := client.Send(); err != nil {
+			log.Printf("Send Email Error:%+v \n", err)
 		}
 
 	}(r.Context())

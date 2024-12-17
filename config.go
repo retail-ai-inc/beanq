@@ -74,21 +74,43 @@ type (
 		}
 		On bool
 	}
-	BeanqConfig struct {
-		Account struct {
+
+	UI struct {
+		Stmt struct {
+			Host     string `json:"host"`
+			Port     string `json:"port"`
+			User     string `json:"user"`
+			Password string `json:"password"`
+		}
+		GoogleAuth struct {
+			ClientId     string
+			ClientSecret string
+			CallbackUrl  string
+		}
+		SendGrid struct {
+			Key         string
+			FromName    string
+			FromAddress string
+		}
+		Root struct {
 			UserName string `json:"username"`
 			Password string `json:"password"`
-		} `json:"account"`
+		} `json:"root"`
+		Issuer    string        `json:"issuer"`
+		Subject   string        `json:"subject"`
+		JwtKey    string        `json:"jwtKey"`
+		Port      string        `json:"port"`
+		ExpiresAt time.Duration `json:"expiresAt"`
+	}
+
+	BeanqConfig struct {
 		Health   Health `json:"health"`
 		Broker   string `json:"broker"`
-		Issuer   string `json:"issuer"`
-		Subject  string `json:"subject"`
-		JwtKey   string `json:"jwtKey"`
+		UI       `json:"ui"`
 		DebugLog `json:"debugLog"`
 		Queue
 		History                  `json:"history"`
 		Redis                    Redis         `json:"redis"`
-		ExpiresAt                time.Duration `json:"expiresAt"`
 		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
 		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
 		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`

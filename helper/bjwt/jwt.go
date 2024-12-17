@@ -13,7 +13,7 @@ type Claim struct {
 
 func MakeHsToken(claims Claim) (string, error) {
 
-	signKey := []byte(viper.GetString("jwtKey"))
+	signKey := []byte(viper.GetString("ui.jwtKey"))
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	str, err := token.SignedString(signKey)
 	if err != nil {
@@ -24,7 +24,7 @@ func MakeHsToken(claims Claim) (string, error) {
 }
 func ParseHsToken(tokenStr string) (*Claim, error) {
 
-	signKey := []byte(viper.GetString("jwtKey"))
+	signKey := []byte(viper.GetString("ui.jwtKey"))
 
 	token, err := jwt.ParseWithClaims(tokenStr, &Claim{}, func(token *jwt.Token) (i interface{}, err error) {
 		return signKey, nil
