@@ -26,8 +26,8 @@ To ensure data safety, it is recommended to enable AOF persistence. For the diff
    ![Alt](/ui/static/images/sequence.png#pic_center=80*80)
    >In synchronous messaging, the status of a message is synchronized to a Redis hash at every stage of the message-sending process.\
     This means that as the message progresses through different stages (e.g., creation, sending, delivery), its status is updated in a Redis hash. \
-    The client then performs synchronous checks against this Redis hash to retrieve the current status of the message. Based on the information retrieved from the Redis hash, the client can then return or provide feedback about the message accordingly.\
-    This approach ensures that the client always has the most up-to-date information regarding the message's status, allowing for immediate responses based on the latest state of the message within the system.
+    **3.1** The client then performs synchronous checks against this Redis hash to retrieve the current status of the message. Based on the information retrieved from the Redis hash, the client can then return or provide feedback about the message accordingly.\
+    **3.2** This approach ensures that the client always has the most up-to-date information regarding the message's status, allowing for immediate responses based on the latest state of the message within the system.
 ## Example Explanation
 
 Start and enter the container.
