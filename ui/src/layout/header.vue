@@ -1,93 +1,88 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <template>
-  <nav class="navbar navbar-expand-lg bg-body-tertiary">
+  <nav class="main-header navbar navbar-expand navbar-danger navbar-dark">
     <div class="container-fluid">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon-monitor">
-        <path fill="#B197FC" d="M256 16C123.5 16 16 123.5 16 256S123.5 496 256 496 496 388.5 496 256 388.5 16 256 16zM121.7 429.1C70.1 389 36.7 326.3 36.7 256a218.5 218.5 0 0 1 9.6-64.1l102.9-17.9-.1 11-13.9 2s-.1 12.5-.1 19.5a12.8 12.8 0 0 0 4.9 10.3l9.5 7.4zm105.7-283.3 8.5-7.6s6.9-5.4-.1-9.3c-7.2-4-39.5-34.5-39.5-34.5-5.3-5.5-8.3-7.3-15.5 0 0 0-32.3 30.5-39.5 34.5-7.1 4-.1 9.3-.1 9.3l8.5 7.6 0 4.4L76 131c39.6-56.9 105.5-94.3 180-94.3A218.8 218.8 0 0 1 420.9 111.8l-193.5 37.7zm34.1 329.3-33.9-250.9 9.5-7.4a12.8 12.8 0 0 0 4.9-10.3c0-7-.1-19.5-.1-19.5l-13.9-2-.1-10.5 241.7 31.4A218.9 218.9 0 0 1 475.3 256C475.3 375.1 379.8 472.2 261.4 475.1z"/>
-      </svg>
-      <router-link to="/admin/home" class="navbar-brand">BeanQ Monitor</router-link>
-      <div class="collapse navbar-collapse" id="navbarSupportedContent">
-        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-          <li class="nav-item">
-            <router-link to="/admin/home" class="nav-link text-muted" :class="route == '/admin/home' ? 'active' : ''">Home</router-link>
-          </li>
-<!--          <li class="nav-item">-->
-<!--            <router-link to="/admin/server" class="nav-link text-muted" :class="route == '/admin/server' ? 'active' : ''">Server</router-link>-->
-<!--          </li>-->
-          <li class="nav-item">
-            <router-link to="/admin/schedule" class="nav-link text-muted" :class="route == '/admin/schedule' ? 'active' : ''">Schedule</router-link>
-          </li>
-          <li class="nav-item">
-            <router-link to="/admin/queue" class="nav-link text-muted" :class="route == '/admin/queue' ? 'active' : ''">Channel</router-link>
-          </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle text-muted"
-               :class="route == '/admin/log/event' || route == '/admin/log/dlq' || route == '/admin/log/workflow' ? 'active' : ''"
-               role="button"
-               data-bs-toggle="dropdown"
-               aria-expanded="false">
-              Log
-            </a>
-            <ul class="dropdown-menu dropdown-menu-dark">
-              <li>
-                <router-link to="/admin/log/event"
-                             class="dropdown-item nav-link text-muted"
-                             :class="route=='/admin/log/event' ? 'active' : ''">
-                  EventLog
-                </router-link>
-              </li>
-              <li>
-                <router-link to="/admin/log/dlq"
-                             class="dropdown-item nav-link text-muted"
-                             :class="route == '/admin/log/dlq' ? 'active' : ''">
-                  DLQLog
-                </router-link>
-              </li>
-              <li>
-                <router-link to="/admin/log/workflow"
-                             class="dropdown-item nav-link text-muted"
-                             :class="route == '/admin/log/workflow' ? 'active' : ''">
-                  WorkFlowLog
-                </router-link>
-              </li>
-            </ul>
-          </li>
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle text-muted" :class="route=='/admin/redis' || route == '/admin/redis/monitor' ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">Redis</a>
-            <ul class="dropdown-menu dropdown-menu-dark">
-              <li>
-                <router-link to="/admin/redis" class="dropdown-item nav-link text-muted" :class="route=='/admin/redis' ? 'active' : ''">Info</router-link>
-              </li>
-              <li>
-                <router-link to="/admin/redis/monitor" class="dropdown-item nav-link text-muted" :class="route == '/admin/redis/monitor' ? 'active' : ''">Command</router-link>
-              </li>
-            </ul>
-          </li>
-
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle text-muted" role="button" data-bs-toggle="dropdown" aria-expanded="false">Nodes</a>
-            <ul class="dropdown-menu dropdown-menu-dark">
-              <li v-for="(item,key) in nodes" :key="key" :style="activeNodeId==item.NodeId?'background-color: #f8f9fa;color: #B197FC':''">
-                <a class="dropdown-item" @click="chooseNode(item)" href="javascript:;">{{item.Master}} - {{item.NodeId}}</a>
-              </li>
-            </ul>
-          </li>
-
-        </ul>
-
-        <span class="navbar-text" style="color:#fff">
-          <div class="dropdown">
-            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="background: #212529;border: none;">
-              Setting
-            </button>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" @click="optLog" href="javascript:;">Operation Log</a></li>
-              <li><a class="dropdown-item" @click="userList" href="javascript:;">User</a></li>
-              <li><a class="dropdown-item" @click="logout" href="javascript:;">Logout</a></li>
-            </ul>
-          </div>
-        </span>
-      </div>
+      <ul class="navbar-nav w-100">
+        <li class="nav-item">
+          <router-link to="/admin/home" class="nav-link" :class="route === '/admin/home' ? 'active' : ''">
+            Home
+          </router-link>
+        </li>
+        <li class="nav-item">
+          <router-link to="/admin/schedule" class="nav-link" :class="route === '/admin/schedule' ? 'active' : ''">
+            Schedule
+          </router-link>
+        </li>
+        <li class="nav-item">
+          <router-link to="/admin/queue" class="nav-link" :class="route === '/admin/queue' ? 'active' : ''">
+            Channel
+          </router-link>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" :class="route === '/admin/log/event' || route === '/admin/log/dlq' || route === '/admin/log/workflow' ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Log
+          </a>
+          <ul class="dropdown-menu dropdown-menu-color">
+            <li>
+              <router-link to="/admin/log/event" class="dropdown-item" :class="route ==='/admin/log/event' ? 'active' : ''">
+                EventLog
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/admin/log/dlq" class="dropdown-item" :class="route === '/admin/log/dlq' ? 'active' : ''">
+                DLQLog
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/admin/log/workflow" class="dropdown-item" :class="route === '/admin/log/workflow' ? 'active' : ''">
+                WorkFlowLog
+              </router-link>
+            </li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" :class="route==='/admin/redis' || route === '/admin/redis/monitor' ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Redis
+          </a>
+          <ul class="dropdown-menu dropdown-menu-color">
+            <li>
+              <router-link to="/admin/redis" class="dropdown-item " :class="route==='/admin/redis' ? 'active' : ''">
+                Info
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/admin/redis/monitor" class="dropdown-item" :class="route === '/admin/redis/monitor' ? 'active' : ''">
+                Command
+              </router-link>
+            </li>
+          </ul>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Setting
+          </a>
+          <ul class="dropdown-menu dropdown-menu-color dropdown-menu-end">
+            <li>
+              <router-link to="/admin/optLog" class="dropdown-item" :class="route==='/admin/optLog' ? 'active' : ''">
+                Operation Log
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/admin/user" class="dropdown-item" :class="route==='/admin/user' ? 'active' : ''">
+                User
+              </router-link>
+            </li>
+            <li>
+              <router-link to="/login" class="dropdown-item">
+                Logout
+              </router-link>
+            </li>
+<!--            <li><a class="dropdown-item" @click="optLog" href="javascript:;">Operation Log</a></li>-->
+<!--            <li><a class="dropdown-item" @click="userList" href="javascript:;">User</a></li>-->
+<!--            <li><a class="dropdown-item" @click="logout" href="javascript:;">Logout</a></li>-->
+          </ul>
+        </li>
+      </ul>
     </div>
   </nav>
 </template>
@@ -95,11 +90,11 @@
 <script setup>
 
 import {useRoute, useRouter} from 'vueRouter';
-import {ref,toRefs, onMounted, watch,reactive} from "vue";
+import {ref, toRefs, onMounted, watch, reactive} from "vue";
 
 const data = reactive({
-  nodes:[],
-  activeNodeId:""
+  nodes: [],
+  activeNodeId: ""
 })
 
 const route = ref('/admin/home');
@@ -114,19 +109,20 @@ onMounted(async () => {
   data.nodes = nodes.data;
 
   let nodeId = sessionStorage.getItem("nodeId");
-  if(nodeId == ""){
+  if (nodeId === "") {
     nodeId = nodes.data[0].NodeId;
   }
   data.activeNodeId = nodeId;
-  sessionStorage.setItem("nodeId",nodeId);
+  sessionStorage.setItem("nodeId", nodeId);
 
   route.value = uroute.fullPath;
 })
+
 watch(() => uroute.fullPath, (newVal, oldVal) => {
   route.value = newVal;
 })
 
-function optLog(){
+function optLog() {
   urouter.push("/admin/optLog");
 }
 
@@ -139,43 +135,66 @@ function logout() {
   urouter.push("/login");
 }
 
-function chooseNode(item){
-  sessionStorage.setItem("nodeId",item.NodeId);
+function chooseNode(item) {
+  sessionStorage.setItem("nodeId", item.NodeId);
   window.href.reload();
 }
 
-const {nodes,activeNodeId} = toRefs(data);
+const {nodes, activeNodeId} = toRefs(data);
 
 </script>
 
 <style scoped>
+
+.main-header {
+  transition: margin-left .3s ease-in-out;
+  margin-left: 250px;
+  background-color: #B197FC;
+  border-bottom: 1px solid #4b545c;
+  z-index: 1034;
+  color: #ffffff;
+}
 .navbar {
-  background-color: var(--bs-body-color);
+  font-size: 1.25rem;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: .5rem .5rem;
+}
+.navbar-expand {
+  flex-flow: row nowrap;
+  justify-content: flex-start;
 }
 
-.icon-monitor {
-  width: 28px;
-  margin-right: 2px;
-}
-
-.navbar .navbar-brand {
-  color: #B197FC !important
+.navbar-nav li:last-child {
+  margin-left: auto;
 }
 
 .navbar .navbar-nav .nav-item .active {
-  color: #ffffff !important
+  color: #000000 !important;
 }
-
 .navbar .navbar-nav .nav-item a:hover {
-  color: #ffffff !important
+  color: #000000 !important;
 }
 
-.navbar-text .btn-secondary:focus {
-  border: none !important;
+.dropdown-item.active {
+  text-decoration: none;
+  background-color: #B197FC;;
 }
 
-.example {
-  color: v-bind('color');
+.dropdown-item:active {
+  background-color: #B197FC;;
 }
+
+.nav-link {
+  color: #ffffff !important;
+}
+
+.dropdown-menu-color {
+  color: #000000;
+  background-color: #ffffff;
+  border-color:#ffffff;
+}
+
 </style>
 
