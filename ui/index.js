@@ -66,6 +66,7 @@
           {path:'optLog',component:()=>loadModule("./src/pages/optLog.vue",options)}
         ]
   };
+
   // login route
   const loginRoute = { path:"/login",component:()=>loadModule("./src/pages/login.vue",options)};
 
