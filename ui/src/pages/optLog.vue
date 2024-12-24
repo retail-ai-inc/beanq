@@ -1,5 +1,5 @@
 <template>
-  <div class="opt-log">
+  <div class="table-responsive opt-log">
     <table class="table table-striped table-hover">
       <thead>
       <tr>
@@ -14,9 +14,9 @@
       <tr v-for="(item, key) in list" :key="key" style="height: 3rem;line-height:3rem">
         <th scope="row" style="width: 5%">{{parseInt(key)+1}}</th>
         <td style="width: 15%">{{item.user}}</td>
-        <td style="width: 20%"><span class="d-inline-block text-truncate" style="">{{item.uri}}</span></td>
+        <td style="width: 20%"><span class="d-inline-block text-truncate" style="max-width: 200px">{{item.uri}}</span></td>
         <td style="width: 55%">
-          <span class="d-inline-block text-truncate" style="">
+          <span class="d-inline-block text-truncate" style="max-width: 400px">
             {{item.data}}
           </span>
         </td>

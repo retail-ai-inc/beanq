@@ -13,7 +13,8 @@
         <ul id="sidebar" class="nav nav-sidebar flex-column nav-flat" role="menu" data-accordion="false">
           <li v-for="(item,key) in nodes" :key="key" class="nav-item" :class="activeNodeId === item.NodeId ? 'active' : ''">
             <a class="nav-link" @click="chooseNode(item)" href="javascript:;">
-              {{ item.Master }}
+              {{ item.Master }}<br/>
+              <span style="font-size: 14px">{{item.Ip}}</span>
             </a>
           </li>
         </ul>
