@@ -85,6 +85,9 @@ func (t *MongoX) DetailEventLog(ctx context.Context, id string) (bson.M, error) 
 
 	filter := bson.M{}
 	if id != "" {
+		if _, err := primitive.ObjectIDFromHex(id); err != nil {
+			return nil, err
+		}
 		filter["id"] = id
 	}
 

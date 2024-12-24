@@ -14,9 +14,7 @@ type GoEmail struct {
 func NewGoEmail(host string, port int, username string, password string) *GoEmail {
 
 	dialer := gomail.NewDialer(host, port, username, password)
-	dialer.TLSConfig = &tls.Config{
-		InsecureSkipVerify: true,
-	}
+	dialer.TLSConfig = &tls.Config{}
 	return &GoEmail{
 		msg:    gomail.NewMessage(),
 		dialer: dialer,

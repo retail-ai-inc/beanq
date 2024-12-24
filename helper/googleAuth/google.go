@@ -65,7 +65,12 @@ func (t *GoogleOauthConfig) Response(accessToken string) (*UserInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.Body.Close()
+
+	defer func() {
+		// or use `//nolint:errcheck` to ignore error
+		_ = res.Body.Close()
+	}()
+
 	bodys, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err

@@ -75,7 +75,8 @@ func (t *Login) GoogleLogin(ctx *bwebframework.BeanContext) error {
 	w := ctx.Writer
 
 	gAuth := googleAuth.New()
-	state := "beanqui"
+	
+	state := time.Now().String()
 	url := gAuth.AuthCodeUrl(state)
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	w.Header().Set("Location", url)
