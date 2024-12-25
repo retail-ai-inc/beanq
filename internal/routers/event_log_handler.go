@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
+	"sort"
 	"time"
 )
 
@@ -54,7 +55,13 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 		filter["id"] = id
 	}
 	if status != "" {
-		filter["status"] = status
+		statusValid := []string{"failed", "published", "success"}
+		if index := sort.SearchStrings(statusValid, status); index < len(statusValid) && statusValid[index] == status {
+			filter["status"] = status
+		} else {
+			http.Error(w, "status is invalid", http.StatusInternalServerError)
+			return nil
+		}
 	}
 	if page <= 0 {
 		page = 0
