@@ -23,8 +23,9 @@
 package beanq
 
 import (
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -34,26 +35,26 @@ import (
 
 type (
 	Message struct {
-		Id           string        `json:"id"`
-		Topic        string        `json:"topic"`
-		Channel      string        `json:"channel"`
-		Consumer     string        `json:"consumer"`
-		MaxLen       int64         `json:"maxLen"`
-		Retry        int           `json:"retry"`
-		PendingRetry int64         `json:"pendingRetry"`
-		Priority     float64       `json:"priority"`
-		Payload      string        `json:"payload"`
-		AddTime      string        `json:"addTime"`
-		ExecuteTime  time.Time     `json:"executeTime"`
-		TimeToRun    time.Duration `json:"timeToRun"`
-		MoodType     MoodType      `json:"moodType"` // 3 types of message: `normal`, `delay`, `sequential`
-		Status       Status        `json:"status"`
-		Level        LevelMsg      `json:"level"`
-		Info         FlagInfo      `json:"info"`
-		RunTime      string        `json:"runTime"`
-		BeginTime    time.Time     `json:"beginTime"`
-		EndTime      time.Time     `json:"endTime"`
-		Response     any           `json:"response"`
+		ExecuteTime  time.Time        `json:"executeTime"`
+		EndTime      time.Time        `json:"endTime"`
+		BeginTime    time.Time        `json:"beginTime"`
+		Response     any              `json:"response"`
+		Info         bstatus.FlagInfo `json:"info"`
+		Level        bstatus.LevelMsg `json:"level"`
+		Topic        string           `json:"topic"`
+		Channel      string           `json:"channel"`
+		Payload      string           `json:"payload"`
+		AddTime      string           `json:"addTime"`
+		Consumer     string           `json:"consumer"`
+		RunTime      string           `json:"runTime"`
+		MoodType     btype.MoodType   `json:"moodType"`
+		Status       bstatus.Status   `json:"status"`
+		Id           string           `json:"id"`
+		Retry        int              `json:"retry"`
+		TimeToRun    time.Duration    `json:"timeToRun"`
+		MaxLen       int64            `json:"maxLen"`
+		Priority     float64          `json:"priority"`
+		PendingRetry int64            `json:"pendingRetry"`
 	}
 )
 
@@ -126,7 +127,7 @@ func (data MessageM) ToMessage() *Message {
 			}
 		case "moodType":
 			if v, ok := val.(string); ok {
-				msg.MoodType = MoodType(v)
+				msg.MoodType = btype.MoodType(v)
 			}
 		case "timeToRun":
 			if v, ok := val.(string); ok {
@@ -177,9 +178,9 @@ func (data MessageS) ToMessage() *Message {
 			msg.ExecuteTime = cast.ToTime(v)
 		}
 		if k == "moodType" {
-			msg.MoodType = MoodType(v)
+			msg.MoodType = btype.MoodType(v)
 		}
-		if k == "status" {
+		if k == "bstatus" {
 			msg.Status = v
 		}
 		if k == "level" {
@@ -217,12 +218,4 @@ func messageToStruct(message any) *Message {
 		msg = MessageS(xmsg).ToMessage()
 	}
 	return msg
-}
-
-func JsonTo[T Message | map[string]any](data string, m *T) error {
-
-	if err := json.NewDecoder(strings.NewReader(data)).Decode(m); err != nil {
-		return err
-	}
-	return nil
 }

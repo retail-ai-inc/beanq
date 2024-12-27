@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
+	"github.com/retail-ai-inc/beanq/v3"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/spf13/viper"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
-
-	"github.com/retail-ai-inc/beanq/v3"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -65,6 +64,20 @@ func main() {
 		logger.New().Error(err)
 	}
 	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
+	//go func() {
+	//	ticker := time.NewTicker(time.Second)
+	//	defer ticker.Stop()
+	//	for {
+	//		select {
+	//		case <-ticker.C:
+	//			fmt.Println(runtime.NumGoroutine())
+	//		}
+	//	}
+	//}()
+
+	//go func() {
+	//	log.Println(http.ListenAndServe("localhost:6060", nil))
+	//}()
 
 	csm.Wait(ctx)
 

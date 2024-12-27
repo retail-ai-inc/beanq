@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,15 +29,15 @@ const (
 type (
 	Workflow struct {
 		ctx              context.Context
-		gid              string
-		currentIndex     int
 		currentTask      Task
+		wfMux            WFMux
 		message          *Message
+		onRollbackResult func(taskID string, err error) error
+		record           *WorkflowRecord
+		gid              string
 		tasks            []Task
 		results          []error
-		onRollbackResult func(taskID string, err error) error
-		wfMux            WFMux
-		record           *WorkflowRecord
+		currentIndex     int
 	}
 	WFMux interface {
 		Name() string
@@ -119,7 +120,8 @@ func (w *Workflow) CurrentTask() Task {
 
 func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
 	var data = struct {
-		Id        primitive.ObjectID `bson:"_id"`
+		CreatedAt time.Time          `bson:"CreatedAt"`
+		UpdatedAt time.Time          `bson:"UpdatedAt"`
 		Channel   string             `bson:"Channel"`
 		Topic     string             `bson:"Topic"`
 		MessageID string             `bson:"MessageId"`
@@ -127,8 +129,7 @@ func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
 		TaskID    string             `bson:"TaskId"`
 		Status    string             `bson:"Status"`
 		Statement string             `bson:"Statement"`
-		CreatedAt time.Time          `bson:"CreatedAt"`
-		UpdatedAt time.Time          `bson:"UpdatedAt"`
+		Id        primitive.ObjectID `bson:"_id"`
 	}{
 		Id:        primitive.NewObjectID(),
 		Channel:   w.message.Channel,
@@ -298,12 +299,12 @@ func (t *BaseTask) Statement() []byte {
 }
 
 type WorkflowRecord struct {
-	on              bool
-	retry           int
-	async           bool
 	errorHandler    func(error)
 	mongoCollection *mongo.Collection
 	asyncPool       *asyncPool
+	retry           int
+	on              bool
+	async           bool
 }
 
 var workflowRecordOnce sync.Once
@@ -311,9 +312,6 @@ var workflowRecord *WorkflowRecord
 
 func NewWorkflowRecord() *WorkflowRecord {
 	var config struct {
-		On    bool
-		Retry int
-		Async bool
 		Mongo *struct {
 			Database              string
 			Collection            string
@@ -325,6 +323,9 @@ func NewWorkflowRecord() *WorkflowRecord {
 			MaxConnectionPoolSize uint64
 			MaxConnectionLifeTime time.Duration
 		}
+		Retry int
+		On    bool
+		Async bool
 	}
 	workflowRecordOnce.Do(func() {
 		err := viper.UnmarshalKey("queue.workflow.record", &config)
@@ -409,7 +410,7 @@ func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) error {
 			return fmt.Errorf("[workflow recored] write error: %w", err)
 		}
 
-		waitTime := jitterBackoff(500*time.Millisecond, time.Second, i)
+		waitTime := tool.JitterBackoff(500*time.Millisecond, time.Second, i)
 		select {
 		case <-time.After(waitTime):
 		case <-ctx.Done():
@@ -420,9 +421,9 @@ func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) error {
 }
 
 type TaskStatus struct {
-	status    int
-	statement []byte
 	err       error
+	statement []byte
+	status    int
 }
 
 func (t *TaskStatus) Status() string {

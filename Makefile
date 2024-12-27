@@ -1,5 +1,4 @@
 GOPATH=$(shell go env GOPATH)
-GOLANGCI_LINT_VERSION=v1.55.2
 
 delay: delay-publisher delay-consumer
 
@@ -90,13 +89,35 @@ clean:
 
 	@echo "done!"
 
+GOLANGCI_LINT_VERSION=v1.55.2
+GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
 lint: ## run all the lint tools, install golangci-lint if not exist
-ifeq (,$(wildcard $(GOPATH)/bin/golangci-lint))
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null
-	$(GOPATH)/bin/golangci-lint --verbose run
-else
-	$(GOPATH)/bin/golangci-lint --verbose run
-endif
+	@if [ ! -x "$(GOLANGCI_LINT_TOOL)" ]; then \
+		echo "Installing golangci-lint..."; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null; \
+	fi
+	@$(if $(wildcard $(GOLANGCI_LINT_TOOL)),echo "Running golangci-lint...";) \
+	$(GOLANGCI_LINT_TOOL) --verbose run
+
+FIELDALIGNMENT_TOOL = $(GOPATH)/bin/fieldalignment
+.PHONY: vet
+vet: ## Field Alignment
+	@if [ ! -x "$(FIELDALIGNMENT_TOOL)" ]; then \
+		echo "Installing fieldalignment..."; \
+		go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest; \
+	fi
+	@$(if $(wildcard $(FIELDALIGNMENT_TOOL)),echo "Running go vet with fieldalignment...";) \
+	go vet -vettool=$(FIELDALIGNMENT_TOOL) ./... || exit 0
+
+.PHONY: vet-fix
+vet-fix: ##If fixed, the annotation for struct fields will be removed
+	@if [ ! -x "$(FIELDALIGNMENT_TOOL)" ]; then \
+		echo "Installing fieldalignment..."; \
+		go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest; \
+	fi
+	@$(if $(wildcard $(FIELDALIGNMENT_TOOL)),echo "Running fieldalignment -fix...";) \
+	$(FIELDALIGNMENT_TOOL) -fix ./... || exit 0
+
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
  		sequential sequential-publisher sequential-consumer sequential-publisher-ack clean
