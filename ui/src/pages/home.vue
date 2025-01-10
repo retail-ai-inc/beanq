@@ -23,23 +23,6 @@
                  :success_count="success_count"
                  :db_size="db_size"/>
     </div>
-
-    <div class="container-fluid text-center">
-      <div class="row justify-content-between">
-        <div class="col-4">
-          <Command :commands="commands"/>
-          <KeySpace :keyspace="keyspace" class="mt-1"/>
-        </div>
-        <div class="col-4">
-          <Client :clients="clients"/>
-          <Memory :memory="memory" class="mt-1"/>
-        </div>
-        <div class="col-4">
-          <Stats :stats="stats"/>
-        </div>
-      </div>
-    </div>
-
   </div>
 </template>
 
@@ -47,12 +30,6 @@
 import {ref, reactive, onMounted,onUnmounted, toRefs,} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
-import Command from "./components/command.vue";
-import Client from "./components/client.vue";
-import Memory from "./components/memory.vue";
-import KeySpace from "./components/keySpace.vue";
-import Stats from "./components/stats.vue";
-
 
 let data = reactive({
   "queue_total": 0,
@@ -60,11 +37,6 @@ let data = reactive({
   "num_cpu": 0,
   "fail_count": 0,
   "success_count": 0,
-  "commands": [],
-  "clients": {},
-  "stats": {},
-  "keyspace": [],
-  "memory": {},
   "queuedMessagesOption":{},
   "messageRatesOption":{},
   "nodeId":"",
@@ -108,11 +80,6 @@ const {
   num_cpu,
   fail_count,
   success_count,
-  commands,
-  clients,
-  stats,
-  keyspace,
-  memory,
   queuedMessagesOption,
   messageRatesOption,
 } = toRefs(data);

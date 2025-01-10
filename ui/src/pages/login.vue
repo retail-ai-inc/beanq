@@ -12,7 +12,7 @@
           </div>
 
           <button type="button" class="btn btn-primary" style="margin-top: 0.625rem" @click="onSubmit">Login</button>
-          <div id="errorMsg" style="color: red;margin-top:0.625rem;">{{msg}}</div>
+          <div id="errorMsg" style="color: red;margin-top:0.625rem;text-align: left">{{msg}}</div>
 
           <button type="button" class="btn btn-outline-secondary" @click="googleLogin" style="margin-top: 1rem;">
             <svg xmlns="http://www.w3.org/2000/svg" style="float: left;margin-top: 0.3rem;" width="16" height="16" fill="currentColor" class="bi bi-google" viewBox="0 0 16 16">
@@ -48,12 +48,24 @@ onMounted(async ()=>{
       return;
     }
   }
+
+  window.addEventListener("keydown",handleKeyDown)
 })
+onUnmounted(()=>{
+  window.removeEventListener("keydown",handleKeyDown)
+})
+
+function handleKeyDown(event){
+  if(event.key === "Enter"){
+    onSubmit(event)
+  }
+  console.log(event)
+}
 
 async function onSubmit(event){
 
   if (data.user.username == "" || data.user.password == ""){
-    console.log("can not empty");
+    data.msg = "field can't empty"
     return;
   }
   //,{headers:{"Content-Type":"multipart/form-data"}}

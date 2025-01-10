@@ -2,7 +2,7 @@
 <template>
   <nav class="main-header navbar navbar-expand navbar-danger navbar-dark">
     <div class="container-fluid">
-      <ul class="navbar-nav w-100">
+      <ul class="navbar-nav">
         <li class="nav-item">
           <router-link to="/admin/home" class="nav-link" :class="route === '/admin/home' ? 'active' : ''">
             Home
@@ -57,6 +57,21 @@
             </li>
           </ul>
         </li>
+      </ul>
+      <ul class="navbar-nav">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+            Language
+          </a>
+          <ul class="dropdown-menu dropdown-menu-color">
+            <li>
+              <a href="javascript:;" class="dropdown-item">English</a>
+            </li>
+            <li>
+              <a href="javascript:;" class="dropdown-item">日本語 (Japanese)</a>
+            </li>
+          </ul>
+        </li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
             Setting
@@ -77,9 +92,9 @@
                 Logout
               </router-link>
             </li>
-<!--            <li><a class="dropdown-item" @click="optLog" href="javascript:;">Operation Log</a></li>-->
-<!--            <li><a class="dropdown-item" @click="userList" href="javascript:;">User</a></li>-->
-<!--            <li><a class="dropdown-item" @click="logout" href="javascript:;">Logout</a></li>-->
+            <!--            <li><a class="dropdown-item" @click="optLog" href="javascript:;">Operation Log</a></li>-->
+            <!--            <li><a class="dropdown-item" @click="userList" href="javascript:;">User</a></li>-->
+            <!--            <li><a class="dropdown-item" @click="logout" href="javascript:;">Logout</a></li>-->
           </ul>
         </li>
       </ul>

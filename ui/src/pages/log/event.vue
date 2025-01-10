@@ -4,21 +4,21 @@
     <div class="container-fluid">
 
       <!--search-->
-        <div class="mb-3 row">
+        <div class="row">
 
-          <div class="col-2">
+          <div class="col-md-3">
             <div class="row">
-            <label for="formId" class="col-sm-3 col-form-label text-end">Id:</label>
-            <div class="col-sm-9">
+            <label for="formId" class="col-md-4 col-form-label text-end">Id:</label>
+            <div class="col-md-8">
               <input type="text" class="form-control" id="formId" name="formId"  v-model="form.id">
             </div>
             </div>
           </div>
 
-          <div class="col-2">
+          <div class="col-md-3">
             <div class="row">
-              <label for="formStatus" class="col-sm-3 col-form-label text-end">Status:</label>
-              <div class="col-sm-9">
+              <label for="formStatus" class="col-md-4 col-lg-6 col-form-label text-end">Status:</label>
+              <div class="col-md-8 col-lg-6">
                 <select class="form-select" aria-label="Default select" id="formStatus" name="formStatus" style="cursor: pointer" v-model="form.status">
                   <option selected value="">Open this select</option>
                   <option value="published">Published</option>
@@ -44,7 +44,7 @@
             <th scope="col">Id</th>
             <th scope="col">Channel</th>
             <th scope="col">Topic</th>
-            <th scope="col">MoodType</th>
+            <th scope="col">Mood Type</th>
             <th scope="col">Status</th>
             <th scope="col">AddTime</th>
             <th scope="col">Payload</th>
@@ -70,17 +70,35 @@
               </span>
             </td>
             <td>
-              <div class="btn-group-sm" role="group">
-                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                  actions
-                </button>
-                <ul class="dropdown-menu">
-                  <!--v-if="item.status == 'failed'"-->
-                  <li ><a class="dropdown-item" href="javascript:;" @click="retryInfo(item)">Retry</a></li>
-                  <li><a class="dropdown-item" href="javascript:;" @click="deleteInfo(item)">Delete</a></li>
-                  <li><a class="dropdown-item" href="javascript:;" @click="editModal(item)">Edit Payload</a></li>
-                </ul>
-              </div>
+              <a class="btn btn-success icon-button" href="javascript:;" role="button" title="Retry" @click="retryModal(item)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="currentColor" class="bi bi-collection-play" viewBox="0 0 16 16">
+                  <path d="M2 3a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 0-1h-11A.5.5 0 0 0 2 3zm2-2a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 0-1h-7A.5.5 0 0 0 4 1zm2.765 5.576A.5.5 0 0 0 6 7v5a.5.5 0 0 0 .765.424l4-2.5a.5.5 0 0 0 0-.848l-4-2.5z"/>
+                  <path d="M1.5 14.5A1.5 1.5 0 0 1 0 13V6a1.5 1.5 0 0 1 1.5-1.5h13A1.5 1.5 0 0 1 16 6v7a1.5 1.5 0 0 1-1.5 1.5h-13zm13-1a.5.5 0 0 0 .5-.5V6a.5.5 0 0 0-.5-.5h-13A.5.5 0 0 0 1 6v7a.5.5 0 0 0 .5.5h13z"/>
+                </svg>
+              </a>
+              <a class="btn btn-danger icon-button" href="javascript:;" role="button" title="Delete" @click="deleteModal(item)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                  <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                  <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                </svg>
+              </a>
+              <a class="btn btn-primary icon-button" href="javascript:;" role="button" title="Edit" @click="editModal(item)">
+                <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="currentColor" class="bi bi-pencil-square" viewBox="0 0 16 16">
+                  <path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/>
+                  <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/>
+                </svg>
+              </a>
+<!--              <div class="btn-group-sm" role="group">-->
+<!--                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">-->
+<!--                  actions-->
+<!--                </button>-->
+<!--                <ul class="dropdown-menu">-->
+<!--                  &lt;!&ndash;v-if="item.status == 'failed'"&ndash;&gt;-->
+<!--                  <li ><a class="dropdown-item" href="javascript:;" @click="retryInfo(item)">Retry</a></li>-->
+<!--                  <li><a class="dropdown-item" href="javascript:;" @click="deleteInfo(item)">Delete</a></li>-->
+<!--                  <li><a class="dropdown-item" href="javascript:;" @click="editModal(item)">Edit Payload</a></li>-->
+<!--                </ul>-->
+<!--              </div>-->
             </td>
           </tr>
         </tbody>
@@ -117,6 +135,44 @@
         </div>
       </div>
       <!--edit modal end-->
+      <!--retry modal begin-->
+      <div class="modal fade" data-bs-keyboard="false" tabindex="-1" aria-labelledby="retryLabel" aria-hidden="true" id="retryModal">
+        <div class="modal-dialog modal-md modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="retryLabel">Are you sure to retry?</h1>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <p>Trying again will not restore the data</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-danger" @click="retryInfo">Yes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!--retry modal end-->
+      <!--delete modal begin-->
+      <div class="modal fade" data-bs-keyboard="false" tabindex="-1" aria-labelledby="deleteLabel" aria-hidden="true" id="deleteModal">
+        <div class="modal-dialog modal-md modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="deleteLabel">Are you sure to delete?</h1>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <p>If you need to restore, please contact the administrator.</p>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-danger" @click="deleteInfo">Yes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!--delete modal end-->
     </div>
   </div>
 </template>
@@ -139,24 +195,53 @@ let data = reactive({
   isFormat:false,
   sseEvent:null,
   infoDetailModal:null,
+  retryModal:null,
+  deleteModal:null,
+  retryItem:{},
+  deleteId:""
 })
-// send payload into queue to consume it again
-async function retryInfo(item){
-  
-  try{
-    let res = await eventApi.Retry(item._id,item);
+
+
+function deleteModal(item){
+  data.deleteId = "";
+  const ele = document.getElementById("deleteModal");
+  data.deleteModal = new bootstrap.Modal(ele);
+  data.deleteModal.show(ele);
+  data.deleteId = item._id;
+}
+
+// delete log
+async function deleteInfo(){
+
+  if(data.deleteId == ""){
+    return;
+  }
+  try {
+    let res = await eventApi.Delete(data.deleteId);
   }catch (e) {
-    console.log("retry err:",e)
+    console.log("delete err:",e);
   }
 
 }
-// delete log
-async function deleteInfo(item){
 
-  try {
-    let res = await eventApi.Delete(item._id);
+function retryModal(item){
+  data.retryItem = {};
+  const eleRetry = document.getElementById("retryModal");
+  data.retryModal = new bootstrap.Modal(eleRetry);
+  data.retryModal.show(eleRetry);
+  data.retryItem = item;
+}
+
+// send payload into queue to consume it again
+async function retryInfo(){
+
+  if(data.retryItem._id == ""){
+    return;
+  }
+  try{
+    let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
   }catch (e) {
-    console.log("delete err:",e);
+    console.log("retry err:",e)
   }
 
 }
@@ -284,5 +369,8 @@ const {eventLogs,form,page,total,cursor,detail} = toRefs(data);
 .event{
   transition: opacity 0.5s ease;
   opacity: 1;
+}
+.icon-button{
+  width: 2.2rem;height:2.2rem;padding:0.2rem 0.5rem 0.5rem;margin-right: 0.2rem;
 }
 </style>

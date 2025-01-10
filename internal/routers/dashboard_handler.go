@@ -11,7 +11,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/spf13/cast"
 	"net/http"
 	"runtime"
 	"strings"
@@ -66,15 +65,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	defer timer.Stop()
 
 	var (
-		err error
-		//redis info
-		server       map[string]any
-		persistence  map[string]any
-		memory       map[string]any
-		command      []map[string]any
-		clients      map[string]any
-		stats        map[string]any
-		keyspace     []map[string]any
+		err          error
 		keys         []string
 		dbSize       int64
 		failCount    int64
@@ -87,84 +78,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		case <-timer.C:
 		}
 		timer.Reset(10 * time.Second)
-		func() {
-			ctx1, cancel1 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel1()
-			server, err = client.Server(ctx1)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-		func() {
-			ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel2()
-			persistence, err = client.Persistence(ctx2)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-		func() {
-			ctx3, cancel3 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel3()
-			memory, err = client.Memory(ctx3)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-		func() {
-			ctx4, cancel4 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel4()
-			command, err = client.CommandStats(ctx4)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-
-		func() {
-			ctx5, cancel5 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel5()
-			clients, err = client.Clients(ctx5)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-		func() {
-			ctx6, cancel6 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel6()
-			stats, err = client.Stats(ctx6)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-		func() {
-			ctx7, cancel7 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel7()
-			keyspace, err = client.KeySpace(ctx7)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
 
 		numCpu := runtime.NumCPU()
 
@@ -245,15 +158,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			"num_cpu":       numCpu,
 			"fail_count":    failCount,
 			"success_count": successCount,
-			"used_memory":   cast.ToInt(memory["used_memory_rss"]) / 1024 / 1024,
-			"total_memory":  cast.ToInt(memory["total_system_memory"]) / 1024 / 1024,
-			"commands":      command,
-			"clients":       clients,
-			"stats":         stats,
-			"keyspace":      keyspace,
-			"memory":        memory,
-			"server":        server,
-			"persistence":   persistence,
 			"queues":        queues,
 			"nodeId":        client.NodeId(nctx),
 		}

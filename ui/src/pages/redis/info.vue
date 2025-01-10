@@ -158,16 +158,43 @@
         </li>
       </ul>
     </div>
+
+    <div class="container-fluid text-center">
+      <div class="row justify-content-between">
+        <div class="col-4">
+          <Command :commands="commands"/>
+          <KeySpace :keyspace="keyspace" class="mt-1"/>
+        </div>
+        <div class="col-4">
+          <Client :clients="clients"/>
+          <Memory :memory="memory" class="mt-1"/>
+        </div>
+        <div class="col-4">
+          <Stats :stats="stats"/>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
   
   
 <script setup>
 
-import { reactive,onMounted,onUnmounted } from "vue";
+import { reactive,onMounted,onUnmounted,toRefs } from "vue";
 import { useRouter } from 'vueRouter';
+import Command from "../components/command.vue";
+import Client from "../components/client.vue";
+import Memory from "../components/memory.vue";
+import KeySpace from "../components/keySpace.vue";
+import Stats from "../components/stats.vue";
 
-let info = reactive({
+let data = reactive({
+  "info":{},
+  "commands": [],
+  "keyspace": [],
+  "clients": {},
+  "stats": {},
+  "memory": {},
   sse:null
 });
 
@@ -179,21 +206,21 @@ onMounted(async ()=>{
   const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
   const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
 
-  if(info.sse){
-    info.sse.close();
+  if(data.sse){
+    data.sse.close();
   }
-  info.sse = sseApi.Init("redis");
-  info.sse.onopen = () => {
+  data.sse = sseApi.Init("redis");
+  data.sse.onopen = () => {
     console.log("success")
   }
-  info.sse.addEventListener("redis_info",function (res) {
+  data.sse.addEventListener("redis_info",function (res) {
     let body = JSON.parse(res.data);
     if (body.code !== "0000"){
       return
     }
-    Object.assign(info,body.data);
+    Object.assign(data,body.data);
   })
-  info.sse.onerror = (err)=>{
+  data.sse.onerror = (err)=>{
     //useRe.push("/login");
     console.log(err)
   }
@@ -201,9 +228,10 @@ onMounted(async ()=>{
 })
 
 onUnmounted(()=>{
-  info.sse.close();
+  data.sse.close();
 })
 
+const{commands,clients, stats,keyspace,memory,info} = toRefs(data);
 </script>
   
 <style scoped>
