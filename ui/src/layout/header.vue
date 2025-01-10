@@ -163,14 +163,14 @@ const {nodes, activeNodeId} = toRefs(data);
 
 .main-header {
   transition: margin-left .3s ease-in-out;
-  margin-left: 250px;
+  margin-left: 15vw;
   background-color: #B197FC;
   border-bottom: 1px solid #4b545c;
   z-index: 1034;
   color: #ffffff;
 }
 .navbar {
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   position: relative;
   display: flex;
   align-items: center;

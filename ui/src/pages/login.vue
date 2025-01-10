@@ -59,7 +59,6 @@ function handleKeyDown(event){
   if(event.key === "Enter"){
     onSubmit(event)
   }
-  console.log(event)
 }
 
 async function onSubmit(event){

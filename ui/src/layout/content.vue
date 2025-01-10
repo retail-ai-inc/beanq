@@ -68,7 +68,7 @@ watch(() => useR.fullPath, (newVal, oldVal) => {
 <style scoped>
 
 .content-wrapper {
-  margin-left: 250px;
+  margin-left: 15vw;
   transition: margin-left .3s ease-in-out;
   height: 100%;
   background-color: #f4f6f9;

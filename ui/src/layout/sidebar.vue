@@ -76,7 +76,7 @@ const {nodes, activeNodeId} = toRefs(data);
   overflow-y: hidden;
   z-index: 1038;
   transition: margin-left .3s ease-in-out, width .3s ease-in-out;
-  width: 250px;
+  width: 15vw;
 }
 .elevation-4 {
   box-shadow: 0 14px 28px rgba(0, 0, 0, .25), 0 10px 10px rgba(0, 0, 0, .22) !important;
@@ -93,7 +93,7 @@ const {nodes, activeNodeId} = toRefs(data);
   border-bottom: 1px solid #4b545c;
   display: flex;
   align-items: center;
-  font-size: 1.5rem;
+  font-size: 1.15rem;
   padding: .8rem .5rem;
   transition: width .3s ease-in-out;
   white-space: nowrap;
@@ -112,7 +112,7 @@ const {nodes, activeNodeId} = toRefs(data);
 
 .sidebar .nav-link {
   color: #c2c7d0;
-  font-size: 1.25rem;
+  font-size: 1.05rem;
 }
 .sidebar .nav-item a:hover {
   color: #fff !important;

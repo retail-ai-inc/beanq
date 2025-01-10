@@ -6,7 +6,7 @@
       <!--search-->
         <div class="row">
 
-          <div class="col-md-3">
+          <div class="col-md-2">
             <div class="row">
             <label for="formId" class="col-md-4 col-form-label text-end">Id:</label>
             <div class="col-md-8">
@@ -17,8 +17,8 @@
 
           <div class="col-md-3">
             <div class="row">
-              <label for="formStatus" class="col-md-4 col-lg-6 col-form-label text-end">Status:</label>
-              <div class="col-md-8 col-lg-6">
+              <label for="formStatus" class="col-md-4 col-form-label text-end">Status:</label>
+              <div class="col-md-8">
                 <select class="form-select" aria-label="Default select" id="formStatus" name="formStatus" style="cursor: pointer" v-model="form.status">
                   <option selected value="">Open this select</option>
                   <option value="published">Published</option>
@@ -37,6 +37,9 @@
         </div>
       <!--search end-->
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      <div class="row">
+        <div class="col-12">
+          <div class="table-responsive">
       <table class="table table-striped table-hover">
         <thead>
           <tr>
@@ -88,22 +91,14 @@
                   <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/>
                 </svg>
               </a>
-<!--              <div class="btn-group-sm" role="group">-->
-<!--                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">-->
-<!--                  actions-->
-<!--                </button>-->
-<!--                <ul class="dropdown-menu">-->
-<!--                  &lt;!&ndash;v-if="item.status == 'failed'"&ndash;&gt;-->
-<!--                  <li ><a class="dropdown-item" href="javascript:;" @click="retryInfo(item)">Retry</a></li>-->
-<!--                  <li><a class="dropdown-item" href="javascript:;" @click="deleteInfo(item)">Delete</a></li>-->
-<!--                  <li><a class="dropdown-item" href="javascript:;" @click="editModal(item)">Edit Payload</a></li>-->
-<!--                </ul>-->
-<!--              </div>-->
             </td>
           </tr>
         </tbody>
 
       </table>
+          </div>
+        </div>
+      </div>
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
 
       <!--edit modal-->
