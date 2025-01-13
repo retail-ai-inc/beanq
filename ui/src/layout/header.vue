@@ -30,17 +30,17 @@
           <ul class="dropdown-menu dropdown-menu-color">
             <li>
               <router-link to="/admin/log/event" class="dropdown-item" :class="route ==='/admin/log/event' ? 'active' : ''">
-                EventLog
+                Event Log
               </router-link>
             </li>
             <li>
               <router-link to="/admin/log/dlq" class="dropdown-item" :class="route === '/admin/log/dlq' ? 'active' : ''">
-                DLQLog
+                DLQ Log
               </router-link>
             </li>
             <li>
               <router-link to="/admin/log/workflow" class="dropdown-item" :class="route === '/admin/log/workflow' ? 'active' : ''">
-                WorkFlowLog
+                WorkFlow Log
               </router-link>
             </li>
           </ul>
