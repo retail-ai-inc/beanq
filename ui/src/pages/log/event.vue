@@ -4,126 +4,99 @@
     <div class="container-fluid">
 
       <!--search-->
-        <div class="mb-3 row">
-
-          <div class="col-2">
-            <div class="row">
-            <label for="formId" class="col-sm-3 col-form-label text-end">Id:</label>
-            <div class="col-sm-9">
-              <input type="text" class="form-control" id="formId" name="formId"  v-model="form.id">
-            </div>
-            </div>
-          </div>
-
-          <div class="col-2">
-            <div class="row">
-              <label for="formStatus" class="col-sm-3 col-form-label text-end">Status:</label>
-              <div class="col-sm-9">
-                <select class="form-select" aria-label="Default select" id="formStatus" name="formStatus" style="cursor: pointer" v-model="form.status">
-                  <option selected value="">Open this select</option>
-                  <option value="published">Published</option>
-                  <option value="success">Success</option>
-                  <option value="failed">Failed</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-2">
-            <div class="col-auto">
-              <button type="submit" class="btn btn-primary mb-3" @click="search">Search</button>
-            </div>
-          </div>
-        </div>
+      <Search :form="form" @search="search"/>
       <!--search end-->
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-      <table class="table table-striped table-hover">
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            <th scope="col">Id</th>
-            <th scope="col">Channel</th>
-            <th scope="col">Topic</th>
-            <th scope="col">MoodType</th>
-            <th scope="col">Status</th>
-            <th scope="col">AddTime</th>
-            <th scope="col">Payload</th>
-            <th scope="col">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="(item, key) in eventLogs" :key="key" style="height: 3rem;line-height:3rem">
-            <th scope="row">{{parseInt(key)+1}}</th>
-            <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item.id}}</router-link></td>
-            <td>{{item.channel}}</td>
-            <td>{{item.topic}}</td>
-            <td>{{item.moodType}}</td>
-            <td>
-              <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
-              <span v-else-if="item.status == 'failed'" class="text-danger">{{item.status}}</span>
-              <span v-else-if="item.status == 'published'" class="text-warning">{{item.status}}</span>
-            </td>
-            <td>{{item.addTime}}</td>
-            <td>
-              <span class="d-block text-truncate" style="max-width: 30rem;">
-                {{item.payload}}
-              </span>
-            </td>
-            <td>
-              <div class="btn-group-sm" role="group">
-                <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                  actions
-                </button>
-                <ul class="dropdown-menu">
-                  <!--v-if="item.status == 'failed'"-->
-                  <li ><a class="dropdown-item" href="javascript:;" @click="retryInfo(item)">Retry</a></li>
-                  <li><a class="dropdown-item" href="javascript:;" @click="deleteInfo(item)">Delete</a></li>
-                  <li><a class="dropdown-item" href="javascript:;" @click="editModal(item)">Edit Payload</a></li>
-                </ul>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-
-      </table>
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-
-      <!--edit modal-->
-      <div class="modal fade" id="infoDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="infoDetailLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h1 class="modal-title fs-5" id="infoDetailLabel">Edit Payload</h1>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-              <div class="mb-3 row" v-for="(item,key) in detail" :key="key">
-                <label :for="key" class="col-sm-2 col-form-label" style="font-weight: bold">{{key}}</label>
-                <div class="col-sm-10">
-
-                  <div id="payloadAlertInfo" v-if="key === 'payload'">
-                  </div>
-
-                  <textarea class="form-control" id="payload" rows="3" v-if="key === 'payload'" v-model="detail.payload" @blur="payloadTrigger"></textarea>
-                  <input type="text" readonly :id="key" class="form-control-plaintext" :value="item" v-else>
-                </div>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-              <button type="button" class="btn btn-primary" @click="editInfo(detail)">Edit</button>
-            </div>
+      <div class="row">
+        <div class="col-12">
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead>
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Id</th>
+                  <th scope="col">Channel</th>
+                  <th scope="col">Topic</th>
+                  <th scope="col">Mood Type</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">AddTime</th>
+                  <th scope="col">Payload</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, key) in eventLogs" :key="key" style="height: 3rem;line-height:3rem">
+                  <th scope="row">{{parseInt(key)+1}}</th>
+                  <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item.id}}</router-link></td>
+                  <td>{{item.channel}}</td>
+                  <td>{{item.topic}}</td>
+                  <td>{{item.moodType}}</td>
+                  <td>
+                    <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
+                    <span v-else-if="item.status == 'failed'" class="text-danger">{{item.status}}</span>
+                    <span v-else-if="item.status == 'published'" class="text-warning">{{item.status}}</span>
+                  </td>
+                  <td>{{item.addTime}}</td>
+                  <td>
+                    <span class="d-block text-truncate" style="max-width: 30rem;">
+                      {{item.payload}}
+                    </span>
+                  </td>
+                  <td>
+                    <a class="btn btn-success icon-button" href="javascript:;" role="button" title="Retry" @click="retryModal(item)">
+                      <RetryIcon />
+                    </a>
+                    <a class="btn btn-danger icon-button" href="javascript:;" role="button" title="Delete" @click="deleteModal(item)">
+                      <DeleteIcon />
+                    </a>
+                    <a class="btn btn-primary icon-button" href="javascript:;" role="button" title="Edit" @click="editModal(item)">
+                      <EditIcon />
+                    </a>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
+      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+
+      <!--edit modal-->
+      <EditAction :label="infoDetailLabel" :id="showInfoDetail" :data="detail" @action="editInfo(detail)"></EditAction>
       <!--edit modal end-->
+      <!--retry modal begin-->
+      <Action :label="retryLabel" :id="showRetryModal" @action="retryInfo">
+        <template #title="{title}">
+          Are you sure to retry?
+        </template>
+        <template #body="{body}">
+          Trying again will not restore the data
+        </template>
+      </Action>
+      <!--retry modal end-->
+      <!--delete modal begin-->
+      <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteInfo">
+        <template #title="{title}">
+          Are you sure to delete?
+        </template>
+        <template #body="{body}">
+          If you need to restore, please contact the administrator.
+        </template>
+      </Action>
+      <!--delete modal end-->
     </div>
   </div>
 </template>
 <script setup>
-import { reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { reactive,onMounted,toRefs,onUnmounted,computed } from "vue";
 import { useRouter } from 'vueRouter';
 import Pagination from "../components/pagination.vue";
+import RetryIcon from "../components/icons/retry_icon.vue";
+import DeleteIcon from "../components/icons/delete_icon.vue";
+import EditIcon from "../components/icons/edit_icon.vue";
+import Search from "./event/search.vue";
+import EditAction from "../components/editAction.vue";
+import Action from "../components/action.vue";
 
 let data = reactive({
   eventLogs:[],
@@ -139,24 +112,59 @@ let data = reactive({
   isFormat:false,
   sseEvent:null,
   infoDetailModal:null,
+  retryModal:null,
+  deleteModal:null,
+  retryItem:{},
+  deleteId:"",
+  infoDetailLabel:"infoDetailLabel",
+  showInfoDetail:"showInfoDetail",
+  retryLabel:"retryLabel",
+  showRetryModal:"showRetryModal",
+  deleteLabel:"deleteLabel",
+  showDeleteModal:"showDeleteModal"
 })
-// send payload into queue to consume it again
-async function retryInfo(item){
-  
-  try{
-    let res = await eventApi.Retry(item._id,item);
+
+
+function deleteModal(item){
+  data.deleteId = "";
+  const ele = document.getElementById("showDeleteModal");
+  data.deleteModal = new bootstrap.Modal(ele);
+  data.deleteModal.show(ele);
+  data.deleteId = item._id;
+}
+
+// delete log
+async function deleteInfo(){
+
+  if(data.deleteId == ""){
+    return;
+  }
+  try {
+    let res = await eventApi.Delete(data.deleteId);
   }catch (e) {
-    console.log("retry err:",e)
+    console.log("delete err:",e);
   }
 
 }
-// delete log
-async function deleteInfo(item){
 
-  try {
-    let res = await eventApi.Delete(item._id);
+function retryModal(item){
+  data.retryItem = {};
+  const eleRetry = document.getElementById("showRetryModal");
+  data.retryModal = new bootstrap.Modal(eleRetry);
+  data.retryModal.show(eleRetry);
+  data.retryItem = item;
+}
+
+// send payload into queue to consume it again
+async function retryInfo(){
+
+  if(data.retryItem._id == ""){
+    return;
+  }
+  try{
+    let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
   }catch (e) {
-    console.log("delete err:",e);
+    console.log("retry err:",e)
   }
 
 }
@@ -182,27 +190,10 @@ function editModal(item){
     runTime:item.runTime,
     status:item.status
   };
-  const ele = document.getElementById("infoDetail");
+
+  const ele = document.getElementById("showInfoDetail");
   data.infoDetailModal = new bootstrap.Modal(ele);
   data.infoDetailModal.show(ele);
-}
-
-// Verify the JSON format of the payload
-async function payloadTrigger(){
-
-  data.isFormat = false;
-  try {
-    await JSON.parse(data.detail.payload);
-  }catch (e) {
-    data.isFormat = true;
-  }
-  if (data.isFormat === true){
-      await eventApi.Alert("Must be in JSON format","danger");
-      return;
-  }
-  const alertTrigger = new bootstrap.Alert('#my-alert');
-  alertTrigger.close();
-
 }
 
 async function editInfo(item){
@@ -277,12 +268,15 @@ onUnmounted(()=>{
   data.sseEvent.close();
 })
 
-const {eventLogs,form,page,total,cursor,detail} = toRefs(data);
+const {eventLogs,form,page,total,cursor,detail,retryLabel,showRetryModal,deleteLabel,showDeleteModal,infoDetailLabel,showInfoDetail} = toRefs(data);
 
 </script>
 <style scoped>
 .event{
   transition: opacity 0.5s ease;
   opacity: 1;
+}
+.icon-button{
+  width: 2.2rem;height:2.2rem;padding:0.2rem 0.5rem 0.5rem;margin-right: 0.2rem;
 }
 </style>

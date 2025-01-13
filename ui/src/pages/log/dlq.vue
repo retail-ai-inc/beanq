@@ -7,7 +7,7 @@
         <th scope="col">Id</th>
         <th scope="col">Channel</th>
         <th scope="col">Topic</th>
-        <th scope="col">MoodType</th>
+        <th scope="col">Mood Type</th>
         <th scope="col">Status</th>
         <th scope="col">AddTime</th>
         <th scope="col">Payload</th>

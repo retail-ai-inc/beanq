@@ -31,9 +31,11 @@ const dashboardApi = {
             trigger: 'axis'
         };
         lineOpt.legend = {
-            data: ['Ready', 'Unacked', 'Total']
+            data: ['Ready', 'Unacked', 'Total'],
+            top:'18%'
         };
         lineOpt.grid = {
+            top:'30%',
             left: '3%',
             right: '4%',
             bottom: '3%',
@@ -73,15 +75,17 @@ const dashboardApi = {
         let line = {};
         line.title = {
             text: 'Message rates',
-            subtext: '(chart:last minute)(?)',
+            subtext: '(chart:last minute)(10s)',
         };
         line.tooltip = {
             trigger: 'axis'
         };
         line.legend={
-            data: ['Publish', 'Confirm', 'Deliver', 'Redelivered', 'Acknowledge', 'Get(noack)']
+            data: ['Publish', 'Confirm', 'Deliver', 'Redelivered', 'Acknowledge', 'Get(noack)'],
+            top:'18%'
         };
         line.grid = {
+            top:'30%',
             left: '3%',
             right: '4%',
             bottom: '3%',
