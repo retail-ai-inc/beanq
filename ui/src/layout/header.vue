@@ -1,6 +1,11 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <template>
   <nav class="main-header navbar navbar-expand navbar-danger navbar-dark">
+    <div style="width: 1.5rem;height:1.5rem" @click="expand">
+        <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" fill="currentColor" class="bi bi-list" viewBox="0 0 16 16">
+          <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+        </svg>
+    </div>
     <div class="container-fluid">
       <ul class="navbar-nav">
         <li class="nav-item">
@@ -92,9 +97,6 @@
                 Logout
               </router-link>
             </li>
-            <!--            <li><a class="dropdown-item" @click="optLog" href="javascript:;">Operation Log</a></li>-->
-            <!--            <li><a class="dropdown-item" @click="userList" href="javascript:;">User</a></li>-->
-            <!--            <li><a class="dropdown-item" @click="logout" href="javascript:;">Logout</a></li>-->
           </ul>
         </li>
       </ul>
@@ -109,7 +111,8 @@ import {ref, toRefs, onMounted, watch, reactive} from "vue";
 
 const data = reactive({
   nodes: [],
-  activeNodeId: ""
+  activeNodeId: "",
+  isSide:false
 })
 
 const route = ref('/admin/home');
@@ -117,8 +120,28 @@ const route = ref('/admin/home');
 const uroute = useRoute();
 const urouter = useRouter();
 
+function expand(){
+
+  data.isSide = !data.isSide;
+
+  let sideWidth = "calc(15vw - 180px)";
+  if(!data.isSide){
+     sideWidth = "calc(15vw)";
+  }
+  let sideBarDom = document.getElementsByClassName("main-sidebar")[0];
+  sideBarDom.style.width = sideWidth;
+
+  [
+      document.getElementsByClassName("content-wrapper")[0],
+      document.getElementsByClassName("main-header")[0]
+  ].forEach(dm=>{
+    dm.style.marginLeft = sideWidth;
+  })
+}
 
 onMounted(async () => {
+
+  expand();
 
   const nodes = await dashboardApi.Nodes();
   data.nodes = nodes.data;

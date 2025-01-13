@@ -27,7 +27,6 @@
     <section class="content">
       <div class="container-fluid pb-4">
         <div class="card card-olive card-outline">
-          <div class="card-header"></div>
           <div class="card-body">
             <div class="row">
               <router-view v-slot="{Component}">

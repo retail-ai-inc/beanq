@@ -3,17 +3,11 @@
   <div class="home">
     <div class="chart-container">
       <div class="chart-h">
-        <v-chart class="chart" :option="queuedMessagesOption"/>
+        <v-chart class="chart" ref="line1"  :option="queuedMessagesOption"/>
       </div>
-<!--      <div class="chart-h">-->
-<!--        <v-chart class="chart" :option="refererOption"/>-->
-<!--      </div>-->
       <div class="chart-h">
-        <v-chart class="chart" :option="messageRatesOption"/>
+        <v-chart class="chart" ref="line2" :option="messageRatesOption"/>
       </div>
-<!--      <div class="chart-h">-->
-<!--        <v-chart class="chart" :option="barOption"/>-->
-<!--      </div>-->
     </div>
 
     <div class="container-fluid" style="margin-bottom: 40px">
@@ -42,8 +36,20 @@ let data = reactive({
   "nodeId":"",
   sse:null
 })
+
+const line1 = ref(null);
+const line2 = ref(null);
+
+function resize(){
+  [line1.value,line2.value].forEach(chart=>{
+    chart?.resize();
+  })
+}
+
 const useR = useRouter();
 onMounted(async () => {
+
+  window.addEventListener("resize",resize)
 
   if(data.sse){
     data.sse.close();
@@ -72,6 +78,7 @@ onMounted(async () => {
 })
 onUnmounted(()=>{
   data.sse.close();
+  window.removeEventListener("resize",resize)
 })
 
 const {
@@ -97,8 +104,8 @@ const {
 
 .chart-container {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* 两列，每列宽度相等 */
-  gap: 10px; /* 可选：设置元素之间的间距 */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }
 
 .chart-h {
@@ -106,9 +113,9 @@ const {
 }
 
 .chart {
-  background-color: #ffffff; /* 示例背景色，可以根据需要更改 */
-  /*border: 1px solid #ccc; !* 示例边框，可以根据需要更改 *!*/
-  box-sizing: border-box; /* 包括边框和内边距在内的宽度和高度计算 */
+  background-color: #ffffff;
+  /*border: 1px solid #ccc; */
+  box-sizing: border-box;
 }
 
 
