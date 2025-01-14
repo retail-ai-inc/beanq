@@ -27,7 +27,6 @@
     <section class="content">
       <div class="container-fluid pb-4">
         <div class="card card-olive card-outline">
-          <div class="card-header"></div>
           <div class="card-body">
             <div class="row">
               <router-view v-slot="{Component}">
@@ -68,7 +67,7 @@ watch(() => useR.fullPath, (newVal, oldVal) => {
 <style scoped>
 
 .content-wrapper {
-  margin-left: 250px;
+  margin-left: 15vw;
   transition: margin-left .3s ease-in-out;
   height: 100%;
   background-color: #f4f6f9;
