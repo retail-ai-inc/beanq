@@ -49,7 +49,7 @@ function resize(){
 const useR = useRouter();
 onMounted(async () => {
 
-  window.addEventListener("resize",resize)
+  window.addEventListener("resize",resize);
 
   if(data.sse){
     data.sse.close();
@@ -88,7 +88,7 @@ const {
   fail_count,
   success_count,
   queuedMessagesOption,
-  messageRatesOption,
+  messageRatesOption
 } = toRefs(data);
 </script>
 <style scoped>

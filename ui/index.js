@@ -3,6 +3,7 @@
   const { loadModule, version } = window["vue3-sfc-loader"];
   console.info("version of vue3-sfc-loader:",version);
 
+
   //vue create
   const options = {
 
@@ -11,6 +12,7 @@
       vueRouter: VueRouter,
       request:request,
       config:config,
+      Lang:Lang,
       //apis
       sseApi,
       scheduleApi,
