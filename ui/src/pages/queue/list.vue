@@ -21,7 +21,6 @@
                   <th scope="col">State</th>
                   <th scope="col">Memory usage</th>
                   <th scope="col">Idle</th>
-                  <th scope="col">Action</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -32,19 +31,6 @@
                   <td :class="d.state == 'Run' ? 'text-success-emphasis' : 'text-danger-emphasis'" class="align-middle">{{ d.state }}</td>
                   <td class="align-middle">{{ d.size }}</td>
                   <td class="align-middle">{{ d.idle }}</td>
-                  <td>
-                    <div class="btn-group" role="group" aria-label="Button group with nested dropdown">
-                      <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                          Actions
-                        </button>
-                        <ul class="dropdown-menu">
-                          <li><a class="dropdown-item" href="#">Delete</a></li>
-                          <li><a class="dropdown-item" href="#">Pause</a></li>
-                        </ul>
-                      </div>
-                    </div>
-                  </td>
                 </tr>
                 </tbody>
               </table>
@@ -55,59 +41,55 @@
       <Pagination :page="page" :total="total" @changePage="changePage"/>
     </div>
 </template>
-  
-  
-<script setup>
 
-import { reactive,onMounted,toRefs,onUnmounted } from "vue";
+<script setup>
+import { ref,onMounted } from "vue";
 import { useRouter } from 'vueRouter';
 import Pagination from "../components/pagination.vue";
 
-let pageSize = 10;
-let data = reactive({
-  queues:[],
-  page:1,
-  total:1
-})
+const [queues,page,pageSize,total,uRouter] = [ref([]),ref(1),ref(10),ref(1),useRouter()];
 
 function getQueue(page,pageSize){
   return request.get("queue/list",{"params":{"page":page,"pageSize":pageSize}});
 }
 
 onMounted(async ()=>{
-  let queue = await getQueue(data.page,10);
-  data.queues = {...queue.data};
+  let queue = await getQueue(page.value,10);
+  queues.value  = queue.data;
 })
 
 async function changePage(page){
   let queue = await getQueue(page,10);
-  data.queues = {...queue.data.data};
-  data.total = Math.ceil(queue.data.total / 10);
-  data.page = page;
+  queues.value = queue.data.data;
+  total.value = Math.ceil(queue.data.total / 10);
+  page.value = page;
 }
 
 function setId(id){
   return "#"+id;
 }
 
-const uRouter = useRouter();
 function detailQueue(item){
   uRouter.push("queue/detail/"+item.channel + ":" + item.topic);
 }
 
-const {queues,page,total} = toRefs(data);
 </script>
   
 <style scoped>
-.table .text-success-emphasis {
+
+.table{
+  .text-success-emphasis {
     color: var(--bs-green) !important;
+  }
+  .text-danger-emphasis {
+    color: var(--bs-danger) !important;
+  }
 }
+
 .table-striped th{
   font-weight: 400 !important;
 }
-.table .text-danger-emphasis {
-    color: var(--bs-danger) !important;
-}
+
 .channel {
   transition: opacity 0.5s ease;
   opacity: 1;

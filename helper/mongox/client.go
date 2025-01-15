@@ -56,6 +56,32 @@ func NewMongo(host, port string, username, password string, database, collection
 	return mongoX
 }
 
+func (t *MongoX) WorkFlowLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
+	skip := (page - 1) * pageSize
+	if skip < 0 {
+		skip = 0
+	}
+	opts := options.Find()
+	opts.SetSkip(skip)
+	opts.SetLimit(pageSize)
+	opts.SetSort(bson.D{{Key: "CreatedAt", Value: 1}})
+
+	cursor, err := t.database.Collection("workflow_logs").Find(ctx, filter, opts)
+	defer cursor.Close(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	var data []bson.M
+	if err := cursor.All(ctx, &data); err != nil {
+		return nil, 0, err
+	}
+	total, err := t.database.Collection("workflow_logs").CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data, total, nil
+}
+
 func (t *MongoX) EventLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
@@ -67,6 +93,7 @@ func (t *MongoX) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	opts.SetSort(bson.D{{Key: "addTime", Value: 1}})
 
 	cursor, err := t.database.Collection(t.collection).Find(ctx, filter, opts)
+	defer cursor.Close(ctx)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -135,4 +162,55 @@ func (t *MongoX) Edit(ctx context.Context, id string, payload any) (int64, error
 		return 0, err
 	}
 	return result.ModifiedCount, nil
+}
+
+func (t *MongoX) AddOptLog(ctx context.Context, data map[string]any) error {
+
+	_, err := t.database.Collection("opt_logs").InsertOne(ctx, data)
+	return err
+}
+
+func (t *MongoX) OptLogs(ctx context.Context, page, pageSize int64) ([]bson.M, int64, error) {
+
+	skip := (page - 1) * pageSize
+	if skip < 0 {
+		skip = 0
+	}
+	opts := options.Find()
+	opts.SetSkip(skip)
+	opts.SetLimit(pageSize)
+	opts.SetSort(bson.D{{Key: "addTime", Value: 1}})
+
+	filter := bson.M{}
+
+	cursor, err := t.database.Collection("opt_logs").Find(ctx, filter, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+	var data []bson.M
+	if err := cursor.All(ctx, &data); err != nil {
+		return nil, 0, err
+	}
+	total, err := t.database.Collection("opt_logs").CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data, total, nil
+}
+
+func (t *MongoX) DeleteOptLog(ctx context.Context, id string) (int64, error) {
+	filter := bson.M{}
+	if id != "" {
+		nid, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			return 0, err
+		}
+		filter["_id"] = nid
+	}
+	result, err := t.database.Collection("opt_logs").DeleteOne(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return result.DeletedCount, nil
 }

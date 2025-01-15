@@ -53,7 +53,13 @@
               </a>
               <ul class="dropdown-menu dropdown-menu-color">
                 <li v-for="(val,ind) in item.sub" :key="ind">
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''">
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Operation Log'" @click="optLog">
+                    {{val.label}}
+                  </router-link>
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'User'" @click="userList">
+                    {{val.label}}
+                  </router-link>
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Logout'" @click="logout">
                     {{val.label}}
                   </router-link>
                 </li>

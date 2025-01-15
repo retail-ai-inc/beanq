@@ -28,7 +28,12 @@
           </span>
         </td>
         <td>
-            <a href="javascript:;" @click="editUserModal(item)">Edit</a> <div class="vr"></div> <a href="javascript:;" @click="deleteUser(item)">Delete</a>
+          <a class="btn btn-danger" href="javascript:;" role="button" title="Delete" style="margin:0 .25rem;" @click="deleteUserModal(item)">
+            <DeleteIcon />
+          </a>
+          <a class="btn btn-primary" href="javascript:;" role="button" title="Edit" @click="editUserModal(item)" style="margin:0 .25rem;">
+            <EditIcon />
+          </a>
         </td>
       </tr>
       </tbody>
@@ -103,10 +108,27 @@
     </div>
     <!--add user modal end-->
 
+    <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteUser">
+      <template #title="{title}">
+        Are you sure to delete?
+      </template>
+      <template #body="{body}">
+        If you need to restore, please contact the administrator.
+      </template>
+    </Action>
+    <Btoast :id="id" ref="toastRef">
+    </Btoast>
   </div>
 </template>
 <script setup>
-import { reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,reactive,onMounted,toRefs,onUnmounted } from "vue";
+import DeleteIcon from "../components/icons/delete_icon.vue";
+import EditIcon from "../components/icons/edit_icon.vue";
+import Action from "../components/action.vue";
+import Btoast from "../components/btoast.vue";
+
+const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
+const [id,toastRef] = [ref("userToast"),ref(null)];
 
 let data = reactive({
   users:[],
@@ -163,18 +185,22 @@ function addUserModal(){
 
 async function addUser(e){
 
-  let next = e.currentTarget.nextElementSibling;
-  let res = await userApi.Add(data.userForm);
-  if(res.code != "0000"){
-    next.style.display = "block";
-    next.innerHTML = res.msg;
-    return
+  try {
+    let next = e.currentTarget.nextElementSibling;
+    let res = await userApi.Add(data.userForm);
+    if(res.code != "0000"){
+      next.style.display = "block";
+      next.innerHTML = res.msg;
+      return
+    }
+    next.style.display = "none";
+    data.addUserDetail.hide();
+    let users = await userApi.List();
+    data.users = users.data;
+  }catch (e) {
+    toastRef.value.show(e.message);
   }
-  next.style.display = "none";
-  data.addUserDetail.hide();
-  let users = await userApi.List();
-  data.users = users.data;
-
+  
 }
 
 async function editUser(){
@@ -186,14 +212,27 @@ async function editUser(){
   return
 }
 
-async function deleteUser(item){
+function deleteUserModal(item){
+  account.value = "";
+  const ele = document.getElementById("showDeleteModal");
+  delModal.value = new bootstrap.Modal(ele);
+  delModal.value.show(ele);
+  account.value  = item.account;
+}
 
-  let res = await userApi.Delete(item.account);
-  if(res.code == "0000"){
-    let res = await userApi.List();
-    data.users = res.data;
-    return
+async function deleteUser(){
+  delModal.value.hide();
+  try {
+    let res = await userApi.Delete(account.value);
+    if(res.code == "0000"){
+      let res = await userApi.List();
+      data.users = res.data;
+      toastRef.value.show("Success");
+    }
+  }catch (e) {
+    toastRef.value.show(e.message);
   }
+
 }
 
 function editUserModal(item){

@@ -28,15 +28,7 @@
 import {useRoute} from 'vueRouter';
 import {ref, toRefs, onMounted, watch, reactive} from "vue";
 
-const data = reactive({
-  nodes: [],
-  activeNodeId: ""
-})
-
-const route = ref('/admin/home');
-
-const uroute = useRoute();
-
+const [data,route,uroute] = [reactive({nodes:[],activeNodeId:""}),ref("/admin/home"),useRoute()];
 
 onMounted(async () => {
 
@@ -96,36 +88,42 @@ const {nodes, activeNodeId} = toRefs(data);
   display: flex;
   align-items: center;
   font-size: 1.15rem;
-  padding: 1.35rem .5rem;
+  padding: 0.85rem .5rem;
   transition: width .3s ease-in-out;
   white-space: nowrap;
   overflow: hidden;
 }
 
-.sidebar {
+.nav-flat {
+  margin: -.25rem -.5rem 0;
+}
+:root{
+  --white-color:#fff;
+  --link-color:#c2c7d0;
+  --back-color:#3d9970
+}
+.sidebar{
   height: calc(100vh - (3.5rem + 1px));
   overflow-x: hidden;
   overflow-y: auto;
   padding: 0 .5rem;
-}
 
-.nav-flat {
-  margin: -.25rem -.5rem 0;
+  .nav-link{
+    color: var(--link-color);
+    font-size: 1.05rem;
+  }
+  .nav-item a:hover{
+    color: var(--white-color);
+  }
+  .nav-sidebar{
+    .active{
+      background-color: var(--back-color);
+      a{
+        color: var(--white-color);
+      }
+    }
+  }
 }
-
-.sidebar .nav-link {
-  color: #c2c7d0;
-  font-size: 1.05rem;
-}
-.sidebar .nav-item a:hover {
-  color: #fff !important;
-}
-.sidebar .nav-sidebar .active {
-  background-color: #3d9970;
-}
-.sidebar .nav-sidebar .active a {
-   color: #fff !important;
- }
 
 </style>
 

@@ -32,15 +32,9 @@
                   <td>{{ d.memory }}</td>
                   <td>{{ d.process }}</td>
                   <td>
-                    <div class="btn-group-sm" role="group" aria-label="Button group with nested dropdown">
-                        <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                          Actions
-                        </button>
-                        <ul class="dropdown-menu">
-                          <li><a class="dropdown-item" href="#">Delete</a></li>
-                          <li><a class="dropdown-item" href="#">Pause</a></li>
-                        </ul>
-                    </div>
+                    <a class="btn btn-danger icon-button" href="javascript:;" role="button" title="Delete" @click="deleteModal(item)">
+                      <DeleteIcon />
+                    </a>
                   </td>
                 </tr>
                 </tbody>
@@ -50,48 +44,80 @@
         </div>
       </div>
       <Pagination :page="page" :total="total" @changePage="changePage"/>
+
+      <Btoast :id="id" ref="toastRef">
+      </Btoast>
+
     </div>
 </template>
   
   
 <script setup>
 
-import { reactive,toRefs,onMounted,onUnmounted } from "vue";
+import { ref,onMounted } from "vue";
 import Pagination from "./components/pagination.vue";
+import DeleteIcon from "./components/icons/delete_icon.vue";
+import Btoast from "./components/btoast.vue";
 
-const data = reactive({
-  page:1,
-  total:1,
-  schedules:[]
-})
+const [
+  page,
+  total,
+  schedules,
+  id,
+  toastRef
+] = [ref(1),ref(1),ref([]),ref("liveToast"),ref(null)];
 
-async function changePage(page){
-  let scheduleData = await scheduleApi.GetSchedule(page,10);
-  data.schedules = {...scheduleData.data};
-  data.total = Math.ceil(scheduleData.data.total / 10);
-  data.page = page;
+function deleteModal(item){}
+
+async function changePage(page,cursor){
+  try {
+    let scheduleData = await scheduleApi.GetSchedule(page,10);
+    const {code,data,msg} = scheduleData;
+    if(code !== "0000"){
+      return
+    }
+    schedules.value = data;
+    total.value = Math.ceil(data.total / 10);
+    page.value = page;
+  }catch (e) {
+    toastRef.value.show(e);
+  }
+
 }
+
 onMounted(async ()=>{
-  let scheduleData = await scheduleApi.GetSchedule(data.page,10);
-  data.schedules = {...scheduleData.data};
-  data.total = Math.ceil(scheduleData.data.total / 10);
+  try{
+    let scheduleData = await scheduleApi.GetSchedule(page.value,10);
+    schedules.value = scheduleData.data;
+    total.value = Math.ceil(scheduleData.data.total / 10);
+  }catch (e) {
+    toastRef.value.show(e);
+  }
 })
+
 function setScheduleId(id){
   return "#"+id;
 }
-const {page,total,schedules} = toRefs(data);
+
 </script>
   
 <style scoped>
-.table .text-success-emphasis{
+
+.table{
+  .text-success-emphasis{
     color:var(--bs-green) !important;
-}
-.table .text-danger-emphasis{
+  }
+  .text-danger-emphasis{
     color:var(--bs-danger) !important;
+  }
 }
+
 .schedule{
   transition: opacity 0.5s ease;
   opacity: 1;
+}
+.icon-button{
+  width: 2.2rem;height:2.2rem;padding:0.2rem 0.5rem 0.5rem;margin-right: 0.2rem;
 }
 </style>
   

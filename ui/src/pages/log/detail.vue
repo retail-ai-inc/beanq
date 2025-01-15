@@ -16,22 +16,20 @@
 </template>
 <script setup>
 
-import {reactive,toRefs,onMounted} from "vue";
-import { useRoute,useRouter } from 'vueRouter';
+import {ref,onMounted} from "vue";
+import { useRoute } from 'vueRouter';
 
 function getDetail(id){
   return request.get("/event_log/detail",{"params":{"id":id}})
 }
 
-let data = reactive({
-  detail:{}
-});
-
+let detail = ref({});
 const uRoute = useRoute();
+
 onMounted(async ()=>{
   let id = uRoute.params.id;
   let res = await getDetail(id);
-  data.detail = res.data;
+  detail.value = res.data;
 })
-const {detail} = toRefs(data);
+
 </script>

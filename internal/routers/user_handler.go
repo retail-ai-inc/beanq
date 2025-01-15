@@ -129,12 +129,12 @@ func (t *User) Delete(ctx *bwebframework.BeanContext) error {
 		return res.Json(ctx.Writer, http.StatusOK)
 	}
 
-	key := strings.Join([]string{viper.GetString("redis.prefix"), "users", account}, ":")
-	if err := Del(ctx.Request.Context(), t.client, key); err != nil {
+	key := strings.Join([]string{t.prefix, "users", account}, ":")
+
+	if err := t.client.Del(ctx.Request.Context(), key).Err(); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		return res.Json(ctx.Writer, http.StatusOK)
-
 	}
 	return res.Json(ctx.Writer, http.StatusOK)
 

@@ -43,13 +43,13 @@
                     </span>
                   </td>
                   <td>
-                    <a class="btn btn-success icon-button" href="javascript:;" role="button" title="Retry" @click="retryModal(item)">
+                    <a class="btn btn-success" href="javascript:;" role="button" title="Retry" @click="retryModal(item)" style="margin:0 .25rem;">
                       <RetryIcon />
                     </a>
-                    <a class="btn btn-danger icon-button" href="javascript:;" role="button" title="Delete" @click="deleteModal(item)">
+                    <a class="btn btn-danger" href="javascript:;" role="button" title="Delete" @click="deleteModal(item)" style="margin:0 .25rem;">
                       <DeleteIcon />
                     </a>
-                    <a class="btn btn-primary icon-button" href="javascript:;" role="button" title="Edit" @click="editModal(item)">
+                    <a class="btn btn-primary" href="javascript:;" role="button" title="Edit" @click="editModal(item)" style="margin:0 .25rem;">
                       <EditIcon />
                     </a>
                   </td>
@@ -275,8 +275,5 @@ const {eventLogs,form,page,total,cursor,detail,retryLabel,showRetryModal,deleteL
 .event{
   transition: opacity 0.5s ease;
   opacity: 1;
-}
-.icon-button{
-  width: 2.2rem;height:2.2rem;padding:0.2rem 0.5rem 0.5rem;margin-right: 0.2rem;
 }
 </style>
