@@ -28,12 +28,8 @@
           </span>
         </td>
         <td>
-          <a class="btn btn-danger" href="javascript:;" role="button" title="Delete" style="margin:0 .25rem;" @click="deleteUserModal(item)">
-            <DeleteIcon />
-          </a>
-          <a class="btn btn-primary" href="javascript:;" role="button" title="Edit" @click="editUserModal(item)" style="margin:0 .25rem;">
-            <EditIcon />
-          </a>
+          <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
+          <EditIcon @action="editUserModal(item)" />
         </td>
       </tr>
       </tbody>
@@ -129,31 +125,29 @@ import Btoast from "../components/btoast.vue";
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
+const [users,accountReadOnly,addUserDetail] = [ref([]),ref(false),ref(null)];
 
 let data = reactive({
-  users:[],
   userForm:{
     account:"",
     password:"",
     type:"normal",
     active:1,
     detail:""
-  },
-  accountReadOnly:false,
-  addUserDetail:null,
-})
+  }
+});
 
 onMounted(async ()=>{
   let res = await userApi.List();
-  data.users = res.data;
+  users.value = res.data;
 
   const ele = document.getElementById("addUserDetail");
   ele.addEventListener('hidden.bs.modal', () => {
     data.userForm = {};
-    data.accountReadOnly = false;
+    accountReadOnly.value = false;
   });
 
-})
+});
 
 onUnmounted(()=>{
     const ele = document.getElementById('addUserDetail');
@@ -162,7 +156,7 @@ onUnmounted(()=>{
 
       });
     }
-})
+});
 
 function checkValid(e){
 
@@ -179,8 +173,8 @@ function checkValid(e){
 
 function addUserModal(){
   const ele = document.getElementById("addUserDetail");
-  data.addUserDetail = new bootstrap.Modal(ele);
-  data.addUserDetail.show(ele);
+  addUserDetail.value = new bootstrap.Modal(ele);
+  addUserDetail.value.show(ele);
 }
 
 async function addUser(e){
@@ -194,9 +188,9 @@ async function addUser(e){
       return
     }
     next.style.display = "none";
-    data.addUserDetail.hide();
+    addUserDetail.value.hide();
     let users = await userApi.List();
-    data.users = users.data;
+    users.value = users.data;
   }catch (e) {
     toastRef.value.show(e.message);
   }
@@ -204,11 +198,11 @@ async function addUser(e){
 }
 
 async function editUser(){
-  console.info(data.userForm);
+
   let res = await userApi.Edit(data.userForm);
-  data.addUserDetail.hide();
-  let users = await userApi.List();
-  data.users = users.data;
+  addUserDetail.value.hide();
+  let user = await userApi.List();
+  users.value = user.data;
   return
 }
 
@@ -237,16 +231,16 @@ async function deleteUser(){
 
 function editUserModal(item){
   data.userForm = item;
-  data.accountReadOnly = true;
+  accountReadOnly.value = true;
   const ele = document.getElementById("addUserDetail");
 
-  data.addUserDetail = new bootstrap.Modal(ele);
-  data.addUserDetail.show(ele);
+  addUserDetail.value = new bootstrap.Modal(ele);
+  addUserDetail.value.show(ele);
 
   console.log(data.userForm);
 }
 
-const {users,userForm,accountReadOnly} = toRefs(data);
+const {userForm} = toRefs(data);
 </script>
 
 <style scoped>

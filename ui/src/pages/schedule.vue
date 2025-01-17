@@ -32,9 +32,7 @@
                   <td>{{ d.memory }}</td>
                   <td>{{ d.process }}</td>
                   <td>
-                    <a class="btn btn-danger icon-button" href="javascript:;" role="button" title="Delete" @click="deleteModal(item)">
-                      <DeleteIcon />
-                    </a>
+                    <DeleteIcon @action="deleteModal(item)"/>
                   </td>
                 </tr>
                 </tbody>

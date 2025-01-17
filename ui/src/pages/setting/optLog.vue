@@ -5,6 +5,7 @@
       <thead>
       <tr>
         <th scope="col">#</th>
+        <th scope="col">Add Time</th>
         <th scope="col">Account</th>
         <th scope="col">Visit</th>
         <th scope="col">Data</th>
@@ -14,17 +15,22 @@
       <tbody>
       <tr v-for="(item, key) in list" :key="key" style="height: 2.5rem;">
         <th scope="row" style="width: 5%">{{parseInt(key)+1}}</th>
+        <td>
+            <pre><code>{{item.addTime}}</code></pre>
+        </td>
         <td style="width: 15%">{{item.user}}</td>
-        <td style="width: 30%"><span class="d-inline-block text-truncate" style="max-width: 50rem">{{item.uri}}</span></td>
+        <td style="width: 30%">
+          <span class="d-inline-block text-truncate" style="max-width: 50rem">
+            <pre><code>{{item.uri}}</code></pre>
+          </span>
+        </td>
         <td style="width: 45%">
           <span class="d-inline-block text-truncate" style="max-width: 400px">
             {{item.data}}
           </span>
         </td>
         <td style="width: 5%">
-          <a class="btn btn-danger" href="javascript:;" @click="deleteShowModal(item)">
-            <Delete_icon />
-          </a>
+            <Delete_icon @action="deleteShowModal(item)"/>
         </td>
       </tr>
       </tbody>

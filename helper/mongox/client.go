@@ -112,10 +112,11 @@ func (t *MongoX) DetailEventLog(ctx context.Context, id string) (bson.M, error) 
 
 	filter := bson.M{}
 	if id != "" {
-		if _, err := primitive.ObjectIDFromHex(id); err != nil {
+		if objectId, err := primitive.ObjectIDFromHex(id); err != nil {
 			return nil, err
+		} else {
+			filter["_id"] = objectId
 		}
-		filter["id"] = id
 	}
 
 	single := t.database.Collection(t.collection).FindOne(ctx, filter)
