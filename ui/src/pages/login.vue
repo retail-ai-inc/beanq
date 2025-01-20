@@ -75,6 +75,7 @@ async function onSubmit(event){
   try{
     let res = await loginApi.Login(data.user.username,data.user.password);
     sessionStorage.setItem("token",res.data.token);
+    sessionStorage.setItem("nodeId",res.data.nodeId);
     useRe.push("/admin/home");
   }catch(err){
     if (err.response.status === 401){

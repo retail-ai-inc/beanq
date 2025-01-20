@@ -35,8 +35,8 @@
           <div v-if="item.sub.length > 0">
 
             <div v-if="item.label === 'Language'">
-              <a class="nav-link dropdown-toggle" :class=" item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                {{item.sub[0].label}}
+              <a class="nav-link dropdown-toggle" :class="item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                {{language}}
               </a>
               <ul class="dropdown-menu dropdown-menu-color">
                 <li v-for="(val,ind) in item.sub" :key="ind">
@@ -93,10 +93,7 @@ function chooseLang(obj){
   sessionStorage.setItem("lang",obj.index);
 }
 
-const route = ref('/admin/home');
-
-const uroute = useRoute();
-const urouter = useRouter();
+const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
 
 function expand(){
 
@@ -119,6 +116,10 @@ function expand(){
 
 onMounted(async () => {
 
+  let lang = sessionStorage.getItem("lang");
+  if(lang == "jp"){
+    language.value = "日本語 (Japanese)";
+  }
   await sessionStorage.setItem("lang","jp");
 
   expand();

@@ -1,3 +1,9 @@
+const langs = [
+    {"label":"English","index":0, "to":""},
+    {"label":"日本語 (Japanese)","index":1, "to":""},
+];
+
+
 const en_nav = [
     {
         "label":"Home",
@@ -36,10 +42,7 @@ const en_setting = [
     {
         "label":"Language",
         "tos":[],
-        "sub":[
-            {"label":"English","index":0, "to":""},
-            {"label":"日本語 (Japanese)","index":1, "to":""},
-        ]
+        "sub":langs
     },
     {
         "label":"Setting",
@@ -106,10 +109,7 @@ const jp_setting = [
     {
         "label":"Language",
         "tos":[],
-        "sub":[
-            {"label":"English","index":0, "to":""},
-            {"label":"日本語 (Japanese)","index":1, "to":""},
-        ]
+        "sub":langs
     },
     {
         "label":"設定",
@@ -121,9 +121,23 @@ const jp_setting = [
         ]
     },
 ];
-const jp_retry_modal = {};
-const jp_delete_modal = {};
-const jp_edit_modal = {};
+const jp_retry_modal = {
+    "title":"あなたは確かに再試すか?",
+    "body":"再度試すと、データは復元されません。",
+    "okButton":"はい",
+    "cancelButton":"キャンセル"
+};
+const jp_delete_modal = {
+    "title":"削除したいと思いますか？",
+    "body":"リストアが必要な場合は、管理者に連絡してください。",
+    "okButton":"はい",
+    "cancelButton":"キャンセル"
+};
+const jp_edit_modal = {
+    "title":"ペイロードの編集",
+    "okButton":"編集",
+    "cancelButton":"閉じる"
+};
 
 const I18n = [
     {"key":"en","value":{
@@ -138,8 +152,8 @@ const I18n = [
     {"key":"jp","value":{
         "nav":jp_nav, // []
         "setting":jp_setting, // []
-        "okButton":"Yes",
-        "cancelButton":"cancel",
+        "okButton":"はい",
+        "cancelButton":"キャンセル",
         "retryModal":jp_retry_modal, // {}
         "deleteModal":jp_delete_modal, // {}
         "editModal":jp_edit_modal // {}

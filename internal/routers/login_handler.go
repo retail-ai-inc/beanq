@@ -8,6 +8,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/googleAuth"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 
 	"net/http"
 	"strings"
@@ -65,7 +66,10 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		return result.Json(w, http.StatusInternalServerError)
 	}
 
-	result.Data = map[string]any{"token": token}
+	client := tool.ClientFac(t.client, t.prefix, "")
+	nodeId := client.NodeId(r.Context())
+
+	result.Data = map[string]any{"token": token, "nodeId": nodeId}
 
 	return result.Json(w, http.StatusOK)
 
@@ -75,7 +79,7 @@ func (t *Login) GoogleLogin(ctx *bwebframework.BeanContext) error {
 	w := ctx.Writer
 
 	gAuth := googleAuth.New()
-	
+
 	state := time.Now().String()
 	url := gAuth.AuthCodeUrl(state)
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")

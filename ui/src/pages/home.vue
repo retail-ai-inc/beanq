@@ -73,9 +73,6 @@ onMounted( () => {
     fail_count.value = result.data.fail_count;
     success_count.value = result.data.success_count;
 
-
-    sessionStorage.setItem("nodeId",result.data.nodeId);
-
     queuedMessagesOption.value = dashboardApi.QueueLine(result.data.queues);
     messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);
   })
