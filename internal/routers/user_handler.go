@@ -2,27 +2,27 @@ package routers
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/email"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 	"log"
 	"net/http"
-	"strings"
 )
 
 type User struct {
 	Account string `json:"account"`
 	client  redis.UniversalClient
+	mgo     *bmongo.BMongo
 	prefix  string
 }
 
-func NewUser(client redis.UniversalClient, prefix string) *User {
-	return &User{client: client, prefix: prefix}
+func NewUser(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *User {
+	return &User{client: client, mgo: x, prefix: prefix}
 }
 
 func (t *User) List(ctx *bwebframework.BeanContext) error {
@@ -33,30 +33,17 @@ func (t *User) List(ctx *bwebframework.BeanContext) error {
 	r := ctx.Request
 	w := ctx.Writer
 
-	nodeId := r.Header.Get("nodeId")
-	client := tool.ClientFac(t.client, t.prefix, nodeId)
+	page := cast.ToInt64(r.URL.Query().Get("page"))
+	pageSize := cast.ToInt64(r.URL.Query().Get("pageSize"))
 
-	pattern := strings.Join([]string{t.prefix, "users:*"}, ":")
-	keys, err := client.Keys(r.Context(), pattern)
+	data, total, err := t.mgo.UserLogs(r.Context(), nil, page, pageSize)
 
 	if err != nil {
-		res.Code = berror.InternalServerErrorMsg
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
+		return res.Json(w, http.StatusInternalServerError)
 	}
-
-	data := make([]any, 0)
-	for _, key := range keys {
-
-		r, err := HGetAll(r.Context(), t.client, key)
-		if err != nil {
-			fmt.Printf("hget err:%+v \n", err)
-			continue
-		}
-
-		data = append(data, r)
-	}
-	res.Data = data
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
 	return res.Json(w, http.StatusOK)
 }
 
@@ -77,23 +64,14 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 		res.Code = berror.MissParameterCode
 		res.Msg = "missing account"
 		return res.Json(w, http.StatusOK)
-
 	}
 
-	key := strings.Join([]string{t.prefix, "users", account}, ":")
-	data := make(map[string]any, 0)
-	data["account"] = account
-	data["password"] = password
-	data["type"] = typ
-	data["active"] = active
-	data["detail"] = detail
-
-	if err := HSet(r.Context(), t.client, key, data); err != nil {
+	if err := t.mgo.AddUser(r.Context(), map[string]any{"account": account, "password": password, "type": typ, "active": active, "detail": detail}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
-
+		return res.Json(w, http.StatusInternalServerError)
 	}
+
 	go func(ctx2 context.Context) {
 
 		client, err := email.NewEmail(ctx2, viper.GetString("ui.sendGrid.key"))
@@ -121,21 +99,20 @@ func (t *User) Delete(ctx *bwebframework.BeanContext) error {
 	res, cancel := response.Get()
 	defer cancel()
 
-	account := ctx.Request.PostFormValue("account")
+	id := ctx.Request.PostFormValue("id")
 
-	if account == "" {
+	if id == "" {
 		res.Code = berror.MissParameterMsg
 		res.Msg = "missing account field"
 		return res.Json(ctx.Writer, http.StatusOK)
 	}
 
-	key := strings.Join([]string{t.prefix, "users", account}, ":")
-
-	if err := t.client.Del(ctx.Request.Context(), key).Err(); err != nil {
+	if _, err := t.mgo.DeleteUser(ctx.Request.Context(), id); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		return res.Json(ctx.Writer, http.StatusOK)
 	}
+
 	return res.Json(ctx.Writer, http.StatusOK)
 
 }
@@ -148,25 +125,22 @@ func (t *User) Edit(ctx *bwebframework.BeanContext) error {
 	r := ctx.Request
 	w := ctx.Writer
 
+	id := r.FormValue("_id")
+	if id == "" {
+		res.Code = berror.MissParameterCode
+		res.Msg = "ID can't be empty"
+		return res.Json(w, http.StatusBadRequest)
+	}
 	account := r.FormValue("account")
 	password := r.FormValue("password")
 	active := r.FormValue("active")
 	typ := r.FormValue("type")
 	detail := r.FormValue("detail")
 
-	key := strings.Join([]string{viper.GetString("redis.prefix"), "users", account}, ":")
-	var data = map[string]any{
-		"account":  account,
-		"password": password,
-		"active":   active,
-		"detail":   detail,
-		"type":     typ,
-	}
-	if err := HSet(r.Context(), t.client, key, data); err != nil {
-		res.Code = berror.InternalServerErrorMsg
+	if _, err := t.mgo.EditUser(r.Context(), id, map[string]any{"account": account, "password": password, "active": active, "type": typ, "detail": detail}); err != nil {
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
-
+		return res.Json(w, http.StatusInternalServerError)
 	}
 	return res.Json(w, http.StatusOK)
 

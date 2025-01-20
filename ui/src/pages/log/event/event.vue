@@ -27,7 +27,9 @@
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 3rem;line-height:3rem">
                   <th scope="row">{{parseInt(key)+1}}</th>
-                  <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item.id}}</router-link></td>
+                  <td>
+                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item.id}}</router-link>
+                  </td>
                   <td>{{item.channel}}</td>
                   <td>{{item.topic}}</td>
                   <td>{{item.moodType}}</td>
@@ -39,7 +41,7 @@
                   <td>{{item.addTime}}</td>
                   <td>
                     <span class="d-block text-truncate" style="max-width: 30rem;">
-                      {{item.payload}}
+                      <pre><code>{{item.payload}}</code></pre>
                     </span>
                   </td>
                   <td>

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
@@ -18,11 +18,11 @@ import (
 
 type Log struct {
 	client redis.UniversalClient
-	mgo    *mongox.MongoX
+	mgo    *bmongo.BMongo
 	prefix string
 }
 
-func NewLog(client redis.UniversalClient, x *mongox.MongoX, prefix string) *Log {
+func NewLog(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *Log {
 	return &Log{client: client, mgo: x, prefix: prefix}
 }
 

@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
@@ -20,11 +20,11 @@ import (
 
 type Dashboard struct {
 	client redis.UniversalClient
-	mog    *mongox.MongoX
+	mog    *bmongo.BMongo
 	prefix string
 }
 
-func NewDashboard(client redis.UniversalClient, x *mongox.MongoX, prefix string) *Dashboard {
+func NewDashboard(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *Dashboard {
 	return &Dashboard{client: client, mog: x, prefix: prefix}
 }
 

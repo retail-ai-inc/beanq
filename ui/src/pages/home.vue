@@ -52,7 +52,7 @@ onMounted( () => {
   resizeObserver = new ResizeObserver((entries)=>{
     resize();
   })
-  resizeObserver.observe(parentEle);
+  Base.Debounce( resizeObserver.observe(parentEle),300) ;
 
   if(sse.value){
     sse.value.close();

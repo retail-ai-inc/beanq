@@ -5,16 +5,16 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"net/http"
 	"strings"
 	"time"
 )
 
-func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *mongox.MongoX, prefix string) bwebframework.HandleFunc {
+func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string) bwebframework.HandleFunc {
 	return HeaderRule(Auth(next, client, x, prefix))
 }
 
@@ -29,7 +29,7 @@ func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 	}
 }
 
-func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *mongox.MongoX, prefix string) bwebframework.HandleFunc {
+func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
 
 		result, cancelr := response.Get()

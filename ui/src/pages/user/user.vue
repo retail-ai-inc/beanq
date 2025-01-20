@@ -1,8 +1,9 @@
 <template>
   <div class="user">
-    <div class="d-flex justify-content-end">
+    <div class="d-flex justify-content-start">
       <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
     </div>
+    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
     <table class="table table-striped table-hover">
       <thead>
       <tr>
@@ -35,6 +36,7 @@
       </tbody>
 
     </table>
+    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
 
     <!--add user modal-->
     <div class="modal fade" id="addUserDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addUserDetailLabel" aria-hidden="true">
@@ -120,14 +122,16 @@
 import { ref,reactive,onMounted,toRefs,onUnmounted } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
+import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [users,accountReadOnly,addUserDetail] = [ref([]),ref(false),ref(null)];
+const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 
-let data = reactive({
+let datas = reactive({
   userForm:{
     account:"",
     password:"",
@@ -138,12 +142,18 @@ let data = reactive({
 });
 
 onMounted(async ()=>{
-  let res = await userApi.List();
-  users.value = res.data;
+  let res = await userApi.List(page.value,pageSize.value);
+  const {code,msg,data} = res;
+  if(code !== "0000"){
+
+  }
+  users.value = data.data;
+  cursor.value = data.cursor;
+  total.value = data.total;
 
   const ele = document.getElementById("addUserDetail");
   ele.addEventListener('hidden.bs.modal', () => {
-    data.userForm = {};
+    datas.userForm = {};
     accountReadOnly.value = false;
   });
 
@@ -158,6 +168,21 @@ onUnmounted(()=>{
     }
 });
 
+async function changePage(page,cursor){
+  page.value = page;
+  cursor.value = cursor;
+  sessionStorage.setItem("page",page)
+
+  let res = await userApi.List(page.value,pageSize.value);
+  const {code,msg,data} = res;
+  if(code !== "0000"){
+
+  }
+  users.value = data.data;
+  cursor.value = data.cursor;
+  total.value = data.total;
+}
+
 function checkValid(e){
 
   //check account
@@ -165,7 +190,7 @@ function checkValid(e){
     let next = e.currentTarget.nextElementSibling;
     next.style.display = "none";
     next.innerHTML = "Please input an account";
-    if(data.userForm.account == ""){
+    if(datas.userForm.account == ""){
       next.style.display = "block";
     }
   }
@@ -181,7 +206,7 @@ async function addUser(e){
 
   try {
     let next = e.currentTarget.nextElementSibling;
-    let res = await userApi.Add(data.userForm);
+    let res = await userApi.Add(datas.userForm);
     if(res.code != "0000"){
       next.style.display = "block";
       next.innerHTML = res.msg;
@@ -198,11 +223,17 @@ async function addUser(e){
 }
 
 async function editUser(){
-
-  let res = await userApi.Edit(data.userForm);
+  let res = await userApi.Edit(datas.userForm);
   addUserDetail.value.hide();
-  let user = await userApi.List();
-  users.value = user.data;
+  let user = await userApi.List(page.value,pageSize.value);
+  const {code,msg,data} = user;
+  if(code !== "0000"){
+
+  }
+  users.value = data.data;
+  cursor.value = data.cursor;
+  total.value = data.total;
+
   return
 }
 
@@ -211,16 +242,18 @@ function deleteUserModal(item){
   const ele = document.getElementById("showDeleteModal");
   delModal.value = new bootstrap.Modal(ele);
   delModal.value.show(ele);
-  account.value  = item.account;
+  account.value  = item._id;
 }
 
 async function deleteUser(){
   delModal.value.hide();
+
   try {
     let res = await userApi.Delete(account.value);
     if(res.code == "0000"){
-      let res = await userApi.List();
-      data.users = res.data;
+      let res = await userApi.List(page.value,pageSize.value);
+      const {code,msg,data} = res;
+      users.value = data.data;
       toastRef.value.show("Success");
     }
   }catch (e) {
@@ -230,17 +263,17 @@ async function deleteUser(){
 }
 
 function editUserModal(item){
-  data.userForm = item;
+  datas.userForm = item;
   accountReadOnly.value = true;
   const ele = document.getElementById("addUserDetail");
 
   addUserDetail.value = new bootstrap.Modal(ele);
   addUserDetail.value.show(ele);
 
-  console.log(data.userForm);
+  console.log(datas.userForm);
 }
 
-const {userForm} = toRefs(data);
+const {userForm} = toRefs(datas);
 </script>
 
 <style scoped>

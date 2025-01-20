@@ -10,15 +10,12 @@
         </div>
         <div class="modal-body">
           <div class="mb-3 row" v-for="(item,key) in data" :key="key">
-            <label :for="key" class="col-md-3 col-form-label" style="font-weight: bold">{{key}}</label>
+            <div :for="key" class="col-md-3 col-form-label" style="font-weight: bold" >{{key}}</div>
             <div class="col-md-9" style="display: flex;flex-direction: column;justify-content: center">
-
-              <div id="payloadAlertInfo" v-if="key === 'payload'">
-              </div>
-              <div v-if="key === 'payload'">
+              <div v-if="key === 'payload'" :id="key">
                 <CodeMirrorEditor :data="item" @getValue="getV"/>
               </div>
-              <div v-else>
+              <div v-else :id="key">
                 <pre style="margin:0"><code>{{item}}</code></pre>
               </div>
             </div>
