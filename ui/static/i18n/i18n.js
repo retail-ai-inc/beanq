@@ -68,8 +68,59 @@ const en_edit_modal = {
     "okButton":"Edit",
     "cancelButton":"Close"
 }
-const jp_nav = [];
-const jp_setting = [];
+const jp_nav = [
+    {
+        "label":"ホーム",
+        "to":"/admin/home",
+        "sub":[]
+    },
+    {
+        "label":"スケジュール",
+        "to":"/admin/schedule",
+        "sub":[]
+    },
+    {
+        "label":"チャンネル",
+        "to":"/admin/queue",
+        "sub":[]
+    },
+    {
+        "label":"ログ",
+        "tos":["/admin/log/event","/admin/log/dlq","/admin/log/workflow"],
+        "sub":[
+            {"label":"イベントログ","to":"/admin/log/event"},
+            {"label":"DLQ ログ","to":"/admin/log/dlq"},
+            {"label":"ワークフローログ","to":"/admin/log/workflow"}
+        ]
+    },
+    {
+        "label":"Redis",
+        "tos":["/admin/redis","/admin/redis/monitor"],
+        "sub":[
+            {"label":"情報","to":"/admin/redis"},
+            {"label":"コマンド","to":"/admin/redis/monitor"},
+        ]
+    }
+];
+const jp_setting = [
+    {
+        "label":"Language",
+        "tos":[],
+        "sub":[
+            {"label":"English","index":0, "to":""},
+            {"label":"日本語 (Japanese)","index":1, "to":""},
+        ]
+    },
+    {
+        "label":"設定",
+        "tos":["/admin/optLog","/admin/user"],
+        "sub":[
+            {"label":"操作ログ","to":"/admin/optLog"},
+            {"label":"ユーザー","to":"/admin/user"},
+            {"label":"ログアウト","to":""},
+        ]
+    },
+];
 const jp_retry_modal = {};
 const jp_delete_modal = {};
 const jp_edit_modal = {};

@@ -12,7 +12,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"net/http"
-	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -47,10 +46,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	w := ctx.Writer
 	r := ctx.Request
 
-	nodeId := r.Header.Get("X-Cluster-Nodeid")
-	if nodeId == "" {
-		nodeId, _ = os.Hostname()
-	}
+	nodeId := r.URL.Query().Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
 	flusher, ok := w.(http.Flusher)

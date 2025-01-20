@@ -107,19 +107,22 @@ const {nodes, activeNodeId} = toRefs(data);
   overflow-y: auto;
   padding: 0 .5rem;
 
-  .nav-link{
-    color: var(--link-color);
-    font-size: 1.05rem;
+
+  .nav-item{
+    .nav-link{
+      font-size: 1.05rem;
+      color: #fff;
+    }
+    a:hover{
+      color: var(--white-color);
+    }
   }
   .nav-item a:hover{
-    color: var(--white-color);
+
   }
   .nav-sidebar{
     .active{
       background-color: var(--back-color);
-      a{
-        color: var(--white-color);
-      }
     }
   }
 }

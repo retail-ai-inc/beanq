@@ -119,6 +119,8 @@ function expand(){
 
 onMounted(async () => {
 
+  await sessionStorage.setItem("lang","jp");
+
   expand();
 
   const nodes = await dashboardApi.Nodes();
