@@ -32,12 +32,21 @@
 import { reactive,toRefs,onMounted,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
 
-const data = reactive({
-  user:{"username":"","password":""},
-  msg:"",
-  title:config.title,
-})
-const useRe = useRouter();
+const [data,useRe] = [
+    reactive({
+      user:{"username":"","password":""},
+      msg:"",
+      title:config.title,
+    }),
+  useRouter()
+]
+
+function handleKeyDown(event){
+  if(event.key === "Enter"){
+    onSubmit(event)
+  }
+}
+const debouncedHandleKeydown = Base.Debounce(handleKeyDown, 400);
 
 onMounted(async ()=>{
   let token = useRe.currentRoute.value.query;
@@ -48,18 +57,13 @@ onMounted(async ()=>{
       return;
     }
   }
-
-  window.addEventListener("keydown",handleKeyDown)
+  window.addEventListener("keydown",debouncedHandleKeydown)
 })
+
 onUnmounted(()=>{
-  window.removeEventListener("keydown",handleKeyDown)
+  window.removeEventListener("keydown",debouncedHandleKeydown)
 })
 
-function handleKeyDown(event){
-  if(event.key === "Enter"){
-    onSubmit(event)
-  }
-}
 
 async function onSubmit(event){
 
@@ -71,6 +75,7 @@ async function onSubmit(event){
   try{
     let res = await loginApi.Login(data.user.username,data.user.password);
     sessionStorage.setItem("token",res.data.token);
+    sessionStorage.setItem("nodeId",res.data.nodeId);
     useRe.push("/admin/home");
   }catch(err){
     if (err.response.status === 401){

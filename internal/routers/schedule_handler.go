@@ -26,7 +26,7 @@ func (t *Schedule) List(bctx *bwebframework.BeanContext) error {
 
 	ctx := bctx.Request.Context()
 
-	nodeId := bctx.Request.Header.Get("nodeId")
+	nodeId := bctx.Request.Header.Get("X-Cluster-Nodeid")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
 	key := strings.Join([]string{t.prefix, "*", "delay_stream:stream"}, ":")

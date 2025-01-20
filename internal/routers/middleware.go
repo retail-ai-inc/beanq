@@ -2,21 +2,20 @@ package routers
 
 import (
 	"context"
-	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"net/http"
 	"strings"
 	"time"
 )
 
-func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, prefix string) bwebframework.HandleFunc {
-	return HeaderRule(Auth(next, client, prefix))
+func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string) bwebframework.HandleFunc {
+	return HeaderRule(Auth(next, client, x, prefix))
 }
 
 func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
@@ -30,7 +29,7 @@ func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 	}
 }
 
-func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, prefix string) bwebframework.HandleFunc {
+func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
 
 		result, cancelr := response.Get()
@@ -87,13 +86,11 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, prefix st
 			return result.Json(writer, http.StatusUnauthorized)
 		}
 
-		if err := client.XAdd(request.Context(), &redis.XAddArgs{
-			Stream: tool.MakeLogicKey(prefix),
-			Values: map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": request.RequestURI, "data": nil},
-		}).Err(); err != nil {
-			fmt.Printf("log-----------%+v \n", err)
+		if err := x.AddOptLog(request.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": request.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			return result.Json(writer, http.StatusInternalServerError)
 		}
-
 		return next(ctx)
 	}
 }

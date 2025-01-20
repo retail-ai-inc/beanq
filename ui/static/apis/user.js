@@ -1,12 +1,12 @@
 const userApi = {
-    List(){
-        return request.get("/user/list");
+    List(page,pageSize){
+        return request.get(`/user/list?page=${page}&pageSize=${pageSize}`);
     },
     Add(data){
         return request.post("/user/add",data);
     },
-    Delete(account){
-        let params = {account:account};
+    Delete(id){
+        let params = {id:id};
         return request.post(`/user/del`,params);
     },
     Edit(data){

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
@@ -17,11 +18,12 @@ import (
 
 type Log struct {
 	client redis.UniversalClient
+	mgo    *bmongo.BMongo
 	prefix string
 }
 
-func NewLog(client redis.UniversalClient, prefix string) *Log {
-	return &Log{client: client, prefix: prefix}
+func NewLog(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *Log {
+	return &Log{client: client, mgo: x, prefix: prefix}
 }
 
 // del ,retry,archive,detail
@@ -164,21 +166,54 @@ func (t *Log) OptLogs(beanContext *bwebframework.BeanContext) error {
 	w := beanContext.Writer
 	r := beanContext.Request
 
-	key := strings.Join([]string{t.prefix, "beanq-logic-log"}, ":")
-	result := t.client.XRangeN(r.Context(), key, "-", "+", 10).Val()
-	data := make([]map[string]any, 0, len(result))
+	query := r.URL.Query()
+	page := cast.ToInt64(query.Get("page"))
+	pageSize := cast.ToInt64(query.Get("pageSize"))
 
-	for _, value := range result {
-		logType, ok := value.Values["logType"]
-		if !ok {
-			continue
-		}
-		if cast.ToString(logType) != "opt" {
-			continue
-		}
-		data = append(data, value.Values)
-
+	data, total, err := t.mgo.OptLogs(r.Context(), page, pageSize)
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		return res.Json(w, http.StatusInternalServerError)
 	}
-	res.Data = data
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
+	return res.Json(w, http.StatusOK)
+}
+
+func (t *Log) DelOptLog(beanContext *bwebframework.BeanContext) error {
+
+	res, cancel := response.Get()
+	defer cancel()
+
+	w := beanContext.Writer
+	r := beanContext.Request
+
+	id := r.URL.Query().Get("id")
+	if _, err := t.mgo.DeleteOptLog(r.Context(), id); err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		return res.Json(w, http.StatusInternalServerError)
+	}
+	return res.Json(w, http.StatusOK)
+}
+
+func (t *Log) WorkFlowLogs(beanContext *bwebframework.BeanContext) error {
+	res, cancel := response.Get()
+	defer cancel()
+
+	w := beanContext.Writer
+	r := beanContext.Request
+
+	query := r.URL.Query()
+	page := cast.ToInt64(query.Get("page"))
+	pageSize := cast.ToInt64(query.Get("pageSize"))
+
+	data, total, err := t.mgo.WorkFlowLogs(r.Context(), nil, page, pageSize)
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		return res.Json(w, http.StatusInternalServerError)
+	}
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
 	return res.Json(w, http.StatusOK)
 }

@@ -12,7 +12,7 @@ const eventApi = {
         return request.post(`event_log/delete`,params);
     },
     Edit(id,payload){
-        return request.post(`/event_log/edit`,{id:id,payload:payload});
+        return request.post(`/event_log/edit`,{id:id,payload:JSON.stringify(payload)});
     },
     Retry(id,data){
         return request.post(`/event_log/retry`,{uniqueId:id,data:JSON.stringify(data)});
