@@ -25,7 +25,6 @@
       vueRouter: VueRouter,
       request:request,
       config:config,
-      Lang:Lang,
       Base,
       //apis
       sseApi,

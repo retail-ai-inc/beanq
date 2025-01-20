@@ -9,6 +9,10 @@ const Base = {
             }, wait);
         };
     },
+    GetLang(i18n){
+        let lang = parseInt(sessionStorage.getItem("lang"));
+        return i18n[lang].value;
+    },
     Alert(message,type){
         const alertPlaceholder = document.getElementById('payloadAlertInfo');
         alertPlaceholder.innerHTML = `<div class="alert alert-${type} alert-dismissible" id="my-alert" role="alert">

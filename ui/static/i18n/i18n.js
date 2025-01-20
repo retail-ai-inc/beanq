@@ -1,4 +1,4 @@
-const langs = [
+const Langs = [
     {"label":"English","index":0, "to":""},
     {"label":"日本語 (Japanese)","index":1, "to":""},
 ];
@@ -42,7 +42,7 @@ const en_setting = [
     {
         "label":"Language",
         "tos":[],
-        "sub":langs
+        "sub":Langs
     },
     {
         "label":"Setting",
@@ -109,7 +109,7 @@ const jp_setting = [
     {
         "label":"Language",
         "tos":[],
-        "sub":langs
+        "sub":Langs
     },
     {
         "label":"設定",
@@ -159,16 +159,3 @@ const I18n = [
         "editModal":jp_edit_modal // {}
     }}
 ]
-
-let Lang = I18n[0].value;
-let lang = sessionStorage.getItem("lang");
-if(lang === "" || lang === "0"){
-    Lang = I18n[0].value;
-}else{
-    I18n.forEach((v,k)=>{
-        if(lang === v.key){
-            Lang = v.value;
-            return;
-        }
-    })
-}

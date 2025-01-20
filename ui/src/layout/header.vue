@@ -86,11 +86,18 @@ const data = reactive({
   nodes: [],
   activeNodeId: "",
   isSide:false,
-  lang:Lang
+  lang:{}
 })
 
 function chooseLang(obj){
-  sessionStorage.setItem("lang",obj.index);
+  if(obj.index === 1){
+    language.value = "日本語 (Japanese)";
+  }else{
+    language.value = "English";
+  }
+  let index = parseInt(obj.index);
+  sessionStorage.setItem("lang",index);
+  data.lang = Base.GetLang(I18n);
 }
 
 const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
@@ -116,11 +123,9 @@ function expand(){
 
 onMounted(async () => {
 
-  let lang = sessionStorage.getItem("lang");
-  if(lang == "jp"){
-    language.value = "日本語 (Japanese)";
-  }
-  await sessionStorage.setItem("lang","jp");
+  let lang = parseInt(sessionStorage.getItem("lang"));
+  language.value = Langs[lang].label;
+  data.lang = Base.GetLang(I18n);
 
   expand();
 
@@ -152,11 +157,6 @@ function userList() {
 function logout() {
   sessionStorage.clear();
   urouter.push("/login");
-}
-
-function chooseNode(item) {
-  sessionStorage.setItem("nodeId", item.NodeId);
-  window.href.reload();
 }
 
 const {nodes,lang, activeNodeId} = toRefs(data);

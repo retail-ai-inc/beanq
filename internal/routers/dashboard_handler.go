@@ -159,7 +159,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			"fail_count":    failCount,
 			"success_count": successCount,
 			"queues":        queues,
-			"nodeId":        client.NodeId(nctx),
 		}
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
