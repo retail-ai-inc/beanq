@@ -9,7 +9,6 @@
         <v-chart class="chart" ref="line2" :option="messageRatesOption"/>
       </div>
     </div>
-
     <div class="container-fluid" style="margin-bottom: 40px">
       <Dashboard :queue_total="queue_total"
                  :num_cpu="num_cpu"
@@ -21,11 +20,12 @@
 </template>
 
 <script setup>
-import {ref, onMounted,onUnmounted} from "vue";
+import {ref, onMounted,onUnmounted,inject} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
+
 let [
     queue_total,
     db_size,

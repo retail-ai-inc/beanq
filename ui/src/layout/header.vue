@@ -40,7 +40,8 @@
               </a>
               <ul class="dropdown-menu dropdown-menu-color">
                 <li v-for="(val,ind) in item.sub" :key="ind">
-                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="chooseLang(val)">
+<!--                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="chooseLang(val)">-->
+                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="action(val)">
                     {{val.label}}
                   </a>
                 </li>
@@ -80,14 +81,34 @@
 <script setup>
 
 import {useRoute, useRouter} from 'vueRouter';
-import {ref, toRefs, onMounted, watch, reactive} from "vue";
+import {ref, toRefs, onMounted, watch, reactive,defineProps,defineEmits} from "vue";
+
+const props = defineProps({
+  hlang:{},
+})
+
+const emits = defineEmits(['action']);
+const action = function (obj){
+
+  if(obj.index === 1){
+    language.value = "日本語 (Japanese)";
+  }else{
+    language.value = "English";
+  }
+  let index = obj.index;
+  sessionStorage.setItem("lang",index);
+  lang.value = Base.GetLang(I18n);
+
+  emits("action",lang.value);
+}
 
 const data = reactive({
   nodes: [],
   activeNodeId: "",
   isSide:false,
-  lang:{}
+  //lang:{}
 })
+const lang = ref(props.hlang);
 
 function chooseLang(obj){
   if(obj.index === 1){
@@ -95,9 +116,9 @@ function chooseLang(obj){
   }else{
     language.value = "English";
   }
-  let index = parseInt(obj.index);
+  let index = obj.index;
   sessionStorage.setItem("lang",index);
-  data.lang = Base.GetLang(I18n);
+  lang.value = Base.GetLang(I18n);
 }
 
 const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
@@ -159,7 +180,7 @@ function logout() {
   urouter.push("/login");
 }
 
-const {nodes,lang, activeNodeId} = toRefs(data);
+const {nodes, activeNodeId} = toRefs(data);
 
 </script>
 

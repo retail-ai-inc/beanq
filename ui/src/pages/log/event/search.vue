@@ -26,13 +26,15 @@
 
     <div class="col-2">
       <div class="col-auto">
-        <button type="submit" class="btn btn-primary mb-3" @click="search">Search</button>
+        <button type="submit" class="btn btn-primary mb-3" @click="search">{{l.search}}</button>
       </div>
     </div>
   </div>
 </template>
 <script setup>
-import {defineProps,defineEmits} from "vue";
+import {ref,inject,defineProps,defineEmits} from "vue";
+
+const l = ref(inject("i18n"));
 
 const props = defineProps({
   form:{

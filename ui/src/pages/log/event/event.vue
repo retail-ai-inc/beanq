@@ -63,20 +63,21 @@
       <!--retry modal begin-->
       <Action :label="retryLabel" :id="showRetryModal" @action="retryInfo">
         <template #title="{title}">
+          {{l.retryModal.title}}
           Are you sure to retry?
         </template>
         <template #body="{body}">
-          Trying again will not restore the data
+          {{l.retryModal.body}}
         </template>
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
       <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteInfo">
         <template #title="{title}">
-          Are you sure to delete?
+          {{l.deleteModal.title}}
         </template>
         <template #body="{body}">
-          If you need to restore, please contact the administrator.
+          {{l.deleteModal.body}}
         </template>
       </Action>
       <!--delete modal end-->
@@ -84,7 +85,7 @@
   </div>
 </template>
 <script setup>
-import { reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
 import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
@@ -93,6 +94,8 @@ import EditIcon from "../../components/icons/edit_icon.vue";
 import Search from "./search.vue";
 import EditAction from "./editAction.vue";
 import Action from "../../components/action.vue";
+
+const l = ref(inject("i18n"));
 
 let data = reactive({
   eventLogs:[],

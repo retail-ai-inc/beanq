@@ -147,7 +147,8 @@ const I18n = [
         "cancelButton":"cancel",
         "retryModal":en_retry_modal,
         "deleteModal":en_delete_modal,
-        "editModal":en_edit_modal
+        "editModal":en_edit_modal,
+        "search":"Search"
     }},
     {"key":"jp","value":{
         "nav":jp_nav, // []
@@ -156,6 +157,7 @@ const I18n = [
         "cancelButton":"キャンセル",
         "retryModal":jp_retry_modal, // {}
         "deleteModal":jp_delete_modal, // {}
-        "editModal":jp_edit_modal // {}
+        "editModal":jp_edit_modal, // {}
+        "search":"検索"
     }}
 ]
