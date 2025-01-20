@@ -48,18 +48,20 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 	filter := bson.M{}
 	filter["logType"] = bstatus.Logic
 	if id != "" {
-		if _, err := primitive.ObjectIDFromHex(id); err != nil {
+		if objId, err := primitive.ObjectIDFromHex(id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return nil
+		} else {
+			filter["id"] = objId
 		}
-		filter["id"] = id
+
 	}
 	if status != "" {
 		statusValid := []string{"failed", "published", "success"}
 		if index := sort.SearchStrings(statusValid, status); index < len(statusValid) && statusValid[index] == status {
 			filter["status"] = status
 		} else {
-			http.Error(w, "status is invalid", http.StatusInternalServerError)
+			http.Error(w, "Invalid status value", http.StatusBadRequest)
 			return nil
 		}
 	}
