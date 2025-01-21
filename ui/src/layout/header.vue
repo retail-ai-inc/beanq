@@ -144,7 +144,12 @@ function expand(){
 
 onMounted(async () => {
 
-  let lang = parseInt(sessionStorage.getItem("lang"));
+  let ls = sessionStorage.getItem("lang");
+  if(ls === "" || ls === null){
+    ls = "0";
+  }
+  let lang = parseInt(ls);
+  
   language.value = Langs[lang].label;
   data.lang = Base.GetLang(I18n);
 

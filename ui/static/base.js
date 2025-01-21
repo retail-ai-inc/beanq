@@ -10,7 +10,11 @@ const Base = {
         };
     },
     GetLang(i18n){
-        let lang = parseInt(sessionStorage.getItem("lang"));
+        let ls = sessionStorage.getItem("lang");
+        if(ls === "" || ls === null){
+            ls = "0";
+        }
+        let lang = parseInt(ls);
         return i18n[lang].value;
     },
     Alert(message,type){
