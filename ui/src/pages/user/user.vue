@@ -95,9 +95,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">Add</button>
-            <button type="button" class="btn btn-primary" @click="editUser" v-else>Edit</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{l.closeButton}}</button>
+            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{l.addButton}}</button>
+            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{l.editButton}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -108,10 +108,10 @@
 
     <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteUser">
       <template #title="{title}">
-        Are you sure to delete?
+        {{l.deleteModal.title}}
       </template>
       <template #body="{body}">
-        If you need to restore, please contact the administrator.
+        {{l.deleteModal.body}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
@@ -119,12 +119,14 @@
   </div>
 </template>
 <script setup>
-import { ref,reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
+
+const l = ref(inject("i18n"));
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];

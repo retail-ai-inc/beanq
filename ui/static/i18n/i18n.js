@@ -143,8 +143,13 @@ const I18n = [
     {"key":"en","value":{
         "nav":en_nav,
         "setting":en_setting,
+
         "okButton":"Yes",
         "cancelButton":"cancel",
+        "editButton":"Edit",
+        "addButton":"Add",
+        "closeButton":"Close",
+
         "retryModal":en_retry_modal,
         "deleteModal":en_delete_modal,
         "editModal":en_edit_modal,
@@ -153,8 +158,13 @@ const I18n = [
     {"key":"jp","value":{
         "nav":jp_nav, // []
         "setting":jp_setting, // []
+
         "okButton":"はい",
         "cancelButton":"キャンセル",
+        "editButton":"編集",
+        "addButton":"追加",
+        "closeButton":"閉じる",
+
         "retryModal":jp_retry_modal, // {}
         "deleteModal":jp_delete_modal, // {}
         "editModal":jp_edit_modal, // {}

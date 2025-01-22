@@ -10,10 +10,7 @@ const Base = {
         };
     },
     GetLang(i18n){
-        let ls = sessionStorage.getItem("lang");
-        if(ls === "" || ls === null){
-            ls = "0";
-        }
+        let ls = sessionStorage.getItem("lang") || "0";
         let lang = parseInt(ls);
         return i18n[lang].value;
     },

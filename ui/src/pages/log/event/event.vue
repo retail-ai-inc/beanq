@@ -64,7 +64,6 @@
       <Action :label="retryLabel" :id="showRetryModal" @action="retryInfo">
         <template #title="{title}">
           {{l.retryModal.title}}
-          Are you sure to retry?
         </template>
         <template #body="{body}">
           {{l.retryModal.body}}

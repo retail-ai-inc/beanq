@@ -67,6 +67,17 @@ func NewMongo(host, port string,
 	return mgo
 }
 
+func (t *BMongo) DocumentCount(ctx context.Context, status string) (int64, error) {
+
+	filter := bson.M{}
+	filter["status"] = status
+	total, err := t.database.Collection("event_logs").CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
 func (t *BMongo) WorkFlowLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {

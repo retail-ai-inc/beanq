@@ -112,8 +112,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		func() {
 			ctx10, cancel10 := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel10()
-			failKey := strings.Join([]string{t.prefix, "logs", "fail"}, ":")
-			failCount, err = client.ZCard(ctx10, failKey)
+			failCount, err = t.mog.DocumentCount(ctx10, "failed")
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
@@ -124,8 +123,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		func() {
 			ctx11, cancel11 := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel11()
-			successKey := strings.Join([]string{t.prefix, "logs", "success"}, ":")
-			successCount, err = client.ZCard(ctx11, successKey)
+			successCount, err = t.mog.DocumentCount(ctx11, "success")
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()

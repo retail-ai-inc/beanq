@@ -20,7 +20,7 @@
 </template>
 
 <script setup>
-import {ref, onMounted,onUnmounted,inject} from "vue";
+import {ref, onMounted,onUnmounted} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
 
