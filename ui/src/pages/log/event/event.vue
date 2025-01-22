@@ -246,7 +246,7 @@ function initEventSource(){
     let body =  JSON.parse(res.data);
     data.eventLogs = body.data.data;
     data.page =  body.data.cursor;
-    data.total = Math.ceil(body.data.total / data.pageSize);
+    data.total = body.data.total;
   })
 }
 

@@ -109,7 +109,7 @@ func (t *BMongo) WorkFlowLogs(ctx context.Context, filter bson.M, page, pageSize
 	return data, total, nil
 }
 
-func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
+func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, float64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
 		skip = 0
@@ -134,7 +134,7 @@ func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, total, nil
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
 }
 
 func (t *BMongo) DetailEventLog(ctx context.Context, id string) (bson.M, error) {
