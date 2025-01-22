@@ -41,7 +41,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 		logs:      NewLogs(client, prefix),
 		log:       NewLog(client, mgo, prefix),
 		redisInfo: NewRedisInfo(client, prefix),
-		login:     NewLogin(client, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt),
+		login:     NewLogin(client, mgo, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt),
 		client:    NewClient(client, prefix),
 		dashboard: NewDashboard(client, mgo, prefix),
 		eventLog:  NewEventLog(client, mgo, prefix),

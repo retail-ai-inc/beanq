@@ -2,12 +2,14 @@ package bmongo
 
 import (
 	"context"
+	"errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +44,7 @@ func NewMongo(host, port string,
 			SetConnectTimeout(connectTimeOut).
 			SetMaxPoolSize(maxConnectionPoolSize).
 			SetMaxConnIdleTime(maxConnectionLifeTime)
+
 		if username != "" && password != "" {
 			auth := options.Credential{
 				AuthSource: database,
@@ -244,9 +247,20 @@ func (t *BMongo) DeleteOptLog(ctx context.Context, id string) (int64, error) {
 	return result.DeletedCount, nil
 }
 
-func (t *BMongo) AddUser(ctx context.Context, data map[string]any) error {
+type User struct {
+	Account  string    `bson:"account" json:"account"`
+	Password string    `bson:"password" json:"password"`
+	Type     string    `bson:"type" json:"type"`
+	Active   int32     `bson:"active" json:"active"`
+	Detail   string    `bson:"detail" json:"detail"`
+	CreateAt time.Time `bson:"createAt" json:"createAt"`
+	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
+}
 
-	_, err := t.database.Collection(manager).InsertOne(ctx, data)
+func (t *BMongo) AddUser(ctx context.Context, user *User) error {
+
+	user.CreateAt = time.Now()
+	_, err := t.database.Collection(manager).InsertOne(ctx, user)
 	return err
 }
 
@@ -265,6 +279,49 @@ func (t *BMongo) DeleteUser(ctx context.Context, id string) (int64, error) {
 		return 0, err
 	}
 	return result.DeletedCount, nil
+}
+
+func (t *BMongo) CheckUser(ctx context.Context, account, password string) (*User, error) {
+
+	filter := bson.M{
+		"account":  account,
+		"password": password,
+		"active":   1,
+	}
+
+	var user User
+	result := t.database.Collection(manager).FindOne(ctx, filter)
+	if err := result.Err(); err != nil {
+		if errors.Is(err, mongo.ErrNilDocument) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if err := result.Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (t *BMongo) CheckGoogleUser(ctx context.Context, account string) (*User, error) {
+	filter := bson.M{
+		"account": account,
+		"type":    "google",
+		"active":  1,
+	}
+
+	var user User
+	result := t.database.Collection(manager).FindOne(ctx, filter)
+	if err := result.Err(); err != nil {
+		if errors.Is(err, mongo.ErrNilDocument) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if err := result.Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (int64, error) {
@@ -309,7 +366,7 @@ func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (
 	return result.ModifiedCount, nil
 }
 
-func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
+func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, float64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
 		skip = 0
@@ -334,5 +391,5 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, total, nil
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
 }
