@@ -212,7 +212,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 			history.Mongo.UserName,
 			history.Mongo.Password,
 			history.Mongo.Database,
-			history.Mongo.Collection,
+			history.Mongo.Collections,
 			history.Mongo.ConnectTimeOut,
 			history.Mongo.MaxConnectionPoolSize,
 			history.Mongo.MaxConnectionLifeTime,
