@@ -5,12 +5,13 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/googleAuth"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -18,14 +19,15 @@ import (
 
 type Login struct {
 	client             redis.UniversalClient
+	mgo                *bmongo.BMongo
 	prefix             string
 	username, password string
 	issuer, subject    string
 	expiresAt          time.Duration
 }
 
-func NewLogin(client redis.UniversalClient, prefix string, username, password string, issuer, subject string, expiresAt time.Duration) *Login {
-	return &Login{client: client, prefix: prefix, username: username, password: password, issuer: issuer, subject: subject, expiresAt: expiresAt}
+func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, username, password string, issuer, subject string, expiresAt time.Duration) *Login {
+	return &Login{client: client, mgo: mgo, prefix: prefix, username: username, password: password, issuer: issuer, subject: subject, expiresAt: expiresAt}
 }
 
 func (t *Login) Login(ctx *bwebframework.BeanContext) error {
@@ -40,9 +42,12 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 	defer cancel()
 
 	if username != t.username || password != t.password {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = "username or password mismatch"
-		return result.Json(w, http.StatusUnauthorized)
+		user, err := t.mgo.CheckUser(r.Context(), username, password)
+		if err != nil || user == nil {
+			result.Code = berror.AuthExpireCode
+			result.Msg = "No permission"
+			return result.Json(w, http.StatusUnauthorized)
+		}
 	}
 
 	claim := bjwt.Claim{
@@ -65,7 +70,10 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		return result.Json(w, http.StatusInternalServerError)
 	}
 
-	result.Data = map[string]any{"token": token}
+	client := tool.ClientFac(t.client, t.prefix, "")
+	nodeId := client.NodeId(r.Context())
+
+	result.Data = map[string]any{"token": token, "nodeId": nodeId}
 
 	return result.Json(w, http.StatusOK)
 
@@ -75,7 +83,7 @@ func (t *Login) GoogleLogin(ctx *bwebframework.BeanContext) error {
 	w := ctx.Writer
 
 	gAuth := googleAuth.New()
-	
+
 	state := time.Now().String()
 	url := gAuth.AuthCodeUrl(state)
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
@@ -116,22 +124,11 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 		return res.Json(w, http.StatusOK)
 	}
 
-	key := strings.Join([]string{t.prefix, "users", userInfo.Email}, ":")
-	result, err := HGetAll(r.Context(), t.client, key)
-	if err != nil {
+	user, err := t.mgo.CheckGoogleUser(r.Context(), userInfo.Email)
+
+	if err != nil || user == nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
-	}
-	if result == nil {
-		res.Code = berror.InternalServerErrorCode
-		res.Msg = "data empty"
-		return res.Json(w, http.StatusOK)
-	}
-
-	if result["active"] == "2" {
-		res.Code = berror.AuthExpireCode
-		res.Msg = "No permission"
 		return res.Json(w, http.StatusOK)
 	}
 

@@ -2,8 +2,8 @@ package routers
 
 import (
 	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"net/http"
 	"time"
 )
@@ -19,7 +19,35 @@ type Ui struct {
 	ExpiresAt time.Duration `json:"expiresAt"`
 }
 
-func NewRouters(r *bwebframework.Router, client redis.UniversalClient, x *mongox.MongoX, prefix string, ui Ui) *bwebframework.Router {
+type Handles struct {
+	schedule  *Schedule
+	queue     *Queue
+	logs      *Logs
+	log       *Log
+	redisInfo *RedisInfo
+	login     *Login
+	client    *Client
+	dashboard *Dashboard
+	eventLog  *EventLog
+	user      *User
+	dlq       *Dlq
+}
+
+func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui Ui) *bwebframework.Router {
+
+	hdls := Handles{
+		schedule:  NewSchedule(client, prefix),
+		queue:     NewQueue(client, prefix),
+		logs:      NewLogs(client, prefix),
+		log:       NewLog(client, mgo, prefix),
+		redisInfo: NewRedisInfo(client, prefix),
+		login:     NewLogin(client, mgo, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt),
+		client:    NewClient(client, prefix),
+		dashboard: NewDashboard(client, mgo, prefix),
+		eventLog:  NewEventLog(client, mgo, prefix),
+		user:      NewUser(client, mgo, prefix),
+		dlq:       NewDlq(client, prefix),
+	}
 
 	r.Get("/ping", HeaderRule(func(ctx *bwebframework.BeanContext) error {
 
@@ -27,36 +55,39 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, x *mongox
 		_, _ = ctx.Writer.Write([]byte("pong"))
 		return nil
 	}))
-	r.Get("/schedule", MigrateMiddleWare(NewSchedule(client, prefix).List, client, prefix))
-	r.Get("/queue/list", MigrateMiddleWare(NewQueue(client, prefix).List, client, prefix))
-	r.Get("/queue/detail", MigrateMiddleWare(NewQueue(client, prefix).Detail, client, prefix))
-	r.Get("/logs", MigrateMiddleWare(NewLogs(client, prefix).List, client, prefix))
-	r.Get("/log", MigrateMiddleWare(NewLog(client, prefix).List, client, prefix))
-	r.Get("/log/opt_log", MigrateMiddleWare(NewLog(client, prefix).OptLogs, client, prefix))
+	r.Get("/schedule", MigrateMiddleWare(hdls.schedule.List, client, mgo, prefix))
+	r.Get("/queue/list", MigrateMiddleWare(hdls.queue.List, client, mgo, prefix))
+	r.Get("/queue/detail", MigrateMiddleWare(hdls.queue.Detail, client, mgo, prefix))
+	r.Get("/logs", MigrateMiddleWare(hdls.logs.List, client, mgo, prefix))
+	r.Get("/log", MigrateMiddleWare(hdls.log.List, client, mgo, prefix))
+	r.Get("/log/opt_log", MigrateMiddleWare(hdls.log.OptLogs, client, mgo, prefix))
+	r.Delete("/log/opt_log", MigrateMiddleWare(hdls.log.DelOptLog, client, mgo, prefix))
 
-	r.Get("/redis", MigrateMiddleWare(NewRedisInfo(client, prefix).Info, client, prefix))
-	r.Get("/redis/monitor", MigrateMiddleWare(NewRedisInfo(client, prefix).Monitor, client, prefix))
+	r.Get("/log/workflow_log", MigrateMiddleWare(hdls.log.WorkFlowLogs, client, mgo, prefix))
 
-	r.Post("/login", HeaderRule(NewLogin(client, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt).Login))
-	r.Get("/clients", MigrateMiddleWare(NewClient(client, prefix).List, client, prefix))
+	r.Get("/redis", MigrateMiddleWare(hdls.redisInfo.Info, client, mgo, prefix))
+	r.Get("/redis/monitor", MigrateMiddleWare(hdls.redisInfo.Monitor, client, mgo, prefix))
 
-	r.Get("/dashboard", MigrateMiddleWare(NewDashboard(client, x, prefix).Info, client, prefix))
-	r.Get("/nodes", MigrateMiddleWare(NewDashboard(client, x, prefix).Nodes, client, prefix))
+	r.Post("/login", HeaderRule(hdls.login.Login))
+	r.Get("/clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix))
 
-	r.Get("/event_log/list", MigrateMiddleWare(NewEventLog(client, x, prefix).List, client, prefix))
-	r.Get("/event_log/detail", MigrateMiddleWare(NewEventLog(client, x, prefix).Detail, client, prefix))
-	r.Post("/event_log/delete", MigrateMiddleWare(NewEventLog(client, x, prefix).Delete, client, prefix))
-	r.Post("/event_log/edit", MigrateMiddleWare(NewEventLog(client, x, prefix).Edit, client, prefix))
-	r.Post("/event_log/retry", MigrateMiddleWare(NewEventLog(client, x, prefix).Retry, client, prefix))
+	r.Get("/dashboard", MigrateMiddleWare(hdls.dashboard.Info, client, mgo, prefix))
+	r.Get("/nodes", MigrateMiddleWare(hdls.dashboard.Nodes, client, mgo, prefix))
 
-	r.Get("/user/list", MigrateMiddleWare(NewUser(client, prefix).List, client, prefix))
-	r.Post("/user/add", MigrateMiddleWare(NewUser(client, prefix).Add, client, prefix))
-	r.Post("/user/del", MigrateMiddleWare(NewUser(client, prefix).Delete, client, prefix))
-	r.Post("/user/edit", MigrateMiddleWare(NewUser(client, prefix).Edit, client, prefix))
+	r.Get("/event_log/list", MigrateMiddleWare(hdls.eventLog.List, client, mgo, prefix))
+	r.Get("/event_log/detail", MigrateMiddleWare(hdls.eventLog.Detail, client, mgo, prefix))
+	r.Post("/event_log/delete", MigrateMiddleWare(hdls.eventLog.Delete, client, mgo, prefix))
+	r.Post("/event_log/edit", MigrateMiddleWare(hdls.eventLog.Edit, client, mgo, prefix))
+	r.Post("/event_log/retry", MigrateMiddleWare(hdls.eventLog.Retry, client, mgo, prefix))
 
-	r.Get("/googleLogin", NewLogin(client, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt).GoogleLogin)
-	r.Get("/callback", NewLogin(client, prefix, ui.Account.UserName, ui.Account.Password, ui.Issuer, ui.Subject, ui.ExpiresAt).GoogleCallBack)
+	r.Get("/user/list", MigrateMiddleWare(hdls.user.List, client, mgo, prefix))
+	r.Post("/user/add", MigrateMiddleWare(hdls.user.Add, client, mgo, prefix))
+	r.Post("/user/del", MigrateMiddleWare(hdls.user.Delete, client, mgo, prefix))
+	r.Post("/user/edit", MigrateMiddleWare(hdls.user.Edit, client, mgo, prefix))
 
-	r.Get("/dlq/list", MigrateMiddleWare(NewDlq(client, prefix).List, client, prefix))
+	r.Get("/googleLogin", hdls.login.GoogleLogin)
+	r.Get("/callback", hdls.login.GoogleCallBack)
+
+	r.Get("/dlq/list", MigrateMiddleWare(hdls.dlq.List, client, mgo, prefix))
 	return r
 }

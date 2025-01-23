@@ -52,15 +52,13 @@
   </div>
 </template>
 <script setup>
-import { reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,onMounted } from "vue";
 
-let data = reactive({
-  dlqLogs:[]
-})
+let dlqLogs = ref([]);
 
 onMounted(async ()=>{
   let res = await dlqApi.List();
-  data.dlqLogs = res.data;
+  dlqLogs.value = res.data;
 })
 
 function detailDlq(item){
@@ -75,7 +73,6 @@ function deleteItem(item){
 
 }
 
-const {dlqLogs} = toRefs(data);
 </script>
 <style scoped>
 .dlq{

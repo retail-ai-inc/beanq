@@ -1,8 +1,7 @@
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <template>
   <aside class="main-sidebar elevation-4" data-theme-default="dark">
     <router-link to="/admin/home" class="brand-link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon-monitor">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="icon-monitor" width="100%" height="100%">
         <path fill="#B197FC"
               d="M256 16C123.5 16 16 123.5 16 256S123.5 496 256 496 496 388.5 496 256 388.5 16 256 16zM121.7 429.1C70.1 389 36.7 326.3 36.7 256a218.5 218.5 0 0 1 9.6-64.1l102.9-17.9-.1 11-13.9 2s-.1 12.5-.1 19.5a12.8 12.8 0 0 0 4.9 10.3l9.5 7.4zm105.7-283.3 8.5-7.6s6.9-5.4-.1-9.3c-7.2-4-39.5-34.5-39.5-34.5-5.3-5.5-8.3-7.3-15.5 0 0 0-32.3 30.5-39.5 34.5-7.1 4-.1 9.3-.1 9.3l8.5 7.6 0 4.4L76 131c39.6-56.9 105.5-94.3 180-94.3A218.8 218.8 0 0 1 420.9 111.8l-193.5 37.7zm34.1 329.3-33.9-250.9 9.5-7.4a12.8 12.8 0 0 0 4.9-10.3c0-7-.1-19.5-.1-19.5l-13.9-2-.1-10.5 241.7 31.4A218.9 218.9 0 0 1 475.3 256C475.3 375.1 379.8 472.2 261.4 475.1z"/>
       </svg>
@@ -28,15 +27,7 @@
 import {useRoute} from 'vueRouter';
 import {ref, toRefs, onMounted, watch, reactive} from "vue";
 
-const data = reactive({
-  nodes: [],
-  activeNodeId: ""
-})
-
-const route = ref('/admin/home');
-
-const uroute = useRoute();
-
+const [data,route,uroute] = [reactive({nodes:[],activeNodeId:""}),ref("/admin/home"),useRoute()];
 
 onMounted(async () => {
 
@@ -68,6 +59,8 @@ const {nodes, activeNodeId} = toRefs(data);
 <style scoped>
 
 .main-sidebar {
+  display: flex;
+  flex-direction: column;
   bottom: 0;
   float: none;
   position: fixed;
@@ -94,35 +87,45 @@ const {nodes, activeNodeId} = toRefs(data);
   display: flex;
   align-items: center;
   font-size: 1.15rem;
-  padding: .8rem .5rem;
+  padding: 0.85rem .5rem;
   transition: width .3s ease-in-out;
   white-space: nowrap;
-}
-
-.sidebar {
-  height: calc(100vh - (3.5rem + 1px));
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding: 0 .5rem;
+  overflow: hidden;
 }
 
 .nav-flat {
   margin: -.25rem -.5rem 0;
 }
+:root{
+  --white-color:#fff;
+  --link-color:#c2c7d0;
+  --back-color:#3d9970
+}
+.sidebar{
+  height: calc(100vh - (3.5rem + 1px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 .5rem;
 
-.sidebar .nav-link {
-  color: #c2c7d0;
-  font-size: 1.05rem;
+
+  .nav-item{
+    .nav-link{
+      font-size: 1.05rem;
+      color: #fff;
+    }
+    a:hover{
+      color: var(--white-color);
+    }
+  }
+  .nav-item a:hover{
+
+  }
+  .nav-sidebar{
+    .active{
+      background-color: var(--back-color);
+    }
+  }
 }
-.sidebar .nav-item a:hover {
-  color: #fff !important;
-}
-.sidebar .nav-sidebar .active {
-  background-color: #3d9970;
-}
-.sidebar .nav-sidebar .active a {
-   color: #fff !important;
- }
 
 </style>
 

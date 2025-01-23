@@ -239,7 +239,7 @@ func (t *BaseClient) ClientList(ctx context.Context) ([]map[string]any, error) {
 	return rdata, nil
 }
 
-func (t *BaseClient) Object(ctx context.Context, queueName string) (objstr *ObjectStruct, err error) {
+func (t *BaseClient) Object(ctx context.Context, queueName string) (*ObjectStruct, error) {
 
 	obj := t.client.DebugObject(ctx, queueName)
 
@@ -253,6 +253,15 @@ func (t *BaseClient) Object(ctx context.Context, queueName string) (objstr *Obje
 		str = strings.ReplaceAll(str, valueAt, "value_at")
 	}
 
+	objstr := ObjectStruct{
+		ValueAt:          "",
+		Encoding:         "",
+		RefCount:         0,
+		SerizlizedLength: 0,
+		Lru:              0,
+		LruSecondsIdle:   0,
+	}
+
 	strs := strings.Split(str, " ")
 
 	for _, s := range strs {
@@ -260,7 +269,7 @@ func (t *BaseClient) Object(ctx context.Context, queueName string) (objstr *Obje
 		if len(sarr) >= 2 {
 			switch sarr[0] {
 			case "value_at":
-				objstr.ValueAt = sarr[1]
+				objstr.ValueAt = cast.ToString(sarr[1])
 			case "refcount":
 				objstr.RefCount = cast.ToInt(sarr[1])
 			case "encoding":
@@ -274,7 +283,7 @@ func (t *BaseClient) Object(ctx context.Context, queueName string) (objstr *Obje
 			}
 		}
 	}
-	return
+	return &objstr, nil
 }
 
 func (t *BaseClient) ZCard(ctx context.Context, key string) (int64, error) {

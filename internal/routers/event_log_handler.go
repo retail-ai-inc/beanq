@@ -3,10 +3,10 @@ package routers
 import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	public "github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
@@ -22,11 +22,11 @@ import (
 type EventLog struct {
 	Id     string `json:"id"`
 	client redis.UniversalClient
-	mogx   *mongox.MongoX
+	mogx   *bmongo.BMongo
 	prefix string
 }
 
-func NewEventLog(client redis.UniversalClient, x *mongox.MongoX, prefix string) *EventLog {
+func NewEventLog(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *EventLog {
 	return &EventLog{client: client, mogx: x, prefix: prefix}
 }
 
@@ -48,18 +48,20 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 	filter := bson.M{}
 	filter["logType"] = bstatus.Logic
 	if id != "" {
-		if _, err := primitive.ObjectIDFromHex(id); err != nil {
+		if objId, err := primitive.ObjectIDFromHex(id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return nil
+		} else {
+			filter["id"] = objId
 		}
-		filter["id"] = id
+
 	}
 	if status != "" {
 		statusValid := []string{"failed", "published", "success"}
 		if index := sort.SearchStrings(statusValid, status); index < len(statusValid) && statusValid[index] == status {
 			filter["status"] = status
 		} else {
-			http.Error(w, "status is invalid", http.StatusInternalServerError)
+			http.Error(w, "Invalid status value", http.StatusBadRequest)
 			return nil
 		}
 	}

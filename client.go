@@ -29,9 +29,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
 	"io/fs"
@@ -204,15 +204,15 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	})
 
 	history := c.broker.config.History
-	var mog *mongox.MongoX
+	var mog *bmongo.BMongo
 	if history.On {
-		mog = mongox.NewMongo(
+		mog = bmongo.NewMongo(
 			history.Mongo.Host,
 			history.Mongo.Port,
 			history.Mongo.UserName,
 			history.Mongo.Password,
 			history.Mongo.Database,
-			history.Mongo.Collection,
+			history.Mongo.Collections,
 			history.Mongo.ConnectTimeOut,
 			history.Mongo.MaxConnectionPoolSize,
 			history.Mongo.MaxConnectionLifeTime,

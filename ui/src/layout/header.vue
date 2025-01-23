@@ -1,4 +1,3 @@
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 <template>
   <nav class="main-header navbar navbar-expand navbar-danger navbar-dark">
     <div style="width: 1.5rem;height:1.5rem" @click="expand">
@@ -8,96 +7,71 @@
     </div>
     <div class="container-fluid">
       <ul class="navbar-nav">
-        <li class="nav-item">
-          <router-link to="/admin/home" class="nav-link" :class="route === '/admin/home' ? 'active' : ''">
-            Home
-          </router-link>
-        </li>
-        <li class="nav-item">
-          <router-link to="/admin/schedule" class="nav-link" :class="route === '/admin/schedule' ? 'active' : ''">
-            Schedule
-          </router-link>
-        </li>
-        <li class="nav-item">
-          <router-link to="/admin/queue" class="nav-link" :class="route === '/admin/queue' ? 'active' : ''">
-            Channel
-          </router-link>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" :class="route === '/admin/log/event' || route === '/admin/log/dlq' || route === '/admin/log/workflow' ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Log
-          </a>
-          <ul class="dropdown-menu dropdown-menu-color">
-            <li>
-              <router-link to="/admin/log/event" class="dropdown-item" :class="route ==='/admin/log/event' ? 'active' : ''">
-                Event Log
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/admin/log/dlq" class="dropdown-item" :class="route === '/admin/log/dlq' ? 'active' : ''">
-                DLQ Log
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/admin/log/workflow" class="dropdown-item" :class="route === '/admin/log/workflow' ? 'active' : ''">
-                WorkFlow Log
-              </router-link>
-            </li>
-          </ul>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" :class="route==='/admin/redis' || route === '/admin/redis/monitor' ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Redis
-          </a>
-          <ul class="dropdown-menu dropdown-menu-color">
-            <li>
-              <router-link to="/admin/redis" class="dropdown-item " :class="route==='/admin/redis' ? 'active' : ''">
-                Info
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/admin/redis/monitor" class="dropdown-item" :class="route === '/admin/redis/monitor' ? 'active' : ''">
-                Command
-              </router-link>
-            </li>
-          </ul>
+        <li class="nav-item" v-for="(item,key) in lang.nav" :key="key" :class="item.sub.length > 0 ?'dropdown':''">
+          <div v-if="item.sub.length > 0">
+            <!--nav sub-->
+            <a class="nav-link dropdown-toggle" :class=" item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              {{item.label}}
+            </a>
+            <ul class="dropdown-menu dropdown-menu-color">
+              <li v-for="(val,ind) in item.sub" :key="ind">
+                <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''">
+                  {{val.label}}
+                </router-link>
+              </li>
+            </ul>
+          </div>
+          <div v-else>
+            <!--nav no sub-->
+            <router-link v-if="item.sub.length <= 0" :to="item.to" class="nav-link" :class="route === item.to ? 'active' : ''">
+              {{item.label}}
+            </router-link>
+          </div>
         </li>
       </ul>
       <ul class="navbar-nav">
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Language
-          </a>
-          <ul class="dropdown-menu dropdown-menu-color">
-            <li>
-              <a href="javascript:;" class="dropdown-item">English</a>
-            </li>
-            <li>
-              <a href="javascript:;" class="dropdown-item">日本語 (Japanese)</a>
-            </li>
-          </ul>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            Setting
-          </a>
-          <ul class="dropdown-menu dropdown-menu-color dropdown-menu-end">
-            <li>
-              <router-link to="/admin/optLog" class="dropdown-item" :class="route==='/admin/optLog' ? 'active' : ''">
-                Operation Log
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/admin/user" class="dropdown-item" :class="route==='/admin/user' ? 'active' : ''">
-                User
-              </router-link>
-            </li>
-            <li>
-              <router-link to="/login" class="dropdown-item">
-                Logout
-              </router-link>
-            </li>
-          </ul>
+        <li class="nav-item" v-for="(item,key) in lang.setting" :key="key" :class="item.sub.length > 0 ?'dropdown':''">
+          <!--nav sub-->
+          <div v-if="item.sub.length > 0">
+
+            <div v-if="item.label === 'Language'">
+              <a class="nav-link dropdown-toggle" :class="item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                {{language}}
+              </a>
+              <ul class="dropdown-menu dropdown-menu-color">
+                <li v-for="(val,ind) in item.sub" :key="ind">
+<!--                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="chooseLang(val)">-->
+                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="action(val)">
+                    {{val.label}}
+                  </a>
+                </li>
+              </ul>
+            </div>
+            <div v-else>
+              <a class="nav-link dropdown-toggle" :class=" item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                {{item.label}}
+              </a>
+              <ul class="dropdown-menu dropdown-menu-color">
+                <li v-for="(val,ind) in item.sub" :key="ind">
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Operation Log'" @click="optLog">
+                    {{val.label}}
+                  </router-link>
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'User'" @click="userList">
+                    {{val.label}}
+                  </router-link>
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Logout'" @click="logout">
+                    {{val.label}}
+                  </router-link>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div v-else>
+            <!--nav no sub-->
+            <router-link v-if="item.sub.length <= 0" :to="item.to" class="nav-link" :class="route === item.to ? 'active' : ''">
+              {{item.label}}
+            </router-link>
+          </div>
         </li>
       </ul>
     </div>
@@ -107,18 +81,47 @@
 <script setup>
 
 import {useRoute, useRouter} from 'vueRouter';
-import {ref, toRefs, onMounted, watch, reactive} from "vue";
+import {ref, toRefs, onMounted, watch, reactive,defineProps,defineEmits} from "vue";
+
+const props = defineProps({
+  hlang:{},
+})
+
+const emits = defineEmits(['action']);
+const action = function (obj){
+
+  if(obj.index === 1){
+    language.value = "日本語 (Japanese)";
+  }else{
+    language.value = "English";
+  }
+  let index = obj.index;
+  sessionStorage.setItem("lang",index);
+  lang.value = Base.GetLang(I18n);
+
+  emits("action",lang.value);
+}
 
 const data = reactive({
   nodes: [],
   activeNodeId: "",
-  isSide:false
+  isSide:false,
+  //lang:{}
 })
+const lang = ref(props.hlang);
 
-const route = ref('/admin/home');
+function chooseLang(obj){
+  if(obj.index === 1){
+    language.value = "日本語 (Japanese)";
+  }else{
+    language.value = "English";
+  }
+  let index = obj.index;
+  sessionStorage.setItem("lang",index);
+  lang.value = Base.GetLang(I18n);
+}
 
-const uroute = useRoute();
-const urouter = useRouter();
+const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
 
 function expand(){
 
@@ -140,6 +143,12 @@ function expand(){
 }
 
 onMounted(async () => {
+
+  let ls = sessionStorage.getItem("lang") || "0";
+  let lang = parseInt(ls);
+
+  language.value = Langs[lang].label;
+  data.lang = Base.GetLang(I18n);
 
   expand();
 
@@ -171,11 +180,6 @@ function userList() {
 function logout() {
   sessionStorage.clear();
   urouter.push("/login");
-}
-
-function chooseNode(item) {
-  sessionStorage.setItem("nodeId", item.NodeId);
-  window.href.reload();
 }
 
 const {nodes, activeNodeId} = toRefs(data);

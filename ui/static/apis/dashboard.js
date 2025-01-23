@@ -23,6 +23,7 @@ const dashboardApi = {
         ];
 
         let lineOpt = {};
+
         lineOpt.title = {
             text: 'Queued messages',
             subtext: '(chart:last minute)(10s)'

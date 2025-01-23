@@ -139,7 +139,7 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 	if t.config.Broker == "redis" {
 		if t.config.History.On {
 			mongo := t.config.Mongo
-			migrate = bmongo.NewMongoLog(ctx, mongo.Host, mongo.Port, mongo.ConnectTimeOut, mongo.MaxConnectionLifeTime, mongo.MaxConnectionPoolSize, mongo.Database, mongo.Collection, mongo.UserName, mongo.Password)
+			migrate = bmongo.NewMongoLog(ctx, mongo.Host, mongo.Port, mongo.ConnectTimeOut, mongo.MaxConnectionLifeTime, mongo.MaxConnectionPoolSize, mongo.Database, mongo.Collections["event"], mongo.UserName, mongo.Password)
 		}
 		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
 	}

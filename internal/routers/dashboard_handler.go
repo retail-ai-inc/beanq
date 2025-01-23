@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/mongox"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
@@ -19,11 +19,11 @@ import (
 
 type Dashboard struct {
 	client redis.UniversalClient
-	mog    *mongox.MongoX
+	mog    *bmongo.BMongo
 	prefix string
 }
 
-func NewDashboard(client redis.UniversalClient, x *mongox.MongoX, prefix string) *Dashboard {
+func NewDashboard(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *Dashboard {
 	return &Dashboard{client: client, mog: x, prefix: prefix}
 }
 
@@ -46,7 +46,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	w := ctx.Writer
 	r := ctx.Request
 
-	nodeId := r.Header.Get("nodeId")
+	nodeId := r.URL.Query().Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
 	flusher, ok := w.(http.Flusher)
@@ -112,8 +112,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		func() {
 			ctx10, cancel10 := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel10()
-			failKey := strings.Join([]string{t.prefix, "logs", "fail"}, ":")
-			failCount, err = client.ZCard(ctx10, failKey)
+			failCount, err = t.mog.DocumentCount(ctx10, "failed")
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
@@ -124,8 +123,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		func() {
 			ctx11, cancel11 := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel11()
-			successKey := strings.Join([]string{t.prefix, "logs", "success"}, ":")
-			successCount, err = client.ZCard(ctx11, successKey)
+			successCount, err = t.mog.DocumentCount(ctx11, "success")
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
@@ -159,7 +157,6 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			"fail_count":    failCount,
 			"success_count": successCount,
 			"queues":        queues,
-			"nodeId":        client.NodeId(nctx),
 		}
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
