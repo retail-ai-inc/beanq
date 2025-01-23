@@ -1,23 +1,45 @@
 <template>
   <div class="user">
-    <div class="d-flex justify-content-start">
-      <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
+    <div class="row mb-4">
+      <div class="col">
+        <h5 class="card-title">List of Admin Users</h5>
+      </div>
     </div>
+    <div class="row">
+      <div class="col-12">
+        <div class="row">
+          <div class="col">
+            <div class="form-row mb-3">
+              <div class="col">
+                <input type="text" class="form-control" id="formId" name="formId"  v-model="" placeholder="Search by email">
+              </div>
+              <div class="col-auto" style="padding-right: 10px">
+                <button type="submit" class="btn btn-primary">Search</button>
+              </div>
+              <div class="col-auto border-left" style="padding-left: 10px">
+                <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-    <table class="table table-striped table-hover">
+    <table class="table table-striped table-hover" style="table-layout: auto;">
       <thead>
       <tr>
-        <th scope="col">#</th>
-        <th scope="col">Account</th>
-        <th scope="col">Active</th>
-        <th scope="col">Type</th>
-        <th scope="col">Detail</th>
-        <th scope="col">Action</th>
+        <th scope="col" class="w-table-number">#</th>
+        <th scope="col" class="text-nowrap">Account</th>
+        <th scope="col" class="text-nowrap">Active</th>
+        <th scope="col" class="text-nowrap">Type</th>
+        <th scope="col" class="text-nowrap">Detail</th>
+        <th scope="col" class="text-center">Action</th>
       </tr>
       </thead>
       <tbody>
       <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
-        <th scope="row">{{parseInt(key)+1}}</th>
+        <td class="text-right">{{parseInt(key)+1}}</td>
         <td>{{item.account}}</td>
         <td>
           <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
@@ -28,9 +50,9 @@
             {{item.detail}}
           </span>
         </td>
-        <td>
-          <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
+        <td class="text-center text-nowrap">
           <EditIcon @action="editUserModal(item)" />
+          <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
         </td>
       </tr>
       </tbody>
@@ -288,5 +310,16 @@ const {userForm} = toRefs(datas);
 }
 .red{
   color:var(--bs-danger);
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.border-left {
+  border-left: 1px solid #dee2e6 !important;
+}
+.form-label {
+  font-weight: bold;
 }
 </style>

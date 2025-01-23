@@ -7,11 +7,11 @@
       </svg>
       <span>BeanQ Monitor</span>
     </router-link>
-    <div class="sidebar" style="">
+    <div class="sidebar">
       <nav class="mt-2">
         <ul id="sidebar" class="nav nav-sidebar flex-column nav-flat" role="menu" data-accordion="false">
-          <li v-for="(item,key) in nodes" :key="key" class="nav-item" :class="activeNodeId === item.NodeId ? 'active' : ''">
-            <a class="nav-link" @click="chooseNode(item)" href="javascript:;">
+          <li v-for="(item,key) in nodes" :key="key" class="nav-item">
+            <a class="nav-link" :class="activeNodeId === item.NodeId ? 'active' : ''" @click="chooseNode(item)" href="javascript:;">
               {{ item.Master }}<br/>
               <span style="font-size: 14px">{{item.Ip}}</span>
             </a>
@@ -101,31 +101,22 @@ const {nodes, activeNodeId} = toRefs(data);
   --link-color:#c2c7d0;
   --back-color:#3d9970
 }
-.sidebar{
+.sidebar {
   height: calc(100vh - (3.5rem + 1px));
   overflow-x: hidden;
   overflow-y: auto;
   padding: 0 .5rem;
-
-
-  .nav-item{
-    .nav-link{
-      font-size: 1.05rem;
-      color: #fff;
-    }
-    a:hover{
-      color: var(--white-color);
-    }
-  }
-  .nav-item a:hover{
-
-  }
-  .nav-sidebar{
-    .active{
-      background-color: var(--back-color);
-    }
-  }
+}
+.sidebar a {
+  color: #c2c7d0;
+}
+.sidebar .nav-item :hover {
+  background-color: rgba(255, 255, 255, .1);
+  color: #fff;
+}
+.sidebar .nav-item .active {
+  background-color: #B197FC;
+  color: #fff;
 }
 
 </style>
-

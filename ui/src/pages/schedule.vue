@@ -1,6 +1,6 @@
 <template>
     <div class="schedule">
-
+      <Pagination :page="page" :total="total" @changePage="changePage"/>
       <div class="accordion" id="schedule-ui-accordion">
         <div class="accordion-item" v-if="JSON.stringify(schedules) == '{}'" style="border: none;text-align: center;padding: 0.9375rem 0">
           Hurrah! We processed all messages.
