@@ -66,7 +66,13 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 		return res.Json(w, http.StatusOK)
 	}
 
-	if err := t.mgo.AddUser(r.Context(), map[string]any{"account": account, "password": password, "type": typ, "active": active, "detail": detail}); err != nil {
+	if err := t.mgo.AddUser(r.Context(), &bmongo.User{
+		Account:  account,
+		Password: password,
+		Type:     typ,
+		Active:   cast.ToInt32(active),
+		Detail:   detail,
+	}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		return res.Json(w, http.StatusInternalServerError)

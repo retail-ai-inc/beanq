@@ -2,12 +2,14 @@ package bmongo
 
 import (
 	"context"
+	"errors"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -18,20 +20,18 @@ var (
 	mgo       *BMongo
 )
 
-const (
-	manager     = "managers"
-	optLog      = "opt_logs"
-	workflowLog = "workflow_logs"
-)
-
 type BMongo struct {
-	database   *mongo.Database
-	collection string
+	database           *mongo.Database
+	eventCollection    string
+	workflowCollection string
+	managerCollection  string
+	optCollection      string
 }
 
 func NewMongo(host, port string,
 	username, password string,
-	database, collection string,
+	database string,
+	collections map[string]string,
 	connectTimeOut time.Duration, maxConnectionPoolSize uint64,
 	maxConnectionLifeTime time.Duration) *BMongo {
 	mongoOnce.Do(func() {
@@ -42,6 +42,7 @@ func NewMongo(host, port string,
 			SetConnectTimeout(connectTimeOut).
 			SetMaxPoolSize(maxConnectionPoolSize).
 			SetMaxConnIdleTime(maxConnectionLifeTime)
+
 		if username != "" && password != "" {
 			auth := options.Credential{
 				AuthSource: database,
@@ -60,8 +61,23 @@ func NewMongo(host, port string,
 			log.Fatal(err)
 		}
 		mgo = &BMongo{
-			database:   client.Database(database),
-			collection: collection,
+			database:           client.Database(database),
+			eventCollection:    "event_logs",
+			workflowCollection: "workflow_logs",
+			managerCollection:  "managers",
+			optCollection:      "opt_logs",
+		}
+		if v, ok := collections["event"]; ok {
+			mgo.eventCollection = v
+		}
+		if v, ok := collections["workflow"]; ok {
+			mgo.workflowCollection = v
+		}
+		if v, ok := collections["manager"]; ok {
+			mgo.managerCollection = v
+		}
+		if v, ok := collections["opt"]; ok {
+			mgo.optCollection = v
 		}
 	})
 	return mgo
@@ -71,7 +87,7 @@ func (t *BMongo) DocumentCount(ctx context.Context, status string) (int64, error
 
 	filter := bson.M{}
 	filter["status"] = status
-	total, err := t.database.Collection("event_logs").CountDocuments(ctx, filter)
+	total, err := t.database.Collection(t.eventCollection).CountDocuments(ctx, filter)
 	if err != nil {
 		return 0, err
 	}
@@ -88,7 +104,7 @@ func (t *BMongo) WorkFlowLogs(ctx context.Context, filter bson.M, page, pageSize
 	opts.SetLimit(pageSize)
 	opts.SetSort(bson.D{{Key: "CreatedAt", Value: 1}})
 
-	cursor, err := t.database.Collection(workflowLog).Find(ctx, filter, opts)
+	cursor, err := t.database.Collection(t.workflowCollection).Find(ctx, filter, opts)
 	defer func() {
 		_ = cursor.Close(ctx)
 	}()
@@ -99,14 +115,14 @@ func (t *BMongo) WorkFlowLogs(ctx context.Context, filter bson.M, page, pageSize
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
 	}
-	total, err := t.database.Collection(workflowLog).CountDocuments(ctx, filter)
+	total, err := t.database.Collection(t.workflowCollection).CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
 	return data, total, nil
 }
 
-func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
+func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, float64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
 		skip = 0
@@ -116,7 +132,7 @@ func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	opts.SetLimit(pageSize)
 	opts.SetSort(bson.D{{Key: "addTime", Value: 1}})
 
-	cursor, err := t.database.Collection(t.collection).Find(ctx, filter, opts)
+	cursor, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
 	defer func() {
 		_ = cursor.Close(ctx)
 	}()
@@ -127,11 +143,11 @@ func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
 	}
-	total, err := t.database.Collection(t.collection).CountDocuments(ctx, filter)
+	total, err := t.database.Collection(t.eventCollection).CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, total, nil
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
 }
 
 func (t *BMongo) DetailEventLog(ctx context.Context, id string) (bson.M, error) {
@@ -145,7 +161,7 @@ func (t *BMongo) DetailEventLog(ctx context.Context, id string) (bson.M, error) 
 		}
 	}
 
-	single := t.database.Collection(t.collection).FindOne(ctx, filter)
+	single := t.database.Collection(t.eventCollection).FindOne(ctx, filter)
 	if err := single.Err(); err != nil {
 		return nil, err
 	}
@@ -165,7 +181,7 @@ func (t *BMongo) Delete(ctx context.Context, id string) (int64, error) {
 		}
 		filter["_id"] = nid
 	}
-	result, err := t.database.Collection(t.collection).DeleteOne(ctx, filter)
+	result, err := t.database.Collection(t.eventCollection).DeleteOne(ctx, filter)
 	if err != nil {
 		return 0, err
 	}
@@ -184,7 +200,7 @@ func (t *BMongo) Edit(ctx context.Context, id string, payload any) (int64, error
 	update := bson.D{
 		{Key: "$set", Value: bson.D{{Key: "payload", Value: payload}}},
 	}
-	result, err := t.database.Collection(t.collection).UpdateOne(ctx, filter, update)
+	result, err := t.database.Collection(t.eventCollection).UpdateOne(ctx, filter, update)
 	if err != nil {
 		return 0, err
 	}
@@ -193,7 +209,7 @@ func (t *BMongo) Edit(ctx context.Context, id string, payload any) (int64, error
 
 func (t *BMongo) AddOptLog(ctx context.Context, data map[string]any) error {
 
-	_, err := t.database.Collection(optLog).InsertOne(ctx, data)
+	_, err := t.database.Collection(t.optCollection).InsertOne(ctx, data)
 	return err
 }
 
@@ -210,7 +226,7 @@ func (t *BMongo) OptLogs(ctx context.Context, page, pageSize int64) ([]bson.M, i
 
 	filter := bson.M{}
 
-	cursor, err := t.database.Collection(optLog).Find(ctx, filter, opts)
+	cursor, err := t.database.Collection(t.optCollection).Find(ctx, filter, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -221,7 +237,7 @@ func (t *BMongo) OptLogs(ctx context.Context, page, pageSize int64) ([]bson.M, i
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
 	}
-	total, err := t.database.Collection(optLog).CountDocuments(ctx, filter)
+	total, err := t.database.Collection(t.optCollection).CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -237,16 +253,27 @@ func (t *BMongo) DeleteOptLog(ctx context.Context, id string) (int64, error) {
 		}
 		filter["_id"] = nid
 	}
-	result, err := t.database.Collection(optLog).DeleteOne(ctx, filter)
+	result, err := t.database.Collection(t.optCollection).DeleteOne(ctx, filter)
 	if err != nil {
 		return 0, err
 	}
 	return result.DeletedCount, nil
 }
 
-func (t *BMongo) AddUser(ctx context.Context, data map[string]any) error {
+type User struct {
+	CreateAt time.Time `bson:"createAt" json:"createAt"`
+	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
+	Account  string    `bson:"account" json:"account"`
+	Password string    `bson:"password" json:"password"`
+	Type     string    `bson:"type" json:"type"`
+	Detail   string    `bson:"detail" json:"detail"`
+	Active   int32     `bson:"active" json:"active"`
+}
 
-	_, err := t.database.Collection(manager).InsertOne(ctx, data)
+func (t *BMongo) AddUser(ctx context.Context, user *User) error {
+
+	user.CreateAt = time.Now()
+	_, err := t.database.Collection(t.managerCollection).InsertOne(ctx, user)
 	return err
 }
 
@@ -260,11 +287,54 @@ func (t *BMongo) DeleteUser(ctx context.Context, id string) (int64, error) {
 		}
 		filter["_id"] = nid
 	}
-	result, err := t.database.Collection(manager).DeleteOne(ctx, filter)
+	result, err := t.database.Collection(t.managerCollection).DeleteOne(ctx, filter)
 	if err != nil {
 		return 0, err
 	}
 	return result.DeletedCount, nil
+}
+
+func (t *BMongo) CheckUser(ctx context.Context, account, password string) (*User, error) {
+
+	filter := bson.M{
+		"account":  account,
+		"password": password,
+		"active":   1,
+	}
+
+	var user User
+	result := t.database.Collection(t.managerCollection).FindOne(ctx, filter)
+	if err := result.Err(); err != nil {
+		if errors.Is(err, mongo.ErrNilDocument) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if err := result.Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+func (t *BMongo) CheckGoogleUser(ctx context.Context, account string) (*User, error) {
+	filter := bson.M{
+		"account": account,
+		"type":    "google",
+		"active":  1,
+	}
+
+	var user User
+	result := t.database.Collection(t.managerCollection).FindOne(ctx, filter)
+	if err := result.Err(); err != nil {
+		if errors.Is(err, mongo.ErrNilDocument) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if err := result.Decode(&user); err != nil {
+		return nil, err
+	}
+	return &user, nil
 }
 
 func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (int64, error) {
@@ -302,14 +372,14 @@ func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (
 		{Key: "$set", Value: values},
 	}
 
-	result, err := t.database.Collection(manager).UpdateOne(ctx, filter, update)
+	result, err := t.database.Collection(t.managerCollection).UpdateOne(ctx, filter, update)
 	if err != nil {
 		return 0, err
 	}
 	return result.ModifiedCount, nil
 }
 
-func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
+func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, float64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
 		skip = 0
@@ -319,7 +389,7 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 	opts.SetLimit(pageSize)
 	opts.SetSort(bson.D{{Key: "addTime", Value: 1}})
 
-	cursor, err := t.database.Collection(manager).Find(ctx, filter, opts)
+	cursor, err := t.database.Collection(t.managerCollection).Find(ctx, filter, opts)
 	defer func() {
 		_ = cursor.Close(ctx)
 	}()
@@ -330,9 +400,9 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
 	}
-	total, err := t.database.Collection(manager).CountDocuments(ctx, filter)
+	total, err := t.database.Collection(t.managerCollection).CountDocuments(ctx, filter)
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, total, nil
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
 }

@@ -173,7 +173,7 @@ onMounted(async ()=>{
   }
   users.value = data.data;
   cursor.value = data.cursor;
-  total.value = data.total;
+  total.value = data.total ;
 
   const ele = document.getElementById("addUserDetail");
   ele.addEventListener('hidden.bs.modal', () => {
@@ -238,8 +238,11 @@ async function addUser(e){
     }
     next.style.display = "none";
     addUserDetail.value.hide();
-    let users = await userApi.List();
-    users.value = users.data;
+    let userList = await userApi.List(page.value,pageSize.value);
+    const {code,data,msg} = userList;
+    users.value = data.data;
+    cursor.value = data.cursor;
+    total.value =  data.total;
   }catch (e) {
     toastRef.value.show(e.message);
   }
@@ -278,6 +281,8 @@ async function deleteUser(){
       let res = await userApi.List(page.value,pageSize.value);
       const {code,msg,data} = res;
       users.value = data.data;
+      cursor.value = data.cursor;
+      total.value = data.total;
       toastRef.value.show("Success");
     }
   }catch (e) {
