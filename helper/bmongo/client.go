@@ -261,13 +261,13 @@ func (t *BMongo) DeleteOptLog(ctx context.Context, id string) (int64, error) {
 }
 
 type User struct {
+	CreateAt time.Time `bson:"createAt" json:"createAt"`
+	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
 	Account  string    `bson:"account" json:"account"`
 	Password string    `bson:"password" json:"password"`
 	Type     string    `bson:"type" json:"type"`
-	Active   int32     `bson:"active" json:"active"`
 	Detail   string    `bson:"detail" json:"detail"`
-	CreateAt time.Time `bson:"createAt" json:"createAt"`
-	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
+	Active   int32     `bson:"active" json:"active"`
 }
 
 func (t *BMongo) AddUser(ctx context.Context, user *User) error {
