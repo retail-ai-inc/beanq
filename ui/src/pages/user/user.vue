@@ -72,7 +72,7 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label for="accountInput" class="form-label">Account</label>
+              <label for="accountInput" class="form-label">Account ID</label>
               <input
                   type="text"
                   class="form-control"
@@ -112,7 +112,7 @@
               </div>
             </div>
             <div class="mb-3">
-              <label for="detailArea" class="form-label">Detail</label>
+              <label for="detailArea" class="form-label">Account Detail</label>
               <textarea class="form-control" id="detailArea" rows="3" v-model="userForm.detail"></textarea>
             </div>
           </div>

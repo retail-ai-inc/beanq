@@ -26,7 +26,7 @@ const en_nav = [
         "sub":[
             {"label":"Event Log","to":"/admin/log/event"},
             {"label":"DLQ Log","to":"/admin/log/dlq"},
-            {"label":"WorkFlow Log","to":"/admin/log/workflow"}
+            {"label":"Workflow Log","to":"/admin/log/workflow"}
         ]
     },
     {

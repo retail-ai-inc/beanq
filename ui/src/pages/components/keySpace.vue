@@ -1,9 +1,9 @@
 <template>
   <div class="card">
     <div class="card-header bg-secondary text-white">
-      <h5>Key Space</h5>
+      Key Space
     </div>
-    <table class="table table-striped table-hover">
+    <table class="table table-striped table-hover" style="table-layout: fixed">
       <thead>
       <tr>
         <th scope="col" class="text-start pl-10">DbName</th>
@@ -14,7 +14,7 @@
       </thead>
       <tbody>
       <tr v-for="(item,key) in keyspace" :key="key">
-        <td class="text-start pl-10 text-bold">{{item.dbname}}</td>
+        <td class="text-start pl-10">{{item.dbname}}</td>
         <td class="text-end">{{item.keys}}</td>
         <td class="text-end">{{item.expires}}</td>
         <td class="text-end pr-10">{{item.avg_ttl}}</td>
