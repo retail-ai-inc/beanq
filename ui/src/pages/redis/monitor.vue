@@ -1,5 +1,10 @@
 <template>
   <div class="redis-monitor container-fluid">
+    <div class="row mb-4">
+      <div class="col">
+        <h5 class="card-title">List of Redis Monitor Info</h5>
+      </div>
+    </div>
     <ul class="list-group list-group-flush" id="monitor" style="height: 500px;overflow-y: scroll;background-color: #333">
       <li v-for="(v,k) in commands " :key="k" class="list-group-item" style="background-color: #333;color:#f5f5f5">{{v}}</li>
     </ul>

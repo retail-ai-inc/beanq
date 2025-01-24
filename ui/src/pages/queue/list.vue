@@ -1,9 +1,8 @@
 <template>
     <div class="channel">
-      <Pagination :page="page" :total="total" @changePage="changePage"/>
-
+      <Pagination v-if="queues.length > 0" :page="page" :total="total" @changePage="changePage"/>
       <div class="accordion" id="ui-accordion">
-        <div class="accordion-item" v-if="queues.length === 0">
+        <div class="accordion-item" v-if="JSON.stringify(queues) == '{}'" style="border: none;text-align: center;padding: 0.9375rem 0">
           Hurrah! We processed all messages.
         </div>
         <div class="accordion-item" v-else v-for="(item, key) in queues" :key="key" style="margin-bottom: 0.9375rem">
@@ -38,7 +37,7 @@
           </div>
         </div>
       </div>
-      <Pagination :page="page" :total="total" @changePage="changePage"/>
+      <Pagination v-if="queues.length > 0" :page="page" :total="total" @changePage="changePage"/>
     </div>
 </template>
 
@@ -55,6 +54,7 @@ function getQueue(page,pageSize){
 
 onMounted(async ()=>{
   let queue = await getQueue(page.value,10);
+  console.log(queue.data)
   queues.value  = queue.data;
 })
 

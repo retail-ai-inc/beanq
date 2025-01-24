@@ -7,33 +7,34 @@
       <Search :form="form" @search="search"/>
       <!--search end-->
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      <hr>
       <div class="row">
         <div class="col-12">
           <div class="table-responsive">
-            <table class="table table-striped table-hover">
+            <table class="table table-striped table-hover" style="table-layout: auto;">
               <thead>
                 <tr>
-                  <th scope="col">#</th>
-                  <th scope="col">Id</th>
-                  <th scope="col">Channel</th>
-                  <th scope="col">Topic</th>
-                  <th scope="col">Mood Type</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">AddTime</th>
-                  <th scope="col">Payload</th>
-                  <th scope="col">Action</th>
+                  <th scope="col" class="w-table-number">#</th>
+                  <th scope="col" class="text-nowrap">Id</th>
+                  <th scope="col" class="text-nowrap">Channel</th>
+                  <th scope="col" class="text-nowrap">Topic</th>
+                  <th scope="col" class="text-nowrap">Mood Type</th>
+                  <th scope="col" class="text-center">Status</th>
+                  <th scope="col" class="text-nowrap">Add Time</th>
+                  <th scope="col" class="text-nowrap">Payload</th>
+                  <th scope="col" class="text-center text-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(item, key) in eventLogs" :key="key" style="height: 3rem;line-height:3rem">
-                  <th scope="row">{{parseInt(key)+1}}</th>
-                  <td>
+                <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
+                  <td class="text-right">{{parseInt(key)+1}}</td>
+                  <td class="">
                     <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item.id}}</router-link>
                   </td>
                   <td>{{item.channel}}</td>
                   <td>{{item.topic}}</td>
                   <td>{{item.moodType}}</td>
-                  <td>
+                  <td class="text-center">
                     <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
                     <span v-else-if="item.status == 'failed'" class="text-danger">{{item.status}}</span>
                     <span v-else-if="item.status == 'published'" class="text-warning">{{item.status}}</span>
@@ -44,10 +45,10 @@
                       <pre><code>{{item.payload}}</code></pre>
                     </span>
                   </td>
-                  <td>
+                  <td class="text-center text-nowrap">
                     <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
-                    <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
                     <EditIcon @action="editModal(item)"/>
+                    <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
                   </td>
                 </tr>
               </tbody>
@@ -273,5 +274,8 @@ const {eventLogs,form,page,total,cursor,detail,retryLabel,showRetryModal,deleteL
 .event{
   transition: opacity 0.5s ease;
   opacity: 1;
+}
+.table th, .table td {
+  vertical-align: middle;
 }
 </style>
