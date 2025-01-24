@@ -51,7 +51,7 @@
               <a class="nav-link dropdown-toggle" :class=" item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 {{item.label}}
               </a>
-              <ul class="dropdown-menu dropdown-menu-color">
+              <ul class="dropdown-menu dropdown-menu-color dropdown-menu-end">
                 <li v-for="(val,ind) in item.sub" :key="ind">
                   <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Operation Log'" @click="optLog">
                     {{val.label}}
@@ -231,6 +231,8 @@ const {nodes, activeNodeId} = toRefs(data);
 .nav-link {
   color: #ffffff !important;
 }
+
+
 
 .dropdown-menu-color {
   color: #000000;

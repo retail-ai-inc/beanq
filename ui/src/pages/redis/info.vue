@@ -1,5 +1,10 @@
 <template>
   <div class="redis container-fluid">
+    <div class="row mb-4">
+      <div class="col">
+        <h5 class="card-title">All Information of Redis</h5>
+      </div>
+    </div>
     <div class="card">
       <div class="card-header">
         Cpu

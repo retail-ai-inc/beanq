@@ -1,6 +1,11 @@
 <template>
   <div class="workflow">
     <div class="container-fluid">
+      <div class="row mb-4">
+        <div class="col">
+          <h5 class="card-title">List of Event Log</h5>
+        </div>
+      </div>
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
       <div class="row">
         <div class="col-12">

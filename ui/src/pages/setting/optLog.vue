@@ -1,35 +1,40 @@
 <template>
   <div class="table-responsive opt-log">
+    <div class="row mb-4">
+      <div class="col">
+        <h5 class="card-title">List of Operation Logs</h5>
+      </div>
+    </div>
     <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-    <table class="table table-striped table-hover">
+    <table class="table table-striped table-hover"  style="table-layout: auto;">
       <thead>
       <tr>
-        <th scope="col">#</th>
-        <th scope="col">Add Time</th>
-        <th scope="col">Account</th>
-        <th scope="col">Visit</th>
-        <th scope="col">Data</th>
-        <th scope="col">Action</th>
+        <th scope="col" class="w-table-number">#</th>
+        <th scope="col" class="text-nowrap">Add Time</th>
+        <th scope="col" class="text-nowrap">Account</th>
+        <th scope="col" class="text-nowrap">Visit</th>
+        <th scope="col" class="text-nowrap">Data</th>
+        <th scope="col" class="text-center">Action</th>
       </tr>
       </thead>
       <tbody>
       <tr v-for="(item, key) in list" :key="key" style="height: 2.5rem;">
-        <th scope="row" style="width: 5%">{{parseInt(key)+1}}</th>
+        <td class="text-right">{{parseInt(key)+1}}</td>
         <td>
             <pre><code>{{item.addTime}}</code></pre>
         </td>
-        <td style="width: 15%">{{item.user}}</td>
-        <td style="width: 30%">
+        <td>{{item.user}}</td>
+        <td>
           <span class="d-inline-block text-truncate" style="max-width: 50rem">
             <pre><code>{{item.uri}}</code></pre>
           </span>
         </td>
-        <td style="width: 45%">
+        <td>
           <span class="d-inline-block text-truncate" style="max-width: 400px">
             {{item.data}}
           </span>
         </td>
-        <td style="width: 5%">
+        <td class="text-center text-nowrap">
             <Delete_icon @action="deleteShowModal(item)"/>
         </td>
       </tr>
