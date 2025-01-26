@@ -27,9 +27,11 @@
               </thead>
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
-                  <td class="text-right">{{parseInt(key)+1}}</td>
+                  <td class="text-right">
+                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item._id}}</router-link>
+                  </td>
                   <td class="">
-                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item.id}}</router-link>
+                    {{item.id}}
                   </td>
                   <td>{{item.channel}}</td>
                   <td>{{item.topic}}</td>
@@ -62,22 +64,16 @@
       <EditAction :label="infoDetailLabel" :id="showInfoDetail" :data="detail" @action="editInfo"></EditAction>
       <!--edit modal end-->
       <!--retry modal begin-->
-      <Action :label="retryLabel" :id="showRetryModal" @action="retryInfo">
+      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
         <template #title="{title}">
           {{l.retryModal.title}}
-        </template>
-        <template #body="{body}">
-          {{l.retryModal.body}}
         </template>
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
-      <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteInfo">
+      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" @action="deleteInfo">
         <template #title="{title}">
           {{l.deleteModal.title}}
-        </template>
-        <template #body="{body}">
-          {{l.deleteModal.body}}
         </template>
       </Action>
       <!--delete modal end-->
@@ -124,13 +120,21 @@ let data = reactive({
 })
 
 const [uRouter,route] = [useRouter(),useRoute()];
+const [dataId] = [ref("")];
+const [retryWarningHtml,retryInfoHtml] = [
+    ref("Warning: Item retry cannot be undone!<br/> Please proceed with caution!"),
+    ref("This operation will permanently retry the data of log.<br>\n" +
+      "To prevent accidental actions, please confirm by entering the following:<br/>")
+]
 
 function deleteModal(item){
   data.deleteId = "";
+  dataId.value = "";
   const ele = document.getElementById("showDeleteModal");
   data.deleteModal = new bootstrap.Modal(ele);
   data.deleteModal.show(ele);
   data.deleteId = item._id;
+  dataId.value = item._id;
 }
 
 // delete log
@@ -149,10 +153,12 @@ async function deleteInfo(){
 
 function retryModal(item){
   data.retryItem = {};
+  dataId.value = "";
   const eleRetry = document.getElementById("showRetryModal");
   data.retryModal = new bootstrap.Modal(eleRetry);
   data.retryModal.show(eleRetry);
   data.retryItem = item;
+  dataId.value = item._id;
 }
 
 // send payload into queue to consume it again

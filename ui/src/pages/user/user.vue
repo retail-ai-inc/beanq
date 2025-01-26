@@ -96,7 +96,7 @@
                   id="passwordInput"
                   v-model="userForm.password"
                   placeholder="The password length range is 5-36 chars"
-                  @blur="checkValid"
+                  @input="checkValid"
               />
               <div class="invalid-feedback">
                 Please enter a length char of 5-36.
@@ -235,6 +235,11 @@ function checkValid(e){
   //check password
   if(e.currentTarget.id === 'passwordInput'){
     let len = datas.userForm.password.length;
+    if(len <= 0){
+      next.innerHTML = "";
+      next.style.display = "none";
+      return;
+    }
     if(len < 5 || len > 36){
       next.innerHTML = "The password length range is 5-36 chars";
       next.style.display = "block";
