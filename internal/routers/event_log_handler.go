@@ -13,7 +13,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
 	"sort"
 	"time"
@@ -48,13 +47,7 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 	filter := bson.M{}
 	filter["logType"] = bstatus.Logic
 	if id != "" {
-		if objId, err := primitive.ObjectIDFromHex(id); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return nil
-		} else {
-			filter["id"] = objId
-		}
-
+		filter["id"] = id
 	}
 	if status != "" {
 		statusValid := []string{"failed", "published", "success"}

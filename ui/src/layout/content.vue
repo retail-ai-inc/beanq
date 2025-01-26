@@ -49,14 +49,14 @@ import {ref, watch, onMounted} from "vue";
 const route = ref('/');
 
 const useR = useRoute();
-let fullPath = useR.fullPath;
+let fullPath = useR.path;
 fullPath = fullPath.replace("/", "");
 fullPath = fullPath.slice(0, 1).toUpperCase() + fullPath.slice(1).toLowerCase();
 
 onMounted(() => {
   route.value = fullPath;
 })
-watch(() => useR.fullPath, (newVal, oldVal) => {
+watch(() => useR.path, (newVal, oldVal) => {
   let newV = newVal.replace("/", "");
   newV = newV.slice(0, 1).toUpperCase() + newV.slice(1).toLowerCase();
   route.value = newV;
@@ -70,11 +70,11 @@ watch(() => useR.fullPath, (newVal, oldVal) => {
   transition: margin-left .3s ease-in-out;
   height: 100%;
   background-color: #f4f6f9;
+  .content-header {
+    padding: 1rem .5rem;
+  }
 }
 
-.content-header {
-  padding: 1rem .5rem;
-}
 .container-fluid {
   width: 100%;
   padding-right: 8px;
