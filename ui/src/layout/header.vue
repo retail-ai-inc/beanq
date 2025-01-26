@@ -162,10 +162,10 @@ onMounted(async () => {
   data.activeNodeId = nodeId;
   sessionStorage.setItem("nodeId", nodeId);
 
-  route.value = uroute.fullPath;
+  route.value = uroute.path;
 })
 
-watch(() => uroute.fullPath, (newVal, oldVal) => {
+watch(() => uroute.path, (newVal, oldVal) => {
   route.value = newVal;
 })
 
