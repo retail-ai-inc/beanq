@@ -11,7 +11,7 @@
           <div class="col">
             <div class="form-row mb-3">
               <div class="col">
-                <input type="text" class="form-control" id="formId" name="formId"  v-model="" placeholder="Search by email">
+                <input type="text" class="form-control" id="formId" name="formId"  placeholder="Search by email">
               </div>
               <div class="col-auto" style="padding-right: 10px">
                 <button type="submit" class="btn btn-primary">Search</button>
@@ -72,21 +72,35 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label for="accountInput" class="form-label">Account ID</label>
+              <label for="accountInput" class="form-label">Account ID
+              </label>
               <input
                   type="text"
                   class="form-control"
                   id="accountInput"
                   @blur="checkValid"
                   v-model="userForm.account"
-                  :readonly="accountReadOnly == true ? 'readonly': false"/>
+                  :readonly="accountReadOnly == true ? 'readonly': false"
+                  :disabled="accountReadOnly === true ? 'disabled': false"
+                  placeholder="Account ID should be an email"
+              />
               <div class="invalid-feedback">
                 Please input an account.
               </div>
             </div>
             <div class="mb-3">
               <label for="passwordInput" class="form-label">Password</label>
-              <input type="text" class="form-control" id="passwordInput" v-model="userForm.password"/>
+              <input
+                  type="text"
+                  class="form-control"
+                  id="passwordInput"
+                  v-model="userForm.password"
+                  placeholder="The password length range is 5-36 chars"
+                  @blur="checkValid"
+              />
+              <div class="invalid-feedback">
+                Please enter a length char of 5-36.
+              </div>
             </div>
             <div class="mb-3">
               <label for="typeSelect" class="form-label">Type</label>
@@ -209,12 +223,20 @@ async function changePage(page,cursor){
 
 function checkValid(e){
 
+  let next = e.currentTarget.nextElementSibling;
+  next.style.display = "none";
   //check account
-  if(e.currentTarget.id == "accountInput"){
-    let next = e.currentTarget.nextElementSibling;
-    next.style.display = "none";
-    next.innerHTML = "Please input an account";
-    if(datas.userForm.account == ""){
+  if(e.currentTarget.id === "accountInput"){
+    next.innerHTML = "Please input an Email account";
+    if(datas.userForm.account === "" || Base.CheckEmail(datas.userForm.account) === false){
+      next.style.display = "block";
+    }
+  }
+  //check password
+  if(e.currentTarget.id === 'passwordInput'){
+    let len = datas.userForm.password.length;
+    if(len < 5 || len > 36){
+      next.innerHTML = "The password length range is 5-36 chars";
       next.style.display = "block";
     }
   }
