@@ -110,17 +110,6 @@ const data = reactive({
 })
 const lang = ref(props.hlang);
 
-function chooseLang(obj){
-  if(obj.index === 1){
-    language.value = "日本語 (Japanese)";
-  }else{
-    language.value = "English";
-  }
-  let index = obj.index;
-  sessionStorage.setItem("lang",index);
-  lang.value = Base.GetLang(I18n);
-}
-
 const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
 
 function expand(){
@@ -167,6 +156,13 @@ onMounted(async () => {
 
 watch(() => uroute.path, (newVal, oldVal) => {
   route.value = newVal;
+
+  document.querySelectorAll('.dropdown-toggle').forEach((toggle) => {
+    toggle.setAttribute('aria-expanded', 'false');
+  });
+  document.querySelectorAll('.dropdown-menu').forEach((menu) => {
+    menu.classList.remove('show');
+  });
 })
 
 function optLog() {

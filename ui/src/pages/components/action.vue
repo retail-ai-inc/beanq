@@ -1,5 +1,5 @@
 <template>
-  <div class="modal fade" data-bs-keyboard="false" tabindex="-1" :aria-labelledby="label" aria-hidden="true" :id="id">
+  <div class="modal fade" data-bs-keyboard="false" tabindex="-1" :aria-labelledby="label" :id="id">
     <div class="modal-dialog modal-md modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
@@ -16,8 +16,8 @@
           </div>
           <input
               type="text"
+              :id="`input-${id}`"
               class="form-control"
-              id="inputDataId"
               v-model="dataIdValue"
               placeholder="Please enter the prompt content to continue."
               @input="checkInput"

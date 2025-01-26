@@ -61,7 +61,7 @@
     <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
 
     <!--add user modal-->
-    <div class="modal fade" id="addUserDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addUserDetailLabel" aria-hidden="true">
+    <div class="modal fade" id="addUserDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addUserDetailLabel">
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
