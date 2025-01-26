@@ -11,10 +11,10 @@
           <div class="col">
             <div class="form-row mb-3">
               <div class="col">
-                <input type="text" class="form-control" id="formId" name="formId"  placeholder="Search by email">
+                <input type="text" class="form-control" id="formId" name="formId" v-model="accountInput" placeholder="Search by account">
               </div>
-              <div class="col-auto" style="padding-right: 10px">
-                <button type="submit" class="btn btn-primary">Search</button>
+              <div class="col-auto" style="margin:0 .75rem;">
+                <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
               </div>
               <div class="col-auto border-left" style="padding-left: 10px">
                 <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
@@ -165,6 +165,7 @@ const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(n
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [users,accountReadOnly,addUserDetail] = [ref([]),ref(false),ref(null)];
 const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
+const [accountInput,userId] = [ref(""),ref("")];
 
 let datas = reactive({
   userForm:{
@@ -176,10 +177,8 @@ let datas = reactive({
   }
 });
 
-const [userId] = [ref("")];
-
-onMounted(async ()=>{
-  let res = await userApi.List(page.value,pageSize.value);
+async function userList(){
+  let res = await userApi.List(page.value,pageSize.value,accountInput.value);
   const {code,msg,data} = res;
   if(code !== "0000"){
 
@@ -187,7 +186,11 @@ onMounted(async ()=>{
   users.value = data.data;
   cursor.value = data.cursor;
   total.value = data.total ;
+}
 
+onMounted( ()=>{
+
+   userList();
   const ele = document.getElementById("addUserDetail");
   ele.addEventListener('hidden.bs.modal', () => {
     datas.userForm = {};
@@ -205,19 +208,16 @@ onUnmounted(()=>{
     }
 });
 
-async function changePage(page,cursor){
+function SearchByAccount(){
+  userList();
+}
+
+function changePage(page,cursor){
   page.value = page;
   cursor.value = cursor;
   sessionStorage.setItem("page",page)
 
-  let res = await userApi.List(page.value,pageSize.value);
-  const {code,msg,data} = res;
-  if(code !== "0000"){
-
-  }
-  users.value = data.data;
-  cursor.value = data.cursor;
-  total.value = data.total;
+  userList();
 }
 
 function checkValid(e){
@@ -264,11 +264,7 @@ async function addUser(e){
     }
     next.style.display = "none";
     addUserDetail.value.hide();
-    let userList = await userApi.List(page.value,pageSize.value);
-    const {code,data,msg} = userList;
-    users.value = data.data;
-    cursor.value = data.cursor;
-    total.value =  data.total;
+    await userList();
   }catch (e) {
     toastRef.value.show(e.message);
   }
@@ -278,14 +274,7 @@ async function addUser(e){
 async function editUser(){
   let res = await userApi.Edit(datas.userForm);
   addUserDetail.value.hide();
-  let user = await userApi.List(page.value,pageSize.value);
-  const {code,msg,data} = user;
-  if(code !== "0000"){
-
-  }
-  users.value = data.data;
-  cursor.value = data.cursor;
-  total.value = data.total;
+  await userList();
 
   return
 }
@@ -306,11 +295,8 @@ async function deleteUser(){
   try {
     let res = await userApi.Delete(account.value);
     if(res.code == "0000"){
-      let res = await userApi.List(page.value,pageSize.value);
-      const {code,msg,data} = res;
-      users.value = data.data;
-      cursor.value = data.cursor;
-      total.value = data.total;
+      await userList();
+
       toastRef.value.show("Success");
     }
   }catch (e) {
@@ -327,7 +313,6 @@ function editUserModal(item){
   addUserDetail.value = new bootstrap.Modal(ele);
   addUserDetail.value.show(ele);
 
-  console.log(datas.userForm);
 }
 
 const {userForm} = toRefs(datas);
