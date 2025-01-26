@@ -86,7 +86,7 @@
 </template>
 <script setup>
 import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
-import { useRouter } from 'vueRouter';
+import { useRouter,useRoute } from 'vueRouter';
 import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
@@ -123,6 +123,7 @@ let data = reactive({
   showDeleteModal:"showDeleteModal"
 })
 
+const [uRouter,route] = [useRouter(),useRoute()];
 
 function deleteModal(item){
   data.deleteId = "";
@@ -212,31 +213,30 @@ async function editInfo(item){
 
 // search feature
 async function search(){
-
-  sessionStorage.setItem("id",data.form.id);
-  sessionStorage.setItem("status",data.form.status);
-
-  initEventSource();
+  uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}`).then(()=>{
+    window.location.reload();
+  });
 }
+
 // paging
 async function changePage(page,cursor){
   data.page = page;
   data.cursor = cursor;
   sessionStorage.setItem("page",page)
-
-  initEventSource();
+  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}`;
+  initEventSource(apiUrl);
 }
-const uRouter = useRouter();
+
 function detailEvent(item){
   uRouter.push("detail/"+item._id);
 }
 
-function initEventSource(){
+function initEventSource(apiUrl){
 
   if (data.sseEvent){
     data.sseEvent.close();
   }
-  data.sseEvent = sseApi.Init(`event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}`);
+  data.sseEvent = sseApi.Init(apiUrl);
   data.sseEvent.onopen = () =>{
     console.log("handshake success");
   }
@@ -253,13 +253,15 @@ function initEventSource(){
 
 onMounted(async()=>{
 
+  let [id,status] = [route.query.id,route.query.status];
   data.form = {
-    id:sessionStorage.getItem("id")??"",
-    status:sessionStorage.getItem("status")??""
+    id:id??"",
+    status:status??""
   };
   data.page = sessionStorage.getItem("page")??1;
 
-  initEventSource();
+  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}`;
+  initEventSource(apiUrl);
 
 })
 

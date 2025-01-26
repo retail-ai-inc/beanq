@@ -10,8 +10,8 @@
           <tr>
             <th scope="col" class="col-3 text-start pl-10">Command</th>
             <th scope="col" class="col-2 text-end">Calls</th>
-            <th scope="col" class="col-4 text-end">Total(ns)</th>
-            <th scope="col" class="col-3 text-end pr-10">Per Call(ns)</th>
+            <th scope="col" class="col-4 text-end">Total(ms)</th>
+            <th scope="col" class="col-3 text-end pr-10">Per Call(ms)</th>
           </tr>
           </thead>
           <tbody>
