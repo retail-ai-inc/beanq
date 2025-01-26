@@ -142,12 +142,9 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteUser">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteUser">
       <template #title="{title}">
         {{l.deleteModal.title}}
-      </template>
-      <template #body="{body}">
-        {{l.deleteModal.body}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
@@ -178,6 +175,8 @@ let datas = reactive({
     detail:""
   }
 });
+
+const [userId] = [ref("")];
 
 onMounted(async ()=>{
   let res = await userApi.List(page.value,pageSize.value);
@@ -293,10 +292,12 @@ async function editUser(){
 
 function deleteUserModal(item){
   account.value = "";
+  userId.value = "";
   const ele = document.getElementById("showDeleteModal");
   delModal.value = new bootstrap.Modal(ele);
   delModal.value.show(ele);
   account.value  = item._id;
+  userId.value = item._id;
 }
 
 async function deleteUser(){
