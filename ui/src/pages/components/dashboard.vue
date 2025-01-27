@@ -25,7 +25,7 @@
     <div class="col bg-danger">
       <div class="inner">
         <h3>
-          <router-link to="" class="nav-link text-muted link-color">{{fail_count}}</router-link>
+          <router-link to="log/event?status=failed" class="nav-link text-muted link-color">{{fail_count}}</router-link>
         </h3>
         <h5 class="my-auto">Fail Total</h5>
       </div>
@@ -36,7 +36,7 @@
     <div class="col bg-info">
       <div class="inner">
         <h3>
-          <router-link to="" class="nav-link text-muted link-color">{{success_count}}</router-link>
+          <router-link to="log/event?status=success" class="nav-link text-muted link-color">{{success_count}}</router-link>
         </h3>
         <h5 class="my-auto">Success Total</h5>
       </div>

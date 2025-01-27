@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
+	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"net/http"
 )
@@ -35,8 +36,17 @@ func (t *User) List(ctx *bwebframework.BeanContext) error {
 
 	page := cast.ToInt64(r.URL.Query().Get("page"))
 	pageSize := cast.ToInt64(r.URL.Query().Get("pageSize"))
+	account := r.URL.Query().Get("account")
 
-	data, total, err := t.mgo.UserLogs(r.Context(), nil, page, pageSize)
+	filter := bson.M{}
+	if account != "" {
+		filter["account"] = bson.M{
+			"$regex":   account,
+			"$options": "i",
+		}
+	}
+
+	data, total, err := t.mgo.UserLogs(r.Context(), filter, page, pageSize)
 
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode

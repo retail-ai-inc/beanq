@@ -10,6 +10,7 @@
       <thead>
       <tr>
         <th scope="col" class="w-table-number">#</th>
+        <th scope="col" class="text-nowrap">Id</th>
         <th scope="col" class="text-nowrap">Add Time</th>
         <th scope="col" class="text-nowrap">Account</th>
         <th scope="col" class="text-nowrap">Visit</th>
@@ -20,6 +21,7 @@
       <tbody>
       <tr v-for="(item, key) in list" :key="key" style="height: 2.5rem;">
         <td class="text-right">{{parseInt(key)+1}}</td>
+        <td>{{item._id}}</td>
         <td>
             <pre><code>{{item.addTime}}</code></pre>
         </td>
@@ -42,12 +44,9 @@
     </table>
     <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
     <Btoast :id="id" ref="toastRef"/>
-    <Action :label="deleteLabel" :id="showDeleteModal" @action="deleteLog">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="mid" @action="deleteLog">
       <template #title="{title}">
         Are you sure to delete?
-      </template>
-      <template #body="{body}">
-        If you need to restore, please contact the administrator.
       </template>
     </Action>
   </div>
@@ -77,6 +76,7 @@ onUnmounted(()=>{
 })
 
 function deleteShowModal(item){
+  mid.value = "";
   const ele = document.getElementById("showDeleteModal");
   deleteModal.value = new bootstrap.Modal(ele);
   deleteModal.value.show(ele);

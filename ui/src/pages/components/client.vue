@@ -1,7 +1,7 @@
 <template>
   <div class="card">
     <div class="card-header bg-secondary text-white">
-      <h5>Client</h5>
+      Client
     </div>
     <div class="mb-3 row text-start p-015">
       <label class="col-sm-7 col-form-label">Connected Clients</label>

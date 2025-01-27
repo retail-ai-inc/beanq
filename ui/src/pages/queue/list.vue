@@ -18,8 +18,8 @@
                 <tr>
                   <th scope="col">Topic</th>
                   <th scope="col">State</th>
-                  <th scope="col">Memory usage</th>
-                  <th scope="col">Idle</th>
+                  <th scope="col">Memory usage(byte)</th>
+                  <th scope="col">Idle(s)</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -54,7 +54,8 @@ function getQueue(page,pageSize){
 
 onMounted(async ()=>{
   let queue = await getQueue(page.value,10);
-  console.log(queue.data)
+  const{code,msg,data} = queue;
+  queues.value = data;
   queues.value  = queue.data;
 })
 

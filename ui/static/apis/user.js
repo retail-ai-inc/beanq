@@ -1,6 +1,6 @@
 const userApi = {
-    List(page,pageSize){
-        return request.get(`/user/list?page=${page}&pageSize=${pageSize}`);
+    List(page,pageSize,account){
+        return request.get(`/user/list?page=${page}&pageSize=${pageSize}&account=${account}`);
     },
     Add(data){
         return request.post("/user/add",data);
