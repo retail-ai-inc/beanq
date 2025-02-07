@@ -53,13 +53,7 @@
               </a>
               <ul class="dropdown-menu dropdown-menu-color dropdown-menu-end">
                 <li v-for="(val,ind) in item.sub" :key="ind">
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Operation Log'" @click="optLog">
-                    {{val.label}}
-                  </router-link>
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'User'" @click="userList">
-                    {{val.label}}
-                  </router-link>
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Logout'" @click="logout">
+                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="jump(val.to,val.flag)">
                     {{val.label}}
                   </router-link>
                 </li>
@@ -165,17 +159,13 @@ watch(() => uroute.path, (newVal, oldVal) => {
   });
 })
 
-function optLog() {
-  urouter.push("/admin/optLog");
-}
-
-function userList() {
-  urouter.push("/admin/user")
-}
-
-function logout() {
-  sessionStorage.clear();
-  urouter.push("/login");
+function jump(uri,flag){
+  if(flag === "Logout"){
+    sessionStorage.clear();
+    urouter.replace("/login");
+  }else{
+    urouter.push(uri);
+  }
 }
 
 const {nodes, activeNodeId} = toRefs(data);
