@@ -2,17 +2,17 @@
   <div class="role-tree">
     <ul>
       <li class="tree-item" v-for="(item,key) in nodes" :key="key">
-        <input type="checkbox" :value="item.value" :pid="item.pid" @click="choose">
+        <input type="checkbox" :value="item.value" :pid="item.pid" :id="item.id" @click="choose"  :checked="checkedIds.includes(item.id) ? 'checked' : false">
         <label>{{item.label}}</label>
         <div v-if="('children' in item) && item.children.length > 0">
-          <tree-node :nodes="item.children"/>
+          <tree-node :nodes="item.children" :checkedIds="checkedIds" @choose="treeChoose"/>
         </div>
       </li>
     </ul>
   </div>
 </template>
 <script setup>
-import {ref,defineProps,defineOptions,computed} from "vue";
+import {defineProps,defineOptions,defineEmits} from "vue";
 
 defineOptions({
   name:"TreeNode"
@@ -20,28 +20,22 @@ defineOptions({
 
 const props = defineProps({
   nodes:{
-    type: Object,
+    type: Array,
+    required: true
+  },
+  checkedIds:{
+    type: Array,
     required: true
   }
 })
 
-const newNodes = computed(()=>{
-  props.nodes.forEach((v,k)=>{
+const emits = defineEmits(['choose']);
+function treeChoose(event){
+  emits("choose",event);
+}
 
-  })
-})
-
-
-
-function choose(event){
-
-  const pid = parseInt(event.target.attributes["pid"]) || 0;
-  if(pid > 0){
-
-  }
-  console.log(event);
-  console.log(event.target.attributes["pid"]);
-  console.log(event.target.value);
+const choose = function (event){
+  emits("choose",event);
 }
 
 </script>

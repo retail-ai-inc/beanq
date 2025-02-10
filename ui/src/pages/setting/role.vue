@@ -82,13 +82,13 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Roles</label>
-              <tree :nodes="nodes"/>
+              <tree :nodes="nodes" :checkedIds="ids" @choose="chooseNode"/>
             </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{l.closeButton}}</button>
-            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{l.addButton}}</button>
-            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{l.editButton}}</button>
+            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{l.addButton}}</button>
+            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{l.editButton}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -97,7 +97,7 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteUser">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteRole">
       <template #title="{title}">
         {{l.deleteModal.title}}
       </template>
@@ -107,7 +107,7 @@
   </div>
 </template>
 <script setup>
-import { ref,inject,onMounted,onUnmounted } from "vue";
+import { ref,inject,onMounted,onUnmounted,computed } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
@@ -157,6 +157,55 @@ onUnmounted(()=>{
   }
 });
 
+const ids = ref([]);
+function tileTree(tree) {
+  return _.flatMap(tree,(node)=>{
+    let children = node.children ? tileTree(node.children) : [];
+    return [node,...children];
+  });
+}
+
+const tileNodes = computed(()=>{
+  return tileTree(role);
+})
+
+function getParent(id,trees){
+  let node = _.find(trees,function (v){
+    return v.id === id;
+  })
+  if(node !== undefined){
+    ids.value.push(node.id);
+  }
+
+  if(node !== undefined && (('pid' in node) && node.pid > 0)){
+    getParent(node.pid,trees);
+  }
+}
+
+function chooseNode(event){
+
+  let id = event.target.getAttribute("id");
+  let isChecked = event.target.checked;
+  let trees = tileNodes.value;
+  getParent(parseInt(id),trees);
+  ids.value = _.uniq(ids.value);
+  if(isChecked === false){
+    _.pull(ids.value,parseInt(id));
+  }
+}
+
+function addRole(){
+
+}
+
+function editRole(){
+
+}
+
+function deleteRole(){
+
+}
+
 function SearchByAccount(){
   userList();
 }
@@ -164,7 +213,7 @@ function SearchByAccount(){
 function changePage(page,cursor){
   page.value = page;
   cursor.value = cursor;
-  sessionStorage.setItem("page",page)
+  sessionStorage.setItem("page",page);
 
   userList();
 }
