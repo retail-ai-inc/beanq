@@ -21,6 +21,7 @@
       dlqApi,
       dashboardApi,
       logApi,
+      roleApi,
       //apis end
     },
 

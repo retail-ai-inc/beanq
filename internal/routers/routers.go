@@ -31,6 +31,7 @@ type Handles struct {
 	eventLog  *EventLog
 	user      *User
 	dlq       *Dlq
+	role      *Role
 }
 
 func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui Ui) *bwebframework.Router {
@@ -47,6 +48,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 		eventLog:  NewEventLog(client, mgo, prefix),
 		user:      NewUser(client, mgo, prefix),
 		dlq:       NewDlq(client, prefix),
+		role:      NewRole(mgo),
 	}
 
 	r.Get("/ping", HeaderRule(func(ctx *bwebframework.BeanContext) error {
@@ -84,6 +86,11 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 	r.Post("/user/add", MigrateMiddleWare(hdls.user.Add, client, mgo, prefix))
 	r.Post("/user/del", MigrateMiddleWare(hdls.user.Delete, client, mgo, prefix))
 	r.Post("/user/edit", MigrateMiddleWare(hdls.user.Edit, client, mgo, prefix))
+
+	r.Get("/role/list", MigrateMiddleWare(hdls.role.List, nil, mgo, ""))
+	r.Post("/role/add", MigrateMiddleWare(hdls.role.Add, nil, mgo, ""))
+	r.Post("/role/delete", MigrateMiddleWare(hdls.role.Delete, nil, mgo, ""))
+	r.Post("/role/edit", MigrateMiddleWare(hdls.role.Edit, nil, mgo, ""))
 
 	r.Get("/googleLogin", hdls.login.GoogleLogin)
 	r.Get("/callback", hdls.login.GoogleCallBack)

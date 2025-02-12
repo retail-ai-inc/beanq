@@ -13,7 +13,7 @@
           <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
         </div>
         <div class="col-auto border-left" style="padding-left: .85rem">
-          <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
+          <button type="button" class="btn btn-primary" @click="addRoleModal">Add</button>
         </div>
     </div>
 
@@ -21,10 +21,8 @@
     <table class="table table-striped table-hover" style="table-layout: auto;">
       <thead>
       <tr>
-        <th scope="col" class="w-table-number">#</th>
-        <th scope="col" class="text-nowrap">Account</th>
-        <th scope="col" class="text-nowrap">Active</th>
-        <th scope="col" class="text-nowrap">Type</th>
+        <th scope="col" class="w-table-number">#_ID</th>
+        <th scope="col" class="text-nowrap">Name</th>
         <th scope="col" class="text-nowrap">Detail</th>
         <th scope="col" class="text-center">Action</th>
       </tr>
@@ -32,11 +30,7 @@
       <tbody>
       <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
         <td class="text-right">{{item._id}}</td>
-        <td>{{item.account}}</td>
-        <td>
-          <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
-        </td>
-        <td>{{item.type}}</td>
+        <td>{{item.name}}</td>
         <td>
           <span class="d-inline-block text-truncate" style="max-width: 5rem;">
             {{item.detail}}
@@ -53,11 +47,11 @@
     <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
 
     <!--add user modal-->
-    <div class="modal fade" id="addUserDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addUserDetailLabel">
+    <div class="modal fade" id="addRoleDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addRoleDetailLabel">
       <div class="modal-dialog modal-lg">
         <div class="modal-content">
           <div class="modal-header">
-            <h1 class="modal-title fs-5" id="addUserDetailLabel">
+            <h1 class="modal-title fs-5" id="addRoleDetailLabel">
               {{accountReadOnly == true ? "Edit Role" : "Add Role"}}
             </h1>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
@@ -71,7 +65,7 @@
                   class="form-control"
                   id="nameInput"
                   @blur="checkValid"
-                  v-model="roleForm.account"
+                  v-model="roleForm.name"
                   :readonly="accountReadOnly == true ? 'readonly': false"
                   :disabled="accountReadOnly === true ? 'disabled': false"
                   placeholder="Please input a role name"
@@ -82,7 +76,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Roles</label>
-              <tree :nodes="nodes" :checkedIds="ids" @choose="chooseNode"/>
+              <tree :nodes="nodes" :checkedIds="roleForm.roles" @choose="chooseNode"/>
             </div>
           </div>
           <div class="modal-footer">
@@ -97,7 +91,7 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteRole">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" @action="deleteRole">
       <template #title="{title}">
         {{l.deleteModal.title}}
       </template>
@@ -119,15 +113,15 @@ const l = ref(inject("i18n"));
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
-const [users,accountReadOnly,addUserDetail] = [ref([]),ref(false),ref(null)];
+const [users,accountReadOnly,addRoleDetail] = [ref([]),ref(false),ref(null)];
 const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
-const [nameInput,userId] = [ref(""),ref("")];
+const [nameInput,roleId] = [ref(""),ref("")];
 const roleForm = ref({name:"",roles:[]});
 const nodes = ref(role);
 
 
-async function userList(){
-  let res = await userApi.List(page.value,pageSize.value,nameInput.value);
+async function roleList(){
+  let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
   const {code,msg,data} = res;
   if(code !== "0000"){
 
@@ -139,8 +133,8 @@ async function userList(){
 
 onMounted( ()=>{
 
-  userList();
-  const ele = document.getElementById("addUserDetail");
+  roleList();
+  const ele = document.getElementById("addRoleDetail");
   ele.addEventListener('hidden.bs.modal', () => {
     roleForm.value = {};
     accountReadOnly.value = false;
@@ -149,7 +143,7 @@ onMounted( ()=>{
 });
 
 onUnmounted(()=>{
-  const ele = document.getElementById('addUserDetail');
+  const ele = document.getElementById('addRoleDetail');
   if (ele) {
     ele.removeEventListener('hidden.bs.modal', () => {
 
@@ -157,7 +151,6 @@ onUnmounted(()=>{
   }
 });
 
-const ids = ref([]);
 function tileTree(tree) {
   return _.flatMap(tree,(node)=>{
     let children = node.children ? tileTree(node.children) : [];
@@ -174,7 +167,8 @@ function getParent(id,trees){
     return v.id === id;
   })
   if(node !== undefined){
-    ids.value.push(node.id);
+    //ids.value.push(node.id);
+    roleForm.value.roles.push(node.id);
   }
 
   if(node !== undefined && (('pid' in node) && node.pid > 0)){
@@ -188,26 +182,14 @@ function chooseNode(event){
   let isChecked = event.target.checked;
   let trees = tileNodes.value;
   getParent(parseInt(id),trees);
-  ids.value = _.uniq(ids.value);
+  roleForm.value.roles = _.uniq(roleForm.value.roles);
   if(isChecked === false){
-    _.pull(ids.value,parseInt(id));
+    _.pull(roleForm.value.roles,parseInt(id))
   }
 }
 
-function addRole(){
-
-}
-
-function editRole(){
-
-}
-
-function deleteRole(){
-
-}
-
 function SearchByAccount(){
-  userList();
+  roleList();
 }
 
 function changePage(page,cursor){
@@ -215,7 +197,7 @@ function changePage(page,cursor){
   cursor.value = cursor;
   sessionStorage.setItem("page",page);
 
-  userList();
+  roleList();
 }
 
 function checkValid(e){
@@ -224,63 +206,63 @@ function checkValid(e){
   next.style.display = "none";
   //check account
   if(e.currentTarget.id === "nameInput"){
-    next.innerHTML = "Please input an Email account";
-    if(roleForm.value.name === "" || Base.CheckEmail(roleForm.value.name) === false){
+    next.innerHTML = "Please input a name";
+    if(roleForm.value.name === ""){
       next.style.display = "block";
     }
   }
 }
 
-function addUserModal(){
-  const ele = document.getElementById("addUserDetail");
-  addUserDetail.value = new bootstrap.Modal(ele);
-  addUserDetail.value.show(ele);
+function addRoleModal(){
+  const ele = document.getElementById("addRoleDetail");
+  addRoleDetail.value = new bootstrap.Modal(ele);
+  addRoleDetail.value.show(ele);
 }
 
-async function addUser(e){
+async function addRole(e){
 
   try {
     let next = e.currentTarget.nextElementSibling;
-    let res = await userApi.Add(roleForm.value);
+    let res = await roleApi.Add(roleForm.value);
     if(res.code != "0000"){
       next.style.display = "block";
       next.innerHTML = res.msg;
       return
     }
     next.style.display = "none";
-    addUserDetail.value.hide();
-    await userList();
+    addRoleDetail.value.hide();
+    await roleList();
   }catch (e) {
     toastRef.value.show(e.message);
   }
 
 }
 
-async function editUser(){
-  let res = await userApi.Edit(roleForm.value);
-  addUserDetail.value.hide();
-  await userList();
+async function editRole(){
+
+  let res = await roleApi.Edit(roleId.value,roleForm.value);
+  addRoleDetail.value.hide();
+  await roleList();
 
   return
 }
 
 function deleteUserModal(item){
   account.value = "";
-  userId.value = "";
+  roleId.value = "";
   const ele = document.getElementById("showDeleteModal");
   delModal.value = new bootstrap.Modal(ele);
   delModal.value.show(ele);
   account.value  = item._id;
-  userId.value = item._id;
+  roleId.value = item._id;
 }
 
-async function deleteUser(){
+async function deleteRole(){
   delModal.value.hide();
-
   try {
-    let res = await userApi.Delete(account.value);
+    let res = await roleApi.Delete(roleId.value);
     if(res.code == "0000"){
-      await userList();
+      await roleList();
 
       toastRef.value.show("Success");
     }
@@ -293,10 +275,11 @@ async function deleteUser(){
 function editUserModal(item){
   roleForm.value = item;
   accountReadOnly.value = true;
-  const ele = document.getElementById("addUserDetail");
+  roleId.value = item._id;
+  const ele = document.getElementById("addRoleDetail");
 
-  addUserDetail.value = new bootstrap.Modal(ele);
-  addUserDetail.value.show(ele);
+  addRoleDetail.value = new bootstrap.Modal(ele);
+  addRoleDetail.value.show(ele);
 
 }
 

@@ -26,6 +26,7 @@ type BMongo struct {
 	workflowCollection string
 	managerCollection  string
 	optCollection      string
+	roleCollection     string
 }
 
 func NewMongo(host, port string,
@@ -66,6 +67,7 @@ func NewMongo(host, port string,
 			workflowCollection: "workflow_logs",
 			managerCollection:  "managers",
 			optCollection:      "opt_logs",
+			roleCollection:     "roles",
 		}
 		if v, ok := collections["event"]; ok {
 			mgo.eventCollection = v
@@ -78,6 +80,9 @@ func NewMongo(host, port string,
 		}
 		if v, ok := collections["opt"]; ok {
 			mgo.optCollection = v
+		}
+		if v, ok := collections["roles"]; ok {
+			mgo.roleCollection = v
 		}
 	})
 	return mgo
@@ -405,4 +410,96 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 		return nil, 0, err
 	}
 	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+}
+
+type Role struct {
+	CreateAt time.Time `bson:"createAt" json:"createAt"`
+	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
+	Name     string    `bson:"name" json:"name"`
+	Roles    []int     `bson:"roles" json:"roles"`
+}
+
+func (t *BMongo) Roles(ctx context.Context, m bson.M, page, pageSize int64) ([]bson.M, float64, error) {
+	skip := (page - 1) * pageSize
+	if skip < 0 {
+		skip = 0
+	}
+	opts := options.Find()
+	opts.SetSkip(skip)
+	opts.SetLimit(pageSize)
+	opts.SetSort(bson.D{{Key: "createAt", Value: 1}})
+
+	cursor, err := t.database.Collection(t.roleCollection).Find(ctx, m, opts)
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+	if err != nil {
+		return nil, 0, err
+	}
+	var data []bson.M
+	if err := cursor.All(ctx, &data); err != nil {
+		return nil, 0, err
+	}
+	total, err := t.database.Collection(t.roleCollection).CountDocuments(ctx, m)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+}
+
+func (t *BMongo) AddRole(ctx context.Context, role *Role) error {
+
+	role.CreateAt = time.Now()
+	_, err := t.database.Collection(t.roleCollection).InsertOne(ctx, role)
+	return err
+}
+
+func (t *BMongo) DeleteRole(ctx context.Context, id string) (int64, error) {
+
+	filter := bson.M{}
+	if id != "" {
+		nid, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			return 0, err
+		}
+		filter["_id"] = nid
+	}
+	result, err := t.database.Collection(t.roleCollection).DeleteOne(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return result.DeletedCount, nil
+}
+
+func (t *BMongo) EditRole(ctx context.Context, id string, data map[string]any) (int64, error) {
+	filter := bson.M{}
+	if id != "" {
+		nid, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			return 0, err
+		}
+		filter["_id"] = nid
+	}
+
+	var values bson.D
+
+	if v, ok := data["roles"]; ok {
+		values = append(values, bson.E{Key: "roles", Value: v})
+	}
+	if v, ok := data["detail"]; ok {
+		if cast.ToString(v) != "" {
+			values = append(values, bson.E{Key: "detail", Value: v})
+		}
+	}
+	values = append(values, bson.E{Key: "updateAt", Value: time.Now()})
+
+	update := bson.D{
+		{Key: "$set", Value: values},
+	}
+
+	result, err := t.database.Collection(t.roleCollection).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return 0, err
+	}
+	return result.ModifiedCount, nil
 }
