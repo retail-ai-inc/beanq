@@ -273,6 +273,7 @@ type User struct {
 	Type     string    `bson:"type" json:"type"`
 	Detail   string    `bson:"detail" json:"detail"`
 	Active   int32     `bson:"active" json:"active"`
+	RoleId   string    `bson:"roleId" json:"roleId"`
 }
 
 func (t *BMongo) AddUser(ctx context.Context, user *User) error {

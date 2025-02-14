@@ -111,7 +111,13 @@
               </select>
             </div>
             <div class="mb-3">
-              <label  class="form-label">Active</label>
+              <label for="roleSelect" class="form-label">Role</label>
+              <select class="form-select" id="roleSelect" v-model="userForm.roleId">
+                <option v-for="(item,key) in roles" :value="item._id" :key="key" :selected="userForm.roleId === item._id">{{item.name}}</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Active</label>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="1" v-model="userForm.active" :checked="userForm.active == 1">
                 <label class="form-check-label" for="flexRadioDefault1">
@@ -173,9 +179,20 @@ let datas = reactive({
     password:"",
     type:"normal",
     active:1,
+    roleId:"",
     detail:""
   }
 });
+const roles = ref([]);
+
+async function roleList(){
+  let res = await roleApi.List(0,100);
+  const {code,msg,data} = res;
+  if(code !== "0000"){
+
+  }
+  roles.value = data.data;
+}
 
 async function userList(){
   let res = await userApi.List(page.value,pageSize.value,accountInput.value);
@@ -250,6 +267,7 @@ function addUserModal(){
   const ele = document.getElementById("addUserDetail");
   addUserDetail.value = new bootstrap.Modal(ele);
   addUserDetail.value.show(ele);
+  roleList();
 }
 
 async function addUser(e){
@@ -313,6 +331,7 @@ function editUserModal(item){
   addUserDetail.value = new bootstrap.Modal(ele);
   addUserDetail.value.show(ele);
 
+  roleList();
 }
 
 const {userForm} = toRefs(datas);

@@ -69,6 +69,7 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 	typ := r.PostFormValue("type")
 	active := r.PostFormValue("active")
 	detail := r.PostFormValue("detail")
+	roleId := r.PostFormValue("roleId")
 
 	if account == "" {
 		res.Code = berror.MissParameterCode
@@ -82,6 +83,7 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 		Type:     typ,
 		Active:   cast.ToInt32(active),
 		Detail:   detail,
+		RoleId:   roleId,
 	}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -152,8 +154,9 @@ func (t *User) Edit(ctx *bwebframework.BeanContext) error {
 	active := r.FormValue("active")
 	typ := r.FormValue("type")
 	detail := r.FormValue("detail")
+	roleId := r.FormValue("roleId")
 
-	if _, err := t.mgo.EditUser(r.Context(), id, map[string]any{"account": account, "password": password, "active": active, "type": typ, "detail": detail}); err != nil {
+	if _, err := t.mgo.EditUser(r.Context(), id, map[string]any{"account": account, "password": password, "active": active, "type": typ, "detail": detail, "roleId": roleId}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		return res.Json(w, http.StatusInternalServerError)

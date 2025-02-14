@@ -25,6 +25,7 @@ const props = defineProps({
   },
   checkedIds:{
     type: Array,
+    default: [],
     required: true
   }
 })

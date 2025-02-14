@@ -132,7 +132,6 @@ async function roleList(){
 }
 
 onMounted( ()=>{
-
   roleList();
   const ele = document.getElementById("addRoleDetail");
   ele.addEventListener('hidden.bs.modal', () => {
@@ -141,15 +140,15 @@ onMounted( ()=>{
   });
 
 });
-
-onUnmounted(()=>{
-  const ele = document.getElementById('addRoleDetail');
-  if (ele) {
-    ele.removeEventListener('hidden.bs.modal', () => {
-
-    });
-  }
-});
+//
+// onUnmounted(()=>{
+//   const ele = document.getElementById('addRoleDetail');
+//   if (ele) {
+//     ele.removeEventListener('hidden.bs.modal', () => {
+//
+//     });
+//   }
+// });
 
 function tileTree(tree) {
   return _.flatMap(tree,(node)=>{
@@ -162,17 +161,23 @@ const tileNodes = computed(()=>{
   return tileTree(role);
 })
 
-function getParent(id,trees){
-  let node = _.find(trees,function (v){
-    return v.id === id;
+let ids = ref([]);
+function getC(id){
+    let a = _.filter(tileNodes.value,function (v) {
+      return v.pid === id;
+    })
+    for(let i=0;i<a.length;i++){
+      ids.value.push(a[i].id);
+      getC(a[i].id);
+    }
+}
+function getP(pid){
+  let a = _.filter(tileNodes.value,function (v) {
+    return v.id === pid;
   })
-  if(node !== undefined){
-    //ids.value.push(node.id);
-    roleForm.value.roles.push(node.id);
-  }
-
-  if(node !== undefined && (('pid' in node) && node.pid > 0)){
-    getParent(node.pid,trees);
+  for(let i=0;i<a.length;i++){
+    ids.value.push(a[i].id);
+    getP(a[i].pid);
   }
 }
 
@@ -180,12 +185,16 @@ function chooseNode(event){
 
   let id = event.target.getAttribute("id");
   let isChecked = event.target.checked;
-  let trees = tileNodes.value;
-  getParent(parseInt(id),trees);
-  roleForm.value.roles = _.uniq(roleForm.value.roles);
+
+  ids.value = [];
+  getP(parseInt(id));
+  getC(parseInt(id));
   if(isChecked === false){
-    _.pull(roleForm.value.roles,parseInt(id))
+    roleForm.value.roles = _.difference(roleForm.value.roles,parseInt(id));
+  }else{
+    roleForm.value.roles.push(...ids.value);
   }
+
 }
 
 function SearchByAccount(){

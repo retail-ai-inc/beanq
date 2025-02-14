@@ -30,7 +30,7 @@ const role = [
     },
     {id:20,label:"Setting",value:"",pid:0,children: [
             {id:21,label:"Operation Log",value:"/log/opt_log",pid:20,children: [
-                    {id:30,label:"Delete",value:"/log/opt_log"}
+                    {id:30,label:"Delete",value:"/log/opt_log",pid:21}
                 ]
             },
             {id:22,label:"User",value:"/user/list",pid:20,children: [
