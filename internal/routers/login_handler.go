@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/googleAuth"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"net/http"
 	"time"
 
@@ -50,7 +51,15 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		}
 		err error
 	)
-
+	// check Email
+	if username != t.ui.Root.UserName {
+		if _, err := mail.ParseEmail(username); err != nil {
+			result.Code = berror.MissParameterCode
+			result.Msg = err.Error()
+			return result.Json(w, http.StatusInternalServerError)
+		}
+	}
+	
 	if username != t.ui.Root.UserName || password != t.ui.Root.Password {
 		user, err = t.mgo.CheckUser(r.Context(), username, password)
 		if err != nil || user == nil {

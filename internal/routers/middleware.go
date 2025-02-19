@@ -9,6 +9,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
 	"net/http"
 	"strings"
@@ -68,6 +69,14 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo
 			result.Code = berror.InternalServerErrorMsg
 			result.Msg = err.Error()
 			return result.Json(writer, http.StatusUnauthorized)
+		}
+		// Check that the username must be an email address
+		if token.UserName != ui.Root.UserName {
+			if _, err := mail.ParseEmail(token.UserName); err != nil {
+				result.Code = berror.MissParameterCode
+				result.Msg = err.Error()
+				return result.Json(writer, http.StatusInternalServerError)
+			}
 		}
 
 		if token.UserName != ui.Root.UserName {
