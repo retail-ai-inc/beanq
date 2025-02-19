@@ -66,14 +66,14 @@
       <!--retry modal begin-->
       <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
         <template #title="{title}">
-          {{l.retryModal.title}}
+<!--          {{l.retryModal.title}}-->
         </template>
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
       <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" @action="deleteInfo">
         <template #title="{title}">
-          {{l.deleteModal.title}}
+<!--          {{l.deleteModal.title}}-->
         </template>
       </Action>
       <!--delete modal end-->
@@ -219,7 +219,7 @@ async function editInfo(item){
 
 // search feature
 async function search(){
-  uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}`).then(()=>{
+  return uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}`).then(()=>{
     window.location.reload();
   });
 }

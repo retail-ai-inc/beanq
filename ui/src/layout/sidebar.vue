@@ -31,15 +31,15 @@ const [data,route,uroute] = [reactive({nodes:[],activeNodeId:""}),ref("/admin/ho
 
 onMounted(async () => {
 
-  const nodes = await dashboardApi.Nodes();
-  data.nodes = nodes.data;
-
-  let nodeId = sessionStorage.getItem("nodeId");
-  if (nodeId === "") {
-    nodeId = nodes.data[0].NodeId;
-  }
-  data.activeNodeId = nodeId;
-  sessionStorage.setItem("nodeId", nodeId);
+  // const nodes = await dashboardApi.Nodes();
+  // data.nodes = nodes.data;
+  //
+  // let nodeId = sessionStorage.getItem("nodeId");
+  // if (nodeId === "") {
+  //   nodeId = nodes.data[0].NodeId;
+  // }
+  // data.activeNodeId = nodeId;
+  // sessionStorage.setItem("nodeId", nodeId);
 
   route.value = uroute.fullPath;
 })

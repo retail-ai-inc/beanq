@@ -7,7 +7,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 
 	"github.com/spf13/cast"
-	"github.com/spf13/viper"
 	"net/http"
 	"strings"
 )
@@ -29,7 +28,7 @@ func (t *Dlq) List(ctx *bwebframework.BeanContext) error {
 	res, cancel := response.Get()
 	defer cancel()
 
-	stream := strings.Join([]string{viper.GetString("redis.prefix"), "beanq-logic-log"}, ":")
+	stream := strings.Join([]string{t.prefix, "beanq-logic-log"}, ":")
 
 	msgs, err := XRevRange(r.Context(), t.client, stream, "+", "-")
 	if err != nil {

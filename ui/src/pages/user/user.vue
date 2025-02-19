@@ -14,10 +14,10 @@
                 <input type="text" class="form-control" id="formId" name="formId" v-model="accountInput" placeholder="Search by account">
               </div>
               <div class="col-auto" style="margin:0 .75rem;">
-                <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
+                <button type="submit" class="btn btn-primary" @click="SearchByAccount">{{searchbtn}}</button>
               </div>
               <div class="col-auto border-left" style="padding-left: 10px">
-                <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
+                <button type="button" class="btn btn-primary" @click="addUserModal">{{addbtn}}</button>
               </div>
             </div>
           </div>
@@ -137,9 +137,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{l.closeButton}}</button>
-            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{l.addButton}}</button>
-            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{l.editButton}}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{closeBtn}}</button>
+            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{addbtn}}</button>
+            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{editbtn}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -150,22 +150,27 @@
 
     <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteUser">
       <template #title="{title}">
-        {{l.deleteModal.title}}
+        {{title}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
     </Btoast>
+
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,inject,reactive,computed,onMounted,toRefs,onUnmounted,watch } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 
-const l = ref(inject("i18n"));
+
+const l = inject("i18n");
+const nav = computed(()=>{
+  return Nav;
+})
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
@@ -184,6 +189,15 @@ let datas = reactive({
   }
 });
 const roles = ref([]);
+const btns = ref(OtherBtn);
+const [addbtn,searchbtn,editbtn,delbtn,closeBtn,title] = [
+  ref(roleApi.GetLang("Setting.User.Add",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Search",btns.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.User.Edit",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.User.Delete",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Close",btns.value)?.[l.value]),
+    ref(roleApi.GetLang("Setting.User"),nav.value)?.[l.value]
+];
 
 async function roleList(){
   let res = await roleApi.List(0,100);
@@ -205,8 +219,15 @@ async function userList(){
   total.value = data.total ;
 }
 
-onMounted( ()=>{
+watch(()=>[l.value],([n,o])=>{
+  addbtn.value = roleApi.GetLang("Setting.User.Add",nav.value)?.[n];
+  searchbtn.value = roleApi.GetLang("Search",btns.value)?.[n];
+  editbtn.value = roleApi.GetLang("Setting.User.Edit",nav.value)?.[n];
+  delbtn.value = roleApi.GetLang("Setting.User.Delete",nav.value)?.[n];
+  closeBtn.value = roleApi.GetLang("Close",btns.value)?.[n];
+})
 
+onMounted( ()=>{
    userList();
   const ele = document.getElementById("addUserDetail");
   ele.addEventListener('hidden.bs.modal', () => {

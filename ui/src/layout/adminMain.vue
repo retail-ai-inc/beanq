@@ -1,23 +1,27 @@
 <template>
   <div class="wrapper">
-    <HeaderLayout :hlang="hlang" @action="action"></HeaderLayout>
+    <HeaderLayout :hlang="hlang" :nav="nav" @action="action"></HeaderLayout>
     <SidebarLayout></SidebarLayout>
     <ContentLayout></ContentLayout>
   </div>
 </template>
 
 <script setup>
-import {ref, provide} from "vue";
+import {ref, provide,onMounted} from "vue";
 
 import HeaderLayout from "./header.vue";
 import SidebarLayout from "./sidebar.vue";
 import ContentLayout from "./content.vue";
 
-const hlang = ref(Base.GetLang(I18n));
+const [nav,hlang,flag] = [ref(Nav),ref(Langs),ref("en")];
+provide("i18n",flag);
 
 function action(item){
-  hlang.value = item;
+  flag.value = item.flag;
 }
 
-provide("i18n",hlang);
+onMounted(()=>{
+  flag.value = sessionStorage.getItem("i18n") || "en";
+})
+
 </script>

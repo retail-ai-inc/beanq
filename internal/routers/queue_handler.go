@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/spf13/viper"
 )
 
 type Queue struct {
@@ -37,11 +35,11 @@ func (t *Queue) List(ctx *bwebframework.BeanContext) error {
 
 }
 func (t *Queue) Detail(ctx *bwebframework.BeanContext) error {
-	queueDetail(ctx.Writer, ctx.Request, t.client)
+	queueDetail(ctx.Writer, ctx.Request, t.client, t.prefix)
 	return nil
 }
 
-func queueDetail(w http.ResponseWriter, r *http.Request, client redis.UniversalClient) {
+func queueDetail(w http.ResponseWriter, r *http.Request, client redis.UniversalClient, prefix string) {
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -55,7 +53,6 @@ func queueDetail(w http.ResponseWriter, r *http.Request, client redis.UniversalC
 	w.Header().Set("Connection", "keep-alive")
 
 	id := r.FormValue("id")
-	prefix := viper.GetString("redis.prefix")
 	id = strings.Join([]string{prefix, id, "normal_stream", "stream"}, ":")
 
 	ctx := r.Context()

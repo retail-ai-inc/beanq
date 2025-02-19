@@ -13,7 +13,7 @@
           <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
         </div>
         <div class="col-auto border-left" style="padding-left: .85rem">
-          <button type="button" class="btn btn-primary" @click="addRoleModal">Add</button>
+          <button type="button" class="btn btn-primary" @click="addRoleModal">{{addbtn}}</button>
         </div>
     </div>
 
@@ -80,9 +80,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{l.closeButton}}</button>
-            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{l.addButton}}</button>
-            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{l.editButton}}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{closeBtn}}</button>
+            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{addbtn}}</button>
+            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{editbtn}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -93,7 +93,7 @@
 
     <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" @action="deleteRole">
       <template #title="{title}">
-        {{l.deleteModal.title}}
+        {{noticeTitle}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
@@ -101,7 +101,7 @@
   </div>
 </template>
 <script setup>
-import { ref,inject,onMounted,onUnmounted,computed } from "vue";
+import { ref,inject,onMounted,watch,computed } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
@@ -109,7 +109,29 @@ import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import Tree from "../components/tree.vue";
 
-const l = ref(inject("i18n"));
+const l = inject("i18n");
+const nav = computed(()=>{
+  return Nav;
+})
+const otherBtns = ref(OtherBtn);
+
+const [addbtn,searchbtn,editbtn,delbtn,closeBtn,noticeTitle] = [
+  ref(roleApi.GetLang("Setting.Role.Add",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.Role.Add",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.Role.Edit",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.Role.Delete",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Close",otherBtns.value)?.[l.value]),
+    ref(roleApi.GetLang("SureDelete",otherBtns.value)?.[l.value])
+];
+
+watch(()=>[l.value],([n,o])=>{
+  addbtn.value = roleApi.GetLang("Setting.Role.Add",nav.value)?.[n];
+  searchbtn.value = roleApi.GetLang("Setting.Role.Search",nav.value)?.[n];
+  editbtn.value = roleApi.GetLang("Setting.Role.Edit",nav.value)?.[n];
+  delbtn.value = roleApi.GetLang("Setting.Role.Delete",nav.value)?.[n];
+  closeBtn.value = roleApi.GetLang("Close",otherBtns.value)?.[n];
+  noticeTitle.value = roleApi.GetLang("SureDelete",otherBtns.value)?.[n];
+})
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
@@ -117,7 +139,7 @@ const [users,accountReadOnly,addRoleDetail] = [ref([]),ref(false),ref(null)];
 const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 const [nameInput,roleId] = [ref(""),ref("")];
 const roleForm = ref({name:"",roles:[]});
-const nodes = ref(role);
+const nodes = ref(Nav);
 
 
 async function roleList(){
@@ -140,61 +162,73 @@ onMounted( ()=>{
   });
 
 });
-//
-// onUnmounted(()=>{
-//   const ele = document.getElementById('addRoleDetail');
-//   if (ele) {
-//     ele.removeEventListener('hidden.bs.modal', () => {
-//
-//     });
-//   }
-// });
-
-function tileTree(tree) {
-  return _.flatMap(tree,(node)=>{
-    let children = node.children ? tileTree(node.children) : [];
-    return [node,...children];
-  });
-}
 
 const tileNodes = computed(()=>{
-  return tileTree(role);
+  return roleApi.TileTree(nodes.value);
 })
 
-let ids = ref([]);
-function getC(id){
+const ids = ref([]);
+function getChild(id){
     let a = _.filter(tileNodes.value,function (v) {
       return v.pid === id;
     })
     for(let i=0;i<a.length;i++){
       ids.value.push(a[i].id);
-      getC(a[i].id);
+      getChild(a[i].id);
     }
 }
-function getP(pid){
+function getParent(pid){
   let a = _.filter(tileNodes.value,function (v) {
     return v.id === pid;
   })
   for(let i=0;i<a.length;i++){
     ids.value.push(a[i].id);
-    getP(a[i].pid);
+    getParent(a[i].pid);
   }
 }
-
+const lastIds = ref([]); // ids result,from last checked
 function chooseNode(event){
 
   let id = event.target.getAttribute("id");
   let isChecked = event.target.checked;
 
-  ids.value = [];
-  getP(parseInt(id));
-  getC(parseInt(id));
-  if(isChecked === false){
-    roleForm.value.roles = _.difference(roleForm.value.roles,parseInt(id));
-  }else{
-    roleForm.value.roles.push(...ids.value);
-  }
+  let obj = _.find(tileNodes.value,function (v) {
+    return v.id === parseInt(id);
+  })
 
+  ids.value = [];
+  getParent(parseInt(id));
+  getChild(parseInt(id));
+
+  if(isChecked === false){
+    //cancel  checked
+    let lids = lastIds.value;
+
+    if(!_.has(obj,"children")){
+      _.remove(lids,(x)=> x === parseInt(id));
+    }else{
+      for(let i = 0;i < ids.value.length;i++){
+        let ind = _.findIndex(lids,(x)=>x === ids.value[i]);
+        if(ind !== -1){
+          _.pullAt(lids,ind);
+        }
+      }
+    }
+    lastIds.value = lids;
+  }else{
+    lastIds.value.push(...ids.value);
+  }
+  let resultIds = [];
+  for(let i = 0;i < lastIds.value.length;i++){
+    resultIds.push(lastIds.value[i]);
+    let obj = _.find(tileNodes.value,function (v) {
+      return v.id === lastIds.value[i];
+    })
+    if(obj.pid > 0){
+      resultIds.push(obj.pid);
+    }
+  }
+  roleForm.value.roles = _.uniq(resultIds);
 }
 
 function SearchByAccount(){
@@ -229,7 +263,7 @@ function addRoleModal(){
 }
 
 async function addRole(e){
-
+  sessionStorage.setItem("roleId",roleApi.GetId("Setting.Role.Add"));
   try {
     let next = e.currentTarget.nextElementSibling;
     let res = await roleApi.Add(roleForm.value);

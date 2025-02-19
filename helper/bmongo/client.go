@@ -274,6 +274,7 @@ type User struct {
 	Detail   string    `bson:"detail" json:"detail"`
 	Active   int32     `bson:"active" json:"active"`
 	RoleId   string    `bson:"roleId" json:"roleId"`
+	Roles    []int     `bson:"roles" json:"roles"`
 }
 
 func (t *BMongo) AddUser(ctx context.Context, user *User) error {
@@ -300,6 +301,27 @@ func (t *BMongo) DeleteUser(ctx context.Context, id string) (int64, error) {
 	return result.DeletedCount, nil
 }
 
+func (t *BMongo) CheckRole(ctx context.Context, userName string, roleId int) error {
+	var user User
+	if err := t.database.Collection(t.managerCollection).FindOne(ctx, bson.M{"account": userName, "active": 1}).Decode(&user); err != nil {
+		return err
+	}
+	objId, err := primitive.ObjectIDFromHex(user.RoleId)
+	if err != nil {
+		return err
+	}
+	var role Role
+	if err := t.database.Collection(t.roleCollection).FindOne(ctx, bson.M{"_id": objId}).Decode(&role); err != nil {
+		return err
+	}
+	for _, val := range role.Roles {
+		if roleId == val {
+			return nil
+		}
+	}
+	return errors.New("No Permission")
+}
+
 func (t *BMongo) CheckUser(ctx context.Context, account, password string) (*User, error) {
 
 	filter := bson.M{
@@ -309,7 +331,8 @@ func (t *BMongo) CheckUser(ctx context.Context, account, password string) (*User
 	}
 
 	var user User
-	result := t.database.Collection(t.managerCollection).FindOne(ctx, filter)
+	userCollection := t.database.Collection(t.managerCollection)
+	result := userCollection.FindOne(ctx, filter)
 	if err := result.Err(); err != nil {
 		if errors.Is(err, mongo.ErrNilDocument) {
 			return nil, nil
@@ -319,6 +342,25 @@ func (t *BMongo) CheckUser(ctx context.Context, account, password string) (*User
 	if err := result.Decode(&user); err != nil {
 		return nil, err
 	}
+
+	objId, err := primitive.ObjectIDFromHex(user.RoleId)
+	if err != nil {
+		return nil, err
+	}
+	roleCollection := t.database.Collection(t.roleCollection)
+	roleResult := roleCollection.FindOne(ctx, bson.M{"_id": objId}, options.FindOne().SetProjection(bson.D{{Key: "roles", Value: 1}, {Key: "name", Value: 1}}))
+	if err := roleResult.Err(); err != nil {
+		if !errors.Is(err, mongo.ErrNilDocument) {
+			return nil, err
+		}
+	}
+
+	var role Role
+	if err := roleResult.Decode(&role); err != nil {
+		return nil, err
+	}
+	user.Roles = role.Roles
+
 	return &user, nil
 }
 
