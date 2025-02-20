@@ -247,6 +247,7 @@ function initEventSource(apiUrl){
     console.log("handshake success");
   }
   data.sseEvent.onerror = (err)=>{
+    uRouter.replace("/login");
     console.log("event err----",err);
   }
   data.sseEvent.addEventListener("event_log", function(res){

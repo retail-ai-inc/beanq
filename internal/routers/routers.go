@@ -65,7 +65,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 		dashboard: NewDashboard(client, mgo, prefix),
 		eventLog:  NewEventLog(client, mgo, prefix),
 		user:      NewUser(client, mgo, prefix),
-		dlq:       NewDlq(client, prefix),
+		dlq:       NewDlq(client, mgo, prefix),
 		role:      NewRole(mgo),
 	}
 
@@ -114,5 +114,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 	r.Get("/callback", hdls.login.GoogleCallBack)
 
 	r.Get("/dlq/list", MigrateMiddleWare(hdls.dlq.List, client, mgo, prefix, ui))
+	r.Post("/dlq/retry", MigrateMiddleWare(hdls.dlq.Retry, client, mgo, prefix, ui))
+	r.Post("/dlq/delete", MigrateMiddleWare(hdls.dlq.Delete, client, mgo, prefix, ui))
 	return r
 }

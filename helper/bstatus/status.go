@@ -25,7 +25,7 @@ const (
 type LogType = string
 
 const (
-	Dlq       LogType = "dlq"
-	Logic     LogType = "logic"
-	Operation LogType = "opt"
+	Dlq       LogType = "dlq"   // deadLetter message
+	Logic     LogType = "logic" // logic message : normal,delay,sequential
+	Operation LogType = "opt"   // UI access log
 )
