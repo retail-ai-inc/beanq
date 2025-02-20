@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"regexp"
 )
 
 var (
@@ -302,6 +303,10 @@ func (t *BMongo) DeleteUser(ctx context.Context, id string) (int64, error) {
 }
 
 func (t *BMongo) CheckRole(ctx context.Context, userName string, roleId int) error {
+	// Validate userName as an email address
+	if !isValidEmail(userName) {
+		return errors.New("Invalid email address")
+	}
 	var user User
 	if err := t.database.Collection(t.managerCollection).FindOne(ctx, bson.M{"account": userName, "active": 1}).Decode(&user); err != nil {
 		return err
@@ -320,6 +325,12 @@ func (t *BMongo) CheckRole(ctx context.Context, userName string, roleId int) err
 		}
 	}
 	return errors.New("No Permission")
+}
+
+func isValidEmail(email string) bool {
+	// Regular expression for validating an email address
+	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	return re.MatchString(email)
 }
 
 func (t *BMongo) CheckUser(ctx context.Context, account, password string) (*User, error) {
