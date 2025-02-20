@@ -51,6 +51,8 @@
       <template #title="{title}">
       </template>
     </Action>
+    <Btoast :id="id" ref="toastRef">
+    </Btoast>
   </div>
 </template>
 <script setup>
@@ -60,7 +62,9 @@ import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
 import Action from "../../components/action.vue";
+import Btoast from "../../components/btoast.vue";
 
+const [id,toastRef] = [ref("userToast"),ref(null)];
 const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(1),ref(0),ref([])];
 const [retryWarningHtml,retryInfoHtml] = [
   ref("Warning: Item retry cannot be undone!<br/> Please proceed with caution!"),
@@ -73,8 +77,9 @@ const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDele
 async function dlqLogs() {
   let res = await dlqApi.List(page.value,pageSize.value);
   const {code,msg,data} = res;
-  if(code === "0000"){
-
+  if(code !== "0000"){
+    toastRef.value.show(msg);
+    return;
   }
   logs.value = data.data;
   total.value = data.total;
@@ -100,8 +105,22 @@ function retryModal(item){
   dataId.value = item._id;
 }
 
-function retryInfo(){
-
+async function retryInfo(){
+  retryModal.value.hide();
+  if(dataId.value === ""){
+    toastRef.value.show("Missing Id");
+    return;
+  }
+  try{
+    let res = await dlqApi.Retry(dataId.value,retryItem.value);
+    toastRef.value.show(res.msg);
+    if(res.code === "0000"){
+      await dlqLogs();
+      return;
+    }
+  }catch (e) {
+    toastRef.value.show(e.error);
+  }
 }
 
 function deleteModal(item){
@@ -116,28 +135,26 @@ function deleteModal(item){
 
 async function deleteInfo(){
   deleteModal.value.hide();
-  if(deleteId.value == ""){
+  if(deleteId.value === ""){
+    toastRef.value.show("Missing Id");
     return;
   }
   try {
     let res = await dlqApi.Delete(deleteId.value);
+    toastRef.value.show(res.msg);
+    if(res.code === "0000"){
+      await dlqLogs();
+    }
   }catch (e) {
-    console.log("delete err:",e);
+    toastRef.value.show(e.error);
   }
-
 }
-
 
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
   cursor.value = cursorVal;
   sessionStorage.setItem("page",pageVal);
   dlqLogs();
-}
-
-
-function deleteItem(item){
-
 }
 
 </script>

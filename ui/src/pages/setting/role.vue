@@ -145,12 +145,11 @@ const nodes = ref(Nav);
 async function roleList(){
   let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
   const {code,msg,data} = res;
-  if(code !== "0000"){
-
+  if(code === "0000"){
+    users.value = data.data;
+    cursor.value = data.cursor;
+    total.value = data.total ;
   }
-  users.value = data.data;
-  cursor.value = data.cursor;
-  total.value = data.total ;
 }
 
 onMounted( ()=>{
@@ -267,7 +266,7 @@ async function addRole(e){
   try {
     let next = e.currentTarget.nextElementSibling;
     let res = await roleApi.Add(roleForm.value);
-    if(res.code != "0000"){
+    if(res.code !== "0000"){
       next.style.display = "block";
       next.innerHTML = res.msg;
       return
@@ -285,6 +284,7 @@ async function editRole(){
 
   let res = await roleApi.Edit(roleId.value,roleForm.value);
   addRoleDetail.value.hide();
+  toastRef.value.show(res.msg);
   await roleList();
 
   return
@@ -304,15 +304,13 @@ async function deleteRole(){
   delModal.value.hide();
   try {
     let res = await roleApi.Delete(roleId.value);
-    if(res.code == "0000"){
+    toastRef.value.show(res.msg);
+    if(res.code === "0000"){
       await roleList();
-
-      toastRef.value.show("Success");
     }
   }catch (e) {
     toastRef.value.show(e.message);
   }
-
 }
 
 function editUserModal(item){

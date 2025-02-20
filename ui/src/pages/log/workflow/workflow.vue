@@ -57,6 +57,8 @@
       <template #title="{title}">
       </template>
     </Action>
+    <Btoast :id="id" ref="toastRef">
+    </Btoast>
   </div>
 </template>
 <script setup>
@@ -64,7 +66,9 @@ import { ref,onMounted,onUnmounted,computed } from "vue";
 import Pagination from "../../components/pagination.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
 import Action from "../../components/action.vue";
+import Btoast from "../../components/btoast.vue";
 
+const [id,toastRef] = [ref("userToast"),ref(null)];
 const [workflowlogs,page,pageSize,total,cursor] = [ref([]),ref(1),ref(10),ref(0),ref(0)];
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")]
 // logs
@@ -72,7 +76,8 @@ const getWorkFLowLogs=(async (pageV,pageSizeV)=>{
   let res = await workflowApi.List(pageV,pageSizeV);
   const {code,msg,data} = res;
   if(code !== "0000"){
-
+    toastRef.value.show(msg);
+    return;
   }
   workflowlogs.value = data.data;
   total.value = data.total;
@@ -98,13 +103,20 @@ function deleteModal(item){
 
 async function deleteInfo(){
   deleteModal.value.hide();
-  if(deleteId.value == ""){
+  if(deleteId.value === ""){
+    toastRef.value.show("missing Id");
     return;
   }
   try {
     let res = await workflowApi.Delete(deleteId.value);
+    const {code,msg,data} = res;
+    data.deleteModal.hide();
+    toastRef.value.show(msg);
+    if(code === "0000"){
+      await getWorkFLowLogs(page.value,pageSize.value);
+    }
   }catch (e) {
-    console.log("delete err:",e);
+    toastRef.value.show(e.error);
   }
 
 }

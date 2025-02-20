@@ -10,7 +10,7 @@
         <div class="col">
           <div class="form-row mb-3">
             <div class="col-2" style="padding-right: 1rem">
-              <select class="form-select">
+              <select class="form-select" aria-label="Default select" id="formMoodType" name="formMoodType" style="cursor: pointer" v-model="form.moodType">
                 <option selected value="">Mood Type</option>
                 <option value="normal">normal</option>
                 <option value="delay">delay</option>
@@ -49,6 +49,7 @@ const l = inject("i18n");
 const props = defineProps({
   form:{
     id:"",
+    moodType:"",
     status:""
   }
 })

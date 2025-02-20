@@ -43,11 +43,15 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 	pageSize := cast.ToInt64(query.Get("pageSize"))
 	id := query.Get("id")
 	status := query.Get("status")
+	moodType := query.Get("moodType")
 
 	filter := bson.M{}
 	filter["logType"] = bstatus.Logic
 	if id != "" {
 		filter["id"] = id
+	}
+	if moodType != "" {
+		filter["moodType"] = moodType
 	}
 	if status != "" {
 		statusValid := []string{"failed", "published", "success"}

@@ -203,7 +203,6 @@ async function roleList(){
   let res = await roleApi.List(0,100);
   const {code,msg,data} = res;
   if(code !== "0000"){
-
   }
   roles.value = data.data;
 }
@@ -212,7 +211,8 @@ async function userList(){
   let res = await userApi.List(page.value,pageSize.value,accountInput.value);
   const {code,msg,data} = res;
   if(code !== "0000"){
-
+    toastRef.value.show(msg);
+    return;
   }
   users.value = data.data;
   cursor.value = data.cursor;
@@ -296,7 +296,7 @@ async function addUser(e){
   try {
     let next = e.currentTarget.nextElementSibling;
     let res = await userApi.Add(datas.userForm);
-    if(res.code != "0000"){
+    if(res.code !== "0000"){
       next.style.display = "block";
       next.innerHTML = res.msg;
       return
@@ -311,11 +311,16 @@ async function addUser(e){
 }
 
 async function editUser(){
-  let res = await userApi.Edit(datas.userForm);
-  addUserDetail.value.hide();
-  await userList();
-
-  return
+  try {
+    let res = await userApi.Edit(datas.userForm);
+    addUserDetail.value.hide();
+    toastRef.value.show(res.msg);
+    if(res.code !== "0000"){
+      await userList();
+    }
+  }catch (e) {
+    toastRef.value.show(e.error);
+  }
 }
 
 function deleteUserModal(item){
@@ -333,10 +338,9 @@ async function deleteUser(){
 
   try {
     let res = await userApi.Delete(account.value);
-    if(res.code == "0000"){
+    toastRef.value.show(res.msg);
+    if(res.code === "0000"){
       await userList();
-
-      toastRef.value.show("Success");
     }
   }catch (e) {
     toastRef.value.show(e.message);

@@ -78,6 +78,7 @@
       </Action>
       <!--delete modal end-->
     </div>
+    <Btoast :id="eventBtoastId" ref="eventRef"/>
   </div>
 </template>
 <script setup>
@@ -90,8 +91,10 @@ import EditIcon from "../../components/icons/edit_icon.vue";
 import Search from "./search.vue";
 import EditAction from "./editAction.vue";
 import Action from "../../components/action.vue";
+import Btoast from "../../components/btoast.vue";
 
 const l = ref(inject("i18n"));
+const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
 
 let data = reactive({
   eventLogs:[],
@@ -101,6 +104,7 @@ let data = reactive({
   cursor:0,
   form:{
     id:"",
+    moodType:"",
     status:""
   },
   detail:{},
@@ -140,15 +144,18 @@ function deleteModal(item){
 // delete log
 async function deleteInfo(){
 
-  if(data.deleteId == ""){
+  if(data.deleteId === ""){
+    eventRef.value.show("missing Id");
     return;
   }
   try {
     let res = await eventApi.Delete(data.deleteId);
-  }catch (e) {
-    console.log("delete err:",e);
-  }
+    data.deleteModal.hide();
+    eventRef.value.show(res.msg);
 
+  }catch (e) {
+    eventRef.value.show(e.error);
+  }
 }
 
 function retryModal(item){
@@ -164,13 +171,15 @@ function retryModal(item){
 // send payload into queue to consume it again
 async function retryInfo(){
 
-  if(data.retryItem._id == ""){
+  if(data.retryItem._id === ""){
+    eventRef.value.show("missing Id");
     return;
   }
   try{
     let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
+    eventRef.value.show(res.msg);
   }catch (e) {
-    console.log("retry err:",e)
+    eventRef.value.show(e.error);
   }
 
 }
@@ -207,19 +216,19 @@ async function editInfo(item){
   try{
     let res = await eventApi.Edit(item._id,item.payload);
     //if success
-    if(res.code == "0000"){
-      data.infoDetailModal.hide();
-      return;
-    }
+    eventRef.value.show(res.msg);
+    data.infoDetailModal.hide();
+
   }catch (e) {
-    console.log("edit err:",e);
+    eventRef.value.show(e.error);
   }
 
 }
 
 // search feature
 async function search(){
-  return uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}`).then(()=>{
+
+  return uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`).then(()=>{
     window.location.reload();
   });
 }
@@ -229,7 +238,7 @@ async function changePage(page,cursor){
   data.page = page;
   data.cursor = cursor;
   sessionStorage.setItem("page",page)
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}`;
+  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
   initEventSource(apiUrl);
 }
 
@@ -260,14 +269,15 @@ function initEventSource(apiUrl){
 
 onMounted(async()=>{
 
-  let [id,status] = [route.query.id,route.query.status];
+  let [id,status,moodType] = [route.query.id,route.query.status,route.query.moodType];
   data.form = {
     id:id??"",
-    status:status??""
+    status:status??"",
+    moodType:moodType??""
   };
   data.page = sessionStorage.getItem("page")??1;
 
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}`;
+  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
   initEventSource(apiUrl);
 
 })

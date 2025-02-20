@@ -35,7 +35,7 @@
   </div>
 </template>
 <script setup>
-import {ref,defineProps,defineEmits} from "vue";
+import {ref,defineProps,defineEmits,watch} from "vue";
 
 const props = defineProps({
   label:"",
@@ -53,6 +53,11 @@ const props = defineProps({
 })
 
 const [dataIdValue,disable] = [ref(""),ref(true)];
+watch(()=>[props.dataId],(n,o)=>{
+  dataIdValue.value = "";
+  noticeMsg.value = "";
+})
+
 const [noticeMsg] = [ref("")];
 const checkInput = Base.Debounce (()=>{
   if(dataIdValue.value.length <= 0){
