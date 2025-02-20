@@ -30,7 +30,7 @@
           <td>{{item.addTime}}</td>
           <td>
               <span class="d-block text-truncate" style="max-width: 30rem;">
-                {{item.payload}}
+                <pre><code>    {{item.payload}}</code></pre>
               </span>
           </td>
           <td class="text-center text-nowrap">
@@ -114,9 +114,19 @@ function deleteModal(item){
   dataId.value = item._id;
 }
 
-function deleteInfo(){
+async function deleteInfo(){
+  deleteModal.value.hide();
+  if(deleteId.value == ""){
+    return;
+  }
+  try {
+    let res = await dlqApi.Delete(deleteId.value);
+  }catch (e) {
+    console.log("delete err:",e);
+  }
 
 }
+
 
 function changePage(pageVal,cursorVal){
   page.value = pageVal;

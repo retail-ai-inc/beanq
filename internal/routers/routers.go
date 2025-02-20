@@ -49,6 +49,7 @@ type Handles struct {
 	eventLog  *EventLog
 	user      *User
 	dlq       *Dlq
+	workflow  *WorkFlow
 	role      *Role
 }
 
@@ -66,6 +67,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 		eventLog:  NewEventLog(client, mgo, prefix),
 		user:      NewUser(client, mgo, prefix),
 		dlq:       NewDlq(client, mgo, prefix),
+		workflow:  NewWorkFlow(client, mgo, prefix),
 		role:      NewRole(mgo),
 	}
 
@@ -116,5 +118,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 	r.Get("/dlq/list", MigrateMiddleWare(hdls.dlq.List, client, mgo, prefix, ui))
 	r.Post("/dlq/retry", MigrateMiddleWare(hdls.dlq.Retry, client, mgo, prefix, ui))
 	r.Post("/dlq/delete", MigrateMiddleWare(hdls.dlq.Delete, client, mgo, prefix, ui))
+	r.Get("/workflow/list", MigrateMiddleWare(hdls.workflow.List, client, mgo, prefix, ui))
+	r.Post("/workflow/delete", MigrateMiddleWare(hdls.workflow.Delete, client, mgo, prefix, ui))
 	return r
 }

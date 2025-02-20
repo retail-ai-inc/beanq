@@ -546,3 +546,48 @@ func (t *BMongo) EditRole(ctx context.Context, id string, data map[string]any) (
 	}
 	return result.ModifiedCount, nil
 }
+
+func (t *BMongo) WorkFLowLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, float64, error) {
+	skip := (page - 1) * pageSize
+	if skip < 0 {
+		skip = 0
+	}
+	opts := options.Find()
+	opts.SetSkip(skip)
+	opts.SetLimit(pageSize)
+	opts.SetSort(bson.D{{Key: "CreatedAt", Value: 1}})
+
+	cursor, err := t.database.Collection(t.workflowCollection).Find(ctx, filter, opts)
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+	if err != nil {
+		return nil, 0, err
+	}
+	var data []bson.M
+	if err := cursor.All(ctx, &data); err != nil {
+		return nil, 0, err
+	}
+	total, err := t.database.Collection(t.workflowCollection).CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+}
+
+func (t *BMongo) DeleteWorkFlow(ctx context.Context, id string) (int64, error) {
+
+	filter := bson.M{}
+	if id != "" {
+		nid, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			return 0, err
+		}
+		filter["_id"] = nid
+	}
+	result, err := t.database.Collection(t.workflowCollection).DeleteOne(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return result.DeletedCount, nil
+}
