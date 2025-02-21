@@ -15,6 +15,7 @@ request.interceptors.request.use(
             config.headers["BEANQ-Authorization"] = "Bearer " + token;
         }
         config.headers["X-Cluster-Nodeid"] = sessionStorage.getItem("nodeId");
+        config.headers["X-Role-Id"] = sessionStorage.getItem("roleId");
         return config;
     },
     err=>{

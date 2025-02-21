@@ -43,11 +43,15 @@ func (t *EventLog) List(ctx *bwebframework.BeanContext) error {
 	pageSize := cast.ToInt64(query.Get("pageSize"))
 	id := query.Get("id")
 	status := query.Get("status")
+	moodType := query.Get("moodType")
 
 	filter := bson.M{}
 	filter["logType"] = bstatus.Logic
 	if id != "" {
 		filter["id"] = id
+	}
+	if moodType != "" {
+		filter["moodType"] = moodType
 	}
 	if status != "" {
 		statusValid := []string{"failed", "published", "success"}
@@ -186,11 +190,26 @@ func (t *EventLog) Retry(ctx *bwebframework.BeanContext) error {
 		return res.Json(w, http.StatusInternalServerError)
 
 	}
-
+	if v, ok := data["status"]; ok {
+		if cast.ToString(v) != bstatus.StatusFailed {
+			res.Msg = "Only failed messages can be retried"
+			res.Code = berror.SuccessCode
+			return res.Json(w, http.StatusOK)
+		}
+	}
 	moodType := ""
 	if v, ok := data["moodType"]; ok {
 		moodType = v.(string)
 	}
+	if _, ok := data["addTime"]; ok {
+		data["addTime"] = time.Now()
+	}
+	delete(data, "beginTime")
+	delete(data, "endTime")
+	if _, ok := data["retry"]; ok {
+		data["retry"] = 0
+	}
+	delete(data, "runTime")
 
 	var bk public.IBroker
 	if moodType == string(btype.SEQUENTIAL) {
@@ -207,7 +226,7 @@ func (t *EventLog) Retry(ctx *bwebframework.BeanContext) error {
 		return res.Json(w, http.StatusOK)
 	}
 
-	bk = bredis.NewNormal(t.client, t.prefix, 2000, 10, 20)
+	bk = bredis.NewNormal(t.client, t.prefix, 2000, 10, 20*time.Minute)
 	if err := bk.Enqueue(nctx, data); err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode

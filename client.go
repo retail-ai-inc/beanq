@@ -219,19 +219,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		)
 	}
 
-	uiCfg := routers.Ui{
-		Issuer:    c.broker.config.Issuer,
-		Subject:   c.broker.config.Subject,
-		ExpiresAt: c.broker.config.ExpiresAt,
-		JwtKey:    c.broker.config.JwtKey,
-		Account: struct {
-			UserName string `json:"username"`
-			Password string `json:"password"`
-		}{
-			c.broker.config.UI.Root.UserName, c.broker.config.UI.Root.Password,
-		},
-	}
-	r = routers.NewRouters(r, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, uiCfg)
+	r = routers.NewRouters(r, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
 	log.Printf("server start on port %+v", httpport)
 	if err := http.ListenAndServe(httpport, r); err != nil {
 		log.Fatalln(err)

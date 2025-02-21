@@ -7,71 +7,44 @@
     </div>
     <div class="container-fluid">
       <ul class="navbar-nav">
-        <li class="nav-item" v-for="(item,key) in lang.nav" :key="key" :class="item.sub.length > 0 ?'dropdown':''">
-          <div v-if="item.sub.length > 0">
-            <!--nav sub-->
-            <a class="nav-link dropdown-toggle" :class=" item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-              {{item.label}}
-            </a>
-            <ul class="dropdown-menu dropdown-menu-color">
-              <li v-for="(val,ind) in item.sub" :key="ind">
-                <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''">
-                  {{val.label}}
-                </router-link>
-              </li>
-            </ul>
-          </div>
-          <div v-else>
-            <!--nav no sub-->
-            <router-link v-if="item.sub.length <= 0" :to="item.to" class="nav-link" :class="route === item.to ? 'active' : ''">
-              {{item.label}}
-            </router-link>
-          </div>
-        </li>
-      </ul>
-      <ul class="navbar-nav">
-        <li class="nav-item" v-for="(item,key) in lang.setting" :key="key" :class="item.sub.length > 0 ?'dropdown':''">
-          <!--nav sub-->
-          <div v-if="item.sub.length > 0">
-
-            <div v-if="item.label === 'Language'">
-              <a class="nav-link dropdown-toggle" :class="item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                {{language}}
+        <li class="nav-item" v-for="(item,key) in nav" :key="key" :class="item.children.length > 0 ? 'dropdown':''">
+            <div v-if="item.children.length > 0 ">
+              <a class="nav-link dropdown-toggle" v-if="hasRoles.includes(item.id)" :class="item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                {{item?.[langTag]}}
               </a>
               <ul class="dropdown-menu dropdown-menu-color">
-                <li v-for="(val,ind) in item.sub" :key="ind">
-<!--                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="chooseLang(val)">-->
-                  <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="action(val)">
-                    {{val.label}}
-                  </a>
+                <li v-for="(val,ind) in item.children" :key="ind">
+                  <router-link :to="val.to" v-if="hasRoles.includes(val.id)" class="dropdown-item" :class="route === val.to ? 'active' : ''">
+                    {{val?.[langTag]}}
+                  </router-link>
                 </li>
               </ul>
             </div>
             <div v-else>
-              <a class="nav-link dropdown-toggle" :class=" item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                {{item.label}}
-              </a>
-              <ul class="dropdown-menu dropdown-menu-color dropdown-menu-end">
-                <li v-for="(val,ind) in item.sub" :key="ind">
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Operation Log'" @click="optLog">
-                    {{val.label}}
-                  </router-link>
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'User'" @click="userList">
-                    {{val.label}}
-                  </router-link>
-                  <router-link :to="val.to" class="dropdown-item" :class="route === val.to ? 'active' : ''" v-if="val.label === 'Logout'" @click="logout">
-                    {{val.label}}
-                  </router-link>
-                </li>
-              </ul>
+              <!--nav no sub-->
+              <router-link v-if="item.children.length <= 0 && (hasRoles.includes(item.id))" :to="item.to" class="nav-link" :class="route === item.to ? 'active' : ''">
+                {{item?.[langTag]}}
+              </router-link>
             </div>
+        </li>
+      </ul>
+      <ul class="navbar-nav">
+        <li class="nav-item dropdown">
+          <div >
+            <a class="nav-link dropdown-toggle"  role="button" data-bs-toggle="dropdown" aria-expanded="false">
+              {{language}}
+            </a>
+            <ul class="dropdown-menu dropdown-menu-color">
+              <li v-for="(val,ind) in hlang" :key="ind">
+                <a  class="dropdown-item" :class="route === val.to ? 'active' : ''" @click="action(val)">
+                  {{val.label}}
+                </a>
+              </li>
+            </ul>
           </div>
-          <div v-else>
-            <!--nav no sub-->
-            <router-link v-if="item.sub.length <= 0" :to="item.to" class="nav-link" :class="route === item.to ? 'active' : ''">
-              {{item.label}}
-            </router-link>
-          </div>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" @click="jump('','Logout')">{{logoutBtn}}</a>
         </li>
       </ul>
     </div>
@@ -81,36 +54,31 @@
 <script setup>
 
 import {useRoute, useRouter} from 'vueRouter';
-import {ref, toRefs, onMounted, watch, reactive,defineProps,defineEmits} from "vue";
+import {ref, toRefs,computed, onMounted, watch, reactive,defineProps,defineEmits,inject} from "vue";
 
 const props = defineProps({
+  nav:{},
   hlang:{},
 })
-
-const emits = defineEmits(['action']);
-const action = function (obj){
-
-  if(obj.index === 1){
-    language.value = "日本語 (Japanese)";
-  }else{
-    language.value = "English";
-  }
-  let index = obj.index;
-  sessionStorage.setItem("lang",index);
-  lang.value = Base.GetLang(I18n);
-
-  emits("action",lang.value);
-}
 
 const data = reactive({
   nodes: [],
   activeNodeId: "",
   isSide:false,
-  //lang:{}
 })
-const lang = ref(props.hlang);
+const [lang,nav,langTag,btns] = [ref(props.hlang),ref(props.nav),ref("en"),ref(OtherBtn)];
+const logoutBtn = ref("Logout");
 
 const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
+
+const emits = defineEmits(['action']);
+const action = function (obj){
+  emits("action",obj);
+  language.value = obj.label;
+  sessionStorage.setItem("i18n",obj.flag);
+  langTag.value = obj.flag;
+  logoutBtn.value = roleApi.GetLang("LogOut",btns.value)?.[langTag.value];
+}
 
 function expand(){
 
@@ -131,27 +99,26 @@ function expand(){
   })
 }
 
+const hasRoles = ref([]);
 onMounted(async () => {
 
-  let ls = sessionStorage.getItem("lang") || "0";
-  let lang = parseInt(ls);
-
-  language.value = Langs[lang].label;
-  data.lang = Base.GetLang(I18n);
-
+  langTag.value = sessionStorage.getItem("i18n") || "en";
+  language.value = _.find(props.hlang,(v)=>{
+    return v.flag === langTag.value;
+  })?.label;
+  let roles = JSON.parse(sessionStorage.getItem("roles"));
+  if(_.isEmpty(roles)){
+    let navs = roleApi.TileTree(nav.value);
+    for(let i = 0;i<navs.length;i++){
+      hasRoles.value.push(navs[i].id);
+    }
+  }else{
+    hasRoles.value = roles;
+  }
   expand();
 
-  const nodes = await dashboardApi.Nodes();
-  data.nodes = nodes.data;
-
-  let nodeId = sessionStorage.getItem("nodeId");
-  if (nodeId === "") {
-    nodeId = nodes.data[0].NodeId;
-  }
-  data.activeNodeId = nodeId;
-  sessionStorage.setItem("nodeId", nodeId);
-
   route.value = uroute.path;
+  logoutBtn.value = roleApi.GetLang("LogOut",btns.value)?.[langTag.value];
 })
 
 watch(() => uroute.path, (newVal, oldVal) => {
@@ -165,17 +132,13 @@ watch(() => uroute.path, (newVal, oldVal) => {
   });
 })
 
-function optLog() {
-  urouter.push("/admin/optLog");
-}
-
-function userList() {
-  urouter.push("/admin/user")
-}
-
-function logout() {
-  sessionStorage.clear();
-  urouter.push("/login");
+function jump(uri,flag){
+  if(flag === "Logout"){
+    sessionStorage.clear();
+    urouter.replace("/login");
+  }else{
+    urouter.push(uri);
+  }
 }
 
 const {nodes, activeNodeId} = toRefs(data);

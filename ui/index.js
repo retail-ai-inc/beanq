@@ -3,20 +3,6 @@
   const { loadModule, version } = window["vue3-sfc-loader"];
   console.info("version of vue3-sfc-loader:",version);
 
-  function obfuscateVueFile(content) {
-
-      const obfuscationResult = JavaScriptObfuscator.obfuscate(content, {
-        compact: true, // 压缩代码
-        controlFlowFlattening: true, // 控制流扁平化
-        deadCodeInjection: true, // 注入死代码
-        debugProtection: false, // 调试保护
-        identifierNamesGenerator: "hexadecimal", // 变量名替换为十六进制
-      });
-
-    return obfuscationResult.getObfuscatedCode();
-  }
-
-
   //vue create
   const options = {
 
@@ -35,6 +21,7 @@
       dlqApi,
       dashboardApi,
       logApi,
+      roleApi,
       //apis end
     },
 
@@ -64,22 +51,21 @@
   const adminRoute =  {
         path:'/admin',component:()=>loadModule("./src/layout/adminMain.vue",options),
         children:[
-          { path: '', component: () => loadModule('./src/pages/home.vue', options) },
           { path: 'home',component:()=>loadModule("./src/pages/home.vue",options)},
-          //{ path: 'server', component: () => loadModule('./src/pages/server.vue', options) },
           { path: 'schedule', component: () => loadModule("./src/pages/schedule.vue", options) },
           { path: 'queue', component: () => loadModule("./src/pages/queue/list.vue", options) },
           { path: 'queue/detail/:id',component:()=>loadModule("./src/pages/queue/detail.vue",options)},
           { path: 'log/event',component:()=>loadModule("./src/pages/log/event/event.vue",options)},
           { path: 'log/detail/:id',component:()=>loadModule("./src/pages/log/event/detail.vue",options)},
           { path: 'log/workflow',component:()=>loadModule("./src/pages/log/workflow/workflow.vue",options)},
-          { path: 'log/dlq',component:()=>loadModule("./src/pages/log/dlq.vue",options)},
-          // { path: 'log/success',component:()=>loadModule("./src/pages/log/success.vue",options)},
-          // { path: 'log/error',component:()=>loadModule("./src/pages/log/error.vue",options)},
+          { path: 'log/dlq',component:()=>loadModule("./src/pages/log/dlq/dlq.vue",options)},
+          { path: 'log/dlq/detail/:id',component:()=>loadModule("./src/pages/log/dlq/detail.vue",options)},
+          {path: 'log/workflow',component:()=>loadModule("./src/pages/log/workflow/workflow.vue",options)},
           { path: 'redis', component: () => loadModule("./src/pages/redis/info.vue", options) },
           { path:'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
-          { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)}
+          { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)},
+          { path:'role',component:()=>loadModule("/src/pages/setting/role.vue",options)}
         ]
   };
 
@@ -90,7 +76,7 @@
   const router = VueRouter.createRouter({
     history: VueRouter.createWebHashHistory(),
     routes: [
-      {path:'/',redirect:'/admin'},
+      {path:'/',redirect:'/admin/home'},
       adminRoute,
       loginRoute
     ],
@@ -98,7 +84,7 @@
   router.beforeEach((to, from) => {
     let token = sessionStorage.getItem("token");
     if (token == null && to.path !== "/login"){
-      return {path:"/login"};
+      return {path:"/login",replace:true};
     }
   })
 

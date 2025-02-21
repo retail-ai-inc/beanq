@@ -14,10 +14,10 @@
                 <input type="text" class="form-control" id="formId" name="formId" v-model="accountInput" placeholder="Search by account">
               </div>
               <div class="col-auto" style="margin:0 .75rem;">
-                <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
+                <button type="submit" class="btn btn-primary" @click="SearchByAccount">{{searchbtn}}</button>
               </div>
               <div class="col-auto border-left" style="padding-left: 10px">
-                <button type="button" class="btn btn-primary" @click="addUserModal">Add</button>
+                <button type="button" class="btn btn-primary" @click="addUserModal">{{addbtn}}</button>
               </div>
             </div>
           </div>
@@ -111,7 +111,13 @@
               </select>
             </div>
             <div class="mb-3">
-              <label  class="form-label">Active</label>
+              <label for="roleSelect" class="form-label">Role</label>
+              <select class="form-select" id="roleSelect" v-model="userForm.roleId">
+                <option v-for="(item,key) in roles" :value="item._id" :key="key" :selected="userForm.roleId === item._id">{{item.name}}</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Active</label>
               <div class="form-check">
                 <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="1" v-model="userForm.active" :checked="userForm.active == 1">
                 <label class="form-check-label" for="flexRadioDefault1">
@@ -131,9 +137,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{l.closeButton}}</button>
-            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{l.addButton}}</button>
-            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{l.editButton}}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{closeBtn}}</button>
+            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{addbtn}}</button>
+            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{editbtn}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -144,22 +150,27 @@
 
     <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteUser">
       <template #title="{title}">
-        {{l.deleteModal.title}}
+        {{title}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
     </Btoast>
+
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,inject,reactive,computed,onMounted,toRefs,onUnmounted,watch } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 
-const l = ref(inject("i18n"));
+
+const l = inject("i18n");
+const nav = computed(()=>{
+  return Nav;
+})
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
@@ -173,23 +184,50 @@ let datas = reactive({
     password:"",
     type:"normal",
     active:1,
+    roleId:"",
     detail:""
   }
 });
+const roles = ref([]);
+const btns = ref(OtherBtn);
+const [addbtn,searchbtn,editbtn,delbtn,closeBtn,title] = [
+  ref(roleApi.GetLang("Setting.User.Add",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Search",btns.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.User.Edit",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Setting.User.Delete",nav.value)?.[l.value]),
+  ref(roleApi.GetLang("Close",btns.value)?.[l.value]),
+    ref(roleApi.GetLang("Setting.User"),nav.value)?.[l.value]
+];
+
+async function roleList(){
+  let res = await roleApi.List(0,100);
+  const {code,msg,data} = res;
+  if(code !== "0000"){
+  }
+  roles.value = data.data;
+}
 
 async function userList(){
   let res = await userApi.List(page.value,pageSize.value,accountInput.value);
   const {code,msg,data} = res;
   if(code !== "0000"){
-
+    toastRef.value.show(msg);
+    return;
   }
   users.value = data.data;
   cursor.value = data.cursor;
   total.value = data.total ;
 }
 
-onMounted( ()=>{
+watch(()=>[l.value],([n,o])=>{
+  addbtn.value = roleApi.GetLang("Setting.User.Add",nav.value)?.[n];
+  searchbtn.value = roleApi.GetLang("Search",btns.value)?.[n];
+  editbtn.value = roleApi.GetLang("Setting.User.Edit",nav.value)?.[n];
+  delbtn.value = roleApi.GetLang("Setting.User.Delete",nav.value)?.[n];
+  closeBtn.value = roleApi.GetLang("Close",btns.value)?.[n];
+})
 
+onMounted( ()=>{
    userList();
   const ele = document.getElementById("addUserDetail");
   ele.addEventListener('hidden.bs.modal', () => {
@@ -250,6 +288,7 @@ function addUserModal(){
   const ele = document.getElementById("addUserDetail");
   addUserDetail.value = new bootstrap.Modal(ele);
   addUserDetail.value.show(ele);
+  roleList();
 }
 
 async function addUser(e){
@@ -257,7 +296,7 @@ async function addUser(e){
   try {
     let next = e.currentTarget.nextElementSibling;
     let res = await userApi.Add(datas.userForm);
-    if(res.code != "0000"){
+    if(res.code !== "0000"){
       next.style.display = "block";
       next.innerHTML = res.msg;
       return
@@ -272,11 +311,16 @@ async function addUser(e){
 }
 
 async function editUser(){
-  let res = await userApi.Edit(datas.userForm);
-  addUserDetail.value.hide();
-  await userList();
-
-  return
+  try {
+    let res = await userApi.Edit(datas.userForm);
+    addUserDetail.value.hide();
+    toastRef.value.show(res.msg);
+    if(res.code !== "0000"){
+      await userList();
+    }
+  }catch (e) {
+    toastRef.value.show(e.error);
+  }
 }
 
 function deleteUserModal(item){
@@ -294,10 +338,9 @@ async function deleteUser(){
 
   try {
     let res = await userApi.Delete(account.value);
-    if(res.code == "0000"){
+    toastRef.value.show(res.msg);
+    if(res.code === "0000"){
       await userList();
-
-      toastRef.value.show("Success");
     }
   }catch (e) {
     toastRef.value.show(e.message);
@@ -313,6 +356,7 @@ function editUserModal(item){
   addUserDetail.value = new bootstrap.Modal(ele);
   addUserDetail.value.show(ele);
 
+  roleList();
 }
 
 const {userForm} = toRefs(datas);

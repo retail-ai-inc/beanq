@@ -32,7 +32,7 @@
 import { reactive,toRefs,onMounted,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
 
-const [data,useRe] = [
+const [formData,useRe] = [
     reactive({
       user:{"username":"","password":""},
       msg:"",
@@ -67,15 +67,26 @@ onUnmounted(()=>{
 
 async function onSubmit(event){
 
-  if (data.user.username == "" || data.user.password == ""){
-    data.msg = "field can't empty"
+  if (formData.user.username == "" || formData.user.password == ""){
+    formData.msg = "field can't empty"
     return;
   }
   //,{headers:{"Content-Type":"multipart/form-data"}}
   try{
-    let res = await loginApi.Login(data.user.username,data.user.password);
-    sessionStorage.setItem("token",res.data.token);
-    sessionStorage.setItem("nodeId",res.data.nodeId);
+    let res = await loginApi.Login(formData.user.username,formData.user.password);
+    const {code:ucode,msg:umsg,data:udata} = res;
+
+    if(ucode === "0000"){
+      sessionStorage.setItem("token",udata.token);
+      sessionStorage.setItem("roles",udata.roles);
+      sessionStorage.setItem("nodeId",udata.nodeId);
+      let nodesRes = await dashboardApi.Nodes;
+      const {code:nCode,msg:nMsg,data:nData} = nodesRes;
+      if(nCode === "0000"){
+        sessionStorage.setItem("nodes",nData);
+      }
+    }
+
     useRe.push("/admin/home");
   }catch(err){
     if (err.response.status === 401){
@@ -88,7 +99,7 @@ function googleLogin(){
   window.location.href="/googleLogin"
 }
 
-const {user,msg,title} = toRefs(data);
+const {user,msg,title} = toRefs(formData);
 </script>
 <style scoped>
 .left-col{

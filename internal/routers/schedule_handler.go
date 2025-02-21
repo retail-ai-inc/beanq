@@ -45,6 +45,8 @@ func (t *Schedule) List(bctx *bwebframework.BeanContext) error {
 		if len(arr) < 4 {
 			continue
 		}
+		arr[1] = strings.ReplaceAll(arr[1], "{", "")
+		arr[2] = strings.ReplaceAll(arr[2], "}", "")
 
 		obj, err := client.Object(ctx, queue)
 		if err != nil {

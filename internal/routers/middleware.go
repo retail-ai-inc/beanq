@@ -9,14 +9,12 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/spf13/cast"
 	"net/http"
 	"strings"
 	"time"
 )
-
-func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string) bwebframework.HandleFunc {
-	return HeaderRule(Auth(next, client, x, prefix))
-}
 
 func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
@@ -29,7 +27,11 @@ func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 	}
 }
 
-func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string) bwebframework.HandleFunc {
+func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui Ui) bwebframework.HandleFunc {
+	return HeaderRule(Auth(next, client, x, prefix, ui))
+}
+
+func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui Ui) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
 
 		result, cancelr := response.Get()
@@ -54,36 +56,36 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo
 		if auth != "" {
 			strs := strings.Split(auth, " ")
 			if len(strs) < 2 {
-				// return data format err
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = "missing parameter"
 				return result.Json(writer, http.StatusInternalServerError)
 			}
-
-			token, err = bjwt.ParseHsToken(strs[1])
-
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				return result.Json(writer, http.StatusUnauthorized)
-			}
-		}
-		if auth == "" {
+			auth = strs[1]
+		} else {
 			auth = request.FormValue("token")
-			token, err = bjwt.ParseHsToken(auth)
-			if err != nil {
-				result.Code = berror.InternalServerErrorMsg
-				result.Msg = err.Error()
-				return result.Json(writer, http.StatusUnauthorized)
-			}
 		}
-
-		//
-		_, err = token.GetExpirationTime()
+		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
 		if err != nil {
-			result.Code = berror.AuthExpireCode
+			result.Code = berror.InternalServerErrorMsg
 			result.Msg = err.Error()
 			return result.Json(writer, http.StatusUnauthorized)
+		}
+		// Check that the username must be an email address
+		if token.UserName != ui.Root.UserName {
+			if _, err := mail.ParseEmail(token.UserName); err != nil {
+				result.Code = berror.MissParameterCode
+				result.Msg = err.Error()
+				return result.Json(writer, http.StatusInternalServerError)
+			}
+		}
+
+		if token.UserName != ui.Root.UserName {
+			roleId := cast.ToInt(request.Header.Get("X-Role-Id"))
+			if err := x.CheckRole(request.Context(), token.UserName, roleId); err != nil {
+				result.Code = berror.AuthExpireCode
+				result.Msg = err.Error()
+				return result.Json(writer, http.StatusUnauthorized)
+			}
 		}
 
 		if err := x.AddOptLog(request.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": request.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {

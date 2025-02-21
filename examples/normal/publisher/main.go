@@ -51,8 +51,8 @@ func pubMoreAndPriorityInfo() {
 	m := make(map[string]string)
 
 	ctx := context.Background()
-	for i := 0; i < 200; i++ {
-		m["delayMsg"] = "new msg" + cast.ToString(i)
+	for i := 0; i < 1; i++ {
+		m["delayMsg"] = "testing --------" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 
 		if err := pub.BQ().WithContext(ctx).Publish("default-channel", "default-topic", b); err != nil {

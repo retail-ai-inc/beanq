@@ -21,7 +21,6 @@
                   <th scope="col">Size</th>
                   <th scope="col">Memory usage</th>
                   <th scope="col">Processed</th>
-                  <th scope="col">Action</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -31,9 +30,6 @@
                   <td>{{ d.size }}</td>
                   <td>{{ d.memory }}</td>
                   <td>{{ d.process }}</td>
-                  <td>
-                    <DeleteIcon @action="deleteModal(item)"/>
-                  </td>
                 </tr>
                 </tbody>
               </table>

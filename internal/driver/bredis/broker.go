@@ -117,19 +117,23 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		}
 
 		pending := pendings[0]
+
 		if pending.Idle > deadLetterIdleTime {
 
 			rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
+
 			if len(rangeV) <= 0 {
 				t.client.Del(ctx, deadLetterKey)
 				continue
 			}
 			val := rangeV[0].Values
 			val["logType"] = bstatus.Dlq
-			t.client.XAdd(ctx, &redis.XAddArgs{
+			if err := t.client.XAdd(ctx, &redis.XAddArgs{
 				Stream: logicKey,
 				Values: val,
-			})
+			}).Err(); err != nil {
+				logger.New().Error(err)
+			}
 		}
 
 		if _, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {

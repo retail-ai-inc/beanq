@@ -10,7 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/googleAuth"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-
+	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"net/http"
 	"time"
 
@@ -18,16 +18,14 @@ import (
 )
 
 type Login struct {
-	client             redis.UniversalClient
-	mgo                *bmongo.BMongo
-	prefix             string
-	username, password string
-	issuer, subject    string
-	expiresAt          time.Duration
+	client redis.UniversalClient
+	mgo    *bmongo.BMongo
+	prefix string
+	ui     Ui
 }
 
-func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, username, password string, issuer, subject string, expiresAt time.Duration) *Login {
-	return &Login{client: client, mgo: mgo, prefix: prefix, username: username, password: password, issuer: issuer, subject: subject, expiresAt: expiresAt}
+func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui Ui) *Login {
+	return &Login{client: client, mgo: mgo, prefix: prefix, ui: ui}
 }
 
 func (t *Login) Login(ctx *bwebframework.BeanContext) error {
@@ -41,8 +39,29 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 	result, cancel := response.Get()
 	defer cancel()
 
-	if username != t.username || password != t.password {
-		user, err := t.mgo.CheckUser(r.Context(), username, password)
+	var (
+		user = &bmongo.User{
+			Account:  "",
+			Password: "",
+			Type:     "",
+			Detail:   "",
+			Active:   0,
+			RoleId:   "",
+			Roles:    nil,
+		}
+		err error
+	)
+	// check Email
+	if username != t.ui.Root.UserName {
+		if _, err := mail.ParseEmail(username); err != nil {
+			result.Code = berror.MissParameterCode
+			result.Msg = err.Error()
+			return result.Json(w, http.StatusInternalServerError)
+		}
+	}
+	
+	if username != t.ui.Root.UserName || password != t.ui.Root.Password {
+		user, err = t.mgo.CheckUser(r.Context(), username, password)
 		if err != nil || user == nil {
 			result.Code = berror.AuthExpireCode
 			result.Msg = "No permission"
@@ -53,17 +72,17 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 	claim := bjwt.Claim{
 		UserName: username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    t.issuer,
-			Subject:   t.issuer,
+			Issuer:    t.ui.Issuer,
+			Subject:   t.ui.Subject,
 			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.expiresAt)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.ui.ExpiresAt)),
 			NotBefore: nil,
 			IssuedAt:  nil,
 			ID:        "",
 		},
 	}
 
-	token, err := bjwt.MakeHsToken(claim)
+	token, err := bjwt.MakeHsToken(claim, []byte(t.ui.JwtKey))
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
@@ -73,7 +92,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 	client := tool.ClientFac(t.client, t.prefix, "")
 	nodeId := client.NodeId(r.Context())
 
-	result.Data = map[string]any{"token": token, "nodeId": nodeId}
+	result.Data = map[string]any{"token": token, "roles": user.Roles, "nodeId": nodeId}
 
 	return result.Json(w, http.StatusOK)
 
@@ -135,16 +154,16 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 	claim := bjwt.Claim{
 		UserName: userInfo.Email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    t.issuer,
-			Subject:   t.subject,
+			Issuer:    t.ui.Issuer,
+			Subject:   t.ui.Subject,
 			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.expiresAt)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.ui.ExpiresAt)),
 			NotBefore: nil,
 			IssuedAt:  nil,
 			ID:        "",
 		},
 	}
-	jwtToken, err := bjwt.MakeHsToken(claim)
+	jwtToken, err := bjwt.MakeHsToken(claim, []byte(t.ui.JwtKey))
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
