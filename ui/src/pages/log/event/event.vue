@@ -256,8 +256,10 @@ function initEventSource(apiUrl){
     console.log("handshake success");
   }
   data.sseEvent.onerror = (err)=>{
-    uRouter.replace("/login");
-    console.log("event err----",err);
+    console.log(err.error);
+    window.location.reload();
+    // uRouter.replace("/login");
+    // console.log("event err----",err);
   }
   data.sseEvent.addEventListener("event_log", function(res){
     let body =  JSON.parse(res.data);

@@ -43,8 +43,8 @@ onMounted(async ()=>{
     div.scrollTop = div.scrollHeight;
   })
   info.sseMonitor.onerror = (err)=>{
-    //useRe.push("/login");
-    console.log(err)
+    console.log(err.error);
+    window.location.reload();
   }
 
 })
