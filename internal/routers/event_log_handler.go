@@ -190,10 +190,31 @@ func (t *EventLog) Retry(ctx *bwebframework.BeanContext) error {
 		return res.Json(w, http.StatusInternalServerError)
 
 	}
-
+	if v, ok := data["status"]; ok {
+		if cast.ToString(v) != bstatus.StatusFailed {
+			res.Msg = "Only failed messages can be retried"
+			res.Code = berror.SuccessCode
+			return res.Json(w, http.StatusOK)
+		}
+	}
 	moodType := ""
 	if v, ok := data["moodType"]; ok {
 		moodType = v.(string)
+	}
+	if _, ok := data["addTime"]; ok {
+		data["addTime"] = time.Now()
+	}
+	if _, ok := data["beginTime"]; ok {
+		delete(data, "beginTime")
+	}
+	if _, ok := data["endTime"]; ok {
+		delete(data, "endTime")
+	}
+	if _, ok := data["retry"]; ok {
+		data["retry"] = 0
+	}
+	if _, ok := data["runTime"]; ok {
+		delete(data, "runTime")
 	}
 
 	var bk public.IBroker
@@ -211,7 +232,7 @@ func (t *EventLog) Retry(ctx *bwebframework.BeanContext) error {
 		return res.Json(w, http.StatusOK)
 	}
 
-	bk = bredis.NewNormal(t.client, t.prefix, 2000, 10, 20)
+	bk = bredis.NewNormal(t.client, t.prefix, 2000, 10, 20*time.Minute)
 	if err := bk.Enqueue(nctx, data); err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode

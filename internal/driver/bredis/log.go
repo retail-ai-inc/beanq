@@ -43,7 +43,7 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 		}
 		timer.Reset(5 * time.Second)
 
-		result, err := t.client.XReadGroup(ctx, NewReadGroupArgs(tool.BeanqLogGroup, key, []string{key, ">"}, 200, 0)).Result()
+		result, err := t.client.XReadGroup(ctx, NewReadGroupArgs(tool.BeanqLogGroup, key, []string{key, ">"}, 200, 20*time.Second)).Result()
 		if err != nil {
 			if strings.Contains(err.Error(), "NOGROUP No such") {
 				if err := t.client.XGroupCreateMkStream(ctx, key, tool.BeanqLogGroup, "0").Err(); err != nil {

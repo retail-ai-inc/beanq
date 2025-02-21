@@ -170,7 +170,7 @@ function retryModal(item){
 
 // send payload into queue to consume it again
 async function retryInfo(){
-
+  data.retryModal.hide();
   if(data.retryItem._id === ""){
     eventRef.value.show("missing Id");
     return;
