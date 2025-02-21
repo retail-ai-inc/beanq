@@ -57,9 +57,7 @@ func (t *MongoLog) Migrate(ctx context.Context, data []map[string]any) error {
 
 	datas := make(bson.A, 0, len(data))
 	for _, v := range data {
-		if _, ok := v["_id"]; ok {
-			delete(v, "_id")
-		}
+		delete(v, "_id")
 		datas = append(datas, bson.M(v))
 	}
 
