@@ -204,18 +204,12 @@ func (t *EventLog) Retry(ctx *bwebframework.BeanContext) error {
 	if _, ok := data["addTime"]; ok {
 		data["addTime"] = time.Now()
 	}
-	if _, ok := data["beginTime"]; ok {
-		delete(data, "beginTime")
-	}
-	if _, ok := data["endTime"]; ok {
-		delete(data, "endTime")
-	}
+	delete(data, "beginTime")
+	delete(data, "endTime")
 	if _, ok := data["retry"]; ok {
 		data["retry"] = 0
 	}
-	if _, ok := data["runTime"]; ok {
-		delete(data, "runTime")
-	}
+	delete(data, "runTime")
 
 	var bk public.IBroker
 	if moodType == string(btype.SEQUENTIAL) {
