@@ -205,11 +205,7 @@ let data = reactive({
 
 const useRe = useRouter();
 
-onMounted(async ()=>{
-
-  // bootstrap tooltips
-  const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
-  const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+function redisSSEConnect(){
 
   if(data.sse){
     data.sse.close();
@@ -221,14 +217,25 @@ onMounted(async ()=>{
   data.sse.addEventListener("redis_info",function (res) {
     let body = JSON.parse(res.data);
     if (body.code !== "0000"){
+      useRe.push()
       return
     }
     Object.assign(data,body.data);
   })
   data.sse.onerror = (err)=>{
-    console.log(err.error);
-    window.location.reload();
+    console.log(err);
+    data.sse.close();
+    setTimeout(redisSSEConnect,3000);
   }
+}
+
+onMounted(async ()=>{
+
+  // bootstrap tooltips
+  const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]')
+  const tooltipList = [...tooltipTriggerList].map(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl))
+
+  redisSSEConnect();
 
 })
 
