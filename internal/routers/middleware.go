@@ -1,7 +1,6 @@
 package routers
 
 import (
-	"context"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
@@ -39,14 +38,6 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo
 		defer cancelr()
 		request := ctx.Request
 		writer := ctx.Writer
-
-		accept := request.Header.Get("Accept")
-		//for SSE
-		if !strings.EqualFold(accept, "text/event-stream") {
-			ctx, cancel := context.WithTimeout(request.Context(), 20*time.Second)
-			defer cancel()
-			request = request.WithContext(ctx)
-		}
 
 		var (
 			err   error
