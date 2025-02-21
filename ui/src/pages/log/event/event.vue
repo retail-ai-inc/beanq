@@ -246,8 +246,9 @@ function detailEvent(item){
   uRouter.push("detail/"+item._id);
 }
 
-function initEventSource(apiUrl){
+function initEventSource(){
 
+  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
   if (data.sseEvent){
     data.sseEvent.close();
   }
@@ -257,9 +258,8 @@ function initEventSource(apiUrl){
   }
   data.sseEvent.onerror = (err)=>{
     console.log(err.error);
-    window.location.reload();
-    // uRouter.replace("/login");
-    // console.log("event err----",err);
+    data.sseEvent.close();
+    setTimeout(initEventSource,3000);
   }
   data.sseEvent.addEventListener("event_log", function(res){
     let body =  JSON.parse(res.data);
@@ -278,9 +278,7 @@ onMounted(async()=>{
     moodType:moodType??""
   };
   data.page = sessionStorage.getItem("page")??1;
-
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
-  initEventSource(apiUrl);
+  initEventSource();
 
 })
 

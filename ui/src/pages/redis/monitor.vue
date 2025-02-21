@@ -24,8 +24,7 @@ let info = reactive({
 
 const useRe = useRouter();
 
-onMounted(async ()=>{
-
+function monitorSSEConnect(){
   if(info.sseMonitor){
     info.sseMonitor.close();
   }
@@ -43,9 +42,15 @@ onMounted(async ()=>{
     div.scrollTop = div.scrollHeight;
   })
   info.sseMonitor.onerror = (err)=>{
-    console.log(err.error);
-    window.location.reload();
+    console.log(err);
+    info.sseMonitor.close();
+    setTimeout(monitorSSEConnect,3000);
   }
+}
+
+onMounted(async ()=>{
+
+  monitorSSEConnect();
 
 })
 

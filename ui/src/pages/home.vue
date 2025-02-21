@@ -46,14 +46,7 @@ function resize(){
   })
 }
 
-onMounted( () => {
-
-  const parentEle = homeEle.value.parentElement;
-  resizeObserver = new ResizeObserver((entries)=>{
-    resize();
-  })
-  Base.Debounce( resizeObserver.observe(parentEle),300) ;
-
+function sseConnect(){
   if(sse.value){
     sse.value.close();
   }
@@ -77,9 +70,21 @@ onMounted( () => {
     messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);
   })
   sse.value.onerror = (err)=>{
-    console.log(err.error);
-    window.location.reload();
+    console.log(err)
+    sse.value.close();
+    setTimeout(sseConnect,3000);
   }
+}
+
+onMounted( () => {
+
+  const parentEle = homeEle.value.parentElement;
+  resizeObserver = new ResizeObserver((entries)=>{
+    resize();
+  })
+  Base.Debounce( resizeObserver.observe(parentEle),300) ;
+
+  sseConnect();
 
 })
 onUnmounted(()=>{
