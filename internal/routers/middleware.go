@@ -9,6 +9,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
 	"net/http"
@@ -27,11 +28,11 @@ func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
 	}
 }
 
-func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui Ui) bwebframework.HandleFunc {
+func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) bwebframework.HandleFunc {
 	return HeaderRule(Auth(next, client, x, prefix, ui))
 }
 
-func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui Ui) bwebframework.HandleFunc {
+func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
 
 		result, cancelr := response.Get()

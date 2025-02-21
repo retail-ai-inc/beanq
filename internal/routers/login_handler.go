@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/googleAuth"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"net/http"
 	"time"
@@ -21,10 +22,10 @@ type Login struct {
 	client redis.UniversalClient
 	mgo    *bmongo.BMongo
 	prefix string
-	ui     Ui
+	ui     ui.Ui
 }
 
-func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui Ui) *Login {
+func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) *Login {
 	return &Login{client: client, mgo: mgo, prefix: prefix, ui: ui}
 }
 
@@ -59,7 +60,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 			return result.Json(w, http.StatusInternalServerError)
 		}
 	}
-	
+
 	if username != t.ui.Root.UserName || password != t.ui.Root.Password {
 		user, err = t.mgo.CheckUser(r.Context(), username, password)
 		if err != nil || user == nil {

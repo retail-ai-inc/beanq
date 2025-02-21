@@ -4,38 +4,9 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
+	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"net/http"
-	"time"
 )
-
-type Ui struct {
-	Stmt struct {
-		Host     string `json:"host"`
-		Port     string `json:"port"`
-		User     string `json:"user"`
-		Password string `json:"password"`
-	}
-	GoogleAuth struct {
-		ClientId     string
-		ClientSecret string
-		CallbackUrl  string
-	}
-	SendGrid struct {
-		Key         string
-		FromName    string
-		FromAddress string
-	}
-	Root struct {
-		UserName string `json:"username"`
-		Password string `json:"password"`
-	} `json:"root"`
-	On        bool          `json:"on"`
-	Issuer    string        `json:"issuer"`
-	Subject   string        `json:"subject"`
-	JwtKey    string        `json:"jwtKey"`
-	Port      string        `json:"port"`
-	ExpiresAt time.Duration `json:"expiresAt"`
-}
 
 type Handles struct {
 	schedule  *Schedule
@@ -53,7 +24,7 @@ type Handles struct {
 	role      *Role
 }
 
-func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui Ui) *bwebframework.Router {
+func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) *bwebframework.Router {
 
 	hdls := Handles{
 		schedule:  NewSchedule(client, prefix),
