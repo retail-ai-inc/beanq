@@ -77,8 +77,8 @@ onMounted( () => {
     messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);
   })
   sse.value.onerror = (err)=>{
-    useR.push("/login");
-    console.log(err)
+    console.log(err.error);
+    window.location.reload();
   }
 
 })
