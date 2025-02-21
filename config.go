@@ -23,8 +23,8 @@
 package beanq
 
 import (
+	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
-	"github.com/retail-ai-inc/beanq/v3/internal/routers"
 	"time"
 )
 
@@ -106,9 +106,9 @@ type (
 	}
 
 	BeanqConfig struct {
-		Health   Health     `json:"health"`
-		Broker   string     `json:"broker"`
-		UI       routers.Ui `json:"ui"`
+		Health   Health `json:"health"`
+		Broker   string `json:"broker"`
+		UI       ui.Ui  `json:"ui"`
 		DebugLog `json:"debugLog"`
 		Queue
 		History                  `json:"history"`
