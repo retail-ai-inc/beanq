@@ -16,6 +16,26 @@
                  :success_count="success_count"
                  :db_size="db_size"/>
     </div>
+
+    <div v-for="(item,index) in pods" :key="index" style="margin-bottom: 2rem;">
+      <div style="font-weight: bold">{{index}}</div>
+      <table class="table">
+        <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Channel</th>
+          <th scope="col">Topic</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr v-for="(citem,cindex) in item" :key="cindex">
+          <td>{{citem.id}}</td>
+          <td>{{citem.channel}}</td>
+          <td>{{citem.topic}}</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -25,6 +45,7 @@ import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
+const [pods] = [ref({})];
 
 let [
     queue_total,
@@ -45,6 +66,13 @@ function resize(){
     chart?.resize();
   })
 }
+
+const podList = (async()=>{
+  const res = await request.get("/pod/list");
+  const {msg,code,data} = res;
+  pods.value = data;
+  console.log(pods.value);
+});
 
 function sseConnect(){
   if(sse.value){
@@ -77,6 +105,8 @@ function sseConnect(){
 }
 
 onMounted( () => {
+
+  podList();
 
   const parentEle = homeEle.value.parentElement;
   resizeObserver = new ResizeObserver((entries)=>{

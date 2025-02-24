@@ -5,7 +5,9 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/spf13/cast"
+	"os"
 	"strings"
 	"time"
 )
@@ -70,4 +72,12 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 		return err
 	}, totalkey)
 	return err
+}
+
+func (t *UITool) HostName(ctx context.Context) error {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return err
+	}
+	return t.client.SAdd(ctx, tool.BeanqHostName, hostname).Err()
 }

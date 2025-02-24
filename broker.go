@@ -172,6 +172,7 @@ func (t *Broker) Start(ctx context.Context) {
 	go func() {
 		_ = t.Migrate(ctx, nil)
 	}()
+	_ = t.tool.HostName(ctx)
 	logger.New().Info("Beanq Start")
 	// monitor signal
 	<-t.WaitSignal(cancel)
