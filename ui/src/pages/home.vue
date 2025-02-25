@@ -17,21 +17,25 @@
                  :db_size="db_size"/>
     </div>
 
-    <div v-for="(item,index) in pods" :key="index" style="margin-bottom: 2rem;">
+    <div v-for="[index, item] in Object.entries(pods)" :key="index" style="margin-bottom: 2rem;">
       <div style="font-weight: bold">{{index}}</div>
       <table class="table">
         <thead>
         <tr>
-          <th scope="col">#</th>
-          <th scope="col">Channel</th>
-          <th scope="col">Topic</th>
+          <th scope="col">Cpu Total</th>
+          <th scope="col">Cpu Percent</th>
+          <th scope="col">Memory Total</th>
+          <th scope="col">Memory Percent</th>
+          <th scope="col">Memory Used</th>
         </tr>
         </thead>
         <tbody>
-        <tr v-for="(citem,cindex) in item" :key="cindex">
-          <td>{{citem.id}}</td>
-          <td>{{citem.channel}}</td>
-          <td>{{citem.topic}}</td>
+        <tr>
+          <td>{{item.cpuCount}}</td>
+          <td>{{item.cpuPercent}}(%)</td>
+          <td>{{item.memoryTotal}}(GB)</td>
+          <td>{{item.memoryPercent}}(%)</td>
+          <td>{{item.memoryUsed}}(MB)</td>
         </tr>
         </tbody>
       </table>
@@ -70,7 +74,11 @@ function resize(){
 const podList = (async()=>{
   const res = await request.get("/pod/list");
   const {msg,code,data} = res;
+  for(let key in data){
+    data[key] = JSON.parse(data[key]);
+  }
   pods.value = data;
+
   console.log(pods.value);
 });
 

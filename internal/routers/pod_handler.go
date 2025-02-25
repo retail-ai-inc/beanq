@@ -7,7 +7,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"go.mongodb.org/mongo-driver/bson"
 	"net/http"
 )
 
@@ -34,22 +33,13 @@ func (t *Pod) List(beanContext *bwebframework.BeanContext) error {
 	w := beanContext.Writer
 	r := beanContext.Request
 
-	cmd := t.client.SMembers(r.Context(), tool.BeanqHostName)
-	vals, err := cmd.Result()
-	if err != nil {
+	cmd := t.client.HGetAll(r.Context(), tool.BeanqHostName)
+	if cmd.Err() != nil {
 		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
+		result.Msg = cmd.Err().Error()
 		return result.Json(w, http.StatusInternalServerError)
 	}
-
-	var data = make(map[string][]bson.M)
-	for _, val := range vals {
-		res, err := t.mog.LogsByPod(r.Context(), val)
-		if err != nil {
-			continue
-		}
-		data[val] = res
-	}
-	result.Data = data
+	
+	result.Data = cmd.Val()
 	return result.Json(w, http.StatusOK)
 }

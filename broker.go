@@ -3,6 +3,7 @@ package beanq
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/internal"
@@ -14,6 +15,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )
@@ -172,7 +174,21 @@ func (t *Broker) Start(ctx context.Context) {
 	go func() {
 		_ = t.Migrate(ctx, nil)
 	}()
-	_ = t.tool.HostName(ctx)
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := t.tool.HostName(ctx); err != nil {
+					fmt.Printf("hostname err:%+v \n", err)
+				}
+			}
+		}
+	}()
+
 	logger.New().Info("Beanq Start")
 	// monitor signal
 	<-t.WaitSignal(cancel)

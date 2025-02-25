@@ -2,12 +2,15 @@ package bredis
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/host"
+	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/spf13/cast"
-	"os"
 	"strings"
 	"time"
 )
@@ -75,9 +78,41 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 }
 
 func (t *UITool) HostName(ctx context.Context) error {
-	hostname, err := os.Hostname()
+
+	info, err := host.Info()
 	if err != nil {
 		return err
 	}
-	return t.client.SAdd(ctx, tool.BeanqHostName, hostname).Err()
+
+	memory, err := mem.VirtualMemory()
+	if err != nil {
+		return err
+	}
+
+	cpuCount, err := cpu.Counts(false)
+	if err != nil {
+		return err
+	}
+	cpuPercent, err := cpu.Percent(time.Second, false)
+	if err != nil {
+		return err
+	}
+
+	data := make(map[string]any, 0)
+	data = map[string]any{
+		"cpuCount":      cpuCount,
+		"cpuPercent":    cpuPercent[0],
+		"memoryCount":   memory.Total,
+		"memoryTotal":   fmt.Sprintf("%.2f", float64(memory.Total/(1024*1024*1024))),
+		"memoryUsed":    fmt.Sprintf("%.2f", float64(memory.Used/(1024*1024))),
+		"memoryPercent": memory.UsedPercent,
+	}
+	bt, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	redisVal := make(map[string]any, 0)
+	redisVal[info.Hostname] = string(bt)
+
+	return t.client.HMSet(ctx, tool.BeanqHostName, redisVal).Err()
 }
