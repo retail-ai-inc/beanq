@@ -100,11 +100,11 @@ func (t *UITool) HostName(ctx context.Context) error {
 
 	data := make(map[string]any, 0)
 	data["cpuCount"] = cpuCount
-	data["cpuPercent"] = cpuPercent[0]
+	data["cpuPercent"] = fmt.Sprintf("%.2f", cpuPercent[0])
 	data["memoryCount"] = memory.Total
 	data["memoryTotal"] = fmt.Sprintf("%.2f", float64(memory.Total/(1024*1024*1024)))
 	data["memoryUsed"] = fmt.Sprintf("%.2f", float64(memory.Used/(1024*1024)))
-	data["memoryPercent"] = memory.UsedPercent
+	data["memoryPercent"] = fmt.Sprintf("%.2f", memory.UsedPercent)
 
 	bt, err := json.Marshal(data)
 	if err != nil {

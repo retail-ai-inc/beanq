@@ -150,6 +150,15 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			queues[qusData.TimeKey] = map[string]any{"ready": qusData.Ready, "unacked": qusData.Unacked, "total": qusData.Total}
 		}
 
+		// pod status
+		cmd := t.client.HGetAll(r.Context(), tool.BeanqHostName)
+		if cmd.Err() != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "dashboard")
+			flusher.Flush()
+		}
+
 		result.Data = map[string]any{
 			"queue_total":   keysLen,
 			"db_size":       dbSize,
@@ -157,6 +166,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			"fail_count":    failCount,
 			"success_count": successCount,
 			"queues":        queues,
+			"pods":          cmd.Val(),
 		}
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()

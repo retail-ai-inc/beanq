@@ -49,7 +49,6 @@ import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
-const [pods] = [ref({})];
 
 let [
     queue_total,
@@ -61,8 +60,9 @@ let [
     messageRatesOption,
     nodeId,
     sse,
-    resizeObserver
-  ] = [ref(0),ref(0),ref(0),ref(0),ref(0),ref({}),ref({}),ref(""),ref(null),null];
+    resizeObserver,
+    pods
+  ] = [ref(0),ref(0),ref(0),ref(0),ref(0),ref({}),ref({}),ref(""),ref(null),null,ref({})];
 
 
 function resize(){
@@ -70,17 +70,6 @@ function resize(){
     chart?.resize();
   })
 }
-
-const podList = (async()=>{
-  const res = await request.get("/pod/list");
-  const {msg,code,data} = res;
-  for(let key in data){
-    data[key] = JSON.parse(data[key]);
-  }
-  pods.value = data;
-
-  console.log(pods.value);
-});
 
 function sseConnect(){
   if(sse.value){
@@ -102,6 +91,11 @@ function sseConnect(){
     fail_count.value = result.data.fail_count;
     success_count.value = result.data.success_count;
 
+    for(let key in result.data.pods){
+      result.data.pods[key] = JSON.parse(result.data.pods[key]);
+    }
+    pods.value = result.data.pods;
+
     queuedMessagesOption.value = dashboardApi.QueueLine(result.data.queues);
     messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);
   })
@@ -113,8 +107,6 @@ function sseConnect(){
 }
 
 onMounted( () => {
-
-  podList();
 
   const parentEle = homeEle.value.parentElement;
   resizeObserver = new ResizeObserver((entries)=>{
