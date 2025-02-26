@@ -113,5 +113,8 @@ func (t *UITool) HostName(ctx context.Context) error {
 	redisVal := make(map[string]any, 0)
 	redisVal[info.Hostname] = string(bt)
 
-	return t.client.HMSet(ctx, tool.BeanqHostName, redisVal).Err()
+	if err := t.client.HMSet(ctx, tool.BeanqHostName, redisVal).Err(); err != nil {
+		return err
+	}
+	return t.client.Expire(ctx, tool.BeanqHostName, 20*time.Second).Err()
 }
