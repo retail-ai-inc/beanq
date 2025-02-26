@@ -36,12 +36,6 @@ sequential-consumer:
 	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
 	go run -race ./main.go
 
-dynamic-consumer:
-	@echo "start dynamic sequential consumer"
-	@cd examples/sequential/consumer-dynamic && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
-	go run -race ./main.go
-
 sequential-publisher:
 	@echo "start sequential publisher"
 	@cd examples/sequential/publisher && \
@@ -54,9 +48,9 @@ sequential-publisher-ack:
 	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
 	go run -race ./main.go
 
-dynamic-publisher:
-	@echo "start dynamic sequential publisher with ack"
-	@cd examples/sequential/publisher-dynamic && \
+ui:
+	@echo "start ui on port:9090"
+	@cd examples/ui && \
 	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
 	go run -race ./main.go
 
@@ -82,10 +76,6 @@ clean:
 	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
 	@cd examples/sequential/publisher-with-ack && \
 	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
-	@cd examples/sequential/publisher-dynamic && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
-	@cd examples/sequential/consumer-dynamic && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
 
 	@echo "done!"
 
@@ -97,7 +87,7 @@ lint: ## run all the lint tools, install golangci-lint if not exist
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null; \
 	fi
 	@$(if $(wildcard $(GOLANGCI_LINT_TOOL)),echo "Running golangci-lint...";) \
-	$(GOLANGCI_LINT_TOOL) --verbose run
+	$(GOLANGCI_LINT_TOOL)  run --fix -j 2 -v
 
 FIELDALIGNMENT_TOOL = $(GOPATH)/bin/fieldalignment
 .PHONY: vet
@@ -120,4 +110,4 @@ vet-fix: ##If fixed, the annotation for struct fields will be removed
 
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
- 		sequential sequential-publisher sequential-consumer sequential-publisher-ack clean
+ 		sequential sequential-publisher sequential-consumer sequential-publisher-ack ui clean

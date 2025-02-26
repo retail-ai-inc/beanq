@@ -180,7 +180,7 @@ func (data MessageS) ToMessage() *Message {
 		if k == "moodType" {
 			msg.MoodType = btype.MoodType(v)
 		}
-		if k == "bstatus" {
+		if k == "status" {
 			msg.Status = v
 		}
 		if k == "level" {

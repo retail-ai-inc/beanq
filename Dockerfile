@@ -13,4 +13,4 @@ RUN mkdir -p /var/www/example
 # Set the Current Working Directory inside the container
 WORKDIR /var/www/example
 
-EXPOSE 6060
+EXPOSE 9090

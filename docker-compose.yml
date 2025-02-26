@@ -9,7 +9,7 @@ services:
     tty: true
     container_name: beanq-example
     ports:
-      - "6060:6060"
+      - "8080:9090"
     volumes:
       - ./:/var/www/example:rw
       - ~/go/pkg:/go/pkg
@@ -25,6 +25,20 @@ services:
     container_name: redis-beanq
     restart: always
     command: redis-server --requirepass secret
+    networks:
+      - beanq
+  mongo:
+    image: mongo:8.0
+    ports:
+      - "27017:27017"
+    container_name: mongo-beanq
+    restart: on-failure
+    command: [--auth]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: root
+    volumes:
+      - ./dbs/mongo/init.js:/docker-entrypoint-initdb.d/init.js:ro
     networks:
       - beanq
 networks:
