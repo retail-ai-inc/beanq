@@ -199,6 +199,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		if err != nil {
 			log.Fatalf("static files error:%+v \n", err)
 		}
+		ctx.Writer.Header().Set("Cache-Control", "public, max-age=31536000")
 		http.FileServer(http.FS(fd)).ServeHTTP(ctx.Writer, ctx.Request)
 		return nil
 	})
