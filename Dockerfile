@@ -6,7 +6,20 @@ FROM golang:1.20-alpine
 
 # The latest alpine images don't have some tools like (`git` and `bash`).
 # Adding git, bash and openssh to the image
-RUN apk update && apk upgrade && apk add --no-cache bash git openssh make autoconf gcc libc-dev sudo procps curl
+RUN apk update &&  \
+    apk upgrade &&  \
+    apk add --no-cache  \
+    bash  \
+    git  \
+    openssh  \
+    make  \
+    autoconf  \
+    gcc  \
+    libc-dev  \
+    sudo  \
+    procps  \
+    curl \
+    jq
 
 RUN mkdir -p /var/www/example
 

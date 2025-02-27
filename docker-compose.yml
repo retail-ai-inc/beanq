@@ -15,6 +15,7 @@ services:
       - ~/go/pkg:/go/pkg
     depends_on:
       - redis
+      - mongo
     networks:
       - beanq
   redis:
