@@ -1,15 +1,16 @@
 version: '3.7'
 
 services:
+  ## UI service
   example:
     build:
       context: ./
       dockerfile: Dockerfile
     init: true
     tty: true
-    container_name: beanq-example
     ports:
       - "8080:9090"
+    container_name: example
     volumes:
       - ./:/var/www/example:rw
       - ~/go/pkg:/go/pkg
@@ -18,6 +19,24 @@ services:
       - mongo
     networks:
       - beanq
+  ## Consumer service,Multiple can be activated.
+  ## Example:
+  ## docker-compose up --build -d --scale example-normal-consumer=3
+  example-normal-consumer:
+    build:
+      context: ./
+      dockerfile: Dockerfile-normal-consumer
+    init: true
+    tty: true
+    volumes:
+      - ./:/var/www/example:rw
+      - ~/go/pkg:/go/pkg
+    depends_on:
+      - redis
+      - mongo
+    networks:
+      - beanq
+  ## Redis service
   redis:
     image: redis:5.0.12
     platform: linux/amd64
@@ -28,6 +47,7 @@ services:
     command: redis-server --requirepass secret
     networks:
       - beanq
+  ## Mongo service
   mongo:
     image: mongo:8.0
     ports:
