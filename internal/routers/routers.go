@@ -22,6 +22,7 @@ type Handles struct {
 	dlq       *Dlq
 	workflow  *WorkFlow
 	role      *Role
+	pod       *Pod
 }
 
 func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) *bwebframework.Router {
@@ -40,6 +41,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 		dlq:       NewDlq(client, mgo, prefix),
 		workflow:  NewWorkFlow(client, mgo, prefix),
 		role:      NewRole(mgo),
+		pod:       NewPod(client, mgo, prefix),
 	}
 
 	r.Get("/ping", HeaderRule(func(ctx *bwebframework.BeanContext) error {
@@ -91,5 +93,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 	r.Post("/dlq/delete", MigrateMiddleWare(hdls.dlq.Delete, client, mgo, prefix, ui))
 	r.Get("/workflow/list", MigrateMiddleWare(hdls.workflow.List, client, mgo, prefix, ui))
 	r.Post("/workflow/delete", MigrateMiddleWare(hdls.workflow.Delete, client, mgo, prefix, ui))
+
+	r.Get("/pod/list", MigrateMiddleWare(hdls.pod.List, client, mgo, prefix, ui))
 	return r
 }

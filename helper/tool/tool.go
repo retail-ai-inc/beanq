@@ -80,6 +80,10 @@ func GetChannelAndTopicFromStreamKey(streamKey string) (channel, topic string) {
 }
 
 const (
+	BeanqHostName = "beanq-host-name"
+)
+
+const (
 	// BeanqLogGroup it's for beanq-logic-log,multiple consumers can consume those data
 	BeanqLogGroup = "beanq-log-group"
 )

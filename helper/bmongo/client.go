@@ -566,7 +566,7 @@ func (t *BMongo) WorkFLowLogs(ctx context.Context, filter bson.M, page, pageSize
 	opts := options.Find()
 	opts.SetSkip(skip)
 	opts.SetLimit(pageSize)
-	opts.SetSort(bson.D{{Key: "CreatedAt", Value: 1}})
+	opts.SetSort(bson.D{{Key: "CreatedAt", Value: -1}})
 
 	cursor, err := t.database.Collection(t.workflowCollection).Find(ctx, filter, opts)
 	defer func() {
@@ -601,4 +601,29 @@ func (t *BMongo) DeleteWorkFlow(ctx context.Context, id string) (int64, error) {
 		return 0, err
 	}
 	return result.DeletedCount, nil
+}
+
+func (t *BMongo) LogsByPod(ctx context.Context, hostname string) ([]bson.M, error) {
+
+	filter := bson.M{}
+	if hostname != "" {
+		filter["hostName"] = hostname
+	}
+	opts := options.Find()
+	opts.SetSkip(0)
+	opts.SetLimit(10)
+	opts.SetSort(bson.D{{Key: "addTime", Value: -1}})
+
+	cursor, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+	if err != nil {
+		return nil, err
+	}
+	var data []bson.M
+	if err := cursor.All(ctx, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }

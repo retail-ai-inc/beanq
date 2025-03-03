@@ -44,7 +44,6 @@ func initCnf() *beanq.BeanqConfig {
 	return &bqConfig
 }
 func main() {
-	runtime.GOMAXPROCS(2)
 	pubDelayInfo()
 }
 
@@ -58,9 +57,6 @@ func pubDelayInfo() {
 	delayT := now
 	for i := 0; i < 10; i++ {
 
-		// if time.Now().Sub(ntime).Minutes() >= 1 {
-		// 	break
-		// }
 		delayT = now
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)

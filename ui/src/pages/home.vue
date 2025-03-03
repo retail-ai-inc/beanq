@@ -16,6 +16,30 @@
                  :success_count="success_count"
                  :db_size="db_size"/>
     </div>
+
+    <div v-for="[index, item] in Object.entries(pods)" :key="index" style="margin-bottom: 2rem;">
+      <div style="font-weight: bold">{{index}}</div>
+      <table class="table">
+        <thead>
+        <tr>
+          <th scope="col">Cpu Total</th>
+          <th scope="col">Cpu Percent</th>
+          <th scope="col">Memory Total</th>
+          <th scope="col">Memory Percent</th>
+          <th scope="col">Memory Used</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+          <td>{{item.cpuCount}}</td>
+          <td>{{item.cpuPercent}}(%)</td>
+          <td>{{item.memoryTotal}}(GB)</td>
+          <td>{{item.memoryPercent}}(%)</td>
+          <td>{{item.memoryUsed}}(MB)</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
@@ -36,8 +60,9 @@ let [
     messageRatesOption,
     nodeId,
     sse,
-    resizeObserver
-  ] = [ref(0),ref(0),ref(0),ref(0),ref(0),ref({}),ref({}),ref(""),ref(null),null];
+    resizeObserver,
+    pods
+  ] = [ref(0),ref(0),ref(0),ref(0),ref(0),ref({}),ref({}),ref(""),ref(null),null,ref({})];
 
 
 function resize(){
@@ -65,6 +90,11 @@ function sseConnect(){
     num_cpu.value = result.data.num_cpu;
     fail_count.value = result.data.fail_count;
     success_count.value = result.data.success_count;
+
+    for(let key in result.data.pods){
+      result.data.pods[key] = JSON.parse(result.data.pods[key]);
+    }
+    pods.value = result.data.pods;
 
     queuedMessagesOption.value = dashboardApi.QueueLine(result.data.queues);
     messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);

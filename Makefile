@@ -4,34 +4,39 @@ GOPATH=$(shell go env GOPATH)
 test:
 	@echo "start test"
 	@docker compose up -d --build
-	@docker exec -it beanq-example bash -c "go mod tidy & go test -v ./..."
+	@docker exec -it example bash -c "go mod tidy & go test -v ./..."
 
 delay: delay-publisher delay-consumer
 
 delay-consumer:
 	@echo "start delay consumer"
 	@cd examples/delay/consumer && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 delay-publisher:
 	@echo "start delay publisher"
 	@cd examples/delay/publisher && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 normal: normal-publisher normal-consumer
 
 normal-consumer:
 	@echo "start normal consumer"
+	go mod tidy
 	@cd examples/normal/consumer && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 normal-publisher:
 	@echo "start normal publisher"
 	@cd examples/normal/publisher && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 sequential: sequential-publisher sequential-consumer
@@ -39,31 +44,30 @@ sequential: sequential-publisher sequential-consumer
 sequential-consumer:
 	@echo "start sequential consumer"
 	@cd examples/sequential/consumer && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
-	go run -race ./main.go
-
-dynamic-consumer:
-	@echo "start dynamic sequential consumer"
-	@cd examples/sequential/consumer-dynamic && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 sequential-publisher:
 	@echo "start sequential publisher"
 	@cd examples/sequential/publisher && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 sequential-publisher-ack:
 	@echo "start sequential publisher with ack"
 	@cd examples/sequential/publisher-with-ack && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
-dynamic-publisher:
-	@echo "start dynamic sequential publisher with ack"
-	@cd examples/sequential/publisher-dynamic && \
-	sed -i 's/"host": "localhost"/"host": "redis-beanq"/' ./env.json && \
+ui:
+	@echo "start ui on port:9090"
+	go mod tidy
+	@cd examples/ui && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
 	go run -race ./main.go
 
 clean:
@@ -71,27 +75,30 @@ clean:
 
 	@echo "delay clean"
 	@cd examples/delay/consumer && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 	@cd examples/delay/publisher && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 
 	@echo "normal clean"
 	@cd examples/normal/consumer && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 	@cd examples/normal/publisher && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 
 	@echo "sequential clean"
 	@cd examples/sequential/consumer && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 	@cd examples/sequential/publisher && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 	@cd examples/sequential/publisher-with-ack && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
-	@cd examples/sequential/publisher-dynamic && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
-	@cd examples/sequential/consumer-dynamic && \
-	sed -i 's/"host": "redis-beanq"/"host": "localhost"/' ./env.json
+	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	mv temp.json env.json
 
 	@echo "done!"
 
@@ -103,7 +110,7 @@ lint: ## run all the lint tools, install golangci-lint if not exist
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null; \
 	fi
 	@$(if $(wildcard $(GOLANGCI_LINT_TOOL)),echo "Running golangci-lint...";) \
-	$(GOLANGCI_LINT_TOOL) --verbose run
+	$(GOLANGCI_LINT_TOOL)  run --fix -j 2 -v
 
 FIELDALIGNMENT_TOOL = $(GOPATH)/bin/fieldalignment
 .PHONY: vet
@@ -126,4 +133,4 @@ vet-fix: ##If fixed, the annotation for struct fields will be removed
 
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
- 		sequential sequential-publisher sequential-consumer sequential-publisher-ack clean
+ 		sequential sequential-publisher sequential-consumer sequential-publisher-ack ui clean

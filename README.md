@@ -56,4 +56,30 @@ When you want to exit the container, please remember to execute the clean comman
 ```bash
 make clean
 ```
+## Directly demonstrate using Docker-Compose:
+Start Service:
+```bash
+docker-compose up --build -d
+```
+### If you want to enable multiple instances, please use the following command:
+notice: Currently, only regular consumer Dockerfiles have been built
+```bash
+docker-compose up --build -d --scale example-normal-consumer=3
+```
+normal publish example(publisher):
+```bash
+docker-compose exec example make normal-publisher
+```
+
+delay example(publisher and consumer):
+```bash
+docker-compose exec example make delay
+```
+
+sequential example(publisher and consumer):
+```bash
+docker-compose exec example make sequential
+```
+
+
 
