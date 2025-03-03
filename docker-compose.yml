@@ -27,8 +27,25 @@ services:
     command: redis-server --requirepass secret
     networks:
       - beanq
+  mongo:
+    image: mongo:6.0.3
+    container_name: mongo-beanq
+    environment:
+      MONGO_DATA_DIR: /data/db
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: secret
+      MONGO_INITDB_DATABASE: lollipop_logs
+    hostname: mongo-beanq
+    volumes:
+      - mongo_data:/data/db:delegated
+    ports:
+      - "27017:27017"
+    restart: always
+    networks:
+      - beanq
 networks:
   beanq:
     name: beanq-network
 
-
+volumes:
+  mongo_data:
