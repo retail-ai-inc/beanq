@@ -63,18 +63,6 @@ func main() {
 	if err != nil {
 		logger.New().Error(err)
 	}
-	//go func() {
-	//	ticker := time.NewTicker(time.Second)
-	//	defer ticker.Stop()
-	//	for {
-	//		select {
-	//		case <-ticker.C:
-	//			fmt.Println(runtime.NumGoroutine())
-	//		}
-	//	}
-	//}()
-
-	// csm.Subscribe("default-channel", "default-topic", &defaultRun{})
 	// begin to consume information
 	csm.Wait(ctx)
 }

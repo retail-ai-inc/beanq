@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 	"math/rand"
+	"os"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -249,6 +250,8 @@ func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler publ
 	val["endTime"] = time.Now()
 	val["retry"] = retry
 	val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).String()
+	hostname, _ := os.Hostname()
+	val["hostName"] = hostname
 	// `stream` confirmation message
 	cancel()
 	// ------------------------

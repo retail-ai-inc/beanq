@@ -65,7 +65,7 @@
           { path:'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
           { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)},
-          { path:'role',component:()=>loadModule("/src/pages/setting/role.vue",options)}
+          { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)}
         ]
   };
 

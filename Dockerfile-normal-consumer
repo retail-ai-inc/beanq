@@ -26,5 +26,4 @@ RUN mkdir -p /var/www/example
 # Set the Current Working Directory inside the container
 WORKDIR /var/www/example
 
-ENTRYPOINT ["make","ui"]
-EXPOSE 9090
+ENTRYPOINT ["make","normal-consumer"]
