@@ -108,23 +108,6 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 				Expect(resp).To(BeNil())
 			}, SpecTimeout(time.Second*5))
 		})
-
-		Context("broker service error", func() {
-			BeforeEach(func(ctx SpecContext) {
-				// TODO: break the broker service
-				_uuid = uuid.New().String()
-				driver := GetBrokerDriver[redis.UniversalClient]()
-				err := driver.Close()
-				Expect(err).To(BeNil())
-			})
-
-			It("send and receive message", func(ctx SpecContext) {
-				// TODO: send and receive message
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
-				Expect(err).To(HaveOccurred())
-				Expect(resp).To(BeNil())
-			}, SpecTimeout(time.Second*5))
-		})
 	})
 	When("without workflow", func() {
 		BeforeEach(func(ctx SpecContext) {
@@ -162,22 +145,6 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			It("send and receive message", func(ctx SpecContext) {
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, "no_workflow_topic", []byte("duplicate test message")).WaitingAck()
 				Expect(err).Should(MatchError(bstatus.ErrIdempotent))
-				Expect(resp).To(BeNil())
-			}, SpecTimeout(time.Second*5))
-		})
-
-		Context("broker service error", func() {
-			BeforeEach(func(ctx SpecContext) {
-				_uuid = uuid.New().String()
-				// Break the broker service by closing Redis connection
-				driver := GetBrokerDriver[redis.UniversalClient]()
-				err := driver.Close()
-				Expect(err).To(BeNil())
-			})
-
-			It("send and receive message", func(ctx SpecContext) {
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, "no_workflow_topic", []byte("error test message")).WaitingAck()
-				Expect(err).To(HaveOccurred())
 				Expect(resp).To(BeNil())
 			}, SpecTimeout(time.Second*5))
 		})

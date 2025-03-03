@@ -3,9 +3,8 @@ GOPATH=$(shell go env GOPATH)
 .PHONY: test
 test:
 	@echo "start test"
-	@docker compose up -d
-	go mod tidy
-	go test -v ./...
+	@docker compose up -d --build
+	@docker exec -it beanq-example bash -c "go mod tidy & go test -v ./..."
 
 delay: delay-publisher delay-consumer
 

@@ -1,4 +1,4 @@
-FROM golang:1.20-alpine
+FROM golang:1.22.0-alpine
 
 # This is necessary for China devps
 #RUN go env -w GOPROXY=https://goproxy.cn,direct
@@ -9,6 +9,8 @@ FROM golang:1.20-alpine
 RUN apk update && apk upgrade && apk add --no-cache bash git openssh make autoconf gcc libc-dev sudo procps curl
 
 RUN mkdir -p /var/www/example
+
+RUN go install github.com/onsi/ginkgo/v2/ginkgo@v2.22.2
 
 # Set the Current Working Directory inside the container
 WORKDIR /var/www/example

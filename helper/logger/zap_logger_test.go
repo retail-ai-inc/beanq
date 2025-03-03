@@ -2,6 +2,7 @@ package logger
 
 import (
 	"errors"
+	"io"
 	"testing"
 	"time"
 )
@@ -9,6 +10,7 @@ import (
 func TestNewLog(t *testing.T) {
 
 	cfg := ZapLoggerConfig{
+		DefaultWriter: io.Discard,
 		Filename:    "",
 		Level:       0,
 		EncoderType: "",
