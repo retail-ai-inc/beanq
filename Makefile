@@ -9,14 +9,14 @@ test:
 	@sed -i 's/"host": "127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005,127.0.0.1:7006"/"host": "redis-beanq"/' env.testing.json
 	@sed -i 's/"host": "127.0.0.1"/"host": "mongo-beanq"/' env.testing.json
 	@echo "start test"
-	@docker compose up -d --build
-	@if [ -z "$(SUITE_TEST_FILES)" ]; then \
-		echo "No *_suite_test.go files found"; \
-		docker exec -it example bash -c "ginkgo bootstrap"; \
+	@docker compose up -d --build && \
+	if [ -z "$(SUITE_TEST_FILES)" ]; then \
+		echo "No *_suite_test.go files found" && \
+		docker compose exec -T example bash -c "ginkgo bootstrap"; \
 	else \
 		echo "$(SUITE_TEST_FILES) files found"; \
-	fi
-	@docker exec -it example bash -c "go test -v ./..."
+	fi && \
+	docker compose exec -T example bash -c "go test -v ./..."
 
 .PHONY: test-clean
 test-clean:
