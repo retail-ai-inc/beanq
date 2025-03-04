@@ -16,7 +16,7 @@ test:
 	else \
 		echo "$(SUITE_TEST_FILES) files found"; \
 	fi && \
-	docker compose exec -T example bash -c "go test -v ./..."
+	docker compose exec -T example bash -c "go test -race -v ./..."
 
 .PHONY: test-clean
 test-clean:

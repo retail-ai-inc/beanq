@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -72,6 +73,36 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			return nil
 		}))
 		Expect(err).To(BeNil())
+
+		_, err = client.BQ().WithContext(ctx).SubscribeSequential(_channel+"_failed", _topic+"_failed", WorkflowHandler(func(ctx context.Context, wf *Workflow) error {
+			wf.Init(
+				WfOptionRecordErrorHandler(func(err error) {
+					if err == nil {
+						return
+					}
+					fmt.Println("error", err)
+				}),
+				WfOptionMux(
+					muxClient.NewMutex("test", WithExpiry(time.Second*10)),
+				),
+			)
+			wf.NewTask("test").OnRollback(func(task Task) error {
+				fmt.Println("rollback")
+				return nil
+			}).OnExecute(func(task Task) error {
+				fmt.Println("execute")
+				return errors.New("test failed")
+			})
+
+			err := wf.OnRollbackResult(func(taskID string, err error) error {
+				fmt.Println("rollback", taskID, err)
+				return nil
+			}).Run()
+			Expect(err).NotTo(BeNil())
+			return err
+		}))
+		Expect(err).To(BeNil())
+
 		go func() {
 			client.Wait(ctx)
 		}()
@@ -85,10 +116,27 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 
 			It("send message", func(ctx SpecContext) {
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
-				fmt.Println("respStatus:", resp.Status)
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
+			}, SpecTimeout(time.Second*5))
+
+			It("send failed message", func(ctx SpecContext) {
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed", _topic+"_failed", []byte("normal test message")).WaitingAck()
+				Expect(err).To(BeNil())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(bstatus.StatusFailed))
+			}, SpecTimeout(time.Second*5))
+
+			It("send parallel message", func(ctx SpecContext) {
+				for i := 0; i < 10; i++ {
+					go func() {
+						resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
+						Expect(err).To(BeNil())
+						Expect(resp).NotTo(BeNil())
+						Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
+					}()
+				}
 			}, SpecTimeout(time.Second*5))
 		})
 
