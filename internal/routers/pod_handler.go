@@ -39,7 +39,7 @@ func (t *Pod) List(beanContext *bwebframework.BeanContext) error {
 		result.Msg = cmd.Err().Error()
 		return result.Json(w, http.StatusInternalServerError)
 	}
-	
+
 	result.Data = cmd.Val()
 	return result.Json(w, http.StatusOK)
 }

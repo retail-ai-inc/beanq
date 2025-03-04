@@ -1,5 +1,6 @@
 GOPATH=$(shell go env GOPATH)
 SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
+
 .PHONY: test
 test:
 	@set -e;
@@ -16,6 +17,13 @@ test:
 		echo "$(SUITE_TEST_FILES) files found"; \
 	fi
 	@docker exec -it example bash -c "go test -v ./..."
+
+.PHONY: test-clean
+test-clean:
+	@echo "start tests clean"
+	@docker compose down
+	@rm -f env.testing.json
+	@echo "tests clean done"
 
 delay: delay-publisher delay-consumer
 

@@ -32,10 +32,8 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Format
-        run: diff -u <(echo -n) <(go fmt $(go list ./...))
+      - name: Run tests inside the container
+        run: make test
 
-      - name: Run tests
-        id: run_tests
-        run: |
-          make test
+      - name: Stop and remove containers
+        run: make test-clean

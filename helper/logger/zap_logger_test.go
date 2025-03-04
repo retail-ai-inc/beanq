@@ -11,15 +11,15 @@ func TestNewLog(t *testing.T) {
 
 	cfg := ZapLoggerConfig{
 		DefaultWriter: io.Discard,
-		Filename:    "",
-		Level:       0,
-		EncoderType: "",
-		MaxSize:     0,
-		MaxAge:      0,
-		MaxBackups:  0,
-		LocalTime:   false,
-		Compress:    false,
-		Pre:         "",
+		Filename:      "",
+		Level:         0,
+		EncoderType:   "",
+		MaxSize:       0,
+		MaxAge:        0,
+		MaxBackups:    0,
+		LocalTime:     false,
+		Compress:      false,
+		Pre:           "",
 	}
 
 	NewWithConfig(cfg).With("a", errors.New("aa")).Error(errors.New("berr"))
