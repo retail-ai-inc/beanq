@@ -1,10 +1,21 @@
 GOPATH=$(shell go env GOPATH)
-
+SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
 .PHONY: test
 test:
+	@set -e;
+	@echo "prepare env.testing.json"
+	@cp env.sample.json env.testing.json
+	@sed -i 's/"host": "127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005,127.0.0.1:7006"/"host": "redis-beanq"/' env.testing.json
+	@sed -i 's/"host": "127.0.0.1"/"host": "mongo-beanq"/' env.testing.json
 	@echo "start test"
 	@docker compose up -d --build
-	@docker exec -it example bash -c "go mod tidy & go test -v ./..."
+	@if [ -z "$(SUITE_TEST_FILES)" ]; then \
+		echo "No *_suite_test.go files found"; \
+		docker exec -it example bash -c "ginkgo bootstrap"; \
+	else \
+		echo "$(SUITE_TEST_FILES) files found"; \
+	fi
+	@docker exec -it example bash -c "go test -v ./..."
 
 delay: delay-publisher delay-consumer
 
@@ -26,7 +37,6 @@ normal: normal-publisher normal-consumer
 
 normal-consumer:
 	@echo "start normal consumer"
-	go mod tidy
 	@cd examples/normal/consumer && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
@@ -64,7 +74,6 @@ sequential-publisher-ack:
 
 ui:
 	@echo "start ui on port:9090"
-	go mod tidy
 	@cd examples/ui && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
