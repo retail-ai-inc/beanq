@@ -8,8 +8,6 @@ services:
       dockerfile: Dockerfile
     init: true
     tty: true
-    volumes:
-      - ./:/var/www/example:rw
     ports:
       - "8080:9090"
     container_name: example

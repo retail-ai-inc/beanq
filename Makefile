@@ -16,7 +16,7 @@ test:
 	else \
 		echo "$(SUITE_TEST_FILES) files found"; \
 	fi
-	@docker compose exec -T example bash -c 'go mod tidy && go test -race -v ./... && ginkgo -p -v --race'
+	@docker compose exec -T example bash -c 'go test -race -v ./... && ginkgo -p -v --race'
 
 .PHONY: clean-test
 clean-test:

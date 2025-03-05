@@ -28,9 +28,9 @@ RUN go install github.com/onsi/ginkgo/v2/ginkgo@v2.22.2
 # Set the Current Working Directory inside the container
 WORKDIR /var/www/example
 
-# COPY . .
+COPY . .
 
-# RUN go mod tidy
+RUN go mod tidy
 
 ENTRYPOINT ["make","ui"]
 EXPOSE 9090
