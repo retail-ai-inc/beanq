@@ -88,11 +88,17 @@ func MakeLogicKey(prefix string) string {
 }
 
 // RetryInfo retry=0 means no retries, but it will be executed at least once.
-func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error) {
+func RetryInfo(ctx context.Context, f func() error, retry int, matcher ...func(error) bool) (i int, err error) {
 	for i = 0; i <= retry; i++ {
 		err = f()
 		if err == nil {
-			return i,nil
+			return i, nil
+		}
+
+		for _, m := range matcher {
+			if !m(err) {
+				return i, err
+			}
 		}
 
 		if i == retry {

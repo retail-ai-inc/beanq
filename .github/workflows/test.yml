@@ -36,4 +36,4 @@ jobs:
         run: make test
 
       - name: Stop and remove containers
-        run: make test-clean
+        run: make clean-test
