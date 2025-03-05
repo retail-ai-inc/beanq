@@ -51,8 +51,10 @@
       <template #title="{title}">
       </template>
     </Action>
-    <Btoast :id="id" ref="toastRef">
-    </Btoast>
+    <Btoast :id="id" ref="toastRef" />
+
+    <LoginModal :id="noticeId" ref="loginModal"/>
+
   </div>
 </template>
 <script setup>
@@ -63,28 +65,39 @@ import RetryIcon from "../../components/icons/retry_icon.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
+import LoginModal from "../../components/loginModal.vue";
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
-const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(1),ref(0),ref([])];
+const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(0),ref(0),ref([])];
 const [retryWarningHtml,retryInfoHtml] = [
   ref("Warning: Item retry cannot be undone!<br/> Please proceed with caution!"),
   ref("This operation will permanently retry the data of log.<br>\n" +
       "To prevent accidental actions, please confirm by entering the following:<br/>")
 ]
 const [retryLabel,showRetryModal,dataId,retryItem] = [ref("retryLabel"),ref("showRetryModal"),ref(""),ref({})];
-const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")]
+const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
+
+const [noticeId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 async function dlqLogs() {
-  let res = await dlqApi.List(page.value,pageSize.value);
-  const {code,msg,data} = res;
-  if(code !== "0000"){
-    toastRef.value.show(msg);
-    return;
+  try {
+    let res = await dlqApi.List(page.value,pageSize.value);
+    const{cursor:resCursor,data,total:resTotal} = res;
+
+    logs.value = data;
+    total.value = resTotal;
+    page.value =  resCursor;
+    cursor.value = resCursor;
+
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
+    }
+    //normal error
+    toastRef.value.show(err);
   }
-  logs.value = data.data;
-  total.value = data.total;
-  page.value =  data.cursor;
-  cursor.value = data.cursor;
 }
 
 onMounted( ()=>{
@@ -113,13 +126,14 @@ async function retryInfo(){
   }
   try{
     let res = await dlqApi.Retry(dataId.value,retryItem.value);
-    toastRef.value.show(res.msg);
-    if(res.code === "0000"){
-      await dlqLogs();
+    toastRef.value.show("success");
+    await dlqLogs();
+  }catch (err) {
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
       return;
     }
-  }catch (e) {
-    toastRef.value.show(e.error);
+    toastRef.value.show(err.error);
   }
 }
 
@@ -141,12 +155,14 @@ async function deleteInfo(){
   }
   try {
     let res = await dlqApi.Delete(deleteId.value);
-    toastRef.value.show(res.msg);
-    if(res.code === "0000"){
-      await dlqLogs();
+    toastRef.value.show("success");
+    await dlqLogs();
+  }catch (err) {
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
     }
-  }catch (e) {
-    toastRef.value.show(e.error);
+    toastRef.value.show(err.error);
   }
 }
 

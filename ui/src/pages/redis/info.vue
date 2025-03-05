@@ -179,20 +179,23 @@
         </div>
       </div>
     </div>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
   
   
 <script setup>
 
-import { reactive,onMounted,onUnmounted,toRefs } from "vue";
+import { ref,reactive,onMounted,onUnmounted,toRefs } from "vue";
 import { useRouter } from 'vueRouter';
 import Command from "../components/command.vue";
 import Client from "../components/client.vue";
 import Memory from "../components/memory.vue";
 import KeySpace from "../components/keySpace.vue";
 import Stats from "../components/stats.vue";
+import LoginModal from "../components/loginModal.vue";
 
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 let data = reactive({
   "info":{},
   "commands": [],
@@ -207,26 +210,28 @@ const useRe = useRouter();
 
 function redisSSEConnect(){
 
-  if(data.sse){
-    data.sse.close();
-  }
-  data.sse = sseApi.Init("redis");
-  data.sse.onopen = () => {
-    console.log("success")
-  }
-  data.sse.addEventListener("redis_info",function (res) {
-    let body = JSON.parse(res.data);
-    if (body.code !== "0000"){
-      useRe.push()
-      return
+    if(data.sse){
+      data.sse.close();
     }
-    Object.assign(data,body.data);
-  })
-  data.sse.onerror = (err)=>{
-    console.log(err);
-    data.sse.close();
-    setTimeout(redisSSEConnect,3000);
-  }
+    data.sse = sseApi.Init("redis");
+    data.sse.onopen = () => {
+      console.log("success")
+    }
+    data.sse.addEventListener("redis_info",function (res) {
+      let body = JSON.parse(res.data);
+      if (body.code !== "0000"){
+        loginModal.value.error(new Error(body.msg));
+        data.sse.close();
+        return
+      }
+      Object.assign(data,body.data);
+    })
+    data.sse.onerror = (err)=>{
+      console.log("err",err);
+      data.sse.close();
+      setTimeout(redisSSEConnect,3000);
+    }
+
 }
 
 onMounted(async ()=>{

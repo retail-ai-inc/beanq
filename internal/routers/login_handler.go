@@ -57,7 +57,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		if _, err := mail.ParseEmail(username); err != nil {
 			result.Code = berror.MissParameterCode
 			result.Msg = err.Error()
-			return result.Json(w, http.StatusInternalServerError)
+			return result.Json(w, http.StatusBadRequest)
 		}
 	}
 
@@ -65,7 +65,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		user, err = t.mgo.CheckUser(r.Context(), username, password)
 		if err != nil || user == nil {
 			result.Code = berror.AuthExpireCode
-			result.Msg = "No permission"
+			result.Msg = "Incorrect username or password"
 			return result.Json(w, http.StatusUnauthorized)
 		}
 	}

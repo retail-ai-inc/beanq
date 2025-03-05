@@ -65,11 +65,7 @@ function deleteModal(item){}
 
 async function changePage(page,cursor){
   try {
-    let scheduleData = await scheduleApi.GetSchedule(page,10);
-    const {code,data,msg} = scheduleData;
-    if(code !== "0000"){
-      return
-    }
+    let data = await scheduleApi.GetSchedule(page,10);
     schedules.value = data;
     total.value = Math.ceil(data.total / 10);
     page.value = page;
@@ -79,14 +75,18 @@ async function changePage(page,cursor){
 
 }
 
-onMounted(async ()=>{
+const getSchedule = (async ()=>{
   try{
-    let scheduleData = await scheduleApi.GetSchedule(page.value,10);
-    schedules.value = scheduleData.data;
-    total.value = Math.ceil(scheduleData.data.total / 10);
+    let data = await scheduleApi.GetSchedule(page.value,10);
+    schedules.value = data;
+    total.value = Math.ceil(10 / 10);
   }catch (e) {
     toastRef.value.show(e);
   }
+})
+
+onMounted(()=>{
+  getSchedule();
 })
 
 function setScheduleId(id){

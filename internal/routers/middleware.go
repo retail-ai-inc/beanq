@@ -31,6 +31,76 @@ func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClie
 	return HeaderRule(Auth(next, client, x, prefix, ui))
 }
 
+func MigrateSSE(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui, name string) bwebframework.HandleFunc {
+	return HeaderRule(AuthSSE(next, client, x, prefix, ui, name))
+}
+
+func AuthSSE(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui, name string) bwebframework.HandleFunc {
+	return func(ctx *bwebframework.BeanContext) error {
+
+		result, cancelr := response.Get()
+		defer cancelr()
+		request := ctx.Request
+		writer := ctx.Writer
+
+		var (
+			err   error
+			token *bjwt.Claim
+		)
+
+		auth := request.FormValue("token")
+
+		flusher, ok := writer.(http.Flusher)
+		if !ok {
+			http.Error(writer, "server error", http.StatusInternalServerError)
+			flusher.Flush()
+			return nil
+		}
+		writer.Header().Set("Content-Type", "text/event-stream")
+		writer.Header().Set("Cache-Control", "no-cache")
+		writer.Header().Set("Connection", "keep-alive")
+
+		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(writer, name)
+			flusher.Flush()
+			return nil
+		}
+		// Check that the username must be an email address
+		if token.UserName != ui.Root.UserName {
+			if _, err := mail.ParseEmail(token.UserName); err != nil {
+				result.Code = berror.MissParameterCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(writer, name)
+				flusher.Flush()
+				return nil
+			}
+		}
+
+		if token.UserName != ui.Root.UserName {
+			roleId := cast.ToInt(request.Header.Get("X-Role-Id"))
+			if err := x.CheckRole(request.Context(), token.UserName, roleId); err != nil {
+				result.Code = berror.AuthExpireCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(writer, name)
+				flusher.Flush()
+				return nil
+			}
+		}
+
+		if err := x.AddOptLog(request.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": request.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(writer, name)
+			flusher.Flush()
+			return nil
+		}
+		return next(ctx)
+	}
+}
+
 func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) bwebframework.HandleFunc {
 	return func(ctx *bwebframework.BeanContext) error {
 
@@ -58,7 +128,7 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo
 		}
 		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
 		if err != nil {
-			result.Code = berror.InternalServerErrorMsg
+			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
 			return result.Json(writer, http.StatusUnauthorized)
 		}

@@ -53,17 +53,23 @@ function getQueue(page,pageSize){
 }
 
 onMounted(async ()=>{
-  let queue = await getQueue(page.value,10);
-  const{code,msg,data} = queue;
-  queues.value = data;
-  queues.value  = queue.data;
+  try {
+    let queue = await getQueue(page.value,10);
+    queues.value = queue;
+  }catch (e) {
+
+  }
 })
 
 async function changePage(page){
-  let queue = await getQueue(page,10);
-  queues.value = queue.data.data;
-  total.value = Math.ceil(queue.data.total / 10);
-  page.value = page;
+  try {
+    let queue = await getQueue(page,10);
+    queues.value = queue;
+    total.value = Math.ceil(queue.data.total / 10);
+    page.value = page;
+  }catch (e) {
+
+  }
 }
 
 function setId(id){

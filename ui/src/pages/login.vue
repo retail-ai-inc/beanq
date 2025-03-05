@@ -29,17 +29,17 @@
   </div>
 </template>
 <script setup>
-import { reactive,toRefs,onMounted,onUnmounted } from "vue";
+import { ref,reactive,toRefs,onMounted,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
 
 const [formData,useRe] = [
     reactive({
       user:{"username":"","password":""},
-      msg:"",
       title:config.title,
     }),
   useRouter()
-]
+];
+const msg = ref("");
 
 function handleKeyDown(event){
   if(event.key === "Enter"){
@@ -53,7 +53,7 @@ onMounted(async ()=>{
   if(JSON.stringify(token) !== "{}"){
     if (token.token != ""){
       await sessionStorage.setItem("token",token.token);
-      useRe.push("/admin/home");
+      //useRe.push("/admin/home");
       return;
     }
   }
@@ -68,38 +68,32 @@ onUnmounted(()=>{
 async function onSubmit(event){
 
   if (formData.user.username == "" || formData.user.password == ""){
-    formData.msg = "field can't empty"
+    msg.value = "Username or Password are required";
     return;
   }
+
   //,{headers:{"Content-Type":"multipart/form-data"}}
   try{
     let res = await loginApi.Login(formData.user.username,formData.user.password);
-    const {code:ucode,msg:umsg,data:udata} = res;
+    sessionStorage.setItem("token",res.token);
+    sessionStorage.setItem("roles",res.roles);
+    sessionStorage.setItem("nodeId",res.nodeId);
 
-    if(ucode === "0000"){
-      sessionStorage.setItem("token",udata.token);
-      sessionStorage.setItem("roles",udata.roles);
-      sessionStorage.setItem("nodeId",udata.nodeId);
-      let nodesRes = await dashboardApi.Nodes;
-      const {code:nCode,msg:nMsg,data:nData} = nodesRes;
-      if(nCode === "0000"){
-        sessionStorage.setItem("nodes",nData);
-      }
-    }
+    let nodesRes = await dashboardApi.Nodes();
+    sessionStorage.setItem("nodes",nodesRes);
 
     useRe.push("/admin/home");
   }catch(err){
-    if (err.response.status === 401){
-      data.msg = err.response.data.msg;
-    }
+    msg.value = err.response.data.msg;
   }
 }
+
 
 function googleLogin(){
   window.location.href="/googleLogin"
 }
 
-const {user,msg,title} = toRefs(formData);
+const {user,title} = toRefs(formData);
 </script>
 <style scoped>
 .left-col{
