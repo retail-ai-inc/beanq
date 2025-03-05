@@ -4,8 +4,8 @@ SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
 .PHONY: test
 test:
 	@set -e;
-	@echo "prepare env.testing.json"
-	@cp env.sample.json env.testing.json
+	@echo "prepare env.testing.json" 
+	@cp env.sample.json env.testing.json 
 	@sed -i 's/"host": "127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005,127.0.0.1:7006"/"host": "redis-beanq"/' env.testing.json
 	@sed -i 's/"host": "127.0.0.1"/"host": "mongo-beanq"/' env.testing.json
 	@echo "start test"
@@ -15,15 +15,15 @@ test:
 		docker compose exec -T example bash -c "ginkgo bootstrap"; \
 	else \
 		echo "$(SUITE_TEST_FILES) files found"; \
-	fi && \
-	docker compose exec -T example bash -c "go test -race -v ./..."
+	fi
+	@docker compose exec -T example bash -c 'go mod tidy && go test -race -v ./... && ginkgo -p -v --race'
 
-.PHONY: test-clean
-test-clean:
-	@echo "start tests clean"
+.PHONY: clean-test
+clean-test:
+	@echo "clean test"
 	@docker compose down
 	@rm -f env.testing.json
-	@echo "tests clean done"
+	@rm -f *_suite_test.go
 
 delay: delay-publisher delay-consumer
 

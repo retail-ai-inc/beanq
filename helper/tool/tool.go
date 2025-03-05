@@ -2,23 +2,20 @@ package tool
 
 import (
 	"context"
-	"fmt"
+	"hash/fnv"
+	"math"
+	"math/rand"
+	"strings"
+	"time"
+
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/spf13/cast"
-	"hash/fnv"
-	"math"
-	"math/rand"
-	"runtime/debug"
-	"strings"
-	"time"
 )
 
 func makeKey(keys ...string) string {
-
 	return strings.Join(keys, ":")
-
 }
 
 // MakeZSetKey create redis key for type sorted set
@@ -36,7 +33,6 @@ func MakeZSetKey(prefix, channel, topic string) string {
 
 // MakeStreamKey create key for type stream
 func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) string {
-
 	if channel == "" {
 		channel = boptions.DefaultOptions.DefaultChannel
 	}
@@ -57,7 +53,6 @@ func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) s
 
 // MakeStatusKey create key for type string
 func MakeStatusKey(prefix, channel, topic, id string) string {
-
 	channel = strings.Join([]string{"{", channel}, "")
 	topic = strings.Join([]string{topic, "}"}, "")
 
@@ -92,32 +87,16 @@ func MakeLogicKey(prefix string) string {
 	return makeKey(prefix, "beanq-logic-log")
 }
 
-func doTimeout(ctx context.Context, f func() error) error {
-	errCh := make(chan error, 1)
-	go func() {
-		defer func() {
-			if ne := recover(); ne != nil {
-				errCh <- fmt.Errorf("error:%+v,stack:%s", ne, string(debug.Stack()))
-				return
-			}
-		}()
-		errCh <- f()
-	}()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errCh:
-		return err
-	}
-}
-
 // RetryInfo retry=0 means no retries, but it will be executed at least once.
 func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error) {
 	for i = 0; i <= retry; i++ {
-		err = doTimeout(ctx, f)
+		err = f()
 		if err == nil {
-			return
+			return i,nil
+		}
+
+		if i == retry {
+			return i, err
 		}
 
 		waitTime := JitterBackoff(500*time.Millisecond, time.Second, i)
@@ -146,8 +125,8 @@ func JitterBackoff(min, max time.Duration, attempt int) time.Duration {
 }
 
 func randDuration(center time.Duration) time.Duration {
-	var ri = int64(center)
-	var jitter = rand.Int63n(ri)
+	ri := int64(center)
+	jitter := rand.Int63n(ri)
 	return time.Duration(math.Abs(float64(ri + jitter)))
 }
 
@@ -160,7 +139,6 @@ func HashKey(id []byte, flake uint64) uint64 {
 }
 
 func JsonDecode[T map[string]any | map[string]string](data string, m *T) error {
-
 	if err := json.NewDecoder(strings.NewReader(data)).Decode(m); err != nil {
 		return err
 	}
