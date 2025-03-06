@@ -10,7 +10,7 @@
   </div>
 </template>
 <script setup>
-import {ref,defineProps,defineExpose} from "vue";
+import {defineProps,defineExpose} from "vue";
 const props = defineProps({
   id:"",
 })

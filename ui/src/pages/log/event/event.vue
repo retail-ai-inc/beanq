@@ -31,9 +31,7 @@
                     <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{maskString(item._id)}}</router-link>
                   </td>
                   <td class="">
-                    <div @click="copyText(item.id)" style="cursor: pointer">
-                      {{maskString(item.id)}}
-                    </div>
+                    <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
                   <td>{{item.topic}}</td>
@@ -43,19 +41,11 @@
                     <span v-else-if="item.status == 'failed'" class="text-danger">{{item.status}}</span>
                     <span v-else-if="item.status == 'published'" class="text-warning">{{item.status}}</span>
                   </td>
-                  <td>{{item.addTime}}</td>
                   <td>
-                    <div class="d-flex">
-                      <span class="d-block text-truncate" style="max-width: 8rem;">{{item.payload}}</span>
-                      <a tabindex="0"
-                         class="link-primary"
-                         role="button"
-                         data-bs-toggle="popover"
-                         data-bs-trigger="focus"
-                         data-bs-placement="top"
-                         data-bs-custom-class="custom-popover"
-                         :id="item._id" style="font-size: 0.9rem;">more</a>
-                    </div>
+                    <TimeToolTips :past-time="item.addTime" />
+                  </td>
+                  <td>
+                    <More :payload="item.payload" />
                   </td>
                   <td class="text-center text-nowrap">
                     <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
@@ -91,12 +81,10 @@
     <Btoast :id="eventBtoastId" ref="eventRef"/>
     <LoginModal :id="loginId" ref="loginModal"/>
 
-    <CopyToast :id="copyToast" ref="copyRef"/>
-
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,onMounted,toRefs,onUnmounted,nextTick } from "vue";
+import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
 import { useRouter,useRoute } from 'vueRouter';
 import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
@@ -107,7 +95,9 @@ import EditAction from "./editAction.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
 import LoginModal from "../../components/loginModal.vue";
-import CopyToast from "../../components/copyToast.vue";
+import More from "../../components/more.vue";
+import TimeToolTips from "../../components/timeToolTips.vue";
+import Copy from "../../components/copy.vue";
 
 const l = ref(inject("i18n"));
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
@@ -150,16 +140,6 @@ const [retryWarningHtml,retryInfoHtml] = [
 
 const maskString = ((id)=>{
   return Base.MaskString(id)
-})
-
-const [copyToast,copyRef] = [ref("copyToast"),ref("copyRef")];
-const copyText = (async (text)=>{
-  try {
-    await navigator.clipboard.writeText(text);
-    copyRef.value.show();
-  } catch (err) {
-    console.error('复制失败:', err);
-  }
 })
 
 function deleteModal(item){
@@ -304,21 +284,6 @@ function initEventSource(){
     data.eventLogs = body.data.data;
     data.page =  body.data.cursor;
     data.total = body.data.total;
-
-    //when DOM rendering completed
-    await nextTick();
-
-    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
-    const popoverList = [...popoverTriggerList].map((popoverTriggerEl,index) => {
-        let str = JSON.stringify(JSON.parse(data.eventLogs[index]?.payload),null,2);
-        let payload = `<pre><code>${str}</code></pre>`;
-        new bootstrap.Popover(popoverTriggerEl,{
-          html:true,
-          trigger:"focus",
-          title:"payload",
-          content:payload
-        })
-    });
   })
 }
 
