@@ -40,6 +40,7 @@
         </tbody>
       </table>
     </div>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
 
@@ -47,8 +48,10 @@
 import {ref, onMounted,onUnmounted} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
+import LoginModal from "./components/loginModal.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 let [
     queue_total,
@@ -80,9 +83,11 @@ function sseConnect(){
     console.log("connect success")
   }
   sse.value.addEventListener("dashboard",function (res) {
-    //let result = JSON.parse(res.data);
     const {code,msg,data} = JSON.parse(res.data);
-    if (code !== "0000"){
+    if (code === "1004"){
+        loginModal.value.error(new Error(msg));
+        sse.value.close();
+        return
       return
     }
 

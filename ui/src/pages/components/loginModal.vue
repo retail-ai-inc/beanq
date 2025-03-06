@@ -15,7 +15,7 @@
   </div>
 </template>
 <script setup>
-import {ref,defineProps,defineExpose,onUnmounted} from "vue";
+import {ref,defineProps,defineExpose,onUnmounted,onMounted} from "vue";
 import { useRouter } from 'vueRouter';
 
 const props = defineProps({
@@ -32,9 +32,12 @@ const showNoticeModal = (()=>{
 const [uRouter] = [useRouter()];
 const reLogin=(()=>{
   sessionStorage.clear();
-  uRouter.replace("login");
+  uRouter.replace("/login");
 })
-
+onMounted(()=>{
+  const eleRetry = document.getElementById(props.id);
+  noticeModal.value = new bootstrap.Modal(eleRetry);
+})
 onUnmounted(()=>{
   noticeModal.value.dispose();
 })

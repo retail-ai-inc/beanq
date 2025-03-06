@@ -62,7 +62,7 @@ func AuthSSE(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmo
 
 		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
 		if err != nil {
-			result.Code = berror.InternalServerErrorCode
+			result.Code = berror.AuthExpireCode
 			result.Msg = err.Error()
 			_ = result.EventMsg(writer, name)
 			flusher.Flush()
@@ -118,7 +118,7 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo
 		if auth != "" {
 			strs := strings.Split(auth, " ")
 			if len(strs) < 2 {
-				result.Code = berror.InternalServerErrorCode
+				result.Code = berror.AuthExpireCode
 				result.Msg = "missing parameter"
 				return result.Json(writer, http.StatusInternalServerError)
 			}
@@ -128,7 +128,7 @@ func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo
 		}
 		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
 		if err != nil {
-			result.Code = berror.InternalServerErrorCode
+			result.Code = berror.AuthExpireCode
 			result.Msg = err.Error()
 			return result.Json(writer, http.StatusUnauthorized)
 		}

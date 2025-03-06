@@ -69,7 +69,7 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 	r.Get("/dashboard", MigrateSSE(hdls.dashboard.Info, client, mgo, prefix, ui, "dashboard"))
 	r.Get("/nodes", MigrateMiddleWare(hdls.dashboard.Nodes, client, mgo, prefix, ui))
 
-	r.Get("/event_log/list", MigrateMiddleWare(hdls.eventLog.List, client, mgo, prefix, ui))
+	r.Get("/event_log/list", MigrateSSE(hdls.eventLog.List, client, mgo, prefix, ui, "event_log"))
 	r.Get("/event_log/detail", MigrateMiddleWare(hdls.eventLog.Detail, client, mgo, prefix, ui))
 	r.Post("/event_log/delete", MigrateMiddleWare(hdls.eventLog.Delete, client, mgo, prefix, ui))
 	r.Post("/event_log/edit", MigrateMiddleWare(hdls.eventLog.Edit, client, mgo, prefix, ui))

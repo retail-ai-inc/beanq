@@ -8,19 +8,23 @@
     <ul class="list-group list-group-flush" id="monitor" style="height: 500px;overflow-y: scroll;background-color: #333">
       <li v-for="(v,k) in commands " :key="k" class="list-group-item" style="background-color: #333;color:#f5f5f5">{{v}}</li>
     </ul>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
   
   
 <script setup>
 
-import { reactive,onMounted,onUnmounted,toRefs } from "vue";
+import { ref,reactive,onMounted,onUnmounted,toRefs } from "vue";
 import { useRouter } from 'vueRouter';
+import LoginModal from "../components/loginModal.vue";
 
 let info = reactive({
   sseMonitor:null,
   commands:[]
 });
+
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 const useRe = useRouter();
 
@@ -34,9 +38,12 @@ function monitorSSEConnect(){
   }
   info.sseMonitor.addEventListener("redis_monitor",function (res) {
     let body = JSON.parse(res.data);
-    if (body.code !== "0000"){
+    if (body.code === "1004"){
+      loginModal.value.error(new Error(body.msg));
+      info.sseMonitor.close();
       return
     }
+
     info.commands.push(body.data);
     let div = document.getElementById("monitor");
     div.scrollTop = div.scrollHeight;
