@@ -48,16 +48,17 @@ const Base = {
         }
 
         if (seconds < 60) {
-            return `${seconds}seconds ago`;
+            return `${seconds} seconds ago`;
         } else if (minutes < 60) {
-            return `${minutes}minutes ago`;
+            return `${minutes} minutes ago`;
         } else if (hours < 24) {
-            return `${hours}hours ago`;
+            return `${hours} hours ago`;
         } else if (days < 7) {
-            return `${days}days ago`;
+            return `${days} days ago`;
         } else if (weeks < 4) {
-            return `${weeks}weeks ago`;
+            return `${weeks} weeks ago`;
         } else {
+            // More than one month will display the complete date
             return past.toLocaleDateString("zh-CN", {
                 year: "numeric",
                 month: "2-digit",
