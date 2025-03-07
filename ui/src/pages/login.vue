@@ -10,6 +10,12 @@
             <input class="form-control" type="text" placeholder="Username" name="userName" autocomplete="off" aria-label="default input example" v-model="user.username">
             <input class="form-control" type="password" placeholder="Password" name="password" autocomplete="off" aria-label="default input example" style="margin-top: 0.9375rem" v-model="user.password">
           </div>
+          <div class="form-check d-flex" style="margin:1rem 0">
+            <input class="form-check-input" type="checkbox" v-model="expiredTimeBool" id="flexCheckDefault">
+            <label class="form-check-label" for="flexCheckDefault" style="margin-left: .4rem">
+              Free login within 30 days
+            </label>
+          </div>
 
           <button type="button" class="btn btn-primary" style="margin-top: 0.625rem" @click="onSubmit">Login</button>
           <div id="errorMsg" style="color: red;margin-top:0.625rem;text-align: left">{{msg}}</div>
@@ -39,6 +45,8 @@ const [formData,useRe] = [
     }),
   useRouter()
 ];
+const expiredTimeBool = ref(false);
+
 const msg = ref("");
 
 function handleKeyDown(event){
@@ -74,7 +82,7 @@ async function onSubmit(event){
 
   //,{headers:{"Content-Type":"multipart/form-data"}}
   try{
-    let res = await loginApi.Login(formData.user.username,formData.user.password);
+    let res = await loginApi.Login(formData.user.username,formData.user.password,expiredTimeBool.value);
     sessionStorage.setItem("token",res.token);
     sessionStorage.setItem("roles",res.roles);
     sessionStorage.setItem("nodeId",res.nodeId);

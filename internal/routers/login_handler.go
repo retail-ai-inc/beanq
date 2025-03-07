@@ -12,6 +12,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/spf13/cast"
 	"net/http"
 	"time"
 
@@ -36,6 +37,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
+	expiredTime := r.PostFormValue("expiredTime")
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -69,6 +71,10 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 			return result.Json(w, http.StatusUnauthorized)
 		}
 	}
+	expiresAt := t.ui.ExpiresAt
+	if cast.ToInt64(expiredTime) > 0 {
+		expiresAt = time.Duration(cast.ToInt64(expiredTime)) * 24 * time.Hour
+	}
 
 	claim := bjwt.Claim{
 		UserName: username,
@@ -76,7 +82,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 			Issuer:    t.ui.Issuer,
 			Subject:   t.ui.Subject,
 			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.ui.ExpiresAt)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresAt)),
 			NotBefore: nil,
 			IssuedAt:  nil,
 			ID:        "",
