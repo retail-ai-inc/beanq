@@ -40,6 +40,7 @@
         </tbody>
       </table>
     </div>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
 
@@ -47,8 +48,10 @@
 import {ref, onMounted,onUnmounted} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
+import LoginModal from "./components/loginModal.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 let [
     queue_total,
@@ -77,30 +80,32 @@ function sseConnect(){
   }
   sse.value = sseApi.Init("dashboard");
   sse.value.onopen = () => {
-    console.log("success")
+    console.log("connect success")
   }
   sse.value.addEventListener("dashboard",function (res) {
-    let result = JSON.parse(res.data);
-    if (result.code !== "0000"){
+    const {code,msg,data} = JSON.parse(res.data);
+    if (code === "1004"){
+        loginModal.value.error(new Error(msg));
+        sse.value.close();
+        return
       return
     }
 
-    queue_total.value = result.data.queue_total;
-    db_size.value = result.data.db_size;
-    num_cpu.value = result.data.num_cpu;
-    fail_count.value = result.data.fail_count;
-    success_count.value = result.data.success_count;
+    queue_total.value = data.queue_total;
+    db_size.value = data.db_size;
+    num_cpu.value = data.num_cpu;
+    fail_count.value = data.fail_count;
+    success_count.value = data.success_count;
 
-    for(let key in result.data.pods){
-      result.data.pods[key] = JSON.parse(result.data.pods[key]);
+    for(let key in data?.pods){
+      data.pods[key] = JSON.parse(data.pods[key]);
     }
-    pods.value = result.data.pods;
+    pods.value = data.pods;
 
-    queuedMessagesOption.value = dashboardApi.QueueLine(result.data.queues);
-    messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);
+    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues);
+    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues);
   })
   sse.value.onerror = (err)=>{
-    console.log(err)
     sse.value.close();
     setTimeout(sseConnect,3000);
   }

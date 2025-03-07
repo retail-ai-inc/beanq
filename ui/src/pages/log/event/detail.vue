@@ -31,7 +31,7 @@ const uRoute = useRoute();
 onMounted(async ()=>{
   let id = uRoute.params.id;
   let res = await getDetail(id);
-  detail.value = res.data;
+  detail.value = res;
 })
 
 </script>

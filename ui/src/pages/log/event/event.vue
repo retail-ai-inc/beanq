@@ -28,10 +28,10 @@
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
                   <td class="text-right">
-                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item._id}}</router-link>
+                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{maskString(item._id)}}</router-link>
                   </td>
                   <td class="">
-                    {{item.id}}
+                    <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
                   <td>{{item.topic}}</td>
@@ -41,11 +41,11 @@
                     <span v-else-if="item.status == 'failed'" class="text-danger">{{item.status}}</span>
                     <span v-else-if="item.status == 'published'" class="text-warning">{{item.status}}</span>
                   </td>
-                  <td>{{item.addTime}}</td>
                   <td>
-                    <span class="d-block text-truncate" style="max-width: 30rem;">
-                      <pre><code>{{item.payload}}</code></pre>
-                    </span>
+                    <TimeToolTips :past-time="item.addTime" />
+                  </td>
+                  <td>
+                    <More :payload="item.payload" />
                   </td>
                   <td class="text-center text-nowrap">
                     <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
@@ -79,6 +79,8 @@
       <!--delete modal end-->
     </div>
     <Btoast :id="eventBtoastId" ref="eventRef"/>
+    <LoginModal :id="loginId" ref="loginModal"/>
+
   </div>
 </template>
 <script setup>
@@ -92,9 +94,14 @@ import Search from "./search.vue";
 import EditAction from "./editAction.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
+import LoginModal from "../../components/loginModal.vue";
+import More from "../../components/more.vue";
+import TimeToolTips from "../../components/timeToolTips.vue";
+import Copy from "../../components/copy.vue";
 
 const l = ref(inject("i18n"));
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 let data = reactive({
   eventLogs:[],
@@ -131,6 +138,10 @@ const [retryWarningHtml,retryInfoHtml] = [
       "To prevent accidental actions, please confirm by entering the following:<br/>")
 ]
 
+const maskString = ((id)=>{
+  return Base.MaskString(id)
+})
+
 function deleteModal(item){
   data.deleteId = "";
   dataId.value = "";
@@ -151,7 +162,7 @@ async function deleteInfo(){
   try {
     let res = await eventApi.Delete(data.deleteId);
     data.deleteModal.hide();
-    eventRef.value.show(res.msg);
+    eventRef.value.show("success");
 
   }catch (e) {
     eventRef.value.show(e.error);
@@ -177,7 +188,7 @@ async function retryInfo(){
   }
   try{
     let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
-    eventRef.value.show(res.msg);
+    eventRef.value.show("success");
   }catch (e) {
     eventRef.value.show(e.error);
   }
@@ -216,7 +227,7 @@ async function editInfo(item){
   try{
     let res = await eventApi.Edit(item._id,item.payload);
     //if success
-    eventRef.value.show(res.msg);
+    eventRef.value.show("success");
     data.infoDetailModal.hide();
 
   }catch (e) {
@@ -261,8 +272,15 @@ function initEventSource(){
     data.sseEvent.close();
     setTimeout(initEventSource,3000);
   }
-  data.sseEvent.addEventListener("event_log", function(res){
+  data.sseEvent.addEventListener("event_log", async function(res){
     let body =  JSON.parse(res.data);
+
+    if (body.code === "1004"){
+      loginModal.value.error(new Error(body.msg));
+      data.sseEvent.close();
+      return
+    }
+
     data.eventLogs = body.data.data;
     data.page =  body.data.cursor;
     data.total = body.data.total;
@@ -279,7 +297,6 @@ onMounted(async()=>{
   };
   data.page = sessionStorage.getItem("page")??1;
   initEventSource();
-
 })
 
 onUnmounted(()=>{
@@ -296,5 +313,10 @@ const {eventLogs,form,page,total,cursor,detail,retryLabel,showRetryModal,deleteL
 }
 .table th, .table td {
   vertical-align: middle;
+}
+.custom-popover{
+  .popover-header{
+    background-color: #fff3cd;
+  }
 }
 </style>

@@ -31,6 +31,7 @@ func (t *RedisInfo) Info(ctx *bwebframework.BeanContext) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
+		flusher.Flush()
 		return nil
 	}
 	w.Header().Set("Content-Type", "text/event-stream")

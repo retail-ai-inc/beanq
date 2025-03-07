@@ -12,6 +12,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
+	"github.com/spf13/cast"
 	"net/http"
 	"time"
 
@@ -36,6 +37,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
+	expiredTime := r.PostFormValue("expiredTime")
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -57,7 +59,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		if _, err := mail.ParseEmail(username); err != nil {
 			result.Code = berror.MissParameterCode
 			result.Msg = err.Error()
-			return result.Json(w, http.StatusInternalServerError)
+			return result.Json(w, http.StatusBadRequest)
 		}
 	}
 
@@ -65,9 +67,13 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		user, err = t.mgo.CheckUser(r.Context(), username, password)
 		if err != nil || user == nil {
 			result.Code = berror.AuthExpireCode
-			result.Msg = "No permission"
+			result.Msg = "Incorrect username or password"
 			return result.Json(w, http.StatusUnauthorized)
 		}
+	}
+	expiresAt := t.ui.ExpiresAt
+	if cast.ToInt64(expiredTime) > 0 {
+		expiresAt = time.Duration(cast.ToInt64(expiredTime)) * 24 * time.Hour
 	}
 
 	claim := bjwt.Claim{
@@ -76,7 +82,7 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 			Issuer:    t.ui.Issuer,
 			Subject:   t.ui.Subject,
 			Audience:  nil,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(t.ui.ExpiresAt)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiresAt)),
 			NotBefore: nil,
 			IssuedAt:  nil,
 			ID:        "",
