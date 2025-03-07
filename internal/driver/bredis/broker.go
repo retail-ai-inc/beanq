@@ -22,11 +22,12 @@ import (
 )
 
 type RdbBroker struct {
-	client         redis.UniversalClient
-	prefix         string
-	maxLen         int64
-	consumers      int64
-	deadLetterIdle time.Duration
+	client          redis.UniversalClient
+	prefix          string
+	maxLen          int64
+	consumers       int64
+	deadLetterIdle  time.Duration
+	retryConditions []func(error) bool
 }
 
 func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, duration time.Duration) *RdbBroker {
@@ -37,6 +38,11 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 		consumers:      consumers,
 		deadLetterIdle: duration,
 	}
+}
+
+func (t *RdbBroker) Migrate(ctx context.Context, log public.IMigrateLog) error {
+	migrate := NewLog(t.client, t.prefix)
+	return migrate.Migrate(ctx, log)
 }
 
 func (t *RdbBroker) Mood(moodType btype.MoodType) public.IBroker {
@@ -227,10 +233,7 @@ func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler publ
 	timeToRun := cast.ToDuration(val["timeToRun"])
 	sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
 
-	retry, err := tool.RetryInfo(sessionCtx, func() error {
-		return handler(sessionCtx, val)
-	}, cast.ToInt(val["retry"]))
-
+	retry, err := handler(sessionCtx, val, cast.ToInt(val["retry"]))
 	if err != nil {
 		//if h, ok := rh.subscribe.(IConsumeError); ok {
 		//	h.Error(sessionCtx, err)

@@ -332,7 +332,7 @@ func NewWorkflowRecord() *WorkflowRecord {
 		if err != nil {
 			logger.New().Info("no workflow configration, ignoring the record")
 		}
-		fmt.Printf("workflow:%+v \n", config)
+	
 		workflowRecord = &WorkflowRecord{
 			on:    config.On,
 			retry: config.Retry,

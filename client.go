@@ -28,16 +28,21 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"slices"
+	"syscall"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
-	"io/fs"
-	"log"
-	"net/http"
-	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/rs/xid"
@@ -65,6 +70,7 @@ type (
 		Retry            int           `json:"retry"`
 		Priority         float64       `json:"priority"`
 		TimeToRun        time.Duration `json:"timeToRun"`
+		retryConditions  []func(error) bool
 	}
 
 	dynamicOption struct {
@@ -132,6 +138,12 @@ func WithCaptureExceptionOption(handler func(ctx context.Context, err any)) Clie
 	}
 }
 
+func WithRetryConditions(condition ...func(error) bool) ClientOption {
+	return func(client *Client) {
+		client.retryConditions = append(client.retryConditions, condition...)
+	}
+}
+
 func (c *Client) BQ() *BQClient {
 	bqc := &BQClient{
 		client: &Client{
@@ -143,6 +155,7 @@ func (c *Client) BQ() *BQClient {
 			Priority:         c.Priority,
 			TimeToRun:        c.TimeToRun,
 			captureException: c.captureException,
+			retryConditions:  slices.Clone(c.retryConditions),
 		},
 
 		dynamicOption: &dynamicOption{},
@@ -155,11 +168,82 @@ func (c *Client) BQ() *BQClient {
 }
 
 func (c *Client) Wait(ctx context.Context) {
-	c.broker.Start(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	for key, handler := range c.broker.handlers {
+		go func(hdl Handler) {
+			brokerImpl := c.broker.Mood(hdl.moodType)
+			hdl.Invoke(ctx, brokerImpl)
+		}(*handler)
+		c.broker.handlers[key] = nil
+	}
+
+	go c.broker.Migrate(ctx)
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := c.broker.tool.HostName(ctx); err != nil {
+					fmt.Printf("hostname err:%+v \n", err)
+				}
+			}
+		}
+	}()
+
+	logger.New().Info("Beanq Start")
+	// monitor signal
+	<-c.WaitSignal(cancel)
+}
+
+func (t *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
+	sigs := make(chan os.Signal, 1)
+	done := make(chan bool, 1)
+
+	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
+
+	go func() {
+		<-sigs
+		cancel()
+		// t.asyncPool.Release()
+		_ = logger.New().Sync()
+		done <- true
+	}()
+	return done
+}
+
+func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions ...func(error) bool) error {
+	conditions := t.retryConditions
+	if len(retryConditions) > 0 {
+		conditions = append(conditions, retryConditions...)
+	}
+
+	handler := Handler{
+		channel:         channel,
+		topic:           topic,
+		moodType:        moodType,
+		retryConditions: conditions,
+		do: func(ctx context.Context, message map[string]any) error {
+			var gerr error
+			msg := messageToStruct(message)
+			if err := subscribe.Handle(ctx, msg); err != nil {
+				gerr = errors.Join(gerr, err)
+				if h, ok := subscribe.(IConsumeCancel); ok {
+					gerr = errors.Join(gerr, h.Cancel(ctx, msg))
+				}
+			}
+			return gerr
+		},
+	}
+
+	t.broker.handlers = append(t.broker.handlers, &handler)
+	return nil
 }
 
 func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*Message, error) {
-
 	m, err := c.broker.Status(ctx, channel, topic, id)
 	if err != nil {
 		return nil, err
@@ -172,7 +256,6 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) 
 var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
-
 	go func() {
 		timer := timex.TimerPool.Get(10 * time.Second)
 		defer timer.Stop()
@@ -189,7 +272,6 @@ func (c *Client) ServeHttp(ctx context.Context) {
 				logger.New().Error(err)
 			}
 		}
-
 	}()
 
 	httpport := c.broker.config.UI.Port
@@ -347,7 +429,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 
 		// store message
 		return b.client.broker.Enqueue(b.ctx, message.ToMap())
-		//return b.client.broker.enqueue(b.ctx, message, b.dynamicOption.on)
+		// return b.client.broker.enqueue(b.ctx, message, b.dynamicOption.on)
 
 	case *Subscribe:
 		channel, topic := cmd.channel, cmd.topic
@@ -360,9 +442,9 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 
 		if b.dynamicOption.on {
-
+			// TODO: maybe need this feature in the future.
 		} else {
-			if err := b.client.broker.AddConsumer(cmd.moodType, channel, topic, cmd.handle); err != nil {
+			if err := b.client.AddConsumer(cmd.moodType, channel, topic, cmd.handle); err != nil {
 				return err
 			}
 		}

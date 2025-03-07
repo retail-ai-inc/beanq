@@ -4,18 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
+	"sync"
+
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/internal"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	public "github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )
@@ -26,13 +23,25 @@ var (
 )
 
 type Handler struct {
-	brokerImpl public.IBroker
-	do         func(ctx context.Context, data map[string]any) error
-	broker     string
-	prefix     string
-	channel    string
-	topic      string
-	moodType   btype.MoodType
+	do              func(ctx context.Context, data map[string]any) error
+	channel         string
+	topic           string
+	moodType        btype.MoodType
+	retryConditions []func(error) bool
+}
+
+func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
+	fmt.Println("h.channel=============", h.channel)
+	fmt.Println("h.topic=============", h.topic)
+	broker.Dequeue(ctx, h.channel, h.topic, func(ctx context.Context, data map[string]any, retry ...int) (int, error) {
+		if len(retry) == 0 {
+			return 0, h.do(ctx, data)
+		}
+
+		return tool.RetryInfo(ctx, func() error {
+			return h.do(ctx, data)
+		}, retry[0], h.retryConditions...)
+	})
 }
 
 type Broker struct {
@@ -46,7 +55,6 @@ type Broker struct {
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
-
 	brokerOnce.Do(func() {
 		switch config.Broker {
 		case "redis":
@@ -63,14 +71,12 @@ func NewBroker(config *BeanqConfig) *Broker {
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}
-
 	})
 	broker.config = config
 	return &broker
 }
 
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
-
 	moodType := btype.NORMAL
 
 	if v, ok := data["moodType"]; ok {
@@ -94,11 +100,9 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 }
 
 func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
 }
 
 func (t *Broker) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {
-
 	data, err := t.status.Status(ctx, channel, topic, id)
 	if err != nil {
 		// todo
@@ -107,112 +111,31 @@ func (t *Broker) Status(ctx context.Context, channel, topic, id string) (map[str
 	return data, nil
 }
 
-func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle) error {
+func (t *Broker) Migrate(ctx context.Context) error {
+	migrate := MigrateLogDiscard
 
-	handler := Handler{
-		broker:   t.config.Broker,
-		prefix:   t.config.Redis.Prefix,
-		channel:  channel,
-		topic:    topic,
-		moodType: moodType,
-		do: func(ctx context.Context, message map[string]any) error {
-
-			var gerr error
-			msg := messageToStruct(message)
-			if err := subscribe.Handle(ctx, msg); err != nil {
-				gerr = errors.Join(gerr, err)
-				if h, ok := subscribe.(IConsumeCancel); ok {
-					gerr = errors.Join(gerr, h.Cancel(ctx, msg))
-				}
-			}
-			return gerr
-		},
-	}
-	handler.brokerImpl = t.fac.Mood(moodType)
-	t.handlers = append(t.handlers, &handler)
-
-	return nil
-}
-
-func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
-
-	var migrate public.IMigrateLog
-
-	if t.config.Broker == "redis" {
-		if t.config.History.On {
-			mongo := t.config.Mongo
-			migrate = bmongo.NewMongoLog(ctx,
-				mongo.Host,
-				mongo.Port,
-				mongo.ConnectTimeOut,
-				mongo.MaxConnectionLifeTime,
-				mongo.MaxConnectionPoolSize,
-				mongo.Database,
-				mongo.Collections["event"],
-				mongo.UserName,
-				mongo.Password)
-		}
-		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
+	if t.config.History.On {
+		mongo := t.config.Mongo
+		migrate = bmongo.NewMongoLog(ctx,
+			mongo.Host,
+			mongo.Port,
+			mongo.ConnectTimeOut,
+			mongo.MaxConnectionLifeTime,
+			mongo.MaxConnectionPoolSize,
+			mongo.Database,
+			mongo.Collections["event"],
+			mongo.UserName,
+			mongo.Password)
 	}
 
-	return migrate.Migrate(ctx, nil)
-
+	return t.fac.Migrate(ctx, migrate)
 }
 
-func (t *Broker) Start(ctx context.Context) {
-
-	ctx, cancel := context.WithCancel(ctx)
-
-	for key, handler := range t.handlers {
-		hdl := *handler
-		go func(hdl2 Handler) {
-			hdl2.brokerImpl.Dequeue(ctx, hdl2.channel, hdl2.topic, hdl2.do)
-		}(hdl)
-		t.handlers[key] = nil
-	}
-	//move logs from redis to mongo
-	go func() {
-		_ = t.Migrate(ctx, nil)
-	}()
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := t.tool.HostName(ctx); err != nil {
-					fmt.Printf("hostname err:%+v \n", err)
-				}
-			}
-		}
-	}()
-
-	logger.New().Info("Beanq Start")
-	// monitor signal
-	<-t.WaitSignal(cancel)
-}
-
-func (t *Broker) WaitSignal(cancel context.CancelFunc) <-chan bool {
-
-	sigs := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
-
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
-
-	go func() {
-		<-sigs
-		cancel()
-		//t.asyncPool.Release()
-		_ = logger.New().Sync()
-		done <- true
-	}()
-	return done
+func (t *Broker) Mood(m btype.MoodType) public.IBroker {
+	return t.fac.Mood(m)
 }
 
 func GetBrokerDriver[T any]() T {
-
 	if broker.config.Broker == "" {
 		logger.New().Panic("the broker has not been initialized yet")
 	}
@@ -224,8 +147,8 @@ func GetBrokerDriver[T any]() T {
 
 // consumer...
 var (
-	NilHandle = errors.New("beanq:handle is nil")
-	NilCancel = errors.New("beanq:cancel is nil")
+	ErrNilHandle = errors.New("beanq:handle is nil")
+	ErrNilCancel = errors.New("beanq:cancel is nil")
 )
 
 type (
@@ -241,6 +164,7 @@ type (
 		Error(ctx context.Context, err error)
 	}
 )
+
 type (
 	DefaultHandle struct {
 		DoHandle func(ctx context.Context, message *Message) error
@@ -259,18 +183,27 @@ func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {
 		return c.DoHandle(ctx, message)
 	}
-	return NilHandle
+	return ErrNilHandle
 }
 
 func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {
 	if c.DoCancel != nil {
 		return c.DoCancel(ctx, message)
 	}
-	return NilCancel
+	return ErrNilCancel
 }
 
 func (c DefaultHandle) Error(ctx context.Context, err error) {
 	if c.DoError != nil {
 		c.DoError(ctx, err)
 	}
+}
+
+var MigrateLogDiscard public.IMigrateLog = discard{}
+
+type discard struct{}
+
+// Migrate this will display nothing for the logs on ui-side.
+func (discard) Migrate(ctx context.Context, data []map[string]any) error {
+	return nil
 }

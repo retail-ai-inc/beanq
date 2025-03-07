@@ -2,6 +2,7 @@ package public
 
 import (
 	"context"
+
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 )
 
@@ -13,7 +14,7 @@ type (
 		Channel string
 		Stream  string
 	}
-	CallBack func(ctx context.Context, data map[string]any) error
+	CallBack func(ctx context.Context, data map[string]any, retry ...int) (int, error)
 	IBroker  interface {
 		Enqueue(ctx context.Context, data map[string]any) error
 		Dequeue(ctx context.Context, channel, topic string, do CallBack)
@@ -23,6 +24,7 @@ type (
 	}
 	IBrokerFactory interface {
 		Mood(moodType btype.MoodType) IBroker
+		Migrate(ctx context.Context, log IMigrateLog) error
 	}
 )
 

@@ -4,10 +4,7 @@ SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
 .PHONY: test
 test:
 	@set -e;
-	@echo "prepare env.testing.json" 
-	@cp env.sample.json env.testing.json 
-	@sed -i 's/"host": "127.0.0.1:7001,127.0.0.1:7002,127.0.0.1:7003,127.0.0.1:7004,127.0.0.1:7005,127.0.0.1:7006"/"host": "redis-beanq"/' env.testing.json
-	@sed -i 's/"host": "127.0.0.1"/"host": "mongo-beanq"/' env.testing.json
+	
 	@echo "start test"
 	@docker compose up -d --build && \
 	if [ -z "$(SUITE_TEST_FILES)" ]; then \
@@ -16,6 +13,7 @@ test:
 	else \
 		echo "$(SUITE_TEST_FILES) files found"; \
 	fi
+	@docker compose exec -T example bash -c "jq '.redis.host = \"redis-beanq\" | .history.mongo.host = \"mongo-beanq\"' ./env.sample.json > env.testing.json"
 	@docker compose exec -T example bash -c 'go test -race -v ./... && ginkgo -p -v --race'
 
 .PHONY: clean-test

@@ -40,6 +40,17 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			if err != nil {
 				log.Fatal(err)
 			}
+		}), WithRetryConditions(func(err error) bool {
+			switch {	
+			case errors.Is(err, bstatus.ErrIdempotent):
+				return false
+			// TODO: add more retry conditions
+			// like:
+			// case errors.Is(err, bussiness.Error):
+			// 	return false
+			default:
+				return true
+			}
 		}))
 
 		muxClient = NewMuxClient(GetBrokerDriver[redis.UniversalClient]())
@@ -103,7 +114,6 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 				return err
 			}))
 			Expect(err).To(BeNil())
-
 			client.Wait(ctx)
 		}()
 	})
