@@ -89,7 +89,7 @@ const getWorkFLowLogs=(async (pageV,pageSizeV)=>{
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
   cursor.value = cursorVal;
-  sessionStorage.setItem("page",pageVal);
+  Storage.SetItem("page",pageVal);
   getWorkFLowLogs(page.value,pageSize.value);
 }
 
@@ -122,7 +122,7 @@ async function deleteInfo(){
 }
 
 onMounted(()=>{
-  page.value = sessionStorage.getItem("page")??1;
+  page.value = Storage.GetItem("page")??1;
   getWorkFLowLogs(page.value,pageSize.value);
 
 })

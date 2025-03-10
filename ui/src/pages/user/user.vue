@@ -246,7 +246,7 @@ function SearchByAccount(){
 function changePage(page,cursor){
   page.value = page;
   cursor.value = cursor;
-  sessionStorage.setItem("page",page)
+  Storage.SetItem("page",page)
 
   userList();
 }

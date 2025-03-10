@@ -13,7 +13,7 @@
           <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
         </div>
         <div class="col-auto border-left" style="padding-left: .85rem">
-          <button type="button" class="btn btn-primary" @click="addRoleModal">{{addbtn}}</button>
+          <button type="button" class="btn btn-primary" @click="addRoleModal">{{$t('add')}}</button>
         </div>
     </div>
 
@@ -228,7 +228,7 @@ function SearchByAccount(){
 function changePage(page,cursor){
   page.value = page;
   cursor.value = cursor;
-  sessionStorage.setItem("page",page);
+  Storage.SetItem("page",page);
 
   roleList();
 }
@@ -253,7 +253,7 @@ function addRoleModal(){
 }
 
 async function addRole(e){
-  sessionStorage.setItem("roleId",roleApi.GetId("Setting.Role.Add"));
+  Storage.SetItem("roleId",roleApi.GetId("Setting.Role.Add"));
   let next = e.currentTarget.nextElementSibling;
   try {
     let res = await roleApi.Add(roleForm.value);

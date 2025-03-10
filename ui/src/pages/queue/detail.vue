@@ -54,7 +54,7 @@ let id = uRoute.params.id;
 
 function initEventSource(){
 
-  let apiUrl = `${cfg.sseUrl}queue/detail?id=${id}&token=${sessionStorage.getItem("token")}`;
+  let apiUrl = `${cfg.sseUrl}queue/detail?id=${id}&token=${Storage.GetItem("token")}`;
   if (data.sseEvent){
     data.sseEvent.close();
   }

@@ -242,7 +242,7 @@ async function search(){
 async function changePage(page,cursor){
   data.page = page;
   data.cursor = cursor;
-  sessionStorage.setItem("page",page)
+  Storage.SetItem("page",page)
   let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
   initEventSource(apiUrl);
 }
@@ -289,7 +289,7 @@ onMounted(async()=>{
     status:status??"",
     moodType:moodType??""
   };
-  data.page = sessionStorage.getItem("page")??1;
+  data.page = Storage.GetItem("page")??1;
   initEventSource();
 })
 

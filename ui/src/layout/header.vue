@@ -77,7 +77,7 @@ const action = function (obj){
   i18n.global.locale.value = obj.flag;
   emits("action",obj);
   language.value = obj.label;
-  sessionStorage.setItem("i18n",obj.flag);
+  Storage.SetItem("i18n",obj.flag);
 }
 
 function expand(){
@@ -102,14 +102,14 @@ function expand(){
 const hasRoles = ref([]);
 onMounted(async () => {
 
-  langTag.value = sessionStorage.getItem("i18n") || "en";
+  langTag.value = Storage.GetItem("i18n") || "en";
   language.value = _.find(props.hlang,(v)=>{
     return v.flag === langTag.value;
   })?.label;
 
   i18n.global.locale.value = langTag.value;
 
-  let roles = JSON.parse(sessionStorage.getItem("roles"));
+  let roles = JSON.parse(Storage.GetItem("roles"));
   if(_.isEmpty(roles)){
     let navs = roleApi.TileTree(nav.value);
     for(let i = 0;i<navs.length;i++){
@@ -136,7 +136,7 @@ watch(() => uroute.path, (newVal, oldVal) => {
 
 function jump(uri,flag){
   if(flag === "Logout"){
-    sessionStorage.clear();
+    Storage.Clear();
     urouter.replace("/login");
   }else{
     urouter.push(uri);

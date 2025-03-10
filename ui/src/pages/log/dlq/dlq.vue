@@ -172,7 +172,7 @@ async function deleteInfo(){
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
   cursor.value = cursorVal;
-  sessionStorage.setItem("page",pageVal);
+  Storage.SetItem("page",pageVal);
   dlqLogs();
 }
 

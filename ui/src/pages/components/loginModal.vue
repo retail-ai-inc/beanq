@@ -31,7 +31,7 @@ const showNoticeModal = (()=>{
 
 const [uRouter] = [useRouter()];
 const reLogin=(()=>{
-  sessionStorage.clear();
+  Storage.Clear();
   uRouter.replace("/login");
 })
 onMounted(()=>{
