@@ -3,7 +3,6 @@ package beanq
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
@@ -31,8 +30,6 @@ type Handler struct {
 }
 
 func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
-	fmt.Println("h.channel=============", h.channel)
-	fmt.Println("h.topic=============", h.topic)
 	broker.Dequeue(ctx, h.channel, h.topic, func(ctx context.Context, data map[string]any, retry ...int) (int, error) {
 		if len(retry) == 0 {
 			return 0, h.do(ctx, data)

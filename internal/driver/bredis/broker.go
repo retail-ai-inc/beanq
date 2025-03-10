@@ -22,12 +22,11 @@ import (
 )
 
 type RdbBroker struct {
-	client          redis.UniversalClient
-	prefix          string
-	maxLen          int64
-	consumers       int64
-	deadLetterIdle  time.Duration
-	retryConditions []func(error) bool
+	client         redis.UniversalClient
+	prefix         string
+	maxLen         int64
+	consumers      int64
+	deadLetterIdle time.Duration
 }
 
 func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, duration time.Duration) *RdbBroker {

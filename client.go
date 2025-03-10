@@ -177,7 +177,12 @@ func (c *Client) Wait(ctx context.Context) {
 		c.broker.handlers[key] = nil
 	}
 
-	go c.broker.Migrate(ctx)
+	go func() {
+		err := c.broker.Migrate(ctx)
+		if err != nil {
+			panic(err)
+		}
+	}()
 
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)

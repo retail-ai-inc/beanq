@@ -1,7 +1,7 @@
 FROM golang:1.22-alpine
 
 # This is necessary for China devps
-RUN go env -w GOPROXY=https://goproxy.cn,direct
+# RUN go env -w GOPROXY=https://goproxy.cn,direct
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 # The latest alpine images don't have some tools like (`git` and `bash`).
