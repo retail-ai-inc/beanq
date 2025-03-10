@@ -80,9 +80,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{closeBtn}}</button>
-            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{addbtn}}</button>
-            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{editbtn}}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{$t('close')}}</button>
+            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{$t('add')}}</button>
+            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{$t('edit')}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -101,7 +101,7 @@
   </div>
 </template>
 <script setup>
-import { ref,inject,onMounted,watch,computed } from "vue";
+import { ref,onMounted,watch,computed } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
@@ -109,28 +109,9 @@ import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import Tree from "../components/tree.vue";
 
-const l = inject("i18n");
+
 const nav = computed(()=>{
   return Nav;
-})
-const otherBtns = ref(OtherBtn);
-
-const [addbtn,searchbtn,editbtn,delbtn,closeBtn,noticeTitle] = [
-  ref(roleApi.GetLang("Setting.Role.Add",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.Role.Add",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.Role.Edit",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.Role.Delete",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Close",otherBtns.value)?.[l.value]),
-    ref(roleApi.GetLang("SureDelete",otherBtns.value)?.[l.value])
-];
-
-watch(()=>[l.value],([n,o])=>{
-  addbtn.value = roleApi.GetLang("Setting.Role.Add",nav.value)?.[n];
-  searchbtn.value = roleApi.GetLang("Setting.Role.Search",nav.value)?.[n];
-  editbtn.value = roleApi.GetLang("Setting.Role.Edit",nav.value)?.[n];
-  delbtn.value = roleApi.GetLang("Setting.Role.Delete",nav.value)?.[n];
-  closeBtn.value = roleApi.GetLang("Close",otherBtns.value)?.[n];
-  noticeTitle.value = roleApi.GetLang("SureDelete",otherBtns.value)?.[n];
 })
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
@@ -143,13 +124,16 @@ const nodes = ref(Nav);
 
 
 async function roleList(){
-  let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
-  const {code,msg,data} = res;
-  if(code === "0000"){
-    users.value = data.data;
-    cursor.value = data.cursor;
-    total.value = data.total ;
+  try {
+    let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
+
+    users.value = res.data;
+    cursor.value = res.cursor;
+    total.value = res.total ;
+  }catch (e) {
+
   }
+
 }
 
 onMounted( ()=>{

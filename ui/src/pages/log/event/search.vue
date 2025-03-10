@@ -33,7 +33,7 @@
               <input type="text" class="form-control" id="formId" name="formId"  v-model="form.id" placeholder="Search by Id">
             </div>
             <div class="col-auto">
-              <button type="submit" class="btn btn-primary" @click="search">{{searchBtn}}</button>
+              <button type="submit" class="btn btn-primary" @click="search">{{$t('search')}}</button>
             </div>
           </div>
         </div>
@@ -42,9 +42,7 @@
   </div>
 </template>
 <script setup>
-import {ref,inject,defineProps,watch,defineEmits} from "vue";
-
-const l = inject("i18n");
+import {defineProps,defineEmits} from "vue";
 
 const props = defineProps({
   form:{
@@ -52,11 +50,6 @@ const props = defineProps({
     moodType:"",
     status:""
   }
-})
-const btns = ref(OtherBtn);
-const searchBtn = ref(roleApi.GetLang("Search",btns.value)?.[l.value]);
-watch(()=>[l.value],([n,o])=>{
-  searchBtn.value = roleApi.GetLang("Search",btns.value)?.[n];
 })
 
 const emits = defineEmits(['search']);
