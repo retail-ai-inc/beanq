@@ -63,14 +63,14 @@
       <EditAction :label="infoDetailLabel" :id="showInfoDetail" :data="detail" @action="editInfo"></EditAction>
       <!--edit modal end-->
       <!--retry modal begin-->
-      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
+      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
         <template #title="{title}">
 <!--          {{l.retryModal.title}}-->
         </template>
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
-      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="deleteInfo">
+      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteInfo">
         <template #title="{title}">
 <!--          {{l.deleteModal.title}}-->
         </template>
@@ -97,7 +97,6 @@ import LoginModal from "../../components/loginModal.vue";
 import More from "../../components/more.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import Copy from "../../components/copy.vue";
-import i18n from "i18n";
 
 
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
@@ -132,11 +131,6 @@ let data = reactive({
 
 const [uRouter,route] = [useRouter(),useRoute()];
 const [dataId] = [ref("")];
-
-const [retryWarningHtml,retryInfoHtml] = [
-    ref(i18n.global.t('retryWarningHtml')),
-    ref(i18n.global.t('retryInfoHtml'))
-]
 
 const maskString = ((id)=>{
   return Base.MaskString(id)

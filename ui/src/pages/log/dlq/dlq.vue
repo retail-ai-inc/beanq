@@ -45,11 +45,11 @@
       </table>
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
     </div>
-    <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
+    <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
       <template #title="{title}">
       </template>
     </Action>
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" @action="deleteInfo">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteInfo">
       <template #title="{title}">
       </template>
     </Action>
@@ -70,15 +70,10 @@ import LoginModal from "../../components/loginModal.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import More from "../../components/more.vue";
 import Copy from "../../components/copy.vue";
-import i18n from "i18n";
-
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(0),ref(0),ref([])];
-const [retryWarningHtml,retryInfoHtml] = [
-    ref(i18n.global.t('retryWarningHtml')),
-    ref(i18n.global.t('retryInfoHtml'))
-]
+
 const [retryLabel,showRetryModal,dataId,retryItem] = [ref("retryLabel"),ref("showRetryModal"),ref(""),ref({})];
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
 

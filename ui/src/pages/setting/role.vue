@@ -91,13 +91,14 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" @action="deleteRole">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteRole">
       <template #title="{title}">
-        {{noticeTitle}}
+
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
     </Btoast>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
 <script setup>
@@ -108,6 +109,7 @@ import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import Tree from "../components/tree.vue";
+import LoginModal from "../components/loginModal.vue";
 
 
 const nav = computed(()=>{
@@ -121,6 +123,7 @@ const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 const [nameInput,roleId] = [ref(""),ref("")];
 const roleForm = ref({name:"",roles:[]});
 const nodes = ref(Nav);
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 
 async function roleList(){
@@ -131,7 +134,11 @@ async function roleList(){
     cursor.value = res.cursor;
     total.value = res.total ;
   }catch (e) {
-
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
+    toastRef.value.show(e);
   }
 
 }
@@ -247,18 +254,19 @@ function addRoleModal(){
 
 async function addRole(e){
   sessionStorage.setItem("roleId",roleApi.GetId("Setting.Role.Add"));
+  let next = e.currentTarget.nextElementSibling;
   try {
-    let next = e.currentTarget.nextElementSibling;
     let res = await roleApi.Add(roleForm.value);
-    if(res.code !== "0000"){
-      next.style.display = "block";
-      next.innerHTML = res.msg;
-      return
-    }
     next.style.display = "none";
     addRoleDetail.value.hide();
     await roleList();
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
+    next.style.display = "block";
+    next.innerHTML = e;
     toastRef.value.show(e.message);
   }
 
@@ -268,10 +276,8 @@ async function editRole(){
 
   let res = await roleApi.Edit(roleId.value,roleForm.value);
   addRoleDetail.value.hide();
-  toastRef.value.show(res.msg);
+  toastRef.value.show("success");
   await roleList();
-
-  return
 }
 
 function deleteUserModal(item){
@@ -288,11 +294,13 @@ async function deleteRole(){
   delModal.value.hide();
   try {
     let res = await roleApi.Delete(roleId.value);
-    toastRef.value.show(res.msg);
-    if(res.code === "0000"){
-      await roleList();
-    }
+    toastRef.value.show("success");
+    await roleList()
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
     toastRef.value.show(e.message);
   }
 }
