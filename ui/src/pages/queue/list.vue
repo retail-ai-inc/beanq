@@ -18,6 +18,7 @@
                 <tr>
                   <th scope="col">Topic</th>
                   <th scope="col">State</th>
+                  <th scope="col">Mood Type</th>
                   <th scope="col">Memory usage(byte)</th>
                   <th scope="col">Idle(s)</th>
                 </tr>
@@ -28,6 +29,7 @@
                     <router-link to="" class="nav-link text-muted" v-on:click="detailQueue(d)">{{ d.topic }}</router-link>
                   </th>
                   <td :class="d.state == 'Run' ? 'text-success-emphasis' : 'text-danger-emphasis'" class="align-middle">{{ d.state }}</td>
+                  <td class="align-middle">{{d.moodType}}</td>
                   <td class="align-middle">{{ d.size }}</td>
                   <td class="align-middle">{{ d.idle }}</td>
                 </tr>
