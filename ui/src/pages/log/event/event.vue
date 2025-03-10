@@ -2,7 +2,6 @@
   <div class="event">
 
     <div class="container-fluid">
-
       <!--search-->
       <Search :form="form" @search="search"/>
       <!--search end-->
@@ -71,7 +70,7 @@
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
-      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" @action="deleteInfo">
+      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="deleteInfo">
         <template #title="{title}">
 <!--          {{l.deleteModal.title}}-->
         </template>
@@ -84,7 +83,7 @@
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,reactive,onMounted,toRefs,onUnmounted } from "vue";
 import { useRouter,useRoute } from 'vueRouter';
 import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
@@ -98,8 +97,9 @@ import LoginModal from "../../components/loginModal.vue";
 import More from "../../components/more.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import Copy from "../../components/copy.vue";
+import i18n from "i18n";
 
-const l = ref(inject("i18n"));
+
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
@@ -132,10 +132,10 @@ let data = reactive({
 
 const [uRouter,route] = [useRouter(),useRoute()];
 const [dataId] = [ref("")];
+
 const [retryWarningHtml,retryInfoHtml] = [
-    ref("Warning: Item retry cannot be undone!<br/> Please proceed with caution!"),
-    ref("This operation will permanently retry the data of log.<br>\n" +
-      "To prevent accidental actions, please confirm by entering the following:<br/>")
+    ref(i18n.global.t('retryWarningHtml')),
+    ref(i18n.global.t('retryInfoHtml'))
 ]
 
 const maskString = ((id)=>{

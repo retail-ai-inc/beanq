@@ -70,14 +70,14 @@ import LoginModal from "../../components/loginModal.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import More from "../../components/more.vue";
 import Copy from "../../components/copy.vue";
+import i18n from "i18n";
 
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(0),ref(0),ref([])];
 const [retryWarningHtml,retryInfoHtml] = [
-  ref("Warning: Item retry cannot be undone!<br/> Please proceed with caution!"),
-  ref("This operation will permanently retry the data of log.<br>\n" +
-      "To prevent accidental actions, please confirm by entering the following:<br/>")
+    ref(i18n.global.t('retryWarningHtml')),
+    ref(i18n.global.t('retryInfoHtml'))
 ]
 const [retryLabel,showRetryModal,dataId,retryItem] = [ref("retryLabel"),ref("showRetryModal"),ref(""),ref({})];
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];

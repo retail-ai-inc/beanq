@@ -10,12 +10,12 @@
         <li class="nav-item" v-for="(item,key) in nav" :key="key" :class="item.children.length > 0 ? 'dropdown':''">
             <div v-if="item.children.length > 0 ">
               <a class="nav-link dropdown-toggle" v-if="hasRoles.includes(item.id)" :class="item.tos.indexOf(route) !== -1 ? 'active' : ''" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                {{item?.[langTag]}}
+                {{$t(item.mark)}}
               </a>
               <ul class="dropdown-menu dropdown-menu-color">
                 <li v-for="(val,ind) in item.children" :key="ind">
                   <router-link :to="val.to" v-if="hasRoles.includes(val.id)" class="dropdown-item" :class="route === val.to ? 'active' : ''">
-                    {{val?.[langTag]}}
+                    {{$t(val.mark)}}
                   </router-link>
                 </li>
               </ul>
@@ -23,7 +23,7 @@
             <div v-else>
               <!--nav no sub-->
               <router-link v-if="item.children.length <= 0 && (hasRoles.includes(item.id))" :to="item.to" class="nav-link" :class="route === item.to ? 'active' : ''">
-                {{item?.[langTag]}}
+                {{$t(item.mark)}}
               </router-link>
             </div>
         </li>
@@ -44,18 +44,19 @@
           </div>
         </li>
         <li class="nav-item">
-          <a class="nav-link" @click="jump('','Logout')">{{logoutBtn}}</a>
+          <a class="nav-link" @click="jump('','Logout')">{{$t("logOut")}}</a>
         </li>
       </ul>
     </div>
   </nav>
+
 </template>
 
 <script setup>
 
 import {useRoute, useRouter} from 'vueRouter';
-import {ref, toRefs,computed, onMounted, watch, reactive,defineProps,defineEmits,inject} from "vue";
-
+import {ref, toRefs, onMounted, watch, reactive,defineProps,defineEmits} from "vue";
+import i18n from "i18n";
 const props = defineProps({
   nav:{},
   hlang:{},
@@ -66,18 +67,17 @@ const data = reactive({
   activeNodeId: "",
   isSide:false,
 })
-const [lang,nav,langTag,btns] = [ref(props.hlang),ref(props.nav),ref("en"),ref(OtherBtn)];
-const logoutBtn = ref("Logout");
+const [lang,nav,langTag] = [ref(props.hlang),ref(props.nav),ref("en")];
 
 const [route,uroute,urouter,language] = [ref("/admin/home"),useRoute(),useRouter(),ref("English")];
 
 const emits = defineEmits(['action']);
 const action = function (obj){
+
+  i18n.global.locale.value = obj.flag;
   emits("action",obj);
   language.value = obj.label;
   sessionStorage.setItem("i18n",obj.flag);
-  langTag.value = obj.flag;
-  logoutBtn.value = roleApi.GetLang("LogOut",btns.value)?.[langTag.value];
 }
 
 function expand(){
@@ -106,6 +106,9 @@ onMounted(async () => {
   language.value = _.find(props.hlang,(v)=>{
     return v.flag === langTag.value;
   })?.label;
+
+  i18n.global.locale.value = langTag.value;
+
   let roles = JSON.parse(sessionStorage.getItem("roles"));
   if(_.isEmpty(roles)){
     let navs = roleApi.TileTree(nav.value);
@@ -118,7 +121,6 @@ onMounted(async () => {
   expand();
 
   route.value = uroute.path;
-  logoutBtn.value = roleApi.GetLang("LogOut",btns.value)?.[langTag.value];
 })
 
 watch(() => uroute.path, (newVal, oldVal) => {
