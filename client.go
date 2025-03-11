@@ -193,12 +193,10 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	httpport := c.broker.config.UI.Port
 
-	os.Setenv("GODEBUG", "httpmuxgo122=1")
-	if v := os.Getenv("GODEBUG"); v != "httpmuxgo122=1" {
-		fmt.Printf("GODEBUG 环境变量设置不正确，当前值: %s\n", v)
-	} else {
-		fmt.Println("GODEBUG 环境变量设置正确")
+	if err := os.Setenv("GODEBUG", "httpmuxgo122=1"); err != nil {
+		logger.New().Error("Error setting environment variables")
 	}
+
 	mux := http.NewServeMux()
 
 	history := c.broker.config.History
