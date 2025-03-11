@@ -87,7 +87,9 @@ func (t *UITool) HostName(ctx context.Context) error {
 	}
 
 	keys, _, err := t.client.ZScan(ctx, tool.BeanqHostName, 0, fmt.Sprintf("*%s*", info.Hostname), 10).Result()
-
+	if err != nil {
+		return err
+	}
 	data := make(map[string]any, 8)
 
 	for _, key := range keys {

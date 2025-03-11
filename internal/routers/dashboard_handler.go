@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/spf13/cast"
 	"net/http"
 	"runtime"
 	"strings"
@@ -51,6 +52,8 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tim := r.URL.Query().Get("time")
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -73,7 +76,7 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-timer.C:
 		}
-		timer.Reset(10 * time.Second)
+		timer.Reset(time.Duration(cast.ToInt64(tim)) * time.Second)
 
 		numCpu := runtime.NumCPU()
 

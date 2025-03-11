@@ -1,6 +1,15 @@
 <template>
 
   <div class="home" ref="homeEle">
+    <div class="row justify-content-end">
+      <div class="col-1">
+        <select class="form-select form-select-sm mb-3" aria-label="Large select example" v-model="execTime">
+          <option selected value="10">10 seconds</option>
+          <option value="25">25 seconds</option>
+          <option value="300">5 minutes</option>
+        </select>
+      </div>
+    </div>
     <div class="chart-container">
       <div class="chart-h">
         <v-chart class="chart" ref="line1"  :option="queuedMessagesOption"/>
@@ -45,13 +54,14 @@
 </template>
 
 <script setup>
-import {ref, onMounted,onUnmounted} from "vue";
+import {ref, onMounted,onUnmounted,watch} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
 import LoginModal from "./components/loginModal.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const [execTime,sseUrl] = [ref(10),ref("")];
 
 let [
     queue_total,
@@ -74,11 +84,17 @@ function resize(){
   })
 }
 
+watch(()=>execTime.value,(n,o)=>{
+  execTime.value = n;
+  sseConnect();
+})
+
 function sseConnect(){
   if(sse.value){
     sse.value.close();
   }
-  sse.value = sseApi.Init("dashboard");
+  sseUrl.value = `dashboard?time=${execTime.value}`;
+  sse.value = sseApi.Init(sseUrl.value);
   sse.value.onopen = () => {
     console.log("connect success")
   }
