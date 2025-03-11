@@ -59,6 +59,7 @@
     </Action>
     <Btoast :id="id" ref="toastRef">
     </Btoast>
+    <LoginModal :id="noticeId" ref="loginModal"/>
   </div>
 </template>
 <script setup>
@@ -67,22 +68,29 @@ import Pagination from "../../components/pagination.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
+import LoginModal from "../../components/loginModal.vue";
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [workflowlogs,page,pageSize,total,cursor] = [ref([]),ref(1),ref(10),ref(0),ref(0)];
-const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")]
+const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
+const [noticeId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 // logs
 const getWorkFLowLogs=(async (pageV,pageSizeV)=>{
-  let res = await workflowApi.List(pageV,pageSizeV);
-  const {code,msg,data} = res;
-  if(code !== "0000"){
-    toastRef.value.show(msg);
-    return;
+  try {
+    let res = await workflowApi.List(pageV,pageSizeV);
+    workflowlogs.value = res.data;
+    total.value = res.total;
+    page.value =  res.cursor;
+    cursor.value = res.cursor;
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
+    }
+    toastRef.value.show(err);
   }
-  workflowlogs.value = data.data;
-  total.value = data.total;
-  page.value =  data.cursor;
-  cursor.value = data.cursor;
+
 })
 
 // paging
@@ -109,14 +117,18 @@ async function deleteInfo(){
   }
   try {
     let res = await workflowApi.Delete(deleteId.value);
-    const {code,msg,data} = res;
-    data.deleteModal.hide();
-    toastRef.value.show(msg);
-    if(code === "0000"){
-      await getWorkFLowLogs(page.value,pageSize.value);
+
+    deleteModal.value.hide();
+    toastRef.value.show("success");
+    await getWorkFLowLogs(page.value,pageSize.value);
+
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
     }
-  }catch (e) {
-    toastRef.value.show(e.error);
+    toastRef.value.show(err.error);
   }
 
 }
