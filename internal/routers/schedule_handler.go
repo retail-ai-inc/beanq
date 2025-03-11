@@ -3,7 +3,6 @@ package routers
 import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"net/http"
@@ -19,14 +18,14 @@ func NewSchedule(client redis.UniversalClient, prefix string) *Schedule {
 	return &Schedule{client: client, prefix: prefix}
 }
 
-func (t *Schedule) List(bctx *bwebframework.BeanContext) error {
+func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
 
-	ctx := bctx.Request.Context()
+	ctx := r.Context()
 
-	nodeId := bctx.Request.Header.Get("X-Cluster-Nodeid")
+	nodeId := r.Header.Get("X-Cluster-Nodeid")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
 	key := strings.Join([]string{t.prefix, "*", "delay_stream:stream"}, ":")
@@ -35,7 +34,8 @@ func (t *Schedule) List(bctx *bwebframework.BeanContext) error {
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
-		return result.Json(bctx.Writer, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	data := make(map[string][]Stream, 0)
@@ -65,5 +65,5 @@ func (t *Schedule) List(bctx *bwebframework.BeanContext) error {
 	}
 
 	result.Data = data
-	return result.Json(bctx.Writer, http.StatusOK)
+	_ = result.Json(w, http.StatusOK)
 }

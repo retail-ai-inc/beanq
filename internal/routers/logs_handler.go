@@ -3,7 +3,6 @@ package routers
 import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"net/http"
@@ -23,7 +22,7 @@ func NewLogs(client redis.UniversalClient, prefix string) *Logs {
 	return &Logs{client: client, prefix: prefix}
 }
 
-func (t *Logs) List(ctx *bwebframework.BeanContext) error {
+func (t *Logs) List(w http.ResponseWriter, r *http.Request) {
 
 	resultRes, cancel := response.Get()
 	defer cancel()
@@ -32,8 +31,6 @@ func (t *Logs) List(ctx *bwebframework.BeanContext) error {
 		dataType string
 		matchStr = strings.Join([]string{t.prefix, "logs", "success"}, ":")
 	)
-	w := ctx.Writer
-	r := ctx.Request
 
 	dataType = r.FormValue("type")
 	gCursor := cast.ToUint64(r.FormValue("cursor"))
@@ -41,8 +38,8 @@ func (t *Logs) List(ctx *bwebframework.BeanContext) error {
 	if dataType != "success" && dataType != "error" {
 		resultRes.Code = berror.TypeErrorCode
 		resultRes.Msg = berror.TypeErrorMsg
-
-		return resultRes.Json(w, http.StatusInternalServerError)
+		_ = resultRes.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	if dataType == "error" {
@@ -57,8 +54,8 @@ func (t *Logs) List(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		resultRes.Code = berror.InternalServerErrorCode
 		resultRes.Msg = err.Error()
-
-		return resultRes.Json(w, http.StatusInternalServerError)
+		_ = resultRes.Json(w, http.StatusInternalServerError)
+		return
 	}
 	data["total"] = count
 
@@ -67,7 +64,8 @@ func (t *Logs) List(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		resultRes.Code = "1005"
 		resultRes.Msg = err.Error()
-		return resultRes.Json(w, http.StatusInternalServerError)
+		_ = resultRes.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	msgs := make([]*Msg, 0, 10)
@@ -86,7 +84,5 @@ func (t *Logs) List(ctx *bwebframework.BeanContext) error {
 	data["data"] = msgs
 	data["cursor"] = cursor
 	resultRes.Data = data
-
-	return resultRes.Json(w, http.StatusOK)
-
+	_ = resultRes.Json(w, http.StatusOK)
 }

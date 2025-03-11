@@ -30,13 +30,12 @@ import (
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
-	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
@@ -193,16 +192,14 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	}()
 
 	httpport := c.broker.config.UI.Port
-	r := bwebframework.NewRouter()
-	r.File("/", func(ctx *bwebframework.BeanContext) error {
-		fd, err := fs.Sub(views, "ui")
-		if err != nil {
-			log.Fatalf("static files error:%+v \n", err)
-		}
-		ctx.Writer.Header().Set("Cache-Control", "public, max-age=3600")
-		http.FileServer(http.FS(fd)).ServeHTTP(ctx.Writer, ctx.Request)
-		return nil
-	})
+
+	os.Setenv("GODEBUG", "httpmuxgo122=1")
+	if v := os.Getenv("GODEBUG"); v != "httpmuxgo122=1" {
+		fmt.Printf("GODEBUG 环境变量设置不正确，当前值: %s\n", v)
+	} else {
+		fmt.Println("GODEBUG 环境变量设置正确")
+	}
+	mux := http.NewServeMux()
 
 	history := c.broker.config.History
 	var mog *bmongo.BMongo
@@ -220,9 +217,10 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		)
 	}
 
-	r = routers.NewRouters(r, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
+	routers.NewOtherRouters(mux, views, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
+
 	log.Printf("server start on port %+v", httpport)
-	if err := http.ListenAndServe(httpport, r); err != nil {
+	if err := http.ListenAndServe(httpport, mux); err != nil {
 		log.Fatalln(err)
 	}
 }

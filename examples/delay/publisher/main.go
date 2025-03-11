@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3"
+	beanq "github.com/retail-ai-inc/beanq/v3"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/cast"

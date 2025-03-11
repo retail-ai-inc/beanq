@@ -5,7 +5,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	public "github.com/retail-ai-inc/beanq/v3/internal"
@@ -28,10 +27,7 @@ func NewDlq(client redis.UniversalClient, mongo *bmongo.BMongo, prefix string) *
 	return &Dlq{client: client, mgo: mongo, prefix: prefix}
 }
 
-func (t *Dlq) List(ctx *bwebframework.BeanContext) error {
-
-	w := ctx.Writer
-	r := ctx.Request
+func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -60,36 +56,30 @@ func (t *Dlq) List(ctx *bwebframework.BeanContext) error {
 		datas["cursor"] = page
 		result.Data = datas
 	}
-	return result.Json(w, http.StatusOK)
-
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *Dlq) Delete(ctx *bwebframework.BeanContext) error {
+func (t *Dlq) Delete(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	w := ctx.Writer
-	r := ctx.Request
 
 	id := r.PostFormValue("id")
 	count, err := t.mgo.Delete(r.Context(), id)
 	if err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	res.Data = count
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *Dlq) Retry(ctx *bwebframework.BeanContext) error {
+func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	w := ctx.Writer
-	r := ctx.Request
 
 	m := make(map[string]any)
 	id := r.FormValue("id")
@@ -100,7 +90,8 @@ func (t *Dlq) Retry(ctx *bwebframework.BeanContext) error {
 	if err := json.Unmarshal([]byte(r.FormValue("data")), &data); err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	moodType := ""
@@ -110,7 +101,8 @@ func (t *Dlq) Retry(ctx *bwebframework.BeanContext) error {
 
 	var bk public.IBroker
 	if moodType == string(btype.SEQUENTIAL) {
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 	if moodType == string(btype.DELAY) {
 
@@ -118,17 +110,19 @@ func (t *Dlq) Retry(ctx *bwebframework.BeanContext) error {
 		if err := bk.Enqueue(nctx, data); err != nil {
 			res.Msg = err.Error()
 			res.Code = berror.InternalServerErrorCode
-			return res.Json(w, http.StatusOK)
+			_ = res.Json(w, http.StatusOK)
+			return
 		}
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
 	bk = bredis.NewNormal(t.client, t.prefix, 2000, 10, 20)
 	if err := bk.Enqueue(nctx, data); err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
-
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }

@@ -6,7 +6,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
@@ -27,24 +26,21 @@ func NewDashboard(client redis.UniversalClient, x *bmongo.BMongo, prefix string)
 	return &Dashboard{client: client, mog: x, prefix: prefix}
 }
 
-func (t *Dashboard) Nodes(beanContext *bwebframework.BeanContext) error {
+func (t *Dashboard) Nodes(w http.ResponseWriter, r *http.Request) {
 
-	nodes := tool.ClientFac(t.client, t.prefix, "").Nodes(beanContext.Request.Context())
+	nodes := tool.ClientFac(t.client, t.prefix, "").Nodes(r.Context())
 	result, cancel := response.Get()
 	defer cancel()
 	result.Code = response.SuccessCode
 	result.Data = nodes
 
-	return result.Json(beanContext.Writer, http.StatusOK)
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
+func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
-
-	w := ctx.Writer
-	r := ctx.Request
 
 	nodeId := r.URL.Query().Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
@@ -52,7 +48,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return nil
+		return
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -74,7 +70,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	for {
 		select {
 		case <-nctx.Done():
-			return nctx.Err()
+			return
 		case <-timer.C:
 		}
 		timer.Reset(10 * time.Second)
