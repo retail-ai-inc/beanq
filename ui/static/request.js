@@ -10,12 +10,12 @@ const request = axios.create({
 request.interceptors.request.use(
     config=>{
 
-        const token = sessionStorage.getItem("token");
+        const token = Storage.GetItem("token");
         if(token){
             config.headers["BEANQ-Authorization"] = "Bearer " + token;
         }
-        config.headers["X-Cluster-Nodeid"] = sessionStorage.getItem("nodeId");
-        config.headers["X-Role-Id"] = sessionStorage.getItem("roleId");
+        config.headers["X-Cluster-Nodeid"] = Storage.GetItem("nodeId");
+        config.headers["X-Role-Id"] = Storage.GetItem("roleId");
         return config;
     },
     err=>{

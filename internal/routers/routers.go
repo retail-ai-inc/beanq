@@ -3,8 +3,9 @@ package routers
 import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
+	"io/fs"
+	"log"
 	"net/http"
 )
 
@@ -25,7 +26,7 @@ type Handles struct {
 	pod       *Pod
 }
 
-func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) *bwebframework.Router {
+func NewRouters(mux *http.ServeMux, fs2 fs.FS, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) {
 
 	hdls := Handles{
 		schedule:  NewSchedule(client, prefix),
@@ -44,56 +45,63 @@ func NewRouters(r *bwebframework.Router, client redis.UniversalClient, mgo *bmon
 		pod:       NewPod(client, mgo, prefix),
 	}
 
-	r.Get("/ping", HeaderRule(func(ctx *bwebframework.BeanContext) error {
+	mux.HandleFunc("GET /", func(writer http.ResponseWriter, request *http.Request) {
+		fd, err := fs.Sub(fs2, "ui")
+		if err != nil {
+			log.Fatalf("static files error:%+v \n", err)
+		}
+		//
+		writer.Header().Set("Cache-Control", "public, max-age=3600")
+		http.FileServer(http.FS(fd)).ServeHTTP(writer, request)
+	})
 
-		ctx.Writer.WriteHeader(http.StatusOK)
-		_, _ = ctx.Writer.Write([]byte("pong"))
-		return nil
+	mux.HandleFunc("GET /ping", HeaderRule(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("pong"))
 	}))
-	r.Get("/schedule", MigrateMiddleWare(hdls.schedule.List, client, mgo, prefix, ui))
-	r.Get("/queue/list", MigrateMiddleWare(hdls.queue.List, client, mgo, prefix, ui))
-	r.Get("/queue/detail", MigrateMiddleWare(hdls.queue.Detail, client, mgo, prefix, ui))
-	r.Get("/logs", MigrateMiddleWare(hdls.logs.List, client, mgo, prefix, ui))
-	r.Get("/log", MigrateMiddleWare(hdls.log.List, client, mgo, prefix, ui))
-	r.Get("/log/opt_log", MigrateMiddleWare(hdls.log.OptLogs, client, mgo, prefix, ui))
-	r.Delete("/log/opt_log", MigrateMiddleWare(hdls.log.DelOptLog, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /schedule", MigrateMiddleWare(hdls.schedule.List, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /queue/list", MigrateMiddleWare(hdls.queue.List, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /queue/detail", MigrateMiddleWare(hdls.queue.Detail, client, mgo, prefix, ui))
 
-	r.Get("/log/workflow_log", MigrateMiddleWare(hdls.log.WorkFlowLogs, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /logs", MigrateMiddleWare(hdls.logs.List, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /log", MigrateMiddleWare(hdls.log.List, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /log/opt_log", MigrateMiddleWare(hdls.log.OptLogs, client, mgo, prefix, ui))
+	mux.HandleFunc("DELETE /log/opt_log", MigrateMiddleWare(hdls.log.DelOptLog, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /log/workflow_log", MigrateMiddleWare(hdls.log.WorkFlowLogs, client, mgo, prefix, ui))
 
-	r.Get("/redis", MigrateSSE(hdls.redisInfo.Info, client, mgo, prefix, ui, "redis_info"))
-	r.Get("/redis/monitor", MigrateSSE(hdls.redisInfo.Monitor, client, mgo, prefix, ui, "redis_monitor"))
+	mux.HandleFunc("GET /redis", MigrateSSE(hdls.redisInfo.Info, client, mgo, prefix, ui, "redis_info"))
+	mux.HandleFunc("GET /redis/monitor", MigrateSSE(hdls.redisInfo.Monitor, client, mgo, prefix, ui, "redis_monitor"))
 
-	r.Post("/login", HeaderRule(hdls.login.Login))
-	r.Get("/clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /login", HeaderRule(hdls.login.Login))
+	mux.HandleFunc("GET /clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix, ui))
 
-	r.Get("/dashboard", MigrateSSE(hdls.dashboard.Info, client, mgo, prefix, ui, "dashboard"))
-	r.Get("/nodes", MigrateMiddleWare(hdls.dashboard.Nodes, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /dashboard", MigrateSSE(hdls.dashboard.Info, client, mgo, prefix, ui, "dashboard"))
+	mux.HandleFunc("GET /nodes", MigrateMiddleWare(hdls.dashboard.Nodes, client, mgo, prefix, ui))
 
-	r.Get("/event_log/list", MigrateSSE(hdls.eventLog.List, client, mgo, prefix, ui, "event_log"))
-	r.Get("/event_log/detail", MigrateMiddleWare(hdls.eventLog.Detail, client, mgo, prefix, ui))
-	r.Post("/event_log/delete", MigrateMiddleWare(hdls.eventLog.Delete, client, mgo, prefix, ui))
-	r.Post("/event_log/edit", MigrateMiddleWare(hdls.eventLog.Edit, client, mgo, prefix, ui))
-	r.Post("/event_log/retry", MigrateMiddleWare(hdls.eventLog.Retry, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /event_log/list", MigrateSSE(hdls.eventLog.List, client, mgo, prefix, ui, "event_log"))
+	mux.HandleFunc("GET /event_log/detail", MigrateMiddleWare(hdls.eventLog.Detail, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /event_log/delete", MigrateMiddleWare(hdls.eventLog.Delete, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /event_log/edit", MigrateMiddleWare(hdls.eventLog.Edit, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /event_log/retry", MigrateMiddleWare(hdls.eventLog.Retry, client, mgo, prefix, ui))
 
-	r.Get("/user/list", MigrateMiddleWare(hdls.user.List, client, mgo, prefix, ui))
-	r.Post("/user/add", MigrateMiddleWare(hdls.user.Add, client, mgo, prefix, ui))
-	r.Post("/user/del", MigrateMiddleWare(hdls.user.Delete, client, mgo, prefix, ui))
-	r.Post("/user/edit", MigrateMiddleWare(hdls.user.Edit, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /user/list", MigrateMiddleWare(hdls.user.List, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /user/add", MigrateMiddleWare(hdls.user.Add, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /user/del", MigrateMiddleWare(hdls.user.Delete, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /user/edit", MigrateMiddleWare(hdls.user.Edit, client, mgo, prefix, ui))
 
-	r.Get("/role/list", MigrateMiddleWare(hdls.role.List, nil, mgo, "", ui))
-	r.Post("/role/add", MigrateMiddleWare(hdls.role.Add, nil, mgo, "", ui))
-	r.Post("/role/delete", MigrateMiddleWare(hdls.role.Delete, nil, mgo, "", ui))
-	r.Post("/role/edit", MigrateMiddleWare(hdls.role.Edit, nil, mgo, "", ui))
+	mux.HandleFunc("GET /role/list", MigrateMiddleWare(hdls.role.List, nil, mgo, "", ui))
+	mux.HandleFunc("POST /role/add", MigrateMiddleWare(hdls.role.Add, nil, mgo, "", ui))
+	mux.HandleFunc("POST /role/delete", MigrateMiddleWare(hdls.role.Delete, nil, mgo, "", ui))
+	mux.HandleFunc("POST /role/edit", MigrateMiddleWare(hdls.role.Edit, nil, mgo, "", ui))
 
-	r.Get("/googleLogin", hdls.login.GoogleLogin)
-	r.Get("/callback", hdls.login.GoogleCallBack)
+	mux.HandleFunc("GET /googleLogin", hdls.login.GoogleLogin)
+	mux.HandleFunc("GET /callback", hdls.login.GoogleCallBack)
 
-	r.Get("/dlq/list", MigrateMiddleWare(hdls.dlq.List, client, mgo, prefix, ui))
-	r.Post("/dlq/retry", MigrateMiddleWare(hdls.dlq.Retry, client, mgo, prefix, ui))
-	r.Post("/dlq/delete", MigrateMiddleWare(hdls.dlq.Delete, client, mgo, prefix, ui))
-	r.Get("/workflow/list", MigrateMiddleWare(hdls.workflow.List, client, mgo, prefix, ui))
-	r.Post("/workflow/delete", MigrateMiddleWare(hdls.workflow.Delete, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /dlq/list", MigrateMiddleWare(hdls.dlq.List, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /dlq/retry", MigrateMiddleWare(hdls.dlq.Retry, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /dlq/delete", MigrateMiddleWare(hdls.dlq.Delete, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /workflow/list", MigrateMiddleWare(hdls.workflow.List, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /workflow/delete", MigrateMiddleWare(hdls.workflow.Delete, client, mgo, prefix, ui))
 
-	r.Get("/pod/list", MigrateMiddleWare(hdls.pod.List, client, mgo, prefix, ui))
-	return r
+	mux.HandleFunc("GET /pod/list", MigrateMiddleWare(hdls.pod.List, client, mgo, prefix, ui))
 }

@@ -13,6 +13,7 @@
       vueRouter: VueRouter,
       request:request,
       config:config,
+      I18NG:VueI18n,
       i18n:i18n,
       Base,
       //apis
@@ -96,7 +97,7 @@
     ],
   });
   router.beforeEach((to, from) => {
-    let token = sessionStorage.getItem("token");
+    let token = Storage.GetItem("token");
     if (token == null && to.path !== "/login"){
       return {path:"/login",replace:true};
     }

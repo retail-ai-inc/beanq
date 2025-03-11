@@ -6,6 +6,7 @@
       </div>
     </div>
     <div class="dlq">
+      <Search :form="form" @search="search"/>
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
       <table class="table table-striped table-hover">
         <thead>
@@ -27,7 +28,7 @@
           </th>
           <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">{{maskString(item.id)}}</router-link></td>
           <td>{{item.channel}}</td>
-          <td>{{item.topic}}</td>
+          <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
           <td>{{item.moodType}}</td>
           <td>
             <TimeToolTips :past-time="item.addTime"/>
@@ -45,11 +46,11 @@
       </table>
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
     </div>
-    <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
+    <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
       <template #title="{title}">
       </template>
     </Action>
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" @action="deleteInfo">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteInfo">
       <template #title="{title}">
       </template>
     </Action>
@@ -70,19 +71,30 @@ import LoginModal from "../../components/loginModal.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import More from "../../components/more.vue";
 import Copy from "../../components/copy.vue";
-import i18n from "i18n";
-
+import Search from "./search.vue";
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(0),ref(0),ref([])];
-const [retryWarningHtml,retryInfoHtml] = [
-    ref(i18n.global.t('retryWarningHtml')),
-    ref(i18n.global.t('retryInfoHtml'))
-]
+
 const [retryLabel,showRetryModal,dataId,retryItem] = [ref("retryLabel"),ref("showRetryModal"),ref(""),ref({})];
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
 
 const [noticeId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const form = ref({
+  id:"",
+  moodType:"",
+  status:"",
+  topicName:""
+});
+
+const filter = ((topic)=>{
+  form.value.topicName = topic;
+  search();
+})
+
+const search = (()=>{
+  dlqLogs();
+})
 
 const maskString = ((id)=>{
   return Base.MaskString(id)
@@ -90,7 +102,7 @@ const maskString = ((id)=>{
 
 async function dlqLogs() {
   try {
-    let res = await dlqApi.List(page.value,pageSize.value);
+    let res = await dlqApi.List(page.value,pageSize.value,form.value.id,form.value.status,form.value.moodType,form.value.topicName);
     const{cursor:resCursor,data,total:resTotal} = res;
 
     logs.value = data;
@@ -177,7 +189,7 @@ async function deleteInfo(){
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
   cursor.value = cursorVal;
-  sessionStorage.setItem("page",pageVal);
+  Storage.SetItem("page",pageVal);
   dlqLogs();
 }
 

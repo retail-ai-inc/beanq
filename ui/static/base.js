@@ -10,7 +10,7 @@ const Base = {
         };
     },
     GetLang(i18n){
-        let ls = sessionStorage.getItem("lang") || "0";
+        let ls = Storage.GetItem("lang") || "0";
         let lang = parseInt(ls);
         return i18n[lang].value;
     },
@@ -65,5 +65,17 @@ const Base = {
                 day: "2-digit"
             });
         }
+    }
+}
+
+const Storage = {
+    SetItem(key,val){
+        return localStorage.setItem(key,val);
+    },
+    GetItem(key){
+        return localStorage.getItem(key);
+    },
+    Clear(){
+        return localStorage.clear();
     }
 }

@@ -1,7 +1,7 @@
 <template>
   <div>
     <div @click="copyText(text)" style="cursor: pointer">
-      {{maskString(text)}}
+      {{isMask ? maskString(text): text}}
     </div>
     <CopyToast :id="copyToast" ref="copyRef"/>
   </div>
@@ -16,6 +16,10 @@ const props = defineProps({
     required:true,
     default:""
   },
+  isMask:{
+    type:Boolean,
+    default: true
+  }
 })
 
 const maskString = ((id)=>{

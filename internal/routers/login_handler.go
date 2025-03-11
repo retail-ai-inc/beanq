@@ -6,7 +6,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/googleAuth"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
@@ -30,10 +29,7 @@ func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, u
 	return &Login{client: client, mgo: mgo, prefix: prefix, ui: ui}
 }
 
-func (t *Login) Login(ctx *bwebframework.BeanContext) error {
-
-	r := ctx.Request
-	w := ctx.Writer
+func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
@@ -59,7 +55,8 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		if _, err := mail.ParseEmail(username); err != nil {
 			result.Code = berror.MissParameterCode
 			result.Msg = err.Error()
-			return result.Json(w, http.StatusBadRequest)
+			_ = result.Json(w, http.StatusBadRequest)
+			return
 		}
 	}
 
@@ -68,7 +65,8 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 		if err != nil || user == nil {
 			result.Code = berror.AuthExpireCode
 			result.Msg = "Incorrect username or password"
-			return result.Json(w, http.StatusUnauthorized)
+			_ = result.Json(w, http.StatusUnauthorized)
+			return
 		}
 	}
 	expiresAt := t.ui.ExpiresAt
@@ -93,20 +91,18 @@ func (t *Login) Login(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	client := tool.ClientFac(t.client, t.prefix, "")
 	nodeId := client.NodeId(r.Context())
 
 	result.Data = map[string]any{"token": token, "roles": user.Roles, "nodeId": nodeId}
-
-	return result.Json(w, http.StatusOK)
-
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *Login) GoogleLogin(ctx *bwebframework.BeanContext) error {
-	w := ctx.Writer
+func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 
 	gAuth := googleAuth.New()
 
@@ -115,13 +111,9 @@ func (t *Login) GoogleLogin(ctx *bwebframework.BeanContext) error {
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusTemporaryRedirect)
-	return nil
 }
 
-func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
-
-	r := ctx.Request
-	w := ctx.Writer
+func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
@@ -129,7 +121,7 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 	state := r.FormValue("state")
 	if state != "test_self" {
 		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
-		return nil
+		return
 	}
 
 	code := r.FormValue("code")
@@ -140,14 +132,16 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
 	userInfo, err := auth.Response(token.AccessToken)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
 	user, err := t.mgo.CheckGoogleUser(r.Context(), userInfo.Email)
@@ -155,7 +149,8 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 	if err != nil || user == nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
 	claim := bjwt.Claim{
@@ -174,7 +169,8 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 	proto := r.Header.Get("X-Forwarded-Proto")
 	if proto == "" {
@@ -188,5 +184,4 @@ func (t *Login) GoogleCallBack(ctx *bwebframework.BeanContext) error {
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusFound)
-	return nil
 }

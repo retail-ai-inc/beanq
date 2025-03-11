@@ -6,11 +6,11 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/spf13/cast"
 	"net/http"
 	"runtime"
 	"strings"
@@ -27,24 +27,21 @@ func NewDashboard(client redis.UniversalClient, x *bmongo.BMongo, prefix string)
 	return &Dashboard{client: client, mog: x, prefix: prefix}
 }
 
-func (t *Dashboard) Nodes(beanContext *bwebframework.BeanContext) error {
+func (t *Dashboard) Nodes(w http.ResponseWriter, r *http.Request) {
 
-	nodes := tool.ClientFac(t.client, t.prefix, "").Nodes(beanContext.Request.Context())
+	nodes := tool.ClientFac(t.client, t.prefix, "").Nodes(r.Context())
 	result, cancel := response.Get()
 	defer cancel()
 	result.Code = response.SuccessCode
 	result.Data = nodes
 
-	return result.Json(beanContext.Writer, http.StatusOK)
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
+func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
-
-	w := ctx.Writer
-	r := ctx.Request
 
 	nodeId := r.URL.Query().Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
@@ -52,8 +49,10 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return nil
+		return
 	}
+
+	tim := r.URL.Query().Get("time")
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -74,10 +73,10 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 	for {
 		select {
 		case <-nctx.Done():
-			return nctx.Err()
+			return
 		case <-timer.C:
 		}
-		timer.Reset(10 * time.Second)
+		timer.Reset(time.Duration(cast.ToInt64(tim)) * time.Second)
 
 		numCpu := runtime.NumCPU()
 
@@ -151,8 +150,9 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 		}
 
 		// pod status
-		cmd := t.client.HGetAll(r.Context(), tool.BeanqHostName)
-		if cmd.Err() != nil {
+
+		pods, _, err := t.client.ZScan(r.Context(), tool.BeanqHostName, 0, "*", 10).Result()
+		if err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
 			_ = result.EventMsg(w, "dashboard")
@@ -166,7 +166,7 @@ func (t *Dashboard) Info(ctx *bwebframework.BeanContext) error {
 			"fail_count":    failCount,
 			"success_count": successCount,
 			"queues":        queues,
-			"pods":          cmd.Val(),
+			"pods":          pods,
 		}
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()

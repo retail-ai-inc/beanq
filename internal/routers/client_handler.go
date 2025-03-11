@@ -2,7 +2,6 @@ package routers
 
 import (
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"net/http"
@@ -17,10 +16,7 @@ func NewClient(client redis.UniversalClient, prefix string) *Client {
 	return &Client{client: client, prefix: prefix}
 }
 
-func (t *Client) List(ctx *bwebframework.BeanContext) error {
-
-	r := ctx.Request
-	w := ctx.Writer
+func (t *Client) List(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -31,10 +27,10 @@ func (t *Client) List(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		result.Code = "1001"
 		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 
 	}
 	result.Data = data
-	return result.Json(w, http.StatusOK)
-
+	_ = result.Json(w, http.StatusOK)
 }

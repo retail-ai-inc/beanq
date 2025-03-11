@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3"
+	beanq "github.com/retail-ai-inc/beanq/v3"
 	"github.com/spf13/viper"
 )
 

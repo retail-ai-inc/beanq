@@ -6,7 +6,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
@@ -16,145 +15,145 @@ import (
 	"time"
 )
 
-func HeaderRule(next bwebframework.HandleFunc) bwebframework.HandleFunc {
-	return func(ctx *bwebframework.BeanContext) error {
-		ctx.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-		ctx.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';")
-		ctx.Writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
-		ctx.Writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-
-		return next(ctx)
+func HeaderRule(next func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		next(w, r)
 	}
 }
 
-func MigrateMiddleWare(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) bwebframework.HandleFunc {
+func MigrateMiddleWare(next func(w http.ResponseWriter, r *http.Request), client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) func(w http.ResponseWriter, r *http.Request) {
 	return HeaderRule(Auth(next, client, x, prefix, ui))
 }
 
-func MigrateSSE(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui, name string) bwebframework.HandleFunc {
+func MigrateSSE(next func(w http.ResponseWriter, r *http.Request), client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui, name string) func(w http.ResponseWriter, r *http.Request) {
 	return HeaderRule(AuthSSE(next, client, x, prefix, ui, name))
 }
 
-func AuthSSE(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui, name string) bwebframework.HandleFunc {
-	return func(ctx *bwebframework.BeanContext) error {
+func AuthSSE(next func(w http.ResponseWriter, r *http.Request), client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui, name string) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 
 		result, cancelr := response.Get()
 		defer cancelr()
-		request := ctx.Request
-		writer := ctx.Writer
 
 		var (
 			err   error
 			token *bjwt.Claim
 		)
 
-		auth := request.FormValue("token")
+		auth := r.FormValue("token")
 
-		flusher, ok := writer.(http.Flusher)
+		flusher, ok := w.(http.Flusher)
 		if !ok {
-			http.Error(writer, "server error", http.StatusInternalServerError)
+			http.Error(w, "server error", http.StatusInternalServerError)
 			flusher.Flush()
-			return nil
+			return
 		}
-		writer.Header().Set("Content-Type", "text/event-stream")
-		writer.Header().Set("Cache-Control", "no-cache")
-		writer.Header().Set("Connection", "keep-alive")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
 
 		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
 		if err != nil {
 			result.Code = berror.AuthExpireCode
 			result.Msg = err.Error()
-			_ = result.EventMsg(writer, name)
+			_ = result.EventMsg(w, name)
 			flusher.Flush()
-			return nil
+			return
 		}
 		// Check that the username must be an email address
 		if token.UserName != ui.Root.UserName {
 			if _, err := mail.ParseEmail(token.UserName); err != nil {
 				result.Code = berror.MissParameterCode
 				result.Msg = err.Error()
-				_ = result.EventMsg(writer, name)
+				_ = result.EventMsg(w, name)
 				flusher.Flush()
-				return nil
+				return
 			}
 		}
 
 		if token.UserName != ui.Root.UserName {
-			roleId := cast.ToInt(request.Header.Get("X-Role-Id"))
-			if err := x.CheckRole(request.Context(), token.UserName, roleId); err != nil {
+			roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
+			if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
 				result.Code = berror.AuthExpireCode
 				result.Msg = err.Error()
-				_ = result.EventMsg(writer, name)
+				_ = result.EventMsg(w, name)
 				flusher.Flush()
-				return nil
+				return
 			}
 		}
 
-		if err := x.AddOptLog(request.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": request.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+		if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
-			_ = result.EventMsg(writer, name)
+			_ = result.EventMsg(w, name)
 			flusher.Flush()
-			return nil
+			return
 		}
-		return next(ctx)
+		next(w, r)
 	}
 }
 
-func Auth(next bwebframework.HandleFunc, client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) bwebframework.HandleFunc {
-	return func(ctx *bwebframework.BeanContext) error {
+func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 
 		result, cancelr := response.Get()
 		defer cancelr()
-		request := ctx.Request
-		writer := ctx.Writer
 
 		var (
 			err   error
 			token *bjwt.Claim
 		)
 
-		auth := request.Header.Get("Beanq-Authorization")
+		auth := r.Header.Get("Beanq-Authorization")
 		if auth != "" {
 			strs := strings.Split(auth, " ")
 			if len(strs) < 2 {
 				result.Code = berror.AuthExpireCode
 				result.Msg = "missing parameter"
-				return result.Json(writer, http.StatusInternalServerError)
+				_ = result.Json(w, http.StatusInternalServerError)
+				return
 			}
 			auth = strs[1]
 		} else {
-			auth = request.FormValue("token")
+			auth = r.FormValue("token")
 		}
 		token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
 		if err != nil {
 			result.Code = berror.AuthExpireCode
 			result.Msg = err.Error()
-			return result.Json(writer, http.StatusUnauthorized)
+			_ = result.Json(w, http.StatusUnauthorized)
+			return
 		}
 		// Check that the username must be an email address
 		if token.UserName != ui.Root.UserName {
 			if _, err := mail.ParseEmail(token.UserName); err != nil {
 				result.Code = berror.MissParameterCode
 				result.Msg = err.Error()
-				return result.Json(writer, http.StatusInternalServerError)
+				_ = result.Json(w, http.StatusInternalServerError)
+				return
 			}
 		}
 
 		if token.UserName != ui.Root.UserName {
-			roleId := cast.ToInt(request.Header.Get("X-Role-Id"))
-			if err := x.CheckRole(request.Context(), token.UserName, roleId); err != nil {
+			roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
+			if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
 				result.Code = berror.AuthExpireCode
 				result.Msg = err.Error()
-				return result.Json(writer, http.StatusUnauthorized)
+				_ = result.Json(w, http.StatusUnauthorized)
+				return
 			}
 		}
 
-		if err := x.AddOptLog(request.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": request.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+		if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
-			return result.Json(writer, http.StatusInternalServerError)
+			_ = result.Json(w, http.StatusInternalServerError)
+			return
 		}
-		return next(ctx)
+		next(w, r)
 	}
 }

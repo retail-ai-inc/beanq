@@ -60,7 +60,7 @@ onMounted(async ()=>{
   let token = useRe.currentRoute.value.query;
   if(JSON.stringify(token) !== "{}"){
     if (token.token != ""){
-      await sessionStorage.setItem("token",token.token);
+      await Storage.SetItem("token",token.token);
       //useRe.push("/admin/home");
       return;
     }
@@ -83,12 +83,12 @@ async function onSubmit(event){
   //,{headers:{"Content-Type":"multipart/form-data"}}
   try{
     let res = await loginApi.Login(formData.user.username,formData.user.password,expiredTimeBool.value);
-    sessionStorage.setItem("token",res.token);
-    sessionStorage.setItem("roles",res.roles);
-    sessionStorage.setItem("nodeId",res.nodeId);
+    Storage.SetItem("token",res.token);
+    Storage.SetItem("roles",res.roles);
+    Storage.SetItem("nodeId",res.nodeId);
 
     let nodesRes = await dashboardApi.Nodes();
-    sessionStorage.setItem("nodes",nodesRes);
+    Storage.SetItem("nodes",nodesRes);
 
     useRe.push("/admin/home");
   }catch(err){

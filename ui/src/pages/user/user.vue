@@ -14,10 +14,10 @@
                 <input type="text" class="form-control" id="formId" name="formId" v-model="accountInput" placeholder="Search by account">
               </div>
               <div class="col-auto" style="margin:0 .75rem;">
-                <button type="submit" class="btn btn-primary" @click="SearchByAccount">{{searchbtn}}</button>
+                <button type="submit" class="btn btn-primary" @click="SearchByAccount">{{$t('search')}}</button>
               </div>
               <div class="col-auto border-left" style="padding-left: 10px">
-                <button type="button" class="btn btn-primary" @click="addUserModal">{{addbtn}}</button>
+                <button type="button" class="btn btn-primary" @click="addUserModal">{{$t('add')}}</button>
               </div>
             </div>
           </div>
@@ -137,9 +137,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{closeBtn}}</button>
-            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{addbtn}}</button>
-            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{editbtn}}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{$t('close')}}</button>
+            <button type="button" class="btn btn-primary" @click="addUser" v-if="accountReadOnly == false">{{$t('add')}}</button>
+            <button type="button" class="btn btn-primary" @click="editUser" v-else>{{$t('edit')}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -148,13 +148,14 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" @action="deleteUser">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteUser">
       <template #title="{title}">
-        {{title}}
+        {{$t('user')}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
     </Btoast>
+    <LoginModal :id="loginId" ref="loginModal"/>
 
   </div>
 </template>
@@ -165,9 +166,8 @@ import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
+import LoginModal from "../components/loginModal.vue";
 
-
-const l = inject("i18n");
 const nav = computed(()=>{
   return Nav;
 })
@@ -177,6 +177,9 @@ const [id,toastRef] = [ref("userToast"),ref(null)];
 const [users,accountReadOnly,addUserDetail] = [ref([]),ref(false),ref(null)];
 const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 const [accountInput,userId] = [ref(""),ref("")];
+
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+
 
 let datas = reactive({
   userForm:{
@@ -189,43 +192,33 @@ let datas = reactive({
   }
 });
 const roles = ref([]);
-const btns = ref(OtherBtn);
-const [addbtn,searchbtn,editbtn,delbtn,closeBtn,title] = [
-  ref(roleApi.GetLang("Setting.User.Add",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Search",btns.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.User.Edit",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.User.Delete",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Close",btns.value)?.[l.value]),
-    ref(roleApi.GetLang("Setting.User"),nav.value)?.[l.value]
-];
 
 async function roleList(){
-  let res = await roleApi.List(0,100);
-  const {code,msg,data} = res;
-  if(code !== "0000"){
+  try {
+    let res = await roleApi.List(0,100);
+    roles.value = res.data;
+  }catch (e) {
+    console.log(e.status)
+    toastRef.value.show(e);
   }
-  roles.value = data.data;
+
 }
 
 async function userList(){
-  let res = await userApi.List(page.value,pageSize.value,accountInput.value);
-  const {code,msg,data} = res;
-  if(code !== "0000"){
-    toastRef.value.show(msg);
-    return;
-  }
-  users.value = data.data;
-  cursor.value = data.cursor;
-  total.value = data.total ;
-}
+  try {
+    let res = await userApi.List(page.value,pageSize.value,accountInput.value);
 
-watch(()=>[l.value],([n,o])=>{
-  addbtn.value = roleApi.GetLang("Setting.User.Add",nav.value)?.[n];
-  searchbtn.value = roleApi.GetLang("Search",btns.value)?.[n];
-  editbtn.value = roleApi.GetLang("Setting.User.Edit",nav.value)?.[n];
-  delbtn.value = roleApi.GetLang("Setting.User.Delete",nav.value)?.[n];
-  closeBtn.value = roleApi.GetLang("Close",btns.value)?.[n];
-})
+    users.value = res.data;
+    cursor.value = res.cursor;
+    total.value = res.total ;
+  }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
+    toastRef.value.show(e);
+  }
+}
 
 onMounted( ()=>{
    userList();
@@ -253,7 +246,7 @@ function SearchByAccount(){
 function changePage(page,cursor){
   page.value = page;
   cursor.value = cursor;
-  sessionStorage.setItem("page",page)
+  Storage.SetItem("page",page)
 
   userList();
 }
@@ -305,6 +298,10 @@ async function addUser(e){
     addUserDetail.value.hide();
     await userList();
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
     toastRef.value.show(e.message);
   }
   
@@ -319,6 +316,10 @@ async function editUser(){
       await userList();
     }
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
     toastRef.value.show(e.error);
   }
 }
@@ -339,10 +340,12 @@ async function deleteUser(){
   try {
     let res = await userApi.Delete(account.value);
     toastRef.value.show(res.msg);
-    if(res.code === "0000"){
-      await userList();
-    }
+    await userList();
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
     toastRef.value.show(e.message);
   }
 

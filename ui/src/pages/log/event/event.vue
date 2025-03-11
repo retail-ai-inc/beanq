@@ -33,7 +33,7 @@
                     <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
-                  <td>{{item.topic}}</td>
+                  <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
                   <td>{{item.moodType}}</td>
                   <td class="text-center">
                     <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
@@ -63,14 +63,14 @@
       <EditAction :label="infoDetailLabel" :id="showInfoDetail" :data="detail" @action="editInfo"></EditAction>
       <!--edit modal end-->
       <!--retry modal begin-->
-      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
+      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
         <template #title="{title}">
 <!--          {{l.retryModal.title}}-->
         </template>
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
-      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="deleteInfo">
+      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteInfo">
         <template #title="{title}">
 <!--          {{l.deleteModal.title}}-->
         </template>
@@ -97,7 +97,6 @@ import LoginModal from "../../components/loginModal.vue";
 import More from "../../components/more.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import Copy from "../../components/copy.vue";
-import i18n from "i18n";
 
 
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
@@ -112,7 +111,8 @@ let data = reactive({
   form:{
     id:"",
     moodType:"",
-    status:""
+    status:"",
+    topicName:""
   },
   detail:{},
   isFormat:false,
@@ -132,11 +132,6 @@ let data = reactive({
 
 const [uRouter,route] = [useRouter(),useRoute()];
 const [dataId] = [ref("")];
-
-const [retryWarningHtml,retryInfoHtml] = [
-    ref(i18n.global.t('retryWarningHtml')),
-    ref(i18n.global.t('retryInfoHtml'))
-]
 
 const maskString = ((id)=>{
   return Base.MaskString(id)
@@ -239,17 +234,44 @@ async function editInfo(item){
 // search feature
 async function search(){
 
-  return uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`).then(()=>{
+  return uRouter.push({
+    path:"/admin/log/event",
+    query:{
+      id:data.form.id,
+      status:data.form.status,
+      moodType:data.form.moodType,
+      topicName:data.form.topicName
+    }
+  }).then(()=>{
     window.location.reload();
   });
 }
+
+const filter = ((topic)=>{
+  data.form.topicName = topic;
+  search();
+})
+
+const urlParams = (()=>{
+  const query = {
+    page: data.page,
+    pageSize: data.pageSize,
+    id: data.form.id,
+    status: data.form.status,
+    moodType: data.form.moodType,
+    topicName: data.form.topicName
+  }
+  const searchParams = new URLSearchParams(query);
+  let apiUrl = `event_log/list?${searchParams.toString()}`;
+  return apiUrl;
+})
 
 // paging
 async function changePage(page,cursor){
   data.page = page;
   data.cursor = cursor;
-  sessionStorage.setItem("page",page)
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
+  Storage.SetItem("page",page)
+  let apiUrl = urlParams();
   initEventSource(apiUrl);
 }
 
@@ -259,7 +281,7 @@ function detailEvent(item){
 
 function initEventSource(){
 
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
+  let apiUrl = urlParams();
   if (data.sseEvent){
     data.sseEvent.close();
   }
@@ -289,13 +311,14 @@ function initEventSource(){
 
 onMounted(async()=>{
 
-  let [id,status,moodType] = [route.query.id,route.query.status,route.query.moodType];
+  let [id,status,moodType,topicName] = [route.query.id,route.query.status,route.query.moodType,route.query.topicName];
   data.form = {
     id:id??"",
     status:status??"",
-    moodType:moodType??""
+    moodType:moodType??"",
+    topicName:topicName??""
   };
-  data.page = sessionStorage.getItem("page")??1;
+  data.page = Storage.GetItem("page")??1;
   initEventSource();
 })
 

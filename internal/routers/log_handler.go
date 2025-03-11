@@ -6,7 +6,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
@@ -27,12 +26,10 @@ func NewLog(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *Log 
 }
 
 // del ,retry,archive,detail
-func (t *Log) List(beanContext *bwebframework.BeanContext) error {
+func (t *Log) List(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
-	r := beanContext.Request
-	w := beanContext.Writer
 
 	id := r.FormValue("id")
 	msgType := r.FormValue("msgType")
@@ -41,25 +38,24 @@ func (t *Log) List(beanContext *bwebframework.BeanContext) error {
 		// error
 		result.Code = berror.MissParameterCode
 		result.Msg = berror.MissParameterMsg
-		return result.Json(w, http.StatusBadRequest)
+		_ = result.Json(w, http.StatusBadRequest)
+		return
 	}
 	data, err := t.detailHandler(r.Context(), id, msgType)
 	if err != nil {
 		result.Code = "1003"
 		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
 	result.Data = data
-	return result.Json(w, http.StatusOK)
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *Log) Retry(beanContext *bwebframework.BeanContext) error {
+func (t *Log) Retry(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
-
-	r := beanContext.Request
-	w := beanContext.Writer
 
 	id := r.PostFormValue("id")
 	msgType := r.PostFormValue("msgType")
@@ -69,22 +65,21 @@ func (t *Log) Retry(beanContext *bwebframework.BeanContext) error {
 	if id == "" {
 		result.Code = berror.MissParameterCode
 		result.Msg = berror.MissParameterMsg
-		return result.Json(w, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
 	if err := t.retryHandler(r.Context(), id, msgType); err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
-	return result.Json(w, http.StatusOK)
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *Log) Delete(beanContext *bwebframework.BeanContext) error {
+func (t *Log) Delete(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
-
-	w := beanContext.Writer
-	r := beanContext.Request
 
 	msgType := r.FormValue("msgType")
 	score := r.FormValue("score")
@@ -93,9 +88,10 @@ func (t *Log) Delete(beanContext *bwebframework.BeanContext) error {
 	if err := ZRemRangeByScore(r.Context(), t.client, key, score, score); err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
-		return result.Json(w, http.StatusInternalServerError)
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
-	return result.Json(w, http.StatusOK)
+	_ = result.Json(w, http.StatusOK)
 }
 
 func (t *Log) Add(w http.ResponseWriter, r *http.Request) {
@@ -158,13 +154,10 @@ func (t *Log) retryHandler(ctx context.Context, id, msgType string) error {
 	return nil
 }
 
-func (t *Log) OptLogs(beanContext *bwebframework.BeanContext) error {
+func (t *Log) OptLogs(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	w := beanContext.Writer
-	r := beanContext.Request
 
 	query := r.URL.Query()
 	page := cast.ToInt64(query.Get("page"))
@@ -174,35 +167,31 @@ func (t *Log) OptLogs(beanContext *bwebframework.BeanContext) error {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *Log) DelOptLog(beanContext *bwebframework.BeanContext) error {
+func (t *Log) DelOptLog(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	w := beanContext.Writer
-	r := beanContext.Request
 
 	id := r.URL.Query().Get("id")
 	if _, err := t.mgo.DeleteOptLog(r.Context(), id); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *Log) WorkFlowLogs(beanContext *bwebframework.BeanContext) error {
+func (t *Log) WorkFlowLogs(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
-
-	w := beanContext.Writer
-	r := beanContext.Request
 
 	query := r.URL.Query()
 	page := cast.ToInt64(query.Get("page"))
@@ -212,8 +201,9 @@ func (t *Log) WorkFlowLogs(beanContext *bwebframework.BeanContext) error {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
