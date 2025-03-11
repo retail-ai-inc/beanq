@@ -17,8 +17,8 @@
                  :db_size="db_size"/>
     </div>
 
-    <div v-for="[index, item] in Object.entries(pods)" :key="index" style="margin-bottom: 2rem;">
-      <div style="font-weight: bold">{{index}}</div>
+    <div v-for="(item, index) in pods" :key="index" style="margin-bottom: 2rem;">
+      <div style="font-weight: bold">{{item.hostName}}</div>
       <table class="table">
         <thead>
         <tr>
@@ -88,7 +88,6 @@ function sseConnect(){
         loginModal.value.error(new Error(msg));
         sse.value.close();
         return
-      return
     }
 
     queue_total.value = data.queue_total;
@@ -97,10 +96,13 @@ function sseConnect(){
     fail_count.value = data.fail_count;
     success_count.value = data.success_count;
 
+    let npods = [];
     for(let key in data?.pods){
-      data.pods[key] = JSON.parse(data.pods[key]);
+      if(key % 2 === 0){
+        npods.push(JSON.parse(data.pods[key]));
+      }
     }
-    pods.value = data.pods;
+    pods.value = npods;
 
     queuedMessagesOption.value = dashboardApi.QueueLine(data.queues);
     messageRatesOption.value = dashboardApi.MessageRateLine(data.queues);

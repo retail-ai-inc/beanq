@@ -79,11 +79,37 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 
 func (t *UITool) HostName(ctx context.Context) error {
 
+	now := time.Now()
+
 	info, err := host.Info()
 	if err != nil {
 		return err
 	}
 
+	keys, _, err := t.client.ZScan(ctx, tool.BeanqHostName, 0, fmt.Sprintf("*%s*", info.Hostname), 10).Result()
+
+	data := make(map[string]any, 8)
+
+	for _, key := range keys {
+		if err := json.NewDecoder(strings.NewReader(key)).Decode(&data); err != nil {
+			continue
+		}
+		if v, ok := data["hostName"]; ok {
+			if cast.ToString(v) == info.Hostname {
+				t.client.ZRem(ctx, tool.BeanqHostName, key)
+				data = nil
+				continue
+			}
+		}
+		if v, ok := data["expiredTime"]; ok {
+			if cast.ToInt64(v) < now.Unix() {
+				t.client.ZRem(ctx, tool.BeanqHostName, key)
+				data = nil
+				continue
+			}
+		}
+		data = nil
+	}
 	memory, err := mem.VirtualMemory()
 	if err != nil {
 		return err
@@ -98,23 +124,26 @@ func (t *UITool) HostName(ctx context.Context) error {
 		return err
 	}
 
-	data := make(map[string]any, 0)
+	data["hostName"] = info.Hostname
 	data["cpuCount"] = cpuCount
 	data["cpuPercent"] = fmt.Sprintf("%.2f", cpuPercent[0])
 	data["memoryCount"] = memory.Total
 	data["memoryTotal"] = fmt.Sprintf("%.2f", float64(memory.Total/(1024*1024*1024)))
 	data["memoryUsed"] = fmt.Sprintf("%.2f", float64(memory.Used/(1024*1024)))
 	data["memoryPercent"] = fmt.Sprintf("%.2f", memory.UsedPercent)
+	data["expiredTime"] = now.Add(50 * time.Second).Unix()
 
 	bt, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
-	redisVal := make(map[string]any, 0)
-	redisVal[info.Hostname] = string(bt)
 
-	if err := t.client.HMSet(ctx, tool.BeanqHostName, redisVal).Err(); err != nil {
+	if err := t.client.ZAdd(ctx, tool.BeanqHostName, &redis.Z{
+		Score:  cast.ToFloat64(now.Unix()),
+		Member: bt,
+	}).Err(); err != nil {
 		return err
 	}
-	return t.client.Expire(ctx, tool.BeanqHostName, 20*time.Second).Err()
+
+	return nil
 }

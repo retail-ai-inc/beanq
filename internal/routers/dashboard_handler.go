@@ -147,8 +147,9 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// pod status
-		cmd := t.client.HGetAll(r.Context(), tool.BeanqHostName)
-		if cmd.Err() != nil {
+
+		pods, _, err := t.client.ZScan(r.Context(), tool.BeanqHostName, 0, "*", 10).Result()
+		if err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
 			_ = result.EventMsg(w, "dashboard")
@@ -162,7 +163,7 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			"fail_count":    failCount,
 			"success_count": successCount,
 			"queues":        queues,
-			"pods":          cmd.Val(),
+			"pods":          pods,
 		}
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
