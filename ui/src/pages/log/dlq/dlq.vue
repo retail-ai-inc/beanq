@@ -28,7 +28,7 @@
           </th>
           <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">{{maskString(item.id)}}</router-link></td>
           <td>{{item.channel}}</td>
-          <td>{{item.topic}}</td>
+          <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
           <td>{{item.moodType}}</td>
           <td>
             <TimeToolTips :past-time="item.addTime"/>
@@ -86,6 +86,11 @@ const form = ref({
   status:"",
   topicName:""
 });
+
+const filter = ((topic)=>{
+  form.value.topicName = topic;
+  search();
+})
 
 const search = (()=>{
   dlqLogs();
