@@ -26,7 +26,7 @@ type Handles struct {
 	pod       *Pod
 }
 
-func NewOtherRouters(mux *http.ServeMux, fs2 fs.FS, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) {
+func NewRouters(mux *http.ServeMux, fs2 fs.FS, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) {
 
 	hdls := Handles{
 		schedule:  NewSchedule(client, prefix),

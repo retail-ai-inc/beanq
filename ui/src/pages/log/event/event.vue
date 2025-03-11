@@ -33,7 +33,7 @@
                     <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
-                  <td>{{item.topic}}</td>
+                  <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
                   <td>{{item.moodType}}</td>
                   <td class="text-center">
                     <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
@@ -111,7 +111,8 @@ let data = reactive({
   form:{
     id:"",
     moodType:"",
-    status:""
+    status:"",
+    topicName:""
   },
   detail:{},
   isFormat:false,
@@ -233,17 +234,44 @@ async function editInfo(item){
 // search feature
 async function search(){
 
-  return uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`).then(()=>{
+  return uRouter.push({
+    path:"/admin/log/event",
+    query:{
+      id:data.form.id,
+      status:data.form.status,
+      moodType:data.form.moodType,
+      topicName:data.form.topicName
+    }
+  }).then(()=>{
     window.location.reload();
   });
 }
+
+const filter = ((topic)=>{
+  data.form.topicName = topic;
+  search();
+})
+
+const urlParams = (()=>{
+  const query = {
+    page: data.page,
+    pageSize: data.pageSize,
+    id: data.form.id,
+    status: data.form.status,
+    moodType: data.form.moodType,
+    topicName: data.form.topicName
+  }
+  const searchParams = new URLSearchParams(query);
+  let apiUrl = `event_log/list?${searchParams.toString()}`;
+  return apiUrl;
+})
 
 // paging
 async function changePage(page,cursor){
   data.page = page;
   data.cursor = cursor;
   Storage.SetItem("page",page)
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
+  let apiUrl = urlParams();
   initEventSource(apiUrl);
 }
 
@@ -253,7 +281,7 @@ function detailEvent(item){
 
 function initEventSource(){
 
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
+  let apiUrl = urlParams();
   if (data.sseEvent){
     data.sseEvent.close();
   }
@@ -283,11 +311,12 @@ function initEventSource(){
 
 onMounted(async()=>{
 
-  let [id,status,moodType] = [route.query.id,route.query.status,route.query.moodType];
+  let [id,status,moodType,topicName] = [route.query.id,route.query.status,route.query.moodType,route.query.topicName];
   data.form = {
     id:id??"",
     status:status??"",
-    moodType:moodType??""
+    moodType:moodType??"",
+    topicName:topicName??""
   };
   data.page = Storage.GetItem("page")??1;
   initEventSource();

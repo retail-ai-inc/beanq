@@ -29,6 +29,9 @@
                 </div>
               </div>
             </div>
+            <div class="col-2" style="padding-right: 1rem;">
+              <input type="text" class="form-control" id="formTopicName" name="formTopicName"  v-model="form.topicName" placeholder="Topic name">
+            </div>
             <div class="col" style="padding-right: 1rem;">
               <input type="text" class="form-control" id="formId" name="formId"  v-model="form.id" placeholder="Search by Id">
             </div>
@@ -48,7 +51,8 @@ const props = defineProps({
   form:{
     id:"",
     moodType:"",
-    status:""
+    status:"",
+    topicName:""
   }
 })
 

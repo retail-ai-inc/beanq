@@ -215,7 +215,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		)
 	}
 
-	routers.NewOtherRouters(mux, views, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
+	routers.NewRouters(mux, views, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
 
 	log.Printf("server start on port %+v", httpport)
 	if err := http.ListenAndServe(httpport, mux); err != nil {

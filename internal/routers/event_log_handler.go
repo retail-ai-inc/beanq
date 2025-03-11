@@ -40,6 +40,7 @@ func (t *EventLog) List(w http.ResponseWriter, r *http.Request) {
 	id := query.Get("id")
 	status := query.Get("status")
 	moodType := query.Get("moodType")
+	topicName := query.Get("topicName")
 
 	filter := bson.M{}
 	filter["logType"] = bstatus.Logic
@@ -48,6 +49,9 @@ func (t *EventLog) List(w http.ResponseWriter, r *http.Request) {
 	}
 	if moodType != "" {
 		filter["moodType"] = moodType
+	}
+	if topicName != "" {
+		filter["topic"] = topicName
 	}
 	if status != "" {
 		statusValid := []string{"failed", "published", "success"}
