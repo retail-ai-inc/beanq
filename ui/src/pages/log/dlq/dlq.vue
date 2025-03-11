@@ -6,6 +6,7 @@
       </div>
     </div>
     <div class="dlq">
+      <Search :form="form" @search="search"/>
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
       <table class="table table-striped table-hover">
         <thead>
@@ -70,6 +71,7 @@ import LoginModal from "../../components/loginModal.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import More from "../../components/more.vue";
 import Copy from "../../components/copy.vue";
+import Search from "./search.vue";
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(0),ref(0),ref([])];
@@ -78,6 +80,16 @@ const [retryLabel,showRetryModal,dataId,retryItem] = [ref("retryLabel"),ref("sho
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
 
 const [noticeId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const form = ref({
+  id:"",
+  moodType:"",
+  status:"",
+  topicName:""
+});
+
+const search = (()=>{
+  dlqLogs();
+})
 
 const maskString = ((id)=>{
   return Base.MaskString(id)
@@ -85,7 +97,7 @@ const maskString = ((id)=>{
 
 async function dlqLogs() {
   try {
-    let res = await dlqApi.List(page.value,pageSize.value);
+    let res = await dlqApi.List(page.value,pageSize.value,form.value.id,form.value.status,form.value.moodType,form.value.topicName);
     const{cursor:resCursor,data,total:resTotal} = res;
 
     logs.value = data;

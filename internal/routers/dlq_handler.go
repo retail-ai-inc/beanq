@@ -35,6 +35,11 @@ func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	page := cast.ToInt64(query.Get("page"))
 	pageSize := cast.ToInt64(query.Get("pageSize"))
+	id := query.Get("id")
+	status := query.Get("status")
+	moodType := query.Get("moodType")
+	topicName := query.Get("topicName")
+
 	if page <= 0 {
 		page = 1
 	}
@@ -43,7 +48,18 @@ func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 	}
 	filter := bson.M{}
 	filter["logType"] = bstatus.Dlq
-
+	if id != "" {
+		filter["_id"] = id
+	}
+	if status != "" {
+		filter["status"] = status
+	}
+	if moodType != "" {
+		filter["moodType"] = moodType
+	}
+	if topicName != "" {
+		filter["topic"] = topicName
+	}
 	datas := make(map[string]any, 3)
 	data, total, err := t.mgo.EventLogs(r.Context(), filter, page, pageSize)
 	if err != nil {
