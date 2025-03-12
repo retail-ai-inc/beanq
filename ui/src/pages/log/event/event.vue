@@ -33,7 +33,7 @@
                     <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
-                  <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
+                  <td><div @click="filter(item.topic)" style="cursor: copy">{{item.topic}}</div></td>
                   <td>{{item.moodType}}</td>
                   <td class="text-center">
                     <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
