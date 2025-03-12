@@ -10,12 +10,12 @@ const request = axios.create({
 request.interceptors.request.use(
     config=>{
 
-        const token = sessionStorage.getItem("token");
+        const token = Storage.GetItem("token");
         if(token){
             config.headers["BEANQ-Authorization"] = "Bearer " + token;
         }
-        config.headers["X-Cluster-Nodeid"] = sessionStorage.getItem("nodeId");
-        config.headers["X-Role-Id"] = sessionStorage.getItem("roleId");
+        config.headers["X-Cluster-Nodeid"] = Storage.GetItem("nodeId");
+        config.headers["X-Role-Id"] = Storage.GetItem("roleId");
         return config;
     },
     err=>{
@@ -24,18 +24,14 @@ request.interceptors.request.use(
 )
 request.interceptors.response.use(
     res=>{
-        let data = res.data;
-        if (data.code === "0000"){
+        const {code,msg,data} = res.data;
+        if (code === "0000"){
             return Promise.resolve(data);
         }
-        return Promise.reject(new Error(data.msg));
+        return Promise.reject(new Error(msg));
     },
     err=>{
-
-        if (err.response.status === 401){
-            sessionStorage.clear();
-            window.location.href = "/";
-        }
+        console.log("request err",err)
         return Promise.reject(err);
     }
 )

@@ -1,9 +1,4 @@
 <template>
-  <div class="row mb-4">
-    <div class="col">
-      <h5 class="card-title">List of Event Log</h5>
-    </div>
-  </div>
   <div class="row">
     <div class="col-12">
       <div class="row">

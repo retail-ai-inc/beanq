@@ -4,7 +4,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
@@ -21,10 +20,7 @@ func NewWorkFlow(client redis.UniversalClient, mongo *bmongo.BMongo, prefix stri
 	return &WorkFlow{client: client, mgo: mongo, prefix: prefix}
 }
 
-func (t *WorkFlow) List(ctx *bwebframework.BeanContext) error {
-
-	w := ctx.Writer
-	r := ctx.Request
+func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -52,25 +48,22 @@ func (t *WorkFlow) List(ctx *bwebframework.BeanContext) error {
 		datas["cursor"] = page
 		result.Data = datas
 	}
-	return result.Json(w, http.StatusOK)
-
+	_ = result.Json(w, http.StatusOK)
 }
 
-func (t *WorkFlow) Delete(ctx *bwebframework.BeanContext) error {
+func (t *WorkFlow) Delete(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	w := ctx.Writer
-	r := ctx.Request
 
 	id := r.PostFormValue("id")
 	count, err := t.mgo.DeleteWorkFlow(r.Context(), id)
 	if err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	res.Data = count
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }

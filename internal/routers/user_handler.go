@@ -5,7 +5,6 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/email"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/spf13/cast"
@@ -26,13 +25,10 @@ func NewUser(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *Use
 	return &User{client: client, mgo: x, prefix: prefix}
 }
 
-func (t *User) List(ctx *bwebframework.BeanContext) error {
+func (t *User) List(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	r := ctx.Request
-	w := ctx.Writer
 
 	page := cast.ToInt64(r.URL.Query().Get("page"))
 	pageSize := cast.ToInt64(r.URL.Query().Get("pageSize"))
@@ -51,18 +47,17 @@ func (t *User) List(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
+
 }
 
-func (t *User) Add(ctx *bwebframework.BeanContext) error {
+func (t *User) Add(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
-
-	r := ctx.Request
-	w := ctx.Writer
 
 	account := r.PostFormValue("account")
 	password := r.PostFormValue("password")
@@ -74,7 +69,8 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 	if account == "" {
 		res.Code = berror.MissParameterCode
 		res.Msg = "missing account"
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
 	if err := t.mgo.AddUser(r.Context(), &bmongo.User{
@@ -87,7 +83,8 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 	}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	go func(ctx2 context.Context) {
@@ -105,49 +102,47 @@ func (t *User) Add(ctx *bwebframework.BeanContext) error {
 		}
 
 	}(r.Context())
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
 type UserInfo struct {
 	Account string `json:"account"`
 }
 
-func (t *User) Delete(ctx *bwebframework.BeanContext) error {
+func (t *User) Delete(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
 
-	id := ctx.Request.PostFormValue("id")
+	id := r.PostFormValue("id")
 
 	if id == "" {
 		res.Code = berror.MissParameterMsg
 		res.Msg = "missing account field"
-		return res.Json(ctx.Writer, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
-	if _, err := t.mgo.DeleteUser(ctx.Request.Context(), id); err != nil {
+	if _, err := t.mgo.DeleteUser(r.Context(), id); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(ctx.Writer, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
-
-	return res.Json(ctx.Writer, http.StatusOK)
-
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *User) Edit(ctx *bwebframework.BeanContext) error {
+func (t *User) Edit(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	r := ctx.Request
-	w := ctx.Writer
 
 	id := r.FormValue("_id")
 	if id == "" {
 		res.Code = berror.MissParameterCode
 		res.Msg = "ID can't be empty"
-		return res.Json(w, http.StatusBadRequest)
+		_ = res.Json(w, http.StatusBadRequest)
+		return
 	}
 	account := r.FormValue("account")
 	password := r.FormValue("password")
@@ -159,8 +154,8 @@ func (t *User) Edit(ctx *bwebframework.BeanContext) error {
 	if _, err := t.mgo.EditUser(r.Context(), id, map[string]any{"account": account, "password": password, "active": active, "type": typ, "detail": detail, "roleId": roleId}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
-	return res.Json(w, http.StatusOK)
-
+	_ = res.Json(w, http.StatusOK)
 }

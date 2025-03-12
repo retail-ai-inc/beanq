@@ -1,8 +1,10 @@
 ; (async () => {
 
   const { loadModule, version } = window["vue3-sfc-loader"];
-  console.info("version of vue3-sfc-loader:",version);
-
+  const i18n = VueI18n.createI18n({
+    legacy:false,
+    locale:"ja",
+  });
   //vue create
   const options = {
 
@@ -11,6 +13,8 @@
       vueRouter: VueRouter,
       request:request,
       config:config,
+      I18NG:VueI18n,
+      i18n:i18n,
       Base,
       //apis
       sseApi,
@@ -42,6 +46,17 @@
       style.textContent = styleStr;
       const ref = document.head.getElementsByTagName('style')[0] || null;
       document.head.insertBefore(style, ref);
+    },
+    customBlockHandler(block, filename, options){
+
+      if ( block.type !== 'i18n' )
+        return
+
+      const messages = JSON.parse(block.content);
+
+      for ( let locale in messages ){
+        i18n.global.mergeLocaleMessage(locale, messages[locale]);
+      }
     },
     log(type, ...args) {
       console.log(type, ...args);
@@ -82,7 +97,7 @@
     ],
   });
   router.beforeEach((to, from) => {
-    let token = sessionStorage.getItem("token");
+    let token = Storage.GetItem("token");
     if (token == null && to.path !== "/login"){
       return {path:"/login",replace:true};
     }
@@ -96,6 +111,7 @@
   });
   app.component("v-chart",VueECharts);
   app.use(router);
+  app.use(i18n);
   app.mount('#app');
 
 })().catch(ex => console.log(ex))

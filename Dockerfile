@@ -4,6 +4,8 @@ FROM golang:1.22-alpine
 # RUN go env -w GOPROXY=https://goproxy.cn,direct
 # RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
+ENV GODEBUG httpmuxgo122=1
+
 # The latest alpine images don't have some tools like (`git` and `bash`).
 # Adding git, bash and openssh to the image
 RUN apk update &&  \

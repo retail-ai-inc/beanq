@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"golang.org/x/net/context"
@@ -21,17 +20,16 @@ type RedisInfo struct {
 func NewRedisInfo(client redis.UniversalClient, prefix string) *RedisInfo {
 	return &RedisInfo{client: client, prefix: prefix}
 }
-func (t *RedisInfo) Info(ctx *bwebframework.BeanContext) error {
+func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
-	w := ctx.Writer
-	r := ctx.Request
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return nil
+		flusher.Flush()
+		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -56,7 +54,7 @@ func (t *RedisInfo) Info(ctx *bwebframework.BeanContext) error {
 	for {
 		select {
 		case <-nctx.Done():
-			return nctx.Err()
+			return
 		case <-ticker.C:
 			d, err := client.Info(nctx)
 
@@ -139,7 +137,7 @@ func (t *RedisInfo) Info(ctx *bwebframework.BeanContext) error {
 	}
 }
 
-func (t *RedisInfo) Monitor(ctx *bwebframework.BeanContext) error {
+func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
@@ -147,14 +145,11 @@ func (t *RedisInfo) Monitor(ctx *bwebframework.BeanContext) error {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 
-	w := ctx.Writer
-	r := ctx.Request
-
 	flusher, ok := w.(http.Flusher)
 	defer flusher.Flush()
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
-		return nil
+		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -166,14 +161,15 @@ func (t *RedisInfo) Monitor(ctx *bwebframework.BeanContext) error {
 	for {
 		select {
 		case <-r.Context().Done():
-			return nil
+			return
 		case <-ticker.C:
 
 			str, err := client.Monitor(r.Context())
 			if err != nil {
 				res.Code = response.InternalServerErrorCode
 				res.Msg = err.Error()
-				return res.EventMsg(w, "redis_monitor")
+				_ = res.EventMsg(w, "redis_monitor")
+				return
 			}
 			str = strings.ReplaceAll(str, "MONITOR:", "")
 			if strings.Contains(str, "OK") {

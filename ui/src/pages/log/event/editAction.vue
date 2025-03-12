@@ -22,8 +22,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="button" class="btn btn-primary" @click="action">Edit</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{$t("close")}}</button>
+          <button type="button" class="btn btn-primary" @click="action">{{$t("edit")}}</button>
         </div>
       </div>
     </div>

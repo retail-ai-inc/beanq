@@ -10,6 +10,12 @@
             <input class="form-control" type="text" placeholder="Username" name="userName" autocomplete="off" aria-label="default input example" v-model="user.username">
             <input class="form-control" type="password" placeholder="Password" name="password" autocomplete="off" aria-label="default input example" style="margin-top: 0.9375rem" v-model="user.password">
           </div>
+          <div class="form-check d-flex" style="margin:1rem 0">
+            <input class="form-check-input" type="checkbox" v-model="expiredTimeBool" id="flexCheckDefault">
+            <label class="form-check-label" for="flexCheckDefault" style="margin-left: .4rem">
+              Free login within 30 days
+            </label>
+          </div>
 
           <button type="button" class="btn btn-primary" style="margin-top: 0.625rem" @click="onSubmit">Login</button>
           <div id="errorMsg" style="color: red;margin-top:0.625rem;text-align: left">{{msg}}</div>
@@ -29,17 +35,19 @@
   </div>
 </template>
 <script setup>
-import { reactive,toRefs,onMounted,onUnmounted } from "vue";
+import { ref,reactive,toRefs,onMounted,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
 
 const [formData,useRe] = [
     reactive({
       user:{"username":"","password":""},
-      msg:"",
       title:config.title,
     }),
   useRouter()
-]
+];
+const expiredTimeBool = ref(false);
+
+const msg = ref("");
 
 function handleKeyDown(event){
   if(event.key === "Enter"){
@@ -52,8 +60,8 @@ onMounted(async ()=>{
   let token = useRe.currentRoute.value.query;
   if(JSON.stringify(token) !== "{}"){
     if (token.token != ""){
-      await sessionStorage.setItem("token",token.token);
-      useRe.push("/admin/home");
+      await Storage.SetItem("token",token.token);
+      //useRe.push("/admin/home");
       return;
     }
   }
@@ -68,38 +76,32 @@ onUnmounted(()=>{
 async function onSubmit(event){
 
   if (formData.user.username == "" || formData.user.password == ""){
-    formData.msg = "field can't empty"
+    msg.value = "Username or Password are required";
     return;
   }
+
   //,{headers:{"Content-Type":"multipart/form-data"}}
   try{
-    let res = await loginApi.Login(formData.user.username,formData.user.password);
-    const {code:ucode,msg:umsg,data:udata} = res;
+    let res = await loginApi.Login(formData.user.username,formData.user.password,expiredTimeBool.value);
+    Storage.SetItem("token",res.token);
+    Storage.SetItem("roles",res.roles);
+    Storage.SetItem("nodeId",res.nodeId);
 
-    if(ucode === "0000"){
-      sessionStorage.setItem("token",udata.token);
-      sessionStorage.setItem("roles",udata.roles);
-      sessionStorage.setItem("nodeId",udata.nodeId);
-      let nodesRes = await dashboardApi.Nodes;
-      const {code:nCode,msg:nMsg,data:nData} = nodesRes;
-      if(nCode === "0000"){
-        sessionStorage.setItem("nodes",nData);
-      }
-    }
+    let nodesRes = await dashboardApi.Nodes();
+    Storage.SetItem("nodes",nodesRes);
 
     useRe.push("/admin/home");
   }catch(err){
-    if (err.response.status === 401){
-      data.msg = err.response.data.msg;
-    }
+    msg.value = err.response.data.msg;
   }
 }
+
 
 function googleLogin(){
   window.location.href="/googleLogin"
 }
 
-const {user,msg,title} = toRefs(formData);
+const {user,title} = toRefs(formData);
 </script>
 <style scoped>
 .left-col{

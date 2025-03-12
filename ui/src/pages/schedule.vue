@@ -41,7 +41,7 @@
 
       <Btoast :id="id" ref="toastRef">
       </Btoast>
-
+      <LoginModal :id="loginId" ref="loginModal"/>
     </div>
 </template>
   
@@ -52,6 +52,8 @@ import { ref,onMounted } from "vue";
 import Pagination from "./components/pagination.vue";
 import DeleteIcon from "./components/icons/delete_icon.vue";
 import Btoast from "./components/btoast.vue";
+import Log from "./log.vue";
+import LoginModal from "./components/loginModal.vue";
 
 const [
   page,
@@ -60,33 +62,30 @@ const [
   id,
   toastRef
 ] = [ref(1),ref(1),ref([]),ref("liveToast"),ref(null)];
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 function deleteModal(item){}
 
-async function changePage(page,cursor){
-  try {
-    let scheduleData = await scheduleApi.GetSchedule(page,10);
-    const {code,data,msg} = scheduleData;
-    if(code !== "0000"){
+const changePage = ((page,cursor)=>{
+  getSchedule(page);
+})
+
+const getSchedule = (async (pageCurr)=>{
+  try{
+    let data = await scheduleApi.GetSchedule(pageCurr,10);
+    schedules.value = data;
+    total.value = Math.ceil(data.length / 10);
+  }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
       return
     }
-    schedules.value = data;
-    total.value = Math.ceil(data.total / 10);
-    page.value = page;
-  }catch (e) {
     toastRef.value.show(e);
   }
+})
 
-}
-
-onMounted(async ()=>{
-  try{
-    let scheduleData = await scheduleApi.GetSchedule(page.value,10);
-    schedules.value = scheduleData.data;
-    total.value = Math.ceil(scheduleData.data.total / 10);
-  }catch (e) {
-    toastRef.value.show(e);
-  }
+onMounted(()=>{
+  getSchedule(page.value);
 })
 
 function setScheduleId(id){

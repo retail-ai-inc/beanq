@@ -32,46 +32,63 @@
         </tr>
         </tbody>
       </table>
-
+      <LoginModal :id="loginId" ref="loginModal"/>
     </div>
 
 </template>
 <script setup>
 
-import {reactive,toRefs,onMounted,onUnmounted} from "vue";
+import {ref,reactive,toRefs,onMounted,onUnmounted} from "vue";
 import { useRoute,useRouter } from 'vueRouter';
 import cfg  from "config";
+import LoginModal from "../components/loginModal.vue";
 
 let data = reactive({
-  queueDetail:[]
+  queueDetail:[],
+  sseEvent:null,
 });
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 const uRoute = useRoute();
 let id = uRoute.params.id;
 
-let sseUrl = `${cfg.sseUrl}queue/detail?id=${id}&token=${sessionStorage.getItem("token")}`;
-const sse = new EventSource(sseUrl);
+function initEventSource(){
 
-onMounted( async ()=>{
-
-  sse.onopen = ()=>{
-    console.log("success")
+  let apiUrl = `${cfg.sseUrl}queue/detail?id=${id}&token=${Storage.GetItem("token")}`;
+  if (data.sseEvent){
+    data.sseEvent.close();
   }
-  sse.addEventListener("queue_detail",function (res) {
-    let body = JSON.parse(res.data);
-    if (body.code !== "0000"){
+  data.sseEvent = sseApi.Init(apiUrl);
+  data.sseEvent.onopen = () =>{
+    console.log("handshake success");
+  }
+  data.sseEvent.onerror = (err)=>{
+    console.log(err.error);
+    data.sseEvent.close();
+    setTimeout(initEventSource,3000);
+  }
+  data.sseEvent.addEventListener("queue_detail", async function(res){
+    let body =  JSON.parse(res.data);
+
+    if (body.code === "1004"){
+      loginModal.value.error(new Error(body.msg));
+      data.sseEvent.close();
       return
     }
-    data.queueDetail = body.data;
+
+    data.eventLogs = body.data.data;
+    data.page =  body.data.cursor;
+    data.total = body.data.total;
   })
-  sse.onerror = (err)=>{
-    useRe.push("/login");
-    console.log(err)
-  }
+}
+
+
+onMounted( async ()=>{
+  initEventSource();
 })
 
 onUnmounted(()=>{
-  sse.close();
+  data.sseEvent.close();
 })
 const {queueDetail} = toRefs(data);
 </script>

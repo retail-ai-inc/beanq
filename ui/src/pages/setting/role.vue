@@ -13,7 +13,7 @@
           <button type="submit" class="btn btn-primary" @click="SearchByAccount">Search</button>
         </div>
         <div class="col-auto border-left" style="padding-left: .85rem">
-          <button type="button" class="btn btn-primary" @click="addRoleModal">{{addbtn}}</button>
+          <button type="button" class="btn btn-primary" @click="addRoleModal">{{$t('add')}}</button>
         </div>
     </div>
 
@@ -80,9 +80,9 @@
             </div>
           </div>
           <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{closeBtn}}</button>
-            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{addbtn}}</button>
-            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{editbtn}}</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{$t('close')}}</button>
+            <button type="button" class="btn btn-primary" @click="addRole" v-if="accountReadOnly == false">{{$t('add')}}</button>
+            <button type="button" class="btn btn-primary" @click="editRole" v-else>{{$t('edit')}}</button>
             <div class="invalid-feedback">
             </div>
           </div>
@@ -91,46 +91,29 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" @action="deleteRole">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteRole">
       <template #title="{title}">
-        {{noticeTitle}}
+
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
     </Btoast>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
 <script setup>
-import { ref,inject,onMounted,watch,computed } from "vue";
+import { ref,onMounted,watch,computed } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import Tree from "../components/tree.vue";
+import LoginModal from "../components/loginModal.vue";
 
-const l = inject("i18n");
+
 const nav = computed(()=>{
   return Nav;
-})
-const otherBtns = ref(OtherBtn);
-
-const [addbtn,searchbtn,editbtn,delbtn,closeBtn,noticeTitle] = [
-  ref(roleApi.GetLang("Setting.Role.Add",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.Role.Add",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.Role.Edit",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Setting.Role.Delete",nav.value)?.[l.value]),
-  ref(roleApi.GetLang("Close",otherBtns.value)?.[l.value]),
-    ref(roleApi.GetLang("SureDelete",otherBtns.value)?.[l.value])
-];
-
-watch(()=>[l.value],([n,o])=>{
-  addbtn.value = roleApi.GetLang("Setting.Role.Add",nav.value)?.[n];
-  searchbtn.value = roleApi.GetLang("Setting.Role.Search",nav.value)?.[n];
-  editbtn.value = roleApi.GetLang("Setting.Role.Edit",nav.value)?.[n];
-  delbtn.value = roleApi.GetLang("Setting.Role.Delete",nav.value)?.[n];
-  closeBtn.value = roleApi.GetLang("Close",otherBtns.value)?.[n];
-  noticeTitle.value = roleApi.GetLang("SureDelete",otherBtns.value)?.[n];
 })
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
@@ -140,16 +123,24 @@ const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 const [nameInput,roleId] = [ref(""),ref("")];
 const roleForm = ref({name:"",roles:[]});
 const nodes = ref(Nav);
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 
 async function roleList(){
-  let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
-  const {code,msg,data} = res;
-  if(code === "0000"){
-    users.value = data.data;
-    cursor.value = data.cursor;
-    total.value = data.total ;
+  try {
+    let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
+
+    users.value = res.data;
+    cursor.value = res.cursor;
+    total.value = res.total ;
+  }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
+    toastRef.value.show(e);
   }
+
 }
 
 onMounted( ()=>{
@@ -237,7 +228,7 @@ function SearchByAccount(){
 function changePage(page,cursor){
   page.value = page;
   cursor.value = cursor;
-  sessionStorage.setItem("page",page);
+  Storage.SetItem("page",page);
 
   roleList();
 }
@@ -262,19 +253,20 @@ function addRoleModal(){
 }
 
 async function addRole(e){
-  sessionStorage.setItem("roleId",roleApi.GetId("Setting.Role.Add"));
+  Storage.SetItem("roleId",roleApi.GetId("Setting.Role.Add"));
+  let next = e.currentTarget.nextElementSibling;
   try {
-    let next = e.currentTarget.nextElementSibling;
     let res = await roleApi.Add(roleForm.value);
-    if(res.code !== "0000"){
-      next.style.display = "block";
-      next.innerHTML = res.msg;
-      return
-    }
     next.style.display = "none";
     addRoleDetail.value.hide();
     await roleList();
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
+    next.style.display = "block";
+    next.innerHTML = e;
     toastRef.value.show(e.message);
   }
 
@@ -284,10 +276,8 @@ async function editRole(){
 
   let res = await roleApi.Edit(roleId.value,roleForm.value);
   addRoleDetail.value.hide();
-  toastRef.value.show(res.msg);
+  toastRef.value.show("success");
   await roleList();
-
-  return
 }
 
 function deleteUserModal(item){
@@ -304,11 +294,13 @@ async function deleteRole(){
   delModal.value.hide();
   try {
     let res = await roleApi.Delete(roleId.value);
-    toastRef.value.show(res.msg);
-    if(res.code === "0000"){
-      await roleList();
-    }
+    toastRef.value.show("success");
+    await roleList()
   }catch (e) {
+    if(e.status === 401){
+      loginModal.value.error(new Error(e));
+      return
+    }
     toastRef.value.show(e.message);
   }
 }

@@ -1,8 +1,8 @@
 const sseApi = {
     Init(url){
 
-        let token = sessionStorage.getItem("token");
-        let nodeId = sessionStorage.getItem("nodeId");
+        let token = Storage.GetItem("token");
+        let nodeId = Storage.GetItem("nodeId");
 
         let urlEs ;
         if(url.includes("?")){

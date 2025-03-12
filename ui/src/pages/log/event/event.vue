@@ -2,7 +2,6 @@
   <div class="event">
 
     <div class="container-fluid">
-
       <!--search-->
       <Search :form="form" @search="search"/>
       <!--search end-->
@@ -28,24 +27,24 @@
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
                   <td class="text-right">
-                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{item._id}}</router-link>
+                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{maskString(item._id)}}</router-link>
                   </td>
                   <td class="">
-                    {{item.id}}
+                    <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
-                  <td>{{item.topic}}</td>
+                  <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
                   <td>{{item.moodType}}</td>
                   <td class="text-center">
                     <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
                     <span v-else-if="item.status == 'failed'" class="text-danger">{{item.status}}</span>
                     <span v-else-if="item.status == 'published'" class="text-warning">{{item.status}}</span>
                   </td>
-                  <td>{{item.addTime}}</td>
                   <td>
-                    <span class="d-block text-truncate" style="max-width: 30rem;">
-                      <pre><code>{{item.payload}}</code></pre>
-                    </span>
+                    <TimeToolTips :past-time="item.addTime" />
+                  </td>
+                  <td>
+                    <More :payload="item.payload" />
                   </td>
                   <td class="text-center text-nowrap">
                     <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
@@ -64,14 +63,14 @@
       <EditAction :label="infoDetailLabel" :id="showInfoDetail" :data="detail" @action="editInfo"></EditAction>
       <!--edit modal end-->
       <!--retry modal begin-->
-      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="retryWarningHtml" :info="retryInfoHtml" @action="retryInfo">
+      <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
         <template #title="{title}">
 <!--          {{l.retryModal.title}}-->
         </template>
       </Action>
       <!--retry modal end-->
       <!--delete modal begin-->
-      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" @action="deleteInfo">
+      <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteInfo">
         <template #title="{title}">
 <!--          {{l.deleteModal.title}}-->
         </template>
@@ -79,10 +78,12 @@
       <!--delete modal end-->
     </div>
     <Btoast :id="eventBtoastId" ref="eventRef"/>
+    <LoginModal :id="loginId" ref="loginModal"/>
+
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,onMounted,toRefs,onUnmounted } from "vue";
+import { ref,reactive,onMounted,toRefs,onUnmounted } from "vue";
 import { useRouter,useRoute } from 'vueRouter';
 import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
@@ -92,9 +93,14 @@ import Search from "./search.vue";
 import EditAction from "./editAction.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
+import LoginModal from "../../components/loginModal.vue";
+import More from "../../components/more.vue";
+import TimeToolTips from "../../components/timeToolTips.vue";
+import Copy from "../../components/copy.vue";
 
-const l = ref(inject("i18n"));
+
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
 let data = reactive({
   eventLogs:[],
@@ -105,7 +111,8 @@ let data = reactive({
   form:{
     id:"",
     moodType:"",
-    status:""
+    status:"",
+    topicName:""
   },
   detail:{},
   isFormat:false,
@@ -125,11 +132,10 @@ let data = reactive({
 
 const [uRouter,route] = [useRouter(),useRoute()];
 const [dataId] = [ref("")];
-const [retryWarningHtml,retryInfoHtml] = [
-    ref("Warning: Item retry cannot be undone!<br/> Please proceed with caution!"),
-    ref("This operation will permanently retry the data of log.<br>\n" +
-      "To prevent accidental actions, please confirm by entering the following:<br/>")
-]
+
+const maskString = ((id)=>{
+  return Base.MaskString(id)
+})
 
 function deleteModal(item){
   data.deleteId = "";
@@ -151,7 +157,7 @@ async function deleteInfo(){
   try {
     let res = await eventApi.Delete(data.deleteId);
     data.deleteModal.hide();
-    eventRef.value.show(res.msg);
+    eventRef.value.show("success");
 
   }catch (e) {
     eventRef.value.show(e.error);
@@ -177,7 +183,7 @@ async function retryInfo(){
   }
   try{
     let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
-    eventRef.value.show(res.msg);
+    eventRef.value.show("success");
   }catch (e) {
     eventRef.value.show(e.error);
   }
@@ -216,7 +222,7 @@ async function editInfo(item){
   try{
     let res = await eventApi.Edit(item._id,item.payload);
     //if success
-    eventRef.value.show(res.msg);
+    eventRef.value.show("success");
     data.infoDetailModal.hide();
 
   }catch (e) {
@@ -228,17 +234,44 @@ async function editInfo(item){
 // search feature
 async function search(){
 
-  return uRouter.push(`/admin/log/event?id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`).then(()=>{
+  return uRouter.push({
+    path:"/admin/log/event",
+    query:{
+      id:data.form.id,
+      status:data.form.status,
+      moodType:data.form.moodType,
+      topicName:data.form.topicName
+    }
+  }).then(()=>{
     window.location.reload();
   });
 }
+
+const filter = ((topic)=>{
+  data.form.topicName = topic;
+  search();
+})
+
+const urlParams = (()=>{
+  const query = {
+    page: data.page,
+    pageSize: data.pageSize,
+    id: data.form.id,
+    status: data.form.status,
+    moodType: data.form.moodType,
+    topicName: data.form.topicName
+  }
+  const searchParams = new URLSearchParams(query);
+  let apiUrl = `event_log/list?${searchParams.toString()}`;
+  return apiUrl;
+})
 
 // paging
 async function changePage(page,cursor){
   data.page = page;
   data.cursor = cursor;
-  sessionStorage.setItem("page",page)
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
+  Storage.SetItem("page",page)
+  let apiUrl = urlParams();
   initEventSource(apiUrl);
 }
 
@@ -248,7 +281,7 @@ function detailEvent(item){
 
 function initEventSource(){
 
-  let apiUrl = `event_log/list?page=${data.page}&pageSize=${data.pageSize}&id=${data.form.id}&status=${data.form.status}&moodType=${data.form.moodType}`;
+  let apiUrl = urlParams();
   if (data.sseEvent){
     data.sseEvent.close();
   }
@@ -261,8 +294,15 @@ function initEventSource(){
     data.sseEvent.close();
     setTimeout(initEventSource,3000);
   }
-  data.sseEvent.addEventListener("event_log", function(res){
+  data.sseEvent.addEventListener("event_log", async function(res){
     let body =  JSON.parse(res.data);
+
+    if (body.code === "1004"){
+      loginModal.value.error(new Error(body.msg));
+      data.sseEvent.close();
+      return
+    }
+
     data.eventLogs = body.data.data;
     data.page =  body.data.cursor;
     data.total = body.data.total;
@@ -271,15 +311,15 @@ function initEventSource(){
 
 onMounted(async()=>{
 
-  let [id,status,moodType] = [route.query.id,route.query.status,route.query.moodType];
+  let [id,status,moodType,topicName] = [route.query.id,route.query.status,route.query.moodType,route.query.topicName];
   data.form = {
     id:id??"",
     status:status??"",
-    moodType:moodType??""
+    moodType:moodType??"",
+    topicName:topicName??""
   };
-  data.page = sessionStorage.getItem("page")??1;
+  data.page = Storage.GetItem("page")??1;
   initEventSource();
-
 })
 
 onUnmounted(()=>{
@@ -296,5 +336,10 @@ const {eventLogs,form,page,total,cursor,detail,retryLabel,showRetryModal,deleteL
 }
 .table th, .table td {
   vertical-align: middle;
+}
+.custom-popover{
+  .popover-header{
+    background-color: #fff3cd;
+  }
 }
 </style>

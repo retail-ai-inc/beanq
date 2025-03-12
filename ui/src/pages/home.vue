@@ -1,6 +1,15 @@
 <template>
 
   <div class="home" ref="homeEle">
+    <div class="row justify-content-end">
+      <div class="col-1">
+        <select class="form-select form-select-sm mb-3" aria-label="Large select example" v-model="execTime">
+          <option selected value="10">10 seconds</option>
+          <option value="25">25 seconds</option>
+          <option value="300">5 minutes</option>
+        </select>
+      </div>
+    </div>
     <div class="chart-container">
       <div class="chart-h">
         <v-chart class="chart" ref="line1"  :option="queuedMessagesOption"/>
@@ -17,8 +26,8 @@
                  :db_size="db_size"/>
     </div>
 
-    <div v-for="[index, item] in Object.entries(pods)" :key="index" style="margin-bottom: 2rem;">
-      <div style="font-weight: bold">{{index}}</div>
+    <div v-for="(item, index) in pods" :key="index" style="margin-bottom: 2rem;">
+      <div style="font-weight: bold">{{item.hostName}}</div>
       <table class="table">
         <thead>
         <tr>
@@ -40,15 +49,19 @@
         </tbody>
       </table>
     </div>
+    <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
 
 <script setup>
-import {ref, onMounted,onUnmounted} from "vue";
+import {ref, onMounted,onUnmounted,watch} from "vue";
 import { useRouter } from 'vueRouter';
 import Dashboard from "./components/dashboard.vue";
+import LoginModal from "./components/loginModal.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
+const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const [execTime,sseUrl] = [ref(10),ref("")];
 
 let [
     queue_total,
@@ -71,36 +84,46 @@ function resize(){
   })
 }
 
+watch(()=>execTime.value,(n,o)=>{
+  execTime.value = n;
+  sseConnect();
+})
+
 function sseConnect(){
   if(sse.value){
     sse.value.close();
   }
-  sse.value = sseApi.Init("dashboard");
+  sseUrl.value = `dashboard?time=${execTime.value}`;
+  sse.value = sseApi.Init(sseUrl.value);
   sse.value.onopen = () => {
-    console.log("success")
+    console.log("connect success")
   }
   sse.value.addEventListener("dashboard",function (res) {
-    let result = JSON.parse(res.data);
-    if (result.code !== "0000"){
-      return
+    const {code,msg,data} = JSON.parse(res.data);
+    if (code === "1004"){
+        loginModal.value.error(new Error(msg));
+        sse.value.close();
+        return
     }
 
-    queue_total.value = result.data.queue_total;
-    db_size.value = result.data.db_size;
-    num_cpu.value = result.data.num_cpu;
-    fail_count.value = result.data.fail_count;
-    success_count.value = result.data.success_count;
+    queue_total.value = data.queue_total;
+    db_size.value = data.db_size;
+    num_cpu.value = data.num_cpu;
+    fail_count.value = data.fail_count;
+    success_count.value = data.success_count;
 
-    for(let key in result.data.pods){
-      result.data.pods[key] = JSON.parse(result.data.pods[key]);
+    let npods = [];
+    for(let key in data?.pods){
+      if(key % 2 === 0){
+        npods.push(JSON.parse(data.pods[key]));
+      }
     }
-    pods.value = result.data.pods;
+    pods.value = npods;
 
-    queuedMessagesOption.value = dashboardApi.QueueLine(result.data.queues);
-    messageRatesOption.value = dashboardApi.MessageRateLine(result.data.queues);
+    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues);
+    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues);
   })
   sse.value.onerror = (err)=>{
-    console.log(err)
     sse.value.close();
     setTimeout(sseConnect,3000);
   }

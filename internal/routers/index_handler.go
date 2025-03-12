@@ -1,6 +1,8 @@
 package routers
 
-import "github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
+import (
+	"net/http"
+)
 
 type Index struct {
 }
@@ -9,6 +11,5 @@ func NewIndex() *Index {
 	return &Index{}
 }
 
-func (t *Index) Home(ctx *bwebframework.BeanContext) error {
-	return nil
+func (t *Index) Home(w http.ResponseWriter, r *http.Request) {
 }

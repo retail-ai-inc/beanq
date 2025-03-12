@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bwebframework"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/spf13/cast"
 	"net/http"
@@ -18,12 +17,9 @@ func NewRole(mongo *bmongo.BMongo) *Role {
 	return &Role{mgo: mongo}
 }
 
-func (t *Role) List(ctx *bwebframework.BeanContext) error {
+func (t *Role) List(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
-
-	r := ctx.Request
-	w := ctx.Writer
 
 	page := cast.ToInt64(r.URL.Query().Get("page"))
 	pageSize := cast.ToInt64(r.URL.Query().Get("pageSize"))
@@ -32,18 +28,16 @@ func (t *Role) List(ctx *bwebframework.BeanContext) error {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *Role) Add(ctx *bwebframework.BeanContext) error {
+func (t *Role) Add(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
-
-	r := ctx.Request
-	w := ctx.Writer
 
 	name := r.PostFormValue("name")
 	roles := r.PostFormValue("roles")
@@ -51,13 +45,15 @@ func (t *Role) Add(ctx *bwebframework.BeanContext) error {
 	if name == "" {
 		res.Code = berror.MissParameterCode
 		res.Msg = "missing name"
-		return res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 	role := make([]int, 0)
 	if err := json.Unmarshal([]byte(roles), &role); err != nil {
 		res.Code = berror.TypeErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 	if err := t.mgo.AddRole(r.Context(), &bmongo.Role{
 		Name:  name,
@@ -65,58 +61,60 @@ func (t *Role) Add(ctx *bwebframework.BeanContext) error {
 	}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *Role) Delete(ctx *bwebframework.BeanContext) error {
+func (t *Role) Delete(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	id := ctx.Request.PostFormValue("id")
+	id := r.PostFormValue("id")
 
 	if id == "" {
 		res.Code = berror.MissParameterMsg
 		res.Msg = "missing account field"
-		return res.Json(ctx.Writer, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
 
-	if _, err := t.mgo.DeleteRole(ctx.Request.Context(), id); err != nil {
+	if _, err := t.mgo.DeleteRole(r.Context(), id); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(ctx.Writer, http.StatusOK)
+		_ = res.Json(w, http.StatusOK)
+		return
 	}
-
-	return res.Json(ctx.Writer, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
 
-func (t *Role) Edit(ctx *bwebframework.BeanContext) error {
+func (t *Role) Edit(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
-
-	r := ctx.Request
-	w := ctx.Writer
 
 	id := r.FormValue("_id")
 	if id == "" {
 		res.Code = berror.MissParameterCode
 		res.Msg = "ID can't be empty"
-		return res.Json(w, http.StatusBadRequest)
+		_ = res.Json(w, http.StatusBadRequest)
+		return
 	}
 	roles := r.PostFormValue("roles")
 	role := make([]int, 0)
 	if err := json.Unmarshal([]byte(roles), &role); err != nil {
 		res.Code = berror.TypeErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	if _, err := t.mgo.EditRole(r.Context(), id, map[string]any{"roles": role}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		return res.Json(w, http.StatusInternalServerError)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
-	return res.Json(w, http.StatusOK)
+	_ = res.Json(w, http.StatusOK)
 }
