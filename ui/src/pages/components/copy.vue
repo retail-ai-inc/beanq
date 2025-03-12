@@ -1,6 +1,6 @@
 <template>
   <div>
-    <div @click="copyText(text)" style="cursor: pointer">
+    <div @click="copyText(text)" style="cursor: copy">
       {{isMask ? maskString(text): text}}
     </div>
     <CopyToast :id="copyToast" ref="copyRef"/>

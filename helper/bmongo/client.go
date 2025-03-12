@@ -3,17 +3,19 @@ package bmongo
 import (
 	"context"
 	"errors"
-	"github.com/spf13/cast"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"math"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
+	"github.com/spf13/cast"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
@@ -187,6 +189,21 @@ func (t *BMongo) DetailEventLog(ctx context.Context, id string) (bson.M, error) 
 	return data, nil
 }
 
+func (t *BMongo) EventRetryCheck(ctx context.Context, id string) (bool, error) {
+	filter := bson.M{}
+	if id != "" {
+		filter["id"] = id
+	}
+	filter["status"] = bstatus.StatusSuccess
+	if err := t.database.Collection(t.eventCollection).FindOne(ctx, filter).Err(); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return true, nil
+		}
+		return false, err
+	}
+	return false, nil
+}
+
 func (t *BMongo) Delete(ctx context.Context, id string) (int64, error) {
 	filter := bson.M{}
 	if id != "" {
@@ -196,6 +213,7 @@ func (t *BMongo) Delete(ctx context.Context, id string) (int64, error) {
 		}
 		filter["_id"] = nid
 	}
+
 	result, err := t.database.Collection(t.eventCollection).DeleteOne(ctx, filter)
 	if err != nil {
 		return 0, err

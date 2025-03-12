@@ -2,6 +2,7 @@ package public
 
 import (
 	"context"
+
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 )
 
