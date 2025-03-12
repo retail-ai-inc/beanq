@@ -14,7 +14,7 @@ test:
 		echo "$(SUITE_TEST_FILES) files found"; \
 	fi
 	@docker compose exec -T example bash -c "jq '.redis.host = \"redis-beanq\" | .history.mongo.host = \"mongo-beanq\"' ./env.sample.json > env.testing.json"
-	@docker compose exec -T example bash -c 'go test -race -v ./... && ginkgo -p -v --race'
+	@docker compose exec -T example bash -c 'go test -tags=ci -race -v ./... && ginkgo -p -v --race'
 
 .PHONY: clean-test
 clean-test:

@@ -1,3 +1,7 @@
+//go:build ci
+// +build ci
+
+// WARN: Please use `go test -tags ci ./...` instead of running `go test ./...` if you want to test this file.
 package beanq
 
 import (
