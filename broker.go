@@ -103,7 +103,7 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
+func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 }
 
 func (t *Broker) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {

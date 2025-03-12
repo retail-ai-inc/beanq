@@ -156,7 +156,7 @@ func (t *Base) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
+func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 
 	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
@@ -216,7 +216,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 	}
 }
 
-func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallBack) error {
+func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallbackWithRetry) error {
 	id := stream.Id
 	stm := stream.Stream
 	channel := stream.Channel

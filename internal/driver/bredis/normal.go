@@ -3,14 +3,15 @@ package bredis
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal"
+	public "github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
-	"sync"
-	"time"
 )
 
 type Normal struct {
@@ -19,7 +20,6 @@ type Normal struct {
 }
 
 func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration) *Normal {
-
 	return &Normal{
 		maxLen: maxLen,
 		base: Base{
@@ -38,7 +38,6 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 }
 
 func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
-
 	channel := ""
 	topic := ""
 
@@ -53,7 +52,6 @@ func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 	args := NewZAddArgs(stream, "", "*", t.maxLen, 0, data)
 
 	err := t.base.client.XAdd(ctx, args).Err()
-
 	if err != nil {
 		return fmt.Errorf("[RedisBroker.enqueue] normal xadd error:%w", err)
 	}
@@ -61,11 +59,9 @@ func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Normal) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
+func (t *Normal) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	go func() {
 		t.base.DeadLetter(ctx, channel, topic)
 	}()
 	t.base.Dequeue(ctx, channel, topic, do)
-
 }
