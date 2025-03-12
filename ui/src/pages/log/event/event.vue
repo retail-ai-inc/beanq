@@ -185,7 +185,7 @@ async function retryInfo(){
     let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
     eventRef.value.show("success");
   }catch (e) {
-    eventRef.value.show(e.error);
+    eventRef.value.show(e.response.data.msg);
   }
 
 }

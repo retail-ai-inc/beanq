@@ -153,7 +153,7 @@ async function retryInfo(){
       loginModal.value.error(err);
       return;
     }
-    toastRef.value.show(err.error);
+    toastRef.value.show(err?.response?.data?.msg);
   }
 }
 

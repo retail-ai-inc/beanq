@@ -193,10 +193,8 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	}()
 
-	httpport := c.broker.config.UI.Port
-	if strings.Contains(httpport, ":") {
-		httpport = strings.TrimLeft(httpport, ":")
-	}
+	// compatible with unmodified env.json
+	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
 	httpport = fmt.Sprintf(":%s", httpport)
 
 	if err := os.Setenv("GODEBUG", "httpmuxgo122=1"); err != nil {
@@ -209,11 +207,9 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	var mog *bmongo.BMongo
 	if history.On {
 
-		mongoPort := history.Mongo.Port
-		if strings.Contains(mongoPort, ":") {
-			mongoPort = strings.TrimLeft(mongoPort, ":")
-		}
-		mongoPort = fmt.Sprintf(":%s", history.Mongo.Port)
+		// compatible with unmodified env.json
+		mongoPort := strings.TrimLeft(history.Mongo.Port, ":")
+		mongoPort = fmt.Sprintf(":%s", mongoPort)
 
 		mog = bmongo.NewMongo(
 			history.Mongo.Host,
