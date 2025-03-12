@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -19,6 +20,8 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/spf13/viper"
 )
+
+var failedTime int32
 
 var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 	var config BeanqConfig
@@ -102,7 +105,7 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 						muxClient.NewMutex("test", WithExpiry(time.Second*10)),
 					),
 				)
-				wf.NewTask("test").OnRollback(func(task Task) error {
+				wf.NewTask("falied_task").OnRollback(func(task Task) error {
 					fmt.Println("rollback")
 					return nil
 				}).OnExecute(func(task Task) error {
@@ -115,6 +118,36 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 					return nil
 				}).Run()
 				Expect(err).NotTo(BeNil())
+				return err
+			}))
+
+			_, err = client.BQ().WithContext(ctx).SubscribeSequential(_channel+"_failed_1_time", _topic+"_failed_1_time", WorkflowHandler(func(ctx context.Context, wf *Workflow) error {
+				wf.Init(
+					WfOptionRecordErrorHandler(func(err error) {
+						if err == nil {
+							return
+						}
+						fmt.Println("error", err)
+					}),
+					WfOptionMux(
+						muxClient.NewMutex("test", WithExpiry(time.Second*10)),
+					),
+				)
+
+				wf.NewTask("faield_1_time_task").OnRollback(func(task Task) error {
+					fmt.Println("rollback")
+					return nil
+				}).OnExecute(func(task Task) error {
+					if atomic.CompareAndSwapInt32(&failedTime, 0, 1) {
+						return errors.New("test failed")
+					}
+					return nil
+				})
+
+				err := wf.OnRollbackResult(func(taskID string, err error) error {
+					fmt.Println("rollback", taskID, err)
+					return nil
+				}).Run()
 				return err
 			}))
 			Expect(err).To(BeNil())
@@ -135,12 +168,21 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
 			}, SpecTimeout(time.Second*5))
 
-			It("send failed message", func(ctx SpecContext) {
+			It("send message, failed", func(ctx SpecContext) {
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed", _topic+"_failed", []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusFailed))
+				Expect(resp.Retry).To(Equal(config.JobMaxRetries))
 			}, SpecTimeout(time.Second*5))
+
+			It("send message, failed 1 time", func(ctx SpecContext) {
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed_1_time", _topic+"_failed_1_time", []byte("normal test message")).WaitingAck()
+				Expect(err).To(BeNil())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
+				Expect(resp.Retry).To(Equal(1))
+			})
 		})
 
 		Context("duplicate idempotency key", func() {
@@ -176,12 +218,20 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 		})
 
 		Context("normal", func() {
-			It("send and receive message", func(ctx SpecContext) {
+			It("send message", func(ctx SpecContext) {
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
 			}, SpecTimeout(time.Second*5))
+
+			It("send message, failed 1 time", func(ctx SpecContext) {
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed_1_time", _topic+"_failed_1_time", []byte("normal test message")).WaitingAck()
+				Expect(err).To(BeNil())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
+				Expect(resp.Retry).To(Equal(1))
+			})
 		})
 
 		Context("duplicate idempotency key", func() {

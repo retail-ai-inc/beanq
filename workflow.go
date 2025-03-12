@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 
 	errorstack "github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
@@ -119,7 +120,7 @@ func (w *Workflow) CurrentTask() Task {
 }
 
 func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
-	var data = struct {
+	data := struct {
 		CreatedAt time.Time          `bson:"CreatedAt"`
 		UpdatedAt time.Time          `bson:"UpdatedAt"`
 		Channel   string             `bson:"Channel"`
@@ -307,8 +308,10 @@ type WorkflowRecord struct {
 	async           bool
 }
 
-var workflowRecordOnce sync.Once
-var workflowRecord *WorkflowRecord
+var (
+	workflowRecordOnce sync.Once
+	workflowRecord     *WorkflowRecord
+)
 
 func NewWorkflowRecord() *WorkflowRecord {
 	var config struct {
@@ -332,7 +335,7 @@ func NewWorkflowRecord() *WorkflowRecord {
 		if err != nil {
 			logger.New().Info("no workflow configration, ignoring the record")
 		}
-	
+
 		workflowRecord = &WorkflowRecord{
 			on:    config.On,
 			retry: config.Retry,
