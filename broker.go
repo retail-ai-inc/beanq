@@ -26,7 +26,7 @@ type Handler struct {
 	channel         string
 	topic           string
 	moodType        btype.MoodType
-	retryConditions []func(error) bool
+	retryConditions []RetryConditionFunc
 }
 
 func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
@@ -37,7 +37,15 @@ func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
 
 		return tool.RetryInfo(ctx, func() error {
 			return h.do(ctx, data)
-		}, retry[0], h.retryConditions...)
+		}, retry[0], func(err error) bool {
+			for _, v := range h.retryConditions {
+				bl := v(data, err)
+				if !bl {
+					return bl
+				}
+			}
+			return true
+		})
 	})
 }
 

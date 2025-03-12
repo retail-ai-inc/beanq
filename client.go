@@ -70,7 +70,7 @@ type (
 		Retry            int           `json:"retry"`
 		Priority         float64       `json:"priority"`
 		TimeToRun        time.Duration `json:"timeToRun"`
-		retryConditions  []func(error) bool
+		retryConditions  []RetryConditionFunc
 	}
 
 	dynamicOption struct {
@@ -78,8 +78,10 @@ type (
 		on  bool
 	}
 
-	DynamicOption func(option *dynamicOption)
-	ClientOption  func(client *Client)
+	DynamicOption      func(option *dynamicOption)
+	ClientOption       func(client *Client)
+	// Include payload details in the method retry condition, as it may be complex.
+	RetryConditionFunc func(map[string]any, error) bool
 )
 
 var (
@@ -138,7 +140,7 @@ func WithCaptureExceptionOption(handler func(ctx context.Context, err any)) Clie
 	}
 }
 
-func WithRetryConditions(condition ...func(error) bool) ClientOption {
+func WithRetryConditions(condition ...RetryConditionFunc) ClientOption {
 	return func(client *Client) {
 		client.retryConditions = append(client.retryConditions, condition...)
 	}
@@ -220,7 +222,7 @@ func (t *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	return done
 }
 
-func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions ...func(error) bool) error {
+func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions ...RetryConditionFunc) error {
 	conditions := t.retryConditions
 	if len(retryConditions) > 0 {
 		conditions = append(conditions, retryConditions...)

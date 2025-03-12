@@ -16,6 +16,7 @@ require (
 	github.com/sendgrid/sendgrid-go v3.16.0+incompatible
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/viper v1.18.2
+	github.com/stretchr/testify v1.10.0
 	go.mongodb.org/mongo-driver v1.15.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.33.0
@@ -26,10 +27,12 @@ require (
 )
 
 require (
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 )
 

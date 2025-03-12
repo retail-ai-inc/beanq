@@ -40,8 +40,8 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			if err != nil {
 				log.Fatal(err)
 			}
-		}), WithRetryConditions(func(err error) bool {
-			switch {	
+		}), WithRetryConditions(func(data map[string]any, err error) bool {
+			switch {
 			case errors.Is(err, bstatus.ErrIdempotent):
 				return false
 			// TODO: add more retry conditions
