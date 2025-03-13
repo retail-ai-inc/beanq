@@ -81,65 +81,13 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 					return nil
 				}).OnExecute(func(task Task) error {
 					fmt.Println("execute")
-					return nil
-				})
-
-				err := wf.OnRollbackResult(func(taskID string, err error) error {
-					fmt.Println("rollback", taskID, err)
-					return nil
-				}).Run()
-				Expect(err).To(BeNil())
-				return nil
-			}))
-			Expect(err).To(BeNil())
-
-			_, err = client.BQ().WithContext(ctx).SubscribeSequential(_channel+"_failed", _topic+"_failed", WorkflowHandler(func(ctx context.Context, wf *Workflow) error {
-				wf.Init(
-					WfOptionRecordErrorHandler(func(err error) {
-						if err == nil {
-							return
-						}
-						fmt.Println("error", err)
-					}),
-					WfOptionMux(
-						muxClient.NewMutex("test", WithExpiry(time.Second*10)),
-					),
-				)
-				wf.NewTask("falied_task").OnRollback(func(task Task) error {
-					fmt.Println("rollback")
-					return nil
-				}).OnExecute(func(task Task) error {
-					fmt.Println("execute")
-					return errors.New("test failed")
-				})
-
-				err := wf.OnRollbackResult(func(taskID string, err error) error {
-					fmt.Println("rollback", taskID, err)
-					return nil
-				}).Run()
-				Expect(err).NotTo(BeNil())
-				return err
-			}))
-
-			_, err = client.BQ().WithContext(ctx).SubscribeSequential(_channel+"_failed_1_time", _topic+"_failed_1_time", WorkflowHandler(func(ctx context.Context, wf *Workflow) error {
-				wf.Init(
-					WfOptionRecordErrorHandler(func(err error) {
-						if err == nil {
-							return
-						}
-						fmt.Println("error", err)
-					}),
-					WfOptionMux(
-						muxClient.NewMutex("test", WithExpiry(time.Second*10)),
-					),
-				)
-
-				wf.NewTask("faield_1_time_task").OnRollback(func(task Task) error {
-					fmt.Println("rollback")
-					return nil
-				}).OnExecute(func(task Task) error {
-					if atomic.CompareAndSwapInt32(&failedTime, 0, 1) {
-						return errors.New("test failed")
+					switch {
+					case atomic.CompareAndSwapInt32(&failedTime, 1, 0):
+						return errors.New("test failed one time")
+					case atomic.LoadInt32(&failedTime) == -1:
+						return errors.New("test failed always")
+					case atomic.LoadInt32(&failedTime) == 0:
+						return nil
 					}
 					return nil
 				})
@@ -150,6 +98,24 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 				}).Run()
 				return err
 			}))
+			Expect(err).To(BeNil())
+
+			// Subscribe without workflow handler
+			_, err = client.BQ().WithContext(ctx).SubscribeSequential("no_workflow"+_channel, _topic, DefaultHandle{
+				DoHandle: func(ctx context.Context, message *Message) error {
+					fmt.Println("execute")
+					switch {
+					case atomic.CompareAndSwapInt32(&failedTime, 1, 0):
+						return errors.New("test failed one time")
+					case atomic.LoadInt32(&failedTime) == -1:
+						return errors.New("test failed always")
+					case atomic.LoadInt32(&failedTime) == 0:
+						return nil
+					}
+					return nil
+				},
+			})
+
 			Expect(err).To(BeNil())
 			client.Wait(ctx)
 		}()
@@ -169,7 +135,8 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			}, SpecTimeout(time.Second*5))
 
 			It("send message, failed", func(ctx SpecContext) {
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed", _topic+"_failed", []byte("normal test message")).WaitingAck()
+				atomic.StoreInt32(&failedTime, -1)
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusFailed))
@@ -177,7 +144,8 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			}, SpecTimeout(time.Second*5))
 
 			It("send message, failed 1 time", func(ctx SpecContext) {
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed_1_time", _topic+"_failed_1_time", []byte("normal test message")).WaitingAck()
+				atomic.StoreInt32(&failedTime, 1)
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
@@ -204,29 +172,29 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 	})
 	When("without workflow", func() {
 		BeforeEach(func(ctx SpecContext) {
-			muxClient = NewMuxClient(GetBrokerDriver[redis.UniversalClient]())
 			_uuid = uuid.New().String()
-
-			// Subscribe without workflow handler
-			_, err := client.BQ().WithContext(ctx).SubscribeSequential(_channel, "no_workflow_topic", DefaultHandle{
-				DoHandle: func(ctx context.Context, message *Message) error {
-					fmt.Println("msg", message)
-					return nil
-				},
-			})
-			Expect(err).To(BeNil())
 		})
 
 		Context("normal", func() {
 			It("send message", func(ctx SpecContext) {
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential("no_workflow"+_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
 			}, SpecTimeout(time.Second*5))
 
+			It("send message, failed", func(ctx SpecContext) {
+				atomic.StoreInt32(&failedTime, -1)
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
+				Expect(err).To(BeNil())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(bstatus.StatusFailed))
+				Expect(resp.Retry).To(Equal(config.JobMaxRetries))
+			}, SpecTimeout(time.Second*5))
+
 			It("send message, failed 1 time", func(ctx SpecContext) {
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel+"_failed_1_time", _topic+"_failed_1_time", []byte("normal test message")).WaitingAck()
+				atomic.StoreInt32(&failedTime, 1)
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential("no_workflow"+_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
@@ -237,14 +205,14 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 		Context("duplicate idempotency key", func() {
 			BeforeEach(func(ctx SpecContext) {
 				_uuid = "duplicate-key-test"
-				key := tool.MakeStatusKey(config.Redis.Prefix, _channel, "no_workflow_topic", _uuid)
+				key := tool.MakeStatusKey(config.Redis.Prefix, "no_workflow"+_channel, _topic, _uuid)
 				driver := GetBrokerDriver[redis.UniversalClient]()
 				err := driver.HSet(ctx, key, "id", _uuid).Err()
 				Expect(err).To(BeNil())
 			})
 
-			It("send and receive message", func(ctx SpecContext) {
-				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, "no_workflow_topic", []byte("duplicate test message")).WaitingAck()
+			It("send message", func(ctx SpecContext) {
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential("no_workflow"+_channel, _topic, []byte("duplicate test message")).WaitingAck()
 				Expect(err).Should(MatchError(bstatus.ErrIdempotent))
 				Expect(resp).To(BeNil())
 			}, SpecTimeout(time.Second*5))
