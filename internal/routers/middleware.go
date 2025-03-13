@@ -15,6 +15,10 @@ import (
 	"time"
 )
 
+func Recover() {
+	// todo
+}
+
 func HeaderRule(next func(w http.ResponseWriter, r *http.Request)) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")

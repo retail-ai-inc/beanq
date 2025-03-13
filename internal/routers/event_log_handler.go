@@ -1,6 +1,10 @@
 package routers
 
 import (
+	"net/http"
+	"sort"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
@@ -12,9 +16,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
-	"net/http"
-	"sort"
-	"time"
 )
 
 type EventLog struct {
@@ -180,6 +181,7 @@ func (t *EventLog) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 
 	}
+	// only failed messages can be retried
 	if v, ok := data["status"]; ok {
 		if cast.ToString(v) != bstatus.StatusFailed {
 			res.Msg = "Only failed messages can be retried"
@@ -201,6 +203,24 @@ func (t *EventLog) Retry(w http.ResponseWriter, r *http.Request) {
 		data["retry"] = 0
 	}
 	delete(data, "runTime")
+	uniqueId := ""
+	if v, ok := data["id"]; ok {
+		uniqueId = cast.ToString(v)
+	}
+
+	b, err := t.mogx.EventRetryCheck(nctx, uniqueId)
+	if err != nil {
+		res.Msg = err.Error()
+		res.Code = berror.InternalServerErrorCode
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if !b {
+		res.Msg = berror.PreventMultipleRetryMsg
+		res.Code = berror.PreventMultipleRetryCode
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
 
 	var bk public.IBroker
 	if moodType == string(btype.SEQUENTIAL) {

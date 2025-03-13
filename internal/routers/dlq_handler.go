@@ -1,6 +1,9 @@
 package routers
 
 import (
+	"net/http"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
@@ -11,10 +14,8 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"go.mongodb.org/mongo-driver/bson"
-	"time"
 
 	"github.com/spf13/cast"
-	"net/http"
 )
 
 type Dlq struct {
@@ -97,9 +98,8 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	m := make(map[string]any)
-	id := r.FormValue("id")
-	m["uniqueId"] = id
+	id := r.FormValue("uniqueId")
+
 	nctx := r.Context()
 
 	data := make(map[string]any)
@@ -126,7 +126,7 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 		if err := bk.Enqueue(nctx, data); err != nil {
 			res.Msg = err.Error()
 			res.Code = berror.InternalServerErrorCode
-			_ = res.Json(w, http.StatusOK)
+			_ = res.Json(w, http.StatusInternalServerError)
 			return
 		}
 		_ = res.Json(w, http.StatusOK)
@@ -137,7 +137,14 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 	if err := bk.Enqueue(nctx, data); err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := t.mgo.Delete(nctx, id); err != nil {
+		res.Msg = err.Error()
+		res.Code = berror.InternalServerErrorCode
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 	_ = res.Json(w, http.StatusOK)

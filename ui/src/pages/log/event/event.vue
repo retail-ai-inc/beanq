@@ -33,7 +33,7 @@
                     <Copy :text="item.id" />
                   </td>
                   <td>{{item.channel}}</td>
-                  <td><div @click="filter(item.topic)" style="cursor: pointer">{{item.topic}}</div></td>
+                  <td><div @click="filter(item.topic)" style="cursor: copy">{{item.topic}}</div></td>
                   <td>{{item.moodType}}</td>
                   <td class="text-center">
                     <span v-if="item.status == 'success'" class="text-success">{{item.status}}</span>
@@ -185,7 +185,7 @@ async function retryInfo(){
     let res = await eventApi.Retry(data.retryItem._id,data.retryItem);
     eventRef.value.show("success");
   }catch (e) {
-    eventRef.value.show(e.error);
+    eventRef.value.show(e.response.data.msg);
   }
 
 }

@@ -31,6 +31,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/routers"
+	"log"
+	"net/http"
+	"os"
 	"os/signal"
 	"slices"
 	"syscall"
@@ -278,7 +289,9 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		}
 	}()
 
-	httpport := c.broker.config.UI.Port
+	// compatible with unmodified env.json
+	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
+	httpport = fmt.Sprintf(":%s", httpport)
 
 	if err := os.Setenv("GODEBUG", "httpmuxgo122=1"); err != nil {
 		logger.New().Error("Error setting environment variables")
@@ -289,9 +302,14 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	history := c.broker.config.History
 	var mog *bmongo.BMongo
 	if history.On {
+
+		// compatible with unmodified env.json
+		mongoPort := strings.TrimLeft(history.Mongo.Port, ":")
+		mongoPort = fmt.Sprintf(":%s", mongoPort)
+
 		mog = bmongo.NewMongo(
 			history.Mongo.Host,
-			history.Mongo.Port,
+			mongoPort,
 			history.Mongo.UserName,
 			history.Mongo.Password,
 			history.Mongo.Database,
