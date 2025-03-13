@@ -21,7 +21,10 @@ import (
 	"github.com/spf13/viper"
 )
 
-var failedTime int32
+var (
+	taskFailedFlag     int32
+	rollbackFailedFlag int32
+)
 
 var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 	var config BeanqConfig
@@ -78,15 +81,19 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 				)
 				wf.NewTask("test").OnRollback(func(task Task) error {
 					fmt.Println("rollback")
+					switch {
+					case atomic.CompareAndSwapInt32(&rollbackFailedFlag, 1, 0):
+						return errors.New("rollback failed")
+					}
 					return nil
 				}).OnExecute(func(task Task) error {
 					fmt.Println("execute")
 					switch {
-					case atomic.CompareAndSwapInt32(&failedTime, 1, 0):
+					case atomic.CompareAndSwapInt32(&taskFailedFlag, 1, 0):
 						return errors.New("test failed one time")
-					case atomic.LoadInt32(&failedTime) == -1:
+					case atomic.LoadInt32(&taskFailedFlag) == -1:
 						return errors.New("test failed always")
-					case atomic.LoadInt32(&failedTime) == 0:
+					case atomic.LoadInt32(&taskFailedFlag) == 0:
 						return nil
 					}
 					return nil
@@ -105,11 +112,11 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 				DoHandle: func(ctx context.Context, message *Message) error {
 					fmt.Println("execute")
 					switch {
-					case atomic.CompareAndSwapInt32(&failedTime, 1, 0):
+					case atomic.CompareAndSwapInt32(&taskFailedFlag, 1, 0):
 						return errors.New("test failed one time")
-					case atomic.LoadInt32(&failedTime) == -1:
+					case atomic.LoadInt32(&taskFailedFlag) == -1:
 						return errors.New("test failed always")
-					case atomic.LoadInt32(&failedTime) == 0:
+					case atomic.LoadInt32(&taskFailedFlag) == 0:
 						return nil
 					}
 					return nil
@@ -135,7 +142,7 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			}, SpecTimeout(time.Second*5))
 
 			It("send message, failed", func(ctx SpecContext) {
-				atomic.StoreInt32(&failedTime, -1)
+				atomic.StoreInt32(&taskFailedFlag, -1)
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
@@ -144,7 +151,17 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			}, SpecTimeout(time.Second*5))
 
 			It("send message, failed 1 time", func(ctx SpecContext) {
-				atomic.StoreInt32(&failedTime, 1)
+				atomic.StoreInt32(&taskFailedFlag, 1)
+				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
+				Expect(err).To(BeNil())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Status).To(Equal(bstatus.StatusSuccess))
+				Expect(resp.Retry).To(Equal(1))
+			})
+
+			It("send message, failed 1 time, rollback failed", func(ctx SpecContext) {
+				atomic.StoreInt32(&taskFailedFlag, 1)
+				atomic.StoreInt32(&rollbackFailedFlag, 1)
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
@@ -184,7 +201,7 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			}, SpecTimeout(time.Second*5))
 
 			It("send message, failed", func(ctx SpecContext) {
-				atomic.StoreInt32(&failedTime, -1)
+				atomic.StoreInt32(&taskFailedFlag, -1)
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential(_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
@@ -193,7 +210,7 @@ var _ = Describe("DO sequential", Ordered, Label("sequential"), func() {
 			}, SpecTimeout(time.Second*5))
 
 			It("send message, failed 1 time", func(ctx SpecContext) {
-				atomic.StoreInt32(&failedTime, 1)
+				atomic.StoreInt32(&taskFailedFlag, 1)
 				resp, err := client.BQ().WithContext(ctx).SetId(_uuid).PublishInSequential("no_workflow"+_channel, _topic, []byte("normal test message")).WaitingAck()
 				Expect(err).To(BeNil())
 				Expect(resp).NotTo(BeNil())
