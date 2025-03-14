@@ -1,27 +1,31 @@
 FROM golang:1.22-alpine
 
-# This is necessary for China devps
-# RUN go env -w GOPROXY=https://goproxy.cn,direct
-# RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+# Proxy for China is enabled by default
+RUN if [ "$USE_CHINA_PROXY" = "true" ]; then \
+  go env -w GOPROXY=https://goproxy.cn,direct && \
+  sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories; \
+  else \
+  go env -w GOPROXY=https://proxy.golang.org,direct; \
+  fi
 
 ENV GODEBUG httpmuxgo122=1
 
 # The latest alpine images don't have some tools like (`git` and `bash`).
 # Adding git, bash and openssh to the image
 RUN apk update &&  \
-    apk upgrade &&  \
-    apk add --no-cache  \
-    bash  \
-    git  \
-    openssh  \
-    make  \
-    autoconf  \
-    gcc  \
-    libc-dev  \
-    sudo  \
-    procps  \
-    curl \
-    jq
+  apk upgrade &&  \
+  apk add --no-cache  \
+  bash  \
+  git  \
+  openssh  \
+  make  \
+  autoconf  \
+  gcc  \
+  libc-dev  \
+  sudo  \
+  procps  \
+  curl \
+  jq
 
 RUN mkdir -p /var/www/example
 

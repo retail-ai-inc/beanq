@@ -8,6 +8,8 @@ services:
       dockerfile: Dockerfile
     init: true
     tty: true
+    environment:
+      - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     ports:
       - "8080:9090"
     container_name: example
@@ -25,6 +27,8 @@ services:
       dockerfile: Dockerfile-normal-consumer
     init: true
     tty: true
+    environment:
+      - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     volumes:
       - ./:/var/www/example:rw
     depends_on:
