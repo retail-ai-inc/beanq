@@ -64,6 +64,7 @@ func NewMongo(host, port string,
 		if err := client.Ping(ctx, nil); err != nil {
 			log.Fatal(err)
 		}
+
 		mgo = &BMongo{
 			database:           client.Database(database),
 			eventCollection:    "event_logs",
@@ -86,6 +87,25 @@ func NewMongo(host, port string,
 		}
 		if v, ok := collections["roles"]; ok {
 			mgo.roleCollection = v
+		}
+
+		if err := Collection(mgo.eventCollection).Create(ctx, mgo.database, EventType); err != nil {
+			log.Fatal(err)
+		}
+		if err := Collection(mgo.workflowCollection).Create(ctx, mgo.database, WorkFLowType); err != nil {
+			log.Fatal(err)
+		}
+		if err := Collection(mgo.managerCollection).Create(ctx, mgo.database, ManagerType); err != nil {
+			log.Fatal(err)
+		}
+		if err := Collection(mgo.optCollection).Create(ctx, mgo.database, OptType); err != nil {
+			log.Fatal(err)
+		}
+		if err := Collection(mgo.roleCollection).Create(ctx, mgo.database, RoleType); err != nil {
+			log.Fatal(err)
+		}
+		if err := Collection(mgo.optCollection).CreateTTLIndex(ctx, mgo.database, 14*24*time.Hour); err != nil {
+			log.Fatal(err)
 		}
 	})
 	return mgo
