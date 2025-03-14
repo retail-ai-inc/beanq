@@ -56,7 +56,9 @@ func NewMongo(host, port string,
 			opts.SetAuth(auth)
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		client, err := mongo.Connect(ctx, opts)
 		if err != nil {
 			log.Fatal(err)
@@ -89,23 +91,46 @@ func NewMongo(host, port string,
 			mgo.roleCollection = v
 		}
 
-		if err := Collection(mgo.eventCollection).Create(ctx, mgo.database, EventType); err != nil {
-			log.Fatal(err)
+		{
+			//event log
+			event := Collection(mgo.eventCollection)
+			if err := event.Create(ctx, mgo.database, EventType); err != nil {
+				log.Fatal(err)
+			}
+			if err := event.CreateIndex(ctx, mgo.database, "id", 1); err != nil {
+				log.Fatal(err)
+			}
 		}
-		if err := Collection(mgo.workflowCollection).Create(ctx, mgo.database, WorkFLowType); err != nil {
-			log.Fatal(err)
+		{
+			//work flow
+			workflow := Collection(mgo.workflowCollection)
+			if err := workflow.Create(ctx, mgo.database, WorkFLowType); err != nil {
+				log.Fatal(err)
+			}
 		}
-		if err := Collection(mgo.managerCollection).Create(ctx, mgo.database, ManagerType); err != nil {
-			log.Fatal(err)
+		{
+			//administrator for UI
+			manager := Collection(mgo.managerCollection)
+			if err := manager.Create(ctx, mgo.database, ManagerType); err != nil {
+				log.Fatal(err)
+			}
 		}
-		if err := Collection(mgo.optCollection).Create(ctx, mgo.database, OptType); err != nil {
-			log.Fatal(err)
+		{
+			//administrator operation log
+			optLog := Collection(mgo.optCollection)
+			if err := optLog.Create(ctx, mgo.database, OptType); err != nil {
+				log.Fatal(err)
+			}
+			if err := optLog.CreateTTLIndex(ctx, mgo.database, 14*24*time.Hour); err != nil {
+				log.Fatal(err)
+			}
 		}
-		if err := Collection(mgo.roleCollection).Create(ctx, mgo.database, RoleType); err != nil {
-			log.Fatal(err)
-		}
-		if err := Collection(mgo.optCollection).CreateTTLIndex(ctx, mgo.database, 14*24*time.Hour); err != nil {
-			log.Fatal(err)
+		{
+			//role for UI
+			role := Collection(mgo.roleCollection)
+			if err := role.Create(ctx, mgo.database, RoleType); err != nil {
+				log.Fatal(err)
+			}
 		}
 	})
 	return mgo

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -202,15 +203,13 @@ func (t Collection) Create(ctx context.Context, database *mongo.Database, tp Col
 	data := make(map[string]any, 5)
 	for cursor.Next(ctx) {
 		if err := cursor.Decode(&data); err != nil {
+			logger.New().Error(err)
 			continue
 		}
-		if v, ok := data["name"]; ok {
-			if v.(string) == string(t) {
-				isExist = true
-				break
-			}
+		if v, ok := data["name"]; ok && v.(string) == string(t) {
+			isExist = true
+			break
 		}
-		data = nil
 	}
 	if !isExist {
 		opts := options.CreateCollection()
@@ -257,6 +256,7 @@ func (t Collection) CreateIndex(ctx context.Context, database *mongo.Database, k
 	isExist := false
 	for cursor.Next(ctx) {
 		if err := cursor.Decode(&data); err != nil {
+			logger.New().Error(err)
 			continue
 		}
 		if v, ok := data["key"]; ok {
