@@ -12,159 +12,159 @@ import (
 
 var (
 	eventLogValid = bson.D{
-		{"$jsonSchema", bson.D{
-			{"bsonType", "object"},
-			{"properties", bson.D{
-				{"id", bson.D{
-					{"bsonType", "string"},
-					{"description", "unique id"},
+		{Key: "$jsonSchema", Value: bson.D{
+			{Key: "bsonType", Value: "object"},
+			{Key: "properties", Value: bson.D{
+				{Key: "id", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
+					{Key: "description", Value: "unique id"},
 				}},
-				{"topic", bson.D{
-					{"bsonType", "string"},
-					{"description", ""},
+				{Key: "topic", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
+					{Key: "description", Value: ""},
 				}},
-				{"channel", bson.D{
-					{"bsonType", "string"},
-					{"description", ""},
+				{Key: "channel", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
+					{Key: "description", Value: ""},
 				}},
-				{"logType", bson.D{
-					{"bsonType", "string"},
+				{Key: "logType", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"moodType", bson.D{
-					{"bsonType", "string"},
+				{Key: "moodType", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"status", bson.D{
-					{"bsonType", "string"},
+				{Key: "status", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"maxLen", bson.D{
-					{"bsonType", "long"},
+				{Key: "maxLen", Value: bson.D{
+					{Key: "bsonType", Value: "long"},
 				}},
-				{"timeToRun", bson.D{
-					{"bsonType", "long"},
+				{Key: "timeToRun", Value: bson.D{
+					{Key: "bsonType", Value: "long"},
 				}},
-				{"retry", bson.D{
-					{"bsonType", "long"},
+				{Key: "retry", Value: bson.D{
+					{Key: "bsonType", Value: "long"},
 				}},
-				{"addTime", bson.D{
-					{"bsonType", "string"},
+				{Key: "addTime", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"executeTime", bson.D{
-					{"bsonType", "string"},
+				{Key: "executeTime", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"payload", bson.D{
-					{"bsonType", "string"},
+				{Key: "payload", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"priority", bson.D{
-					{"bsonType", "long"},
+				{Key: "priority", Value: bson.D{
+					{Key: "bsonType", Value: "long"},
 				}},
 			}},
 		}},
 	}
 	optLogValid = bson.D{
-		{"$jsonSchema", bson.D{
-			{"bsonType", "object"},
-			{"properties", bson.D{
-				{"uri", bson.D{
-					{"bsonType", "string"},
+		{Key: "$jsonSchema", Value: bson.D{
+			{Key: "bsonType", Value: "object"},
+			{Key: "properties", Value: bson.D{
+				{Key: "uri", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"addTime", bson.D{
-					{"bsonType", "string"},
+				{Key: "addTime", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"data", bson.D{
-					{"bsonType", "string"},
+				{Key: "data", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"logType", bson.D{
-					{"bsonType", "string"},
+				{Key: "logType", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"user", bson.D{
-					{"bsonType", "string"},
+				{Key: "user", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"expireAt", bson.D{
-					{"bsonType", "string"},
+				{Key: "expireAt", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
 			}},
 		}},
 	}
 	managerValid = bson.D{
-		{"$jsonSchema", bson.D{
-			{"bsonType", "object"},
-			{"properties", bson.D{
-				{"account", bson.D{
-					{"bsonType", "string"},
+		{Key: "$jsonSchema", Value: bson.D{
+			{Key: "bsonType", Value: "object"},
+			{Key: "properties", Value: bson.D{
+				{Key: "account", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"password", bson.D{
-					{"bsonType", "string"},
+				{Key: "password", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"type", bson.D{
-					{"bsonType", "string"},
+				{Key: "type", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"active", bson.D{
-					{"bsonType", "long"},
+				{Key: "active", Value: bson.D{
+					{Key: "bsonType", Value: "long"},
 				}},
-				{"detail", bson.D{
-					{"bsonType", "string"},
+				{Key: "detail", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"roleId", bson.D{
-					{"bsonType", "string"},
+				{Key: "roleId", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"createAt", bson.D{
-					{"bsonType", "date"},
+				{Key: "createAt", Value: bson.D{
+					{Key: "bsonType", Value: "date"},
 				}},
-				{"updateAt", bson.D{
-					{"bsonType", "date"},
+				{Key: "updateAt", Value: bson.D{
+					{Key: "bsonType", Value: "date"},
 				}},
 			}},
 		}},
 	}
 	roleValid = bson.D{
-		{"$jsonSchema", bson.D{
-			{"bsonType", "object"},
-			{"properties", bson.D{
-				{"name", bson.D{
-					{"bsonType", "string"},
+		{Key: "$jsonSchema", Value: bson.D{
+			{Key: "bsonType", Value: "object"},
+			{Key: "properties", Value: bson.D{
+				{Key: "name", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"roles", bson.D{
-					{"bsonType", "array"},
+				{Key: "roles", Value: bson.D{
+					{Key: "bsonType", Value: "array"},
 				}},
-				{"createAt", bson.D{
-					{"bsonType", "date"},
+				{Key: "createAt", Value: bson.D{
+					{Key: "bsonType", Value: "date"},
 				}},
-				{"updateAt", bson.D{
-					{"bsonType", "date"},
+				{Key: "updateAt", Value: bson.D{
+					{Key: "bsonType", Value: "date"},
 				}},
 			}},
 		}},
 	}
 	workflowValid = bson.D{
-		{"$jsonSchema", bson.D{
-			{"bsonType", "object"},
-			{"properties", bson.D{
-				{"Channel", bson.D{
-					{"bsonType", "string"},
+		{Key: "$jsonSchema", Value: bson.D{
+			{Key: "bsonType", Value: "object"},
+			{Key: "properties", Value: bson.D{
+				{Key: "Channel", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"Topic", bson.D{
-					{"bsonType", "string"},
+				{Key: "Topic", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"Gid", bson.D{
-					{"bsonType", "string"},
+				{Key: "Gid", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"MessageId", bson.D{
-					{"bsonType", "string"},
+				{Key: "MessageId", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"Statement", bson.D{
-					{"bsonType", "string"},
+				{Key: "Statement", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"Status", bson.D{
-					{"bsonType", "string"},
+				{Key: "Status", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"TaskId", bson.D{
-					{"bsonType", "string"},
+				{Key: "TaskId", Value: bson.D{
+					{Key: "bsonType", Value: "string"},
 				}},
-				{"CreatedAt", bson.D{
-					{"bsonType", "date"},
+				{Key: "CreatedAt", Value: bson.D{
+					{Key: "bsonType", Value: "date"},
 				}},
-				{"UpdatedAt", bson.D{
-					{"bsonType", "date"},
+				{Key: "UpdatedAt", Value: bson.D{
+					{Key: "bsonType", Value: "date"},
 				}},
 			}},
 		}},
@@ -187,8 +187,8 @@ type Collection string
 func (t Collection) Create(ctx context.Context, database *mongo.Database, tp CollectionType) error {
 
 	cursor, err := database.RunCommandCursor(ctx, bson.D{
-		{"listCollections", 1},
-		{"filter", bson.D{{"name", t}}},
+		{Key: "listCollections", Value: 1},
+		{Key: "filter", Value: bson.D{{Key: "name", Value: t}}},
 	})
 	if err != nil {
 		return err
@@ -268,7 +268,7 @@ func (t Collection) CreateIndex(ctx context.Context, database *mongo.Database, k
 	}
 	if !isExist {
 		if _, err := database.Collection(string(t)).Indexes().CreateOne(ctx, mongo.IndexModel{
-			Keys:    bson.D{{key, sort}},
+			Keys:    bson.D{{Key: key, Value: sort}},
 			Options: nil,
 		}); err != nil {
 			return err
@@ -303,7 +303,7 @@ func (t Collection) CreateTTLIndex(ctx context.Context, database *mongo.Database
 	}
 	if !isExist {
 		if _, err := database.Collection(string(t)).Indexes().CreateOne(ctx, mongo.IndexModel{
-			Keys:    bson.D{{key, 1}},
+			Keys:    bson.D{{Key: key, Value: 1}},
 			Options: options.Index().SetExpireAfterSeconds(cast.ToInt32(duration.Seconds())),
 		}); err != nil {
 			return err
