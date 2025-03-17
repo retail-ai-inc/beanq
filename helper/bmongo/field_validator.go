@@ -27,7 +27,7 @@ var (
 					{Key: "data", Value: bson.D{{Key: "bsonType", Value: "string"}}},
 					{Key: "logType", Value: bson.D{{Key: "bsonType", Value: "string"}}},
 					{Key: "user", Value: bson.D{{Key: "bsonType", Value: "string"}}},
-					{Key: "expireAt", Value: bson.D{{Key: "bsonType", Value: "string"}}},
+					{Key: "expireAt", Value: bson.D{{Key: "bsonType", Value: "date"}}},
 				}},
 			}},
 		},
@@ -93,6 +93,17 @@ var (
 				}},
 			}},
 		},
+		// for test
+		TestType: bson.D{
+			{Key: "$jsonSchema", Value: bson.D{
+				{Key: "bsonType", Value: "object"},
+				{Key: "properties", Value: bson.D{
+					{Key: "id", Value: bson.D{{Key: "bsonType", Value: "string"}}},
+					{Key: "topic", Value: bson.D{{Key: "bsonType", Value: "string"}}},
+					{Key: "channel", Value: bson.D{{Key: "bsonType", Value: "string"}}},
+				}},
+			}},
+		},
 	}
 )
 
@@ -105,6 +116,7 @@ const (
 	OptType      CollectionType = "opt"
 	RoleType     CollectionType = "role"
 	WorkFLowType CollectionType = "workflow"
+	TestType     CollectionType = "testtype"
 )
 
 var (
@@ -123,7 +135,7 @@ func (t Collection) Create(ctx context.Context, database *mongo.Database, tp Col
 		return err
 	}
 	collectionName := string(t)
-	//go1.21+ version
+	// go1.21+ version
 	// Check if the collection already exists
 	if b := slices.Contains(names, collectionName); b {
 		return nil
@@ -216,8 +228,10 @@ func (t Collection) checkIndexExists(ctx context.Context, database *mongo.Databa
 
 	indexInfo := make(map[string]any, 3)
 	for cursor.Next(ctx) {
+
 		if err := cursor.Decode(&indexInfo); err != nil {
-			return false, err
+			logger.New().Error(err)
+			continue
 		}
 		if v, ok := indexInfo["key"]; ok {
 			if mv, mok := v.(map[string]any); mok {
