@@ -2,6 +2,7 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"sync"
 
@@ -17,15 +18,16 @@ type (
 		zapFields []zap.Field
 	}
 	ZapLoggerConfig struct {
-		Filename    string
-		EncoderType string
-		Pre         string
-		MaxSize     int
-		MaxAge      int
-		MaxBackups  int
-		Level       zapcore.Level
-		LocalTime   bool
-		Compress    bool
+		DefaultWriter io.Writer
+		Filename      string
+		EncoderType   string
+		Pre           string
+		MaxSize       int
+		MaxAge        int
+		MaxBackups    int
+		Level         zapcore.Level
+		LocalTime     bool
+		Compress      bool
 	}
 )
 
@@ -35,15 +37,16 @@ var (
 
 	// set lumberjack logger default parameter
 	defaultZapConfig = ZapLoggerConfig{
-		Filename:    "",
-		Level:       zap.InfoLevel,
-		EncoderType: "json",
-		MaxSize:     0,
-		MaxAge:      0,
-		MaxBackups:  0,
-		LocalTime:   false,
-		Compress:    false,
-		Pre:         "beanq",
+		DefaultWriter: os.Stdout,
+		Filename:      "",
+		Level:         zap.InfoLevel,
+		EncoderType:   "json",
+		MaxSize:       0,
+		MaxAge:        0,
+		MaxBackups:    0,
+		LocalTime:     false,
+		Compress:      false,
+		Pre:           "beanq",
 	}
 )
 
@@ -53,7 +56,6 @@ func New() *ZapLogger {
 }
 
 func NewWithConfig(cfg ZapLoggerConfig) *ZapLogger {
-
 	logOnce.Do(func() {
 		var (
 			encoder zapcore.Encoder
@@ -82,7 +84,7 @@ func NewWithConfig(cfg ZapLoggerConfig) *ZapLogger {
 		level := zapcore.LevelOf(cfg.Level)
 
 		if cfg.Filename == "" {
-			syncer = zapcore.WriteSyncer(os.Stdout)
+			syncer = zapcore.WriteSyncer(zapcore.AddSync(cfg.DefaultWriter))
 		} else {
 			syncer = zapcore.AddSync(&lumberjack.Logger{
 				Filename:   cfg.Filename,
@@ -113,7 +115,6 @@ func NewWithConfig(cfg ZapLoggerConfig) *ZapLogger {
 }
 
 func (t ZapLogger) With(key string, val any) ZapLogger {
-
 	switch v := val.(type) {
 	case int, int64, *int, *int64:
 		t.zapFields = append(t.zapFields, zap.Int64(key, cast.ToInt64(v)))

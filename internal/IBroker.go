@@ -14,16 +14,17 @@ type (
 		Channel string
 		Stream  string
 	}
-	CallBack func(ctx context.Context, data map[string]any) error
-	IBroker  interface {
+	CallbackWithRetry func(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	IBroker           interface {
 		Enqueue(ctx context.Context, data map[string]any) error
-		Dequeue(ctx context.Context, channel, topic string, do CallBack)
+		Dequeue(ctx context.Context, channel, topic string, do CallbackWithRetry)
 	}
 	IDeadLetter interface {
 		DeadLetter(ctx context.Context, channel, topic string)
 	}
 	IBrokerFactory interface {
 		Mood(moodType btype.MoodType) IBroker
+		Migrate(ctx context.Context, log IMigrateLog) error
 	}
 )
 

@@ -3,15 +3,16 @@ package bredis
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal"
+	public "github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
-	"sync"
-	"time"
 )
 
 type Sequential struct {
@@ -19,7 +20,6 @@ type Sequential struct {
 }
 
 func NewSequential(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Sequential {
-
 	return &Sequential{
 		base: Base{
 			client:         client,
@@ -37,7 +37,6 @@ func NewSequential(client redis.UniversalClient, prefix string, consumerCount in
 }
 
 func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
-
 	channel := ""
 	topic := ""
 	id := ""
@@ -57,7 +56,6 @@ func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
 	key := tool.MakeStatusKey(t.base.prefix, channel, topic, id)
 
 	exist, err := HashDuplicateIdScript.Run(ctx, t.base.client, []string{key, streamKey}, data).Bool()
-
 	if err != nil {
 		return err
 	}
@@ -68,11 +66,9 @@ func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Sequential) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
+func (t *Sequential) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	go func() {
 		t.base.DeadLetter(ctx, channel, topic)
 	}()
 	t.base.Dequeue(ctx, channel, topic, do)
-
 }

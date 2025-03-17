@@ -4,20 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
-	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 	"math/rand"
 	"os"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	public "github.com/retail-ai-inc/beanq/v3/internal"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/spf13/cast"
+	"golang.org/x/sync/errgroup"
 )
 
 type RdbBroker struct {
@@ -38,8 +39,12 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 	}
 }
 
-func (t *RdbBroker) Mood(moodType btype.MoodType) public.IBroker {
+func (t *RdbBroker) Migrate(ctx context.Context, log public.IMigrateLog) error {
+	migrate := NewLog(t.client, t.prefix)
+	return migrate.Migrate(ctx, log)
+}
 
+func (t *RdbBroker) Mood(moodType btype.MoodType) public.IBroker {
 	if moodType == btype.NORMAL {
 		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle)
 	}
@@ -66,14 +71,11 @@ type (
 	}
 )
 
-var (
-	DefaultBlockDuration BlockDuration = func() time.Duration {
-		return time.Duration(rand.Int63n(9)+1) * time.Second
-	}
-)
+var DefaultBlockDuration BlockDuration = func() time.Duration {
+	return time.Duration(rand.Int63n(9)+1) * time.Second
+}
 
 func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
-
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 	logicKey := tool.MakeLogicKey(t.prefix)
 	deadLetterKey := strings.Join([]string{streamKey, "dead_letter_lock"}, ":")
@@ -154,8 +156,7 @@ func (t *Base) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
+func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 
 	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
@@ -215,8 +216,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 	}
 }
 
-func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallBack) error {
-
+func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallbackWithRetry) error {
 	id := stream.Id
 	stm := stream.Stream
 	channel := stream.Channel
@@ -232,10 +232,7 @@ func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler publ
 	timeToRun := cast.ToDuration(val["timeToRun"])
 	sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
 
-	retry, err := tool.RetryInfo(sessionCtx, func() error {
-		return handler(sessionCtx, val)
-	}, 3)
-
+	retry, err := handler(sessionCtx, val, cast.ToInt(val["retry"]))
 	if err != nil {
 		//if h, ok := rh.subscribe.(IConsumeError); ok {
 		//	h.Error(sessionCtx, err)

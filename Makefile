@@ -1,4 +1,25 @@
 GOPATH=$(shell go env GOPATH)
+SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
+
+.PHONY: test
+test:
+	@set -e;
+	
+	@echo "start test"
+	@docker compose up -d --build && \
+	if [ -z "$(SUITE_TEST_FILES)" ]; then \
+		echo "No *_suite_test.go files found" && \
+		docker compose exec -T example bash -c "ginkgo bootstrap"; \
+	else \
+		echo "$(SUITE_TEST_FILES) files found"; \
+	fi
+	@docker compose exec -T example bash -c "jq '.redis.host = \"redis-beanq\" | .history.mongo.host = \"mongo-beanq\"' ./env.sample.json > env.testing.json"
+	@docker compose exec -T example bash -c 'go test -tags=ci -race -v ./... && ginkgo -tags=ci -p -v --race'
+	
+.PHONY: clean-test
+clean-test:
+	@echo "clean test"
+	@docker compose down
 
 delay: delay-publisher delay-consumer
 

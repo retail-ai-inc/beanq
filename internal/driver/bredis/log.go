@@ -14,19 +14,17 @@ import (
 
 type Log struct {
 	client redis.UniversalClient
-	log    public.IMigrateLog
 	prefix string
 }
 
-func NewLog(client redis.UniversalClient, prefix string, log public.IMigrateLog) *Log {
+func NewLog(client redis.UniversalClient, prefix string) *Log {
 	return &Log{
 		client: client,
 		prefix: prefix,
-		log:    log,
 	}
 }
 
-func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
+func (t *Log) Migrate(ctx context.Context,log public.IMigrateLog) error {
 
 	timer := timex.TimerPool.Get(5 * time.Second)
 	defer timex.TimerPool.Put(timer)
@@ -76,8 +74,9 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 				datas = append(datas, v.Values)
 			}
 		}
-		if t.log != nil {
-			if err := t.log.Migrate(ctx, datas); err != nil {
+
+		if log != nil {
+			if err := log.Migrate(ctx, datas); err != nil {
 				logger.New().Error(err)
 				continue
 			}
