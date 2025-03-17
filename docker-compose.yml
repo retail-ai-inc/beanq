@@ -6,10 +6,10 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
+      args:
+        - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     init: true
     tty: true
-    environment:
-      - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     ports:
       - "8080:9090"
     container_name: example
@@ -25,6 +25,8 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile-normal-consumer
+      args:
+        - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     init: true
     tty: true
     environment:

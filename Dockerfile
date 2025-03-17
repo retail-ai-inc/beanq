@@ -1,10 +1,15 @@
 FROM golang:1.22-alpine
 
-# Proxy for China is enabled by default
-RUN if [ "$USE_CHINA_PROXY" = "true" ]; then \
-  go env -w GOPROXY=https://goproxy.cn,direct && \
+ARG USE_CHINA_PROXY
+ENV USE_CHINA_PROXY=${USE_CHINA_PROXY}
+
+RUN set -eux; \
+  if [ "${USE_CHINA_PROXY}" = "true" ]; then \
+  echo "Using China Proxy"; \
+  go env -w GOPROXY=https://goproxy.cn,direct; \
   sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories; \
   else \
+  echo "Using default Golang Proxy"; \
   go env -w GOPROXY=https://proxy.golang.org,direct; \
   fi
 
