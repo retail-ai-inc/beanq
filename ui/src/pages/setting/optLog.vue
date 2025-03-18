@@ -1,48 +1,63 @@
 <template>
-  <div class="table-responsive opt-log">
+  <div class="opt-log">
     <div class="row mb-4">
       <div class="col">
         <h5 class="card-title">List of Operation Logs</h5>
       </div>
     </div>
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-    <table class="table table-striped table-hover"  style="table-layout: auto;">
-      <thead>
-      <tr>
-        <th scope="col" class="w-table-number">#</th>
-        <th scope="col" class="text-nowrap">Id</th>
-        <th scope="col" class="text-nowrap">Add Time</th>
-        <th scope="col" class="text-nowrap">Account</th>
-        <th scope="col" class="text-nowrap">Visit</th>
-        <th scope="col" class="text-nowrap">Data</th>
-        <th scope="col" class="text-center">Action</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr v-for="(item, key) in list" :key="key" style="height: 2.5rem;">
-        <td class="text-right">{{parseInt(key)+1}}</td>
-        <td>{{item._id}}</td>
-        <td>
-            <pre><code>{{item.addTime}}</code></pre>
-        </td>
-        <td>{{item.user}}</td>
-        <td>
+
+    <div class="text-center" v-if="loading">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+
+    <div v-else>
+      <div v-if="list.length <= 0" style="text-align: center">
+        Hurrah! We processed all messages.
+      </div>
+      <div v-else>
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        <table class="table table-striped table-hover"  style="table-layout: auto;">
+          <thead>
+          <tr>
+            <th scope="col" class="w-table-number">#</th>
+            <th scope="col" class="text-nowrap">Id</th>
+            <th scope="col" class="text-nowrap">Add Time</th>
+            <th scope="col" class="text-nowrap">Account</th>
+            <th scope="col" class="text-nowrap">Visit</th>
+            <th scope="col" class="text-nowrap">Data</th>
+            <th scope="col" class="text-center">Action</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr v-for="(item, key) in list" :key="key" style="height: 2.5rem;">
+            <td class="text-right">{{parseInt(key)+1}}</td>
+            <td>{{item._id}}</td>
+            <td>
+              <pre><code>{{item.addTime}}</code></pre>
+            </td>
+            <td>{{item.user}}</td>
+            <td>
           <span class="d-inline-block text-truncate" style="max-width: 50rem">
             <pre><code>{{item.uri}}</code></pre>
           </span>
-        </td>
-        <td>
+            </td>
+            <td>
           <span class="d-inline-block text-truncate" style="max-width: 400px">
             {{item.data}}
           </span>
-        </td>
-        <td class="text-center text-nowrap">
-            <Delete_icon @action="deleteShowModal(item)"/>
-        </td>
-      </tr>
-      </tbody>
-    </table>
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+            </td>
+            <td class="text-center text-nowrap">
+              <Delete_icon @action="deleteShowModal(item)"/>
+            </td>
+          </tr>
+          </tbody>
+        </table>
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      </div>
+    </div>
+
     <Btoast :id="id" ref="toastRef"/>
     <Action :label="deleteLabel" :id="showDeleteModal" :data-id="mid" @action="deleteLog">
       <template #title="{title}">
@@ -65,13 +80,18 @@ const [deleteLabel,showDeleteModal,deleteModal,mid] = [ref("deleteLabel"),ref("s
 const [page,pageSize,total,cursor] = [ref(1),ref(10),ref(0),ref(1)];
 
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const loading = ref(false);
 
 const getOptLogs = (async (pageV,pageSizev)=>{
+  loading.value = true;
   try {
     let res = await logApi.OptLog(pageV,pageSizev);
     list.value = res.data;
     total.value = Math.ceil(res.total / pageSize.value);
     cursor.value = res.cursor;
+    setTimeout(()=>{
+      loading.value = false;
+    },800);
   }catch (e) {
     if(e.status === 401){
       loginModal.value.error(new Error(e));
