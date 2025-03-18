@@ -1,12 +1,13 @@
 package routers
 
 import (
-	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"io/fs"
 	"log"
 	"net/http"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
+	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 )
 
 type Handles struct {

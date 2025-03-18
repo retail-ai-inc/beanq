@@ -1,6 +1,10 @@
 package routers
 
 import (
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
@@ -10,9 +14,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
-	"net/http"
-	"strings"
-	"time"
 )
 
 func Recover() {
@@ -90,7 +91,7 @@ func AuthSSE(next func(w http.ResponseWriter, r *http.Request), client redis.Uni
 			}
 		}
 
-		if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+		if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "expireAt": time.Now(), "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
 			_ = result.EventMsg(w, name)
@@ -152,7 +153,7 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 			}
 		}
 
-		if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+		if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "expireAt": time.Now(), "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()
 			_ = result.Json(w, http.StatusInternalServerError)

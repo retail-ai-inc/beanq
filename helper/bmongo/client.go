@@ -32,6 +32,52 @@ type BMongo struct {
 	roleCollection     string
 }
 
+func createCollection(ctx context.Context) error {
+
+	//event log
+	event := Collection(mgo.eventCollection)
+	if err := event.Create(ctx, mgo.database, EventType); err != nil {
+		return err
+	}
+	if err := event.CreateIndex(ctx, mgo.database, "id", 1); err != nil {
+		return err
+	}
+
+	//work flow
+	workflow := Collection(mgo.workflowCollection)
+	if err := workflow.Create(ctx, mgo.database, WorkFLowType); err != nil {
+		return err
+	}
+
+	//administrator for UI
+	manager := Collection(mgo.managerCollection)
+	if err := manager.Create(ctx, mgo.database, ManagerType); err != nil {
+		return err
+	}
+	if err := manager.CreateIndex(ctx, mgo.database, "account", 1); err != nil {
+		return err
+	}
+
+	//administrator operation log
+	optLog := Collection(mgo.optCollection)
+	if err := optLog.Create(ctx, mgo.database, OptType); err != nil {
+		return err
+	}
+	if err := optLog.CreateTTLIndex(ctx, mgo.database, 14*24*time.Hour); err != nil {
+		return err
+	}
+
+	//role for UI
+	role := Collection(mgo.roleCollection)
+	if err := role.Create(ctx, mgo.database, RoleType); err != nil {
+		return err
+	}
+	if err := role.CreateIndex(ctx, mgo.database, "name", 1); err != nil {
+		return err
+	}
+	return nil
+}
+
 func NewMongo(host, port string,
 	username, password string,
 	database string,
@@ -56,7 +102,9 @@ func NewMongo(host, port string,
 			opts.SetAuth(auth)
 		}
 
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
 		client, err := mongo.Connect(ctx, opts)
 		if err != nil {
 			log.Fatal(err)
@@ -64,6 +112,7 @@ func NewMongo(host, port string,
 		if err := client.Ping(ctx, nil); err != nil {
 			log.Fatal(err)
 		}
+
 		mgo = &BMongo{
 			database:           client.Database(database),
 			eventCollection:    "event_logs",
@@ -86,6 +135,10 @@ func NewMongo(host, port string,
 		}
 		if v, ok := collections["roles"]; ok {
 			mgo.roleCollection = v
+		}
+
+		if err := createCollection(ctx); err != nil {
+			log.Fatal(err)
 		}
 	})
 	return mgo
