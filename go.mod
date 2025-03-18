@@ -1,10 +1,10 @@
 module github.com/retail-ai-inc/beanq/v3
 
 go 1.22
+toolchain go1.23.7
 
 require (
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/go-resty/resty/v2 v2.14.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/json-iterator/go v1.1.12
@@ -13,13 +13,14 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/rs/xid v1.5.0
 	github.com/sendgrid/sendgrid-go v3.16.0+incompatible
+	github.com/shirou/gopsutil/v4 v4.25.1
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/viper v1.18.2
 	go.mongodb.org/mongo-driver v1.15.0
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.33.0
+	golang.org/x/net v0.36.0
 	golang.org/x/oauth2 v0.15.0
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.11.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
@@ -50,7 +51,6 @@ require (
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
-	github.com/shirou/gopsutil/v4 v4.25.1 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
@@ -65,10 +65,10 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
