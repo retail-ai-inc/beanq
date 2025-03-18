@@ -7,44 +7,57 @@
     </div>
     <div class="dlq">
       <Search :form="form" @search="search"/>
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-      <table class="table table-striped table-hover">
-        <thead>
-        <tr>
-          <th scope="col">#</th>
-          <th scope="col">Id</th>
-          <th scope="col">Channel</th>
-          <th scope="col">Topic</th>
-          <th scope="col">Mood Type</th>
-          <th scope="col">AddTime</th>
-          <th scope="col">Payload</th>
-          <th scope="col">Action</th>
-        </tr>
-        </thead>
-        <tbody>
-        <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
-          <th scope="row">
-            <Copy :text="item._id" />
-          </th>
-          <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">{{maskString(item.id)}}</router-link></td>
-          <td>{{item.channel}}</td>
-          <td><div @click="filter(item.topic)" style="cursor: copy">{{item.topic}}</div></td>
-          <td>{{item.moodType}}</td>
-          <td>
-            <TimeToolTips :past-time="item.addTime"/>
-          </td>
-          <td>
-            <More :payload="item.payload"/>
-          </td>
-          <td class="text-center text-nowrap">
-            <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
-            <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
-          </td>
-        </tr>
-        </tbody>
 
-      </table>
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      <div class="text-center" v-if="loading">
+        <div class="spinner-border" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+      <div v-else>
+        <div v-if="logs.length <= 0" style="text-align: center">
+          Hurrah! We processed all messages.
+        </div>
+        <div v-else>
+          <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+          <table class="table table-striped table-hover">
+            <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Id</th>
+              <th scope="col">Channel</th>
+              <th scope="col">Topic</th>
+              <th scope="col">Mood Type</th>
+              <th scope="col">AddTime</th>
+              <th scope="col">Payload</th>
+              <th scope="col">Action</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
+              <th scope="row">
+                <Copy :text="item._id" />
+              </th>
+              <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">{{maskString(item.id)}}</router-link></td>
+              <td>{{item.channel}}</td>
+              <td><div @click="filter(item.topic)" style="cursor: copy">{{item.topic}}</div></td>
+              <td>{{item.moodType}}</td>
+              <td>
+                <TimeToolTips :past-time="item.addTime"/>
+              </td>
+              <td>
+                <More :payload="item.payload"/>
+              </td>
+              <td class="text-center text-nowrap">
+                <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
+                <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
+              </td>
+            </tr>
+            </tbody>
+
+          </table>
+          <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        </div>
+      </div>
     </div>
     <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
       <template #title="{title}">
@@ -80,6 +93,8 @@ const [retryLabel,showRetryModal,dataId,retryItem] = [ref("retryLabel"),ref("sho
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
 
 const [noticeId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const loading = ref(false);
+
 const form = ref({
   id:"",
   moodType:"",
@@ -101,6 +116,7 @@ const maskString = ((id)=>{
 })
 
 async function dlqLogs() {
+  loading.value = true;
   try {
     let res = await dlqApi.List(page.value,pageSize.value,form.value.id,form.value.status,form.value.moodType,form.value.topicName);
     const{cursor:resCursor,data,total:resTotal} = res;
@@ -109,6 +125,9 @@ async function dlqLogs() {
     total.value = resTotal;
     page.value =  resCursor;
     cursor.value = resCursor;
+    setTimeout(()=>{
+      loading.value = false;
+    },800);
   }catch (err) {
     //401 error
     if (err?.response?.status === 401){
