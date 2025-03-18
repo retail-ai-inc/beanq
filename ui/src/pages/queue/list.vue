@@ -61,7 +61,6 @@ const [id,toastRef] = [ref("userToast"),ref(null)];
 const getQueue=(async (pageCur,pageSize)=>{
   try {
     let res = await request.get("queue/list",{"params":{"page":pageCur,"pageSize":pageSize}});
-    toastRef.value.show("success");
     queues.value = res;
     page.value = pageCur;
   }catch (e) {
