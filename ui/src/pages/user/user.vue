@@ -24,41 +24,46 @@
         </div>
       </div>
     </div>
-
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-    <table class="table table-striped table-hover" style="table-layout: auto;">
-      <thead>
-      <tr>
-        <th scope="col" class="w-table-number">#</th>
-        <th scope="col" class="text-nowrap">Account</th>
-        <th scope="col" class="text-nowrap">Active</th>
-        <th scope="col" class="text-nowrap">Type</th>
-        <th scope="col" class="text-nowrap">Detail</th>
-        <th scope="col" class="text-center">Action</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
-        <td class="text-right">{{item._id}}</td>
-        <td>{{item.account}}</td>
-        <td>
-          <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
-        </td>
-        <td>{{item.type}}</td>
-        <td>
+    <div v-if="users.length <= 0" style="text-align: center">
+      create some admin ,please click the <button type="button" class="btn btn-primary" @click="addUserModal">{{$t('add')}}</button>
+    </div>
+    <div v-else>
+      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      <table class="table table-striped table-hover" style="table-layout: auto;">
+        <thead>
+        <tr>
+          <th scope="col" class="w-table-number">#</th>
+          <th scope="col" class="text-nowrap">Account</th>
+          <th scope="col" class="text-nowrap">Active</th>
+          <th scope="col" class="text-nowrap">Type</th>
+          <th scope="col" class="text-nowrap">Detail</th>
+          <th scope="col" class="text-center">Action</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
+          <td class="text-right">{{item._id}}</td>
+          <td>{{item.account}}</td>
+          <td>
+            <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
+          </td>
+          <td>{{item.type}}</td>
+          <td>
           <span class="d-inline-block text-truncate" style="max-width: 5rem;">
             {{item.detail}}
           </span>
-        </td>
-        <td class="text-center text-nowrap">
-          <EditIcon @action="editUserModal(item)" />
-          <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
-        </td>
-      </tr>
-      </tbody>
+          </td>
+          <td class="text-center text-nowrap">
+            <EditIcon @action="editUserModal(item)" />
+            <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
+          </td>
+        </tr>
+        </tbody>
 
-    </table>
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      </table>
+      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+    </div>
+
 
     <!--add user modal-->
     <div class="modal fade" id="addUserDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addUserDetailLabel">
@@ -160,7 +165,7 @@
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,computed,onMounted,toRefs,onUnmounted,watch } from "vue";
+import { ref,reactive,computed,onMounted,toRefs,onUnmounted } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
@@ -207,7 +212,6 @@ async function roleList(){
 async function userList(){
   try {
     let res = await userApi.List(page.value,pageSize.value,accountInput.value);
-
     users.value = res.data;
     cursor.value = res.cursor;
     total.value = res.total ;
