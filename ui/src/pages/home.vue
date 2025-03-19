@@ -120,8 +120,8 @@ function sseConnect(){
     }
     pods.value = npods;
 
-    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues);
-    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues);
+    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues,execTime.value);
+    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues,execTime.value);
   })
   sse.value.onerror = (err)=>{
     sse.value.close();

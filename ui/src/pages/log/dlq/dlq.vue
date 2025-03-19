@@ -8,15 +8,9 @@
     <div class="dlq">
       <Search :form="form" @search="search"/>
 
-      <div class="text-center" v-if="loading">
-        <div class="spinner-border" role="status">
-          <span class="visually-hidden">Loading...</span>
-        </div>
-      </div>
+      <Spinner v-if="loading" />
       <div v-else>
-        <div v-if="logs.length <= 0" style="text-align: center">
-          Hurrah! We processed all messages.
-        </div>
+        <NoMessage v-if="logs.length <= 0"/>
         <div v-else>
           <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
           <table class="table table-striped table-hover">
@@ -85,6 +79,8 @@ import TimeToolTips from "../../components/timeToolTips.vue";
 import More from "../../components/more.vue";
 import Copy from "../../components/copy.vue";
 import Search from "./search.vue";
+import Spinner from "../../components/spinner.vue";
+import NoMessage from "../../components/noMessage.vue";
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [page,pageSize,total,cursor,logs] = [ref(1),ref(10),ref(0),ref(0),ref([])];

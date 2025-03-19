@@ -25,15 +25,13 @@
       </div>
     </div>
 
-    <div class="text-center" v-if="loading">
-      <div class="spinner-border" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
+    <Spinner v-if="loading"/>
     <div v-else>
-      <div v-if="users.length <= 0" style="text-align: center">
-        create some admin ,please click the <button type="button" class="btn btn-primary" @click="addUserModal">{{$t('add')}}</button>
-      </div>
+      <NoMessage v-if="users.length <= 0">
+        <template #content="{content}">
+          create some admin ,please click the <button type="button" class="btn btn-primary" @click="addUserModal">{{$t('add')}}</button>
+        </template>
+      </NoMessage>
       <div v-else>
         <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
         <table class="table table-striped table-hover" style="table-layout: auto;">
@@ -103,6 +101,7 @@
             <div class="mb-3">
               <label for="passwordInput" class="form-label">Password</label>
               <input
+                  name="passwordInput"
                   type="text"
                   class="form-control"
                   id="passwordInput"
@@ -116,7 +115,7 @@
             </div>
             <div class="mb-3">
               <label for="typeSelect" class="form-label">Type</label>
-              <select class="form-select" aria-label="Type Select" id="typeSelect" v-model="userForm.type">
+              <select class="form-select" aria-label="Type Select" id="typeSelect" name="typeSelect" v-model="userForm.type">
                 <option selected>Open this select menu</option>
                 <option value="normal">Normal</option>
                 <option value="google">Google</option>
@@ -124,28 +123,31 @@
             </div>
             <div class="mb-3">
               <label for="roleSelect" class="form-label">Role</label>
-              <select class="form-select" id="roleSelect" v-model="userForm.roleId">
+              <select class="form-select" id="roleSelect" name="roleSelect" v-model="userForm.roleId">
                 <option v-for="(item,key) in roles" :value="item._id" :key="key" :selected="userForm.roleId === item._id">{{item.name}}</option>
               </select>
             </div>
             <div class="mb-3">
-              <label class="form-label">Active</label>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="1" v-model="userForm.active" :checked="userForm.active == 1">
-                <label class="form-check-label" for="flexRadioDefault1">
-                  Yes
-                </label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="2" v-model="userForm.active" :checked="userForm.active == 2">
-                <label class="form-check-label" for="flexRadioDefault2">
-                  No
-                </label>
-              </div>
+              <label class="form-label">
+                Active
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="1" v-model="userForm.active" :checked="userForm.active == 1">
+                  <label class="form-check-label" for="flexRadioDefault1">
+                    Yes
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="2" v-model="userForm.active" :checked="userForm.active == 2">
+                  <label class="form-check-label" for="flexRadioDefault2">
+                    No
+                  </label>
+                </div>
+              </label>
+
             </div>
             <div class="mb-3">
               <label for="detailArea" class="form-label">Account Detail</label>
-              <textarea class="form-control" id="detailArea" rows="3" v-model="userForm.detail"></textarea>
+              <textarea class="form-control" id="detailArea" name="detailArea" rows="3" v-model="userForm.detail"></textarea>
             </div>
           </div>
           <div class="modal-footer">
@@ -179,6 +181,8 @@ import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import LoginModal from "../components/loginModal.vue";
+import NoMessage from "../components/noMessage.vue";
+import Spinner from "../components/spinner.vue";
 
 const nav = computed(()=>{
   return Nav;

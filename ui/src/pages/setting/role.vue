@@ -17,15 +17,11 @@
         </div>
     </div>
 
-    <div class="text-center" v-if="loading">
-      <div class="spinner-border" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
+    <Spinner v-if="loading"/>
     <div v-else>
-      <div v-if="roles.length <= 0" style="text-align: center">
+      <NoMessage v-if="roles.length <= 0">
         create some admin ,please click the <button type="button" class="btn btn-primary" @click="addRoleModal">{{$t('add')}}</button>
-      </div>
+      </NoMessage>
       <div v-else>
         <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
         <table class="table table-striped table-hover" style="table-layout: auto;">
@@ -70,18 +66,19 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label for="nameInput" class="form-label">Role Name
+              <label for="nameInput" class="form-label" style="width: 50%">Role Name
+                <input
+                    type="text"
+                    class="form-control"
+                    id="nameInput"
+                    @blur="checkValid"
+                    v-model="roleForm.name"
+                    :readonly="accountReadOnly == true ? 'readonly': false"
+                    :disabled="accountReadOnly === true ? 'disabled': false"
+                    placeholder="Please input a role name"
+                />
               </label>
-              <input
-                  type="text"
-                  class="form-control"
-                  id="nameInput"
-                  @blur="checkValid"
-                  v-model="roleForm.name"
-                  :readonly="accountReadOnly == true ? 'readonly': false"
-                  :disabled="accountReadOnly === true ? 'disabled': false"
-                  placeholder="Please input a role name"
-              />
+
               <div class="invalid-feedback">
                 Please input a role name.
               </div>
@@ -122,6 +119,8 @@ import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import Tree from "../components/tree.vue";
 import LoginModal from "../components/loginModal.vue";
+import Spinner from "../components/spinner.vue";
+import NoMessage from "../components/noMessage.vue";
 
 
 const nav = computed(()=>{
@@ -252,15 +251,16 @@ function changePage(page,cursor){
 
 function checkValid(e){
 
-  let next = e.currentTarget.nextElementSibling;
-  next.style.display = "none";
-  //check account
-  if(e.currentTarget.id === "nameInput"){
-    next.innerHTML = "Please input a name";
-    if(roleForm.value.name === ""){
-      next.style.display = "block";
-    }
+  let currentElement = document.querySelector('#nameInput');
+  let parentElement = currentElement.parentNode;
+  let nextSiblingOfParent = parentElement.nextElementSibling;
+  nextSiblingOfParent.style.display = "none";
+
+  nextSiblingOfParent.innerHTML = "Please input a name";
+  if(roleForm.value.name === ""){
+    nextSiblingOfParent.style.display = "block";
   }
+
 }
 
 function addRoleModal(){

@@ -174,25 +174,6 @@ var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
 
-	go func() {
-		timer := timex.TimerPool.Get(10 * time.Second)
-		defer timer.Stop()
-
-		for range timer.C {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-
-			}
-			timer.Reset(10 * time.Second)
-			if err := c.broker.tool.QueueMessage(ctx); err != nil {
-				logger.New().Error(err)
-			}
-		}
-
-	}()
-
 	// compatible with unmodified env.json
 	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
 	httpport = fmt.Sprintf(":%s", httpport)

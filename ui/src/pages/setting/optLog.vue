@@ -6,16 +6,9 @@
       </div>
     </div>
 
-    <div class="text-center" v-if="loading">
-      <div class="spinner-border" role="status">
-        <span class="visually-hidden">Loading...</span>
-      </div>
-    </div>
-
+    <Spinner v-if="loading"/>
     <div v-else>
-      <div v-if="list.length <= 0" style="text-align: center">
-        Hurrah! We processed all messages.
-      </div>
+      <NoMessage v-if="list.length <= 0"/>
       <div v-else>
         <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
         <table class="table table-striped table-hover"  style="table-layout: auto;">
@@ -74,6 +67,8 @@ import Btoast from "../components/btoast.vue";
 import Action from "../components/action.vue";
 import Pagination from "../components/pagination.vue";
 import LoginModal from "../components/loginModal.vue";
+import Spinner from "../components/spinner.vue";
+import NoMessage from "../components/noMessage.vue";
 
 const [list,id,toastRef] = [ref([]),ref("optLog"),ref(null)];
 const [deleteLabel,showDeleteModal,deleteModal,mid] = [ref("deleteLabel"),ref("showDeleteModal"),ref(null),ref("")];

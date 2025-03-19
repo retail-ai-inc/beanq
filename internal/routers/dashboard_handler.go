@@ -3,6 +3,11 @@ package routers
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"runtime"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
@@ -10,11 +15,8 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
-	"net/http"
-	"runtime"
-	"strings"
-	"time"
 )
 
 type Dashboard struct {
@@ -43,6 +45,29 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
 
+	tim := r.URL.Query().Get("time")
+	if tim == "" {
+		tim = "10"
+	}
+	// prepare data for charts
+	uiTool := bredis.NewUITool(t.client, t.prefix)
+	timeDuration := time.Duration(cast.ToInt64(tim)) * time.Second
+	go func() {
+		timer := timex.TimerPool.Get(timeDuration)
+		defer timer.Stop()
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case <-timer.C:
+				if err := uiTool.QueueMessage(r.Context()); err != nil {
+					logger.New().Error(err)
+				}
+			}
+			timer.Reset(timeDuration)
+		}
+	}()
+
 	nodeId := r.URL.Query().Get("nodeId")
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
@@ -51,8 +76,6 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-
-	tim := r.URL.Query().Get("time")
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -132,7 +155,7 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		//queue messages
-		queues := make(map[string]any, 0)
+		queues := make(map[string]any, 5)
 		var qusData = struct {
 			TimeKey string `json:"time"`
 			Ready   int64  `json:"ready"`
