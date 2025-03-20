@@ -84,9 +84,12 @@ function expand(){
 
   data.isSide = !data.isSide;
 
+  let ele = document.getElementById("sidebar-title");
+  ele.style.display = "none";
   let sideWidth = "calc(15vw - 180px)";
   if(!data.isSide){
      sideWidth = "calc(15vw)";
+     ele.style.display = "block";
   }
   let sideBarDom = document.getElementsByClassName("main-sidebar")[0];
   sideBarDom.style.width = sideWidth;
@@ -97,6 +100,7 @@ function expand(){
   ].forEach(dm=>{
     dm.style.marginLeft = sideWidth;
   })
+
 }
 
 const hasRoles = ref([]);
