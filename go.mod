@@ -2,8 +2,6 @@ module github.com/retail-ai-inc/beanq/v3
 
 go 1.23.0
 
-toolchain go1.23.7
-
 require (
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-jwt/jwt/v5 v5.2.1
