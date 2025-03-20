@@ -71,7 +71,7 @@ const getQueue=(async (pageCur,pageSize)=>{
   loading.value = true;
   try {
     let res = await request.get("queue/list",{"params":{"page":pageCur,"pageSize":pageSize}});
-    queues.value = res;
+    queues.value = res ?? [];
     page.value = pageCur;
     setTimeout(()=>{
       loading.value = false;

@@ -143,7 +143,7 @@ async function roleList(){
   try {
     let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
 
-    roles.value = res.data;
+    roles.value = res.data ?? [];
     cursor.value = res.cursor;
     total.value = res.total ;
     setTimeout(()=>{

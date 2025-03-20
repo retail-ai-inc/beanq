@@ -225,7 +225,7 @@ async function userList(){
   loading.value = true;
   try {
     let res = await userApi.List(page.value,pageSize.value,accountInput.value);
-    users.value = res.data;
+    users.value = res.data ?? [];
     cursor.value = res.cursor;
     total.value = res.total ;
     setTimeout(()=>{

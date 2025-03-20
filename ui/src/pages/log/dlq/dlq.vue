@@ -117,7 +117,7 @@ async function dlqLogs() {
     let res = await dlqApi.List(page.value,pageSize.value,form.value.id,form.value.status,form.value.moodType,form.value.topicName);
     const{cursor:resCursor,data,total:resTotal} = res;
 
-    logs.value = data;
+    logs.value = data ?? [];
     total.value = resTotal;
     page.value =  resCursor;
     cursor.value = resCursor;

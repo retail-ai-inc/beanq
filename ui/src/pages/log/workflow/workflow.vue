@@ -86,7 +86,7 @@ const getWorkFLowLogs=(async (pageV,pageSizeV)=>{
   loading.value = true;
   try {
     let res = await workflowApi.List(pageV,pageSizeV);
-    workflowlogs.value = res.data;
+    workflowlogs.value = res.data ?? [];
     total.value = res.total;
     page.value =  res.cursor;
     cursor.value = res.cursor;

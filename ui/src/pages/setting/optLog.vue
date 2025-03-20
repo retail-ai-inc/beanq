@@ -81,7 +81,7 @@ const getOptLogs = (async (pageV,pageSizev)=>{
   loading.value = true;
   try {
     let res = await logApi.OptLog(pageV,pageSizev);
-    list.value = res.data;
+    list.value = res.data ?? [];
     total.value = Math.ceil(res.total / pageSize.value);
     cursor.value = res.cursor;
     setTimeout(()=>{
