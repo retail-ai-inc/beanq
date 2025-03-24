@@ -8,7 +8,7 @@
           <Pagination :page="page" :total="total" @changePage="changePage"/>
           <div class="accordion" id="schedule-ui-accordion">
 
-            <div class="accordion-item" v-else v-for="(item, key) in schedules" :key="key" style="margin-bottom: 0.9375rem">
+            <div class="accordion-item" v-for="(item, key) in schedules" :key="key" style="margin-bottom: 0.9375rem">
               <h2 class="accordion-header">
                 <button style="font-weight: bold" class="accordion-button" type="button" data-bs-toggle="collapse" :data-bs-target="setScheduleId(key)" aria-expanded="true" :aria-controls="key">
                   {{key}}

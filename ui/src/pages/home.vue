@@ -131,11 +131,15 @@ function sseConnect(){
 
 onMounted( () => {
 
-  const parentEle = homeEle.value.parentElement;
-  resizeObserver = new ResizeObserver((entries)=>{
+  let observerFun = ()=>{
     resize();
-  })
-  Base.Debounce( resizeObserver.observe(parentEle),300) ;
+    return false;
+  }
+  resizeObserver = new ResizeObserver((entries)=>{
+    Base.Debounce( observerFun(),5000);
+  });
+  const parentEle = homeEle.value.parentElement;
+  resizeObserver.observe(parentEle);
 
   sseConnect();
 

@@ -1,13 +1,14 @@
 package main
 
 import (
-	beanq "github.com/retail-ai-inc/beanq/v3"
-	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 	"log"
 	"path/filepath"
 	"runtime"
 	"sync"
+
+	beanq "github.com/retail-ai-inc/beanq/v3"
+	"github.com/spf13/viper"
+	"golang.org/x/net/context"
 )
 
 var (

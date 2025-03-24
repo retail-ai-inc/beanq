@@ -28,9 +28,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -168,12 +171,68 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) 
 
 	return MessageS(m).ToMessage(), nil
 }
+func getRootPath() (string, error) {
+
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("unable to get caller information")
+	}
+
+	dir := filepath.Dir(filename)
+	for {
+
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			break
+		}
+
+		nextDir := filepath.Dir(dir)
+		if nextDir == dir {
+			break
+		}
+		dir = nextDir
+	}
+	return dir, nil
+}
+func StaticFileInfo() (map[string]time.Time, error) {
+
+	files := make(map[string]time.Time, 0)
+
+	dir, err := getRootPath()
+	if err != nil {
+		return nil, err
+	}
+	dir = filepath.Join(dir, "./ui")
+	err = filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			arr := strings.SplitAfter(path, "ui")
+			if len(arr) == 2 {
+				files[arr[1]] = info.ModTime()
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
 
 //go:embed ui
 var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
 
+	files, err := StaticFileInfo()
+	if err != nil {
+		logger.New().Error(err)
+	}
 	// compatible with unmodified env.json
 	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
 	httpport = fmt.Sprintf(":%s", httpport)
@@ -205,7 +264,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		)
 	}
 
-	routers.NewRouters(mux, views, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
+	routers.NewRouters(mux, views, files, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
 
 	log.Printf("server start on port %+v", httpport)
 	if err := http.ListenAndServe(httpport, mux); err != nil {

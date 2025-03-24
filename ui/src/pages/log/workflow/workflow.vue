@@ -15,7 +15,7 @@
           <div class="row">
             <div class="col-12">
 
-              <div v-else class="table-responsive">
+              <div class="table-responsive">
                 <table class="table table-striped table-hover">
                   <thead>
                   <tr>

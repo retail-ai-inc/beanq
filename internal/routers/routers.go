@@ -1,9 +1,12 @@
 package routers
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
@@ -27,7 +30,7 @@ type Handles struct {
 	pod       *Pod
 }
 
-func NewRouters(mux *http.ServeMux, fs2 fs.FS, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) {
+func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) {
 
 	hdls := Handles{
 		schedule:  NewSchedule(client, prefix),
@@ -47,12 +50,33 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, client redis.UniversalClient, mgo
 	}
 
 	mux.HandleFunc("GET /", func(writer http.ResponseWriter, request *http.Request) {
+
 		fd, err := fs.Sub(fs2, "ui")
 		if err != nil {
 			log.Fatalf("static files error:%+v \n", err)
 		}
+
+		path := request.URL.Path
+		if path == "/" {
+			path = "/index.html"
+		}
+		_, err = fs.Stat(fd, strings.TrimLeft(path, "/"))
+		if err != nil {
+			http.Error(writer, "Not Found", http.StatusNotFound)
+			return
+		}
+
+		ifModifiedSince := request.Header.Get("If-Modified-Since")
+		fmt.Printf("path:%+v,modify:%+v，modify:%+v \n", path, modFiles[path], ifModifiedSince)
+		if ifModifiedSince != "" {
+			ifModifiedSinceTime, err := time.ParseInLocation(time.RFC1123, ifModifiedSince, time.UTC)
+			if err == nil && modFiles[path].UTC().Before(ifModifiedSinceTime.Add(1*time.Second)) {
+				writer.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
 		//
-		writer.Header().Set("Cache-Control", "public, max-age=3600")
+		writer.Header().Set("Last-Modified", modFiles[path].UTC().Format(time.RFC1123))
 		http.FileServer(http.FS(fd)).ServeHTTP(writer, request)
 	})
 
