@@ -38,6 +38,7 @@
           <thead>
           <tr>
             <th scope="col" class="w-table-number">#</th>
+            <th scope="col" class="text-nowrap">_Id</th>
             <th scope="col" class="text-nowrap">Account</th>
             <th scope="col" class="text-nowrap">Active</th>
             <th scope="col" class="text-nowrap">Type</th>
@@ -47,6 +48,7 @@
           </thead>
           <tbody>
           <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
+            <td>{{key+1}}</td>
             <td class="text-right">{{item._id}}</td>
             <td>{{item.account}}</td>
             <td>

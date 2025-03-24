@@ -1,7 +1,7 @@
 <template>
   <div style="text-align: center">
     <slot name="content">
-      Hurrah! We processed all messages.
+      {{$t('noMsg')}}
     </slot>
   </div>
 </template>

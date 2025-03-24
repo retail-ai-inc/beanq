@@ -20,6 +20,7 @@
                   <thead>
                   <tr>
                     <th scope="col">#</th>
+                    <th scope="col">_Id</th>
                     <th scope="col">GId</th>
                     <th scope="col">TaskId</th>
                     <th scope="col">Channel</th>
@@ -33,6 +34,7 @@
                   </thead>
                   <tbody>
                   <tr v-for="(item, key) in workflowlogs" :key="key" style="height: 3rem;line-height:3rem">
+                    <th scope="row">{{key+1}}</th>
                     <th scope="row">{{item._id}}</th>
                     <td><router-link to="" class="nav-link text-primary" style="display: contents">{{item.Gid}}</router-link></td>
                     <td>{{item.TaskId}}</td>

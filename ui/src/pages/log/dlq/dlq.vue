@@ -17,6 +17,7 @@
             <thead>
             <tr>
               <th scope="col">#</th>
+              <th scope="col">_Id</th>
               <th scope="col">Id</th>
               <th scope="col">Channel</th>
               <th scope="col">Topic</th>
@@ -28,6 +29,7 @@
             </thead>
             <tbody>
             <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
+              <th scope="row">{{key+1}}</th>
               <th scope="row">
                 <Copy :text="item._id" />
               </th>
@@ -55,10 +57,12 @@
     </div>
     <Action :label="retryLabel" :id="showRetryModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="retryInfo">
       <template #title="{title}">
+        {{$t("sureRetry")}}
       </template>
     </Action>
     <Action :label="deleteLabel" :id="showDeleteModal" :data-id="dataId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteInfo">
       <template #title="{title}">
+        {{$t("sureDelete")}}
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef" />

@@ -1,7 +1,6 @@
 package routers
 
 import (
-	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -67,7 +66,6 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 		}
 
 		ifModifiedSince := request.Header.Get("If-Modified-Since")
-		fmt.Printf("path:%+v,modify:%+v，modify:%+v \n", path, modFiles[path], ifModifiedSince)
 		if ifModifiedSince != "" {
 			ifModifiedSinceTime, err := time.ParseInLocation(time.RFC1123, ifModifiedSince, time.UTC)
 			if err == nil && modFiles[path].UTC().Before(ifModifiedSinceTime.Add(1*time.Second)) {
@@ -96,6 +94,8 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 
 	mux.HandleFunc("GET /redis", MigrateSSE(hdls.redisInfo.Info, client, mgo, prefix, ui, "redis_info"))
 	mux.HandleFunc("GET /redis/monitor", MigrateSSE(hdls.redisInfo.Monitor, client, mgo, prefix, ui, "redis_monitor"))
+	mux.HandleFunc("GET /redis/keys", MigrateMiddleWare(hdls.redisInfo.Keys, client, mgo, prefix, ui))
+	mux.HandleFunc("DELETE /redis/{key}", MigrateMiddleWare(hdls.redisInfo.DeleteKey, client, mgo, prefix, ui))
 
 	mux.HandleFunc("POST /login", HeaderRule(hdls.login.Login))
 	mux.HandleFunc("GET /clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix, ui))

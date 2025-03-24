@@ -27,7 +27,8 @@
         <table class="table table-striped table-hover" style="table-layout: auto;">
           <thead>
           <tr>
-            <th scope="col" class="w-table-number">#_ID</th>
+            <th scope="col" class="w-table-number">#</th>
+            <th scope="col" class="text-nowrap">_ID</th>
             <th scope="col" class="text-nowrap">Name</th>
             <th scope="col" class="text-nowrap">Detail</th>
             <th scope="col" class="text-center">Action</th>
@@ -35,6 +36,7 @@
           </thead>
           <tbody>
           <tr v-for="(item, key) in roles" :key="key" style="height: 3rem;line-height:3rem">
+            <td>{{key+1}}</td>
             <td class="text-right">{{item._id}}</td>
             <td>{{item.name}}</td>
             <td>

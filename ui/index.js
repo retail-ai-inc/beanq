@@ -35,7 +35,7 @@
       headers.set("Cache-Control",'no-cache, no-store, must-revalidate');
       headers.set("Pragma",'no-cache');
       headers.set("Expires",'0');
-      
+
       const res = await fetch(url,{
         cache: 'no-store',
         headers: {
@@ -89,7 +89,8 @@
           { path:'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
           { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)},
-          { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)}
+          { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)},
+          {path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)}
         ]
   };
 
