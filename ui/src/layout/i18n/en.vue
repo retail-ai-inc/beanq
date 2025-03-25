@@ -28,6 +28,7 @@
     "operationLog": "Operation Log",
     "user": "User",
     "role": "Role",
+    "config":"Config",
     "retryWarningHtml": "Warning: Item retry cannot be undone! Please proceed with caution!",
     "retryInfoHtml": "This operation will permanently retry the data of log.To prevent accidental actions, please confirm by entering the following:"
   }

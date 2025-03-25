@@ -33,7 +33,7 @@ const Nav = [
             {id:19,label:"Command",mark:"command",to:"/admin/redis/monitor",value:"/redis/monitor",pid:17}
         ]
     },
-    {id:20,label:"Setting",mark:"setting",tos:["/admin/optLog","/admin/user"],value:"",pid:0,children: [
+    {id:20,label:"Setting",mark:"setting",tos:["/admin/optLog","/admin/user","/admin/role","/admin/config"],value:"",pid:0,children: [
             {id:21,label:"Operation Log",mark:"operationLog",to:"/admin/optLog",value:"/log/opt_log",pid:20,children: [
                     {id:30,label:"Delete",mark:"delete",value:"/log/opt_log",pid:21}
                 ]
@@ -49,7 +49,8 @@ const Nav = [
                     {id:28,label:"Delete",mark:"delete",value:"",pid:26},
                     {id:29,label:"Edit",mark:"edit",value:"",pid:26}
                 ]
-            }
+            },
+            {id:31,label:"Config",mark:"config",to:"/admin/config",value:"/admin/config",pid:20}
         ]
     }
 ];
