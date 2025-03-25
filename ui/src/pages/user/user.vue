@@ -25,40 +25,52 @@
       </div>
     </div>
 
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-    <table class="table table-striped table-hover" style="table-layout: auto;">
-      <thead>
-      <tr>
-        <th scope="col" class="w-table-number">#</th>
-        <th scope="col" class="text-nowrap">Account</th>
-        <th scope="col" class="text-nowrap">Active</th>
-        <th scope="col" class="text-nowrap">Type</th>
-        <th scope="col" class="text-nowrap">Detail</th>
-        <th scope="col" class="text-center">Action</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
-        <td class="text-right">{{item._id}}</td>
-        <td>{{item.account}}</td>
-        <td>
-          <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
-        </td>
-        <td>{{item.type}}</td>
-        <td>
+    <Spinner v-if="loading"/>
+    <div v-else>
+      <NoMessage v-if="users.length <= 0">
+        <template #content="{content}">
+          create some admin ,please click the <button type="button" class="btn btn-primary" @click="addUserModal">{{$t('add')}}</button>
+        </template>
+      </NoMessage>
+      <div v-else>
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        <table class="table table-striped table-hover" style="table-layout: auto;">
+          <thead>
+          <tr>
+            <th scope="col" class="w-table-number">#</th>
+            <th scope="col" class="text-nowrap">_Id</th>
+            <th scope="col" class="text-nowrap">Account</th>
+            <th scope="col" class="text-nowrap">Active</th>
+            <th scope="col" class="text-nowrap">Type</th>
+            <th scope="col" class="text-nowrap">Detail</th>
+            <th scope="col" class="text-center">Action</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
+            <td>{{key+1}}</td>
+            <td class="text-right">{{item._id}}</td>
+            <td>{{item.account}}</td>
+            <td>
+              <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
+            </td>
+            <td>{{item.type}}</td>
+            <td>
           <span class="d-inline-block text-truncate" style="max-width: 5rem;">
             {{item.detail}}
           </span>
-        </td>
-        <td class="text-center text-nowrap">
-          <EditIcon @action="editUserModal(item)" />
-          <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
-        </td>
-      </tr>
-      </tbody>
+            </td>
+            <td class="text-center text-nowrap">
+              <EditIcon @action="editUserModal(item)" />
+              <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
+            </td>
+          </tr>
+          </tbody>
 
-    </table>
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        </table>
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      </div>
+    </div>
 
     <!--add user modal-->
     <div class="modal fade" id="addUserDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addUserDetailLabel">
@@ -91,6 +103,7 @@
             <div class="mb-3">
               <label for="passwordInput" class="form-label">Password</label>
               <input
+                  name="passwordInput"
                   type="text"
                   class="form-control"
                   id="passwordInput"
@@ -104,7 +117,7 @@
             </div>
             <div class="mb-3">
               <label for="typeSelect" class="form-label">Type</label>
-              <select class="form-select" aria-label="Type Select" id="typeSelect" v-model="userForm.type">
+              <select class="form-select" aria-label="Type Select" id="typeSelect" name="typeSelect" v-model="userForm.type">
                 <option selected>Open this select menu</option>
                 <option value="normal">Normal</option>
                 <option value="google">Google</option>
@@ -112,28 +125,31 @@
             </div>
             <div class="mb-3">
               <label for="roleSelect" class="form-label">Role</label>
-              <select class="form-select" id="roleSelect" v-model="userForm.roleId">
+              <select class="form-select" id="roleSelect" name="roleSelect" v-model="userForm.roleId">
                 <option v-for="(item,key) in roles" :value="item._id" :key="key" :selected="userForm.roleId === item._id">{{item.name}}</option>
               </select>
             </div>
             <div class="mb-3">
-              <label class="form-label">Active</label>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="1" v-model="userForm.active" :checked="userForm.active == 1">
-                <label class="form-check-label" for="flexRadioDefault1">
-                  Yes
-                </label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="2" v-model="userForm.active" :checked="userForm.active == 2">
-                <label class="form-check-label" for="flexRadioDefault2">
-                  No
-                </label>
-              </div>
+              <label class="form-label">
+                Active
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="1" v-model="userForm.active" :checked="userForm.active == 1">
+                  <label class="form-check-label" for="flexRadioDefault1">
+                    Yes
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="2" v-model="userForm.active" :checked="userForm.active == 2">
+                  <label class="form-check-label" for="flexRadioDefault2">
+                    No
+                  </label>
+                </div>
+              </label>
+
             </div>
             <div class="mb-3">
               <label for="detailArea" class="form-label">Account Detail</label>
-              <textarea class="form-control" id="detailArea" rows="3" v-model="userForm.detail"></textarea>
+              <textarea class="form-control" id="detailArea" name="detailArea" rows="3" v-model="userForm.detail"></textarea>
             </div>
           </div>
           <div class="modal-footer">
@@ -160,13 +176,15 @@
   </div>
 </template>
 <script setup>
-import { ref,inject,reactive,computed,onMounted,toRefs,onUnmounted,watch } from "vue";
+import { ref,reactive,computed,onMounted,toRefs,onUnmounted } from "vue";
 import DeleteIcon from "../components/icons/delete_icon.vue";
 import EditIcon from "../components/icons/edit_icon.vue";
 import Pagination from "../components/pagination.vue";
 import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import LoginModal from "../components/loginModal.vue";
+import NoMessage from "../components/noMessage.vue";
+import Spinner from "../components/spinner.vue";
 
 const nav = computed(()=>{
   return Nav;
@@ -177,6 +195,7 @@ const [id,toastRef] = [ref("userToast"),ref(null)];
 const [users,accountReadOnly,addUserDetail] = [ref([]),ref(false),ref(null)];
 const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 const [accountInput,userId] = [ref(""),ref("")];
+const [loading] = [ref(false)];
 
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 
@@ -205,12 +224,15 @@ async function roleList(){
 }
 
 async function userList(){
+  loading.value = true;
   try {
     let res = await userApi.List(page.value,pageSize.value,accountInput.value);
-
-    users.value = res.data;
+    users.value = res.data ?? [];
     cursor.value = res.cursor;
     total.value = res.total ;
+    setTimeout(()=>{
+      loading.value = false;
+    },800)
   }catch (e) {
     if(e.status === 401){
       loginModal.value.error(new Error(e));

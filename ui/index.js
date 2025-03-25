@@ -5,6 +5,7 @@
     legacy:false,
     locale:"ja",
   });
+
   //vue create
   const options = {
 
@@ -13,7 +14,6 @@
       vueRouter: VueRouter,
       request:request,
       config:config,
-      I18NG:VueI18n,
       i18n:i18n,
       Base,
       //apis
@@ -30,15 +30,24 @@
     },
 
     async getFile(url) {
-      const res = await fetch(url);
 
-      if ( !res.ok )
+      const headers = new Headers();
+      headers.set("Cache-Control",'no-cache, no-store, must-revalidate');
+      headers.set("Pragma",'no-cache');
+      headers.set("Expires",'0');
+
+      const res = await fetch(url,{
+        cache: 'no-store',
+        headers: {
+          ...headers,
+        }
+      });
+
+      if ( !res.ok ){
         throw Object.assign(new Error(res.statusText + ' ' + url), { res });
-
-      return {
-        getContentData: (asBinary ) => asBinary ? res.arrayBuffer() : (res.text()),
-        type:".vue"
       }
+      return res.text();
+
     },
 
     addStyle(styleStr) {
@@ -80,7 +89,8 @@
           { path:'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
           { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)},
-          { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)}
+          { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)},
+          {path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)}
         ]
   };
 

@@ -120,8 +120,8 @@ function sseConnect(){
     }
     pods.value = npods;
 
-    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues);
-    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues);
+    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues,execTime.value);
+    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues,execTime.value);
   })
   sse.value.onerror = (err)=>{
     sse.value.close();
@@ -131,11 +131,15 @@ function sseConnect(){
 
 onMounted( () => {
 
-  const parentEle = homeEle.value.parentElement;
-  resizeObserver = new ResizeObserver((entries)=>{
+  let observerFun = ()=>{
     resize();
-  })
-  Base.Debounce( resizeObserver.observe(parentEle),300) ;
+    return false;
+  }
+  resizeObserver = new ResizeObserver((entries)=>{
+    Base.Debounce( observerFun(),5000);
+  });
+  const parentEle = homeEle.value.parentElement;
+  resizeObserver.observe(parentEle);
 
   sseConnect();
 

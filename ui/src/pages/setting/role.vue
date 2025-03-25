@@ -17,34 +17,44 @@
         </div>
     </div>
 
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-    <table class="table table-striped table-hover" style="table-layout: auto;">
-      <thead>
-      <tr>
-        <th scope="col" class="w-table-number">#_ID</th>
-        <th scope="col" class="text-nowrap">Name</th>
-        <th scope="col" class="text-nowrap">Detail</th>
-        <th scope="col" class="text-center">Action</th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
-        <td class="text-right">{{item._id}}</td>
-        <td>{{item.name}}</td>
-        <td>
+    <Spinner v-if="loading"/>
+    <div v-else>
+      <NoMessage v-if="roles.length <= 0">
+        create some admin ,please click the <button type="button" class="btn btn-primary" @click="addRoleModal">{{$t('add')}}</button>
+      </NoMessage>
+      <div v-else>
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        <table class="table table-striped table-hover" style="table-layout: auto;">
+          <thead>
+          <tr>
+            <th scope="col" class="w-table-number">#</th>
+            <th scope="col" class="text-nowrap">_ID</th>
+            <th scope="col" class="text-nowrap">Name</th>
+            <th scope="col" class="text-nowrap">Detail</th>
+            <th scope="col" class="text-center">Action</th>
+          </tr>
+          </thead>
+          <tbody>
+          <tr v-for="(item, key) in roles" :key="key" style="height: 3rem;line-height:3rem">
+            <td>{{key+1}}</td>
+            <td class="text-right">{{item._id}}</td>
+            <td>{{item.name}}</td>
+            <td>
           <span class="d-inline-block text-truncate" style="max-width: 5rem;">
             {{item.detail}}
           </span>
-        </td>
-        <td class="text-center text-nowrap">
-          <EditIcon @action="editUserModal(item)" />
-          <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
-        </td>
-      </tr>
-      </tbody>
+            </td>
+            <td class="text-center text-nowrap">
+              <EditIcon @action="editUserModal(item)" />
+              <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
+            </td>
+          </tr>
+          </tbody>
 
-    </table>
-    <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        </table>
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      </div>
+    </div>
 
     <!--add user modal-->
     <div class="modal fade" id="addRoleDetail" data-bs-keyboard="false" tabindex="-1" aria-labelledby="addRoleDetailLabel">
@@ -58,18 +68,19 @@
           </div>
           <div class="modal-body">
             <div class="mb-3">
-              <label for="nameInput" class="form-label">Role Name
+              <label for="nameInput" class="form-label" style="width: 50%">Role Name
+                <input
+                    type="text"
+                    class="form-control"
+                    id="nameInput"
+                    @blur="checkValid"
+                    v-model="roleForm.name"
+                    :readonly="accountReadOnly == true ? 'readonly': false"
+                    :disabled="accountReadOnly === true ? 'disabled': false"
+                    placeholder="Please input a role name"
+                />
               </label>
-              <input
-                  type="text"
-                  class="form-control"
-                  id="nameInput"
-                  @blur="checkValid"
-                  v-model="roleForm.name"
-                  :readonly="accountReadOnly == true ? 'readonly': false"
-                  :disabled="accountReadOnly === true ? 'disabled': false"
-                  placeholder="Please input a role name"
-              />
+
               <div class="invalid-feedback">
                 Please input a role name.
               </div>
@@ -110,6 +121,8 @@ import Action from "../components/action.vue";
 import Btoast from "../components/btoast.vue";
 import Tree from "../components/tree.vue";
 import LoginModal from "../components/loginModal.vue";
+import Spinner from "../components/spinner.vue";
+import NoMessage from "../components/noMessage.vue";
 
 
 const nav = computed(()=>{
@@ -118,21 +131,26 @@ const nav = computed(()=>{
 
 const [deleteLabel,delModal,showDeleteModal,account] = [ref("deleteLabel"),ref(null),ref("showDeleteModal"),ref("")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
-const [users,accountReadOnly,addRoleDetail] = [ref([]),ref(false),ref(null)];
+const [roles,accountReadOnly,addRoleDetail] = [ref([]),ref(false),ref(null)];
 const [page,pageSize,cursor,total] = [ref(1),ref(10),ref(0),ref(0)];
 const [nameInput,roleId] = [ref(""),ref("")];
 const roleForm = ref({name:"",roles:[]});
 const nodes = ref(Nav);
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const loading = ref(false);
 
 
 async function roleList(){
+  loading.value = true;
   try {
     let res = await roleApi.List(page.value,pageSize.value,nameInput.value);
 
-    users.value = res.data;
+    roles.value = res.data ?? [];
     cursor.value = res.cursor;
     total.value = res.total ;
+    setTimeout(()=>{
+      loading.value = false;
+    },800)
   }catch (e) {
     if(e.status === 401){
       loginModal.value.error(new Error(e));
@@ -235,15 +253,16 @@ function changePage(page,cursor){
 
 function checkValid(e){
 
-  let next = e.currentTarget.nextElementSibling;
-  next.style.display = "none";
-  //check account
-  if(e.currentTarget.id === "nameInput"){
-    next.innerHTML = "Please input a name";
-    if(roleForm.value.name === ""){
-      next.style.display = "block";
-    }
+  let currentElement = document.querySelector('#nameInput');
+  let parentElement = currentElement.parentNode;
+  let nextSiblingOfParent = parentElement.nextElementSibling;
+  nextSiblingOfParent.style.display = "none";
+
+  nextSiblingOfParent.innerHTML = "Please input a name";
+  if(roleForm.value.name === ""){
+    nextSiblingOfParent.style.display = "block";
   }
+
 }
 
 function addRoleModal(){

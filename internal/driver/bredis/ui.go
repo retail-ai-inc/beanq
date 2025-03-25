@@ -3,6 +3,9 @@ package bredis
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
@@ -11,8 +14,6 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 	"github.com/shirou/gopsutil/v4/mem"
 	"github.com/spf13/cast"
-	"strings"
-	"time"
 )
 
 type UITool struct {

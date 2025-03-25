@@ -2,14 +2,15 @@ package routers
 
 import (
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"golang.org/x/net/context"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type RedisInfo struct {
@@ -181,4 +182,36 @@ func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 			ticker.Reset(time.Second)
 		}
 	}
+}
+
+func (t *RedisInfo) Keys(w http.ResponseWriter, r *http.Request) {
+
+	res, cancel := response.Get()
+	defer cancel()
+
+	result, err := t.client.Keys(r.Context(), "*").Result()
+	if err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	res.Data = result
+	_ = res.Json(w, http.StatusOK)
+}
+
+func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+	key := r.PathValue("key")
+
+	result, err := t.client.Del(r.Context(), key).Result()
+	if err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	res.Data = result
+	_ = res.Json(w, http.StatusOK)
 }

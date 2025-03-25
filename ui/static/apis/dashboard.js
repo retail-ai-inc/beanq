@@ -5,7 +5,7 @@ const dashboardApi = {
     Nodes(){
         return request.get("nodes");
     },
-    QueueLine(queues){
+    QueueLine(queues,execTime){
 
         let vals = Object.values(queues);
         let ready = [],unacked = [],total = [];
@@ -15,7 +15,11 @@ const dashboardApi = {
             unacked.push(val["unacked"]);
             total.push(val["total"]);
         })
-
+        let subtextNotice = `${execTime}s`;
+        if(execTime > 60){
+            execTime = Math.floor(execTime / 60);
+            subtextNotice = `${execTime}m`;
+        }
         let series = [
             {"name":"Ready","type":"line","data":ready},
             {"name":"Unacked","type":"line","data":unacked},
@@ -26,7 +30,7 @@ const dashboardApi = {
 
         lineOpt.title = {
             text: 'Queued messages',
-            subtext: '(chart:last minute)(10s)'
+            subtext:`(chart:last minute)(${subtextNotice})`
         };
         lineOpt.tooltip = {
             trigger: 'axis'
@@ -61,7 +65,7 @@ const dashboardApi = {
         lineOpt.series = series;
         return lineOpt;
     },
-    MessageRateLine(values){
+    MessageRateLine(values,execTime){
 
 
         let xdata = Object.keys(values);
@@ -73,10 +77,16 @@ const dashboardApi = {
         })
         confirm = deliver = redelivered = ack = get = publish;
 
+        let subtextNotice = `${execTime}s`;
+        if(execTime > 60){
+            execTime = Math.floor(execTime / 60);
+            subtextNotice = `${execTime}m`;
+        }
+
         let line = {};
         line.title = {
             text: 'Message rates',
-            subtext: '(chart:last minute)(10s)',
+            subtext: `(chart:last minute)(${subtextNotice})`,
         };
         line.tooltip = {
             trigger: 'axis'

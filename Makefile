@@ -94,7 +94,7 @@ clean:
 
 	@echo "done!"
 
-GOLANGCI_LINT_VERSION=v1.55.2
+GOLANGCI_LINT_VERSION=v1.64.8
 GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
 lint: ## run all the lint tools, install golangci-lint if not exist
 	@if [ ! -x "$(GOLANGCI_LINT_TOOL)" ]; then \

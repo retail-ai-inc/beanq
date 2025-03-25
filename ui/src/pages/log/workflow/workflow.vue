@@ -6,52 +6,58 @@
           <h5 class="card-title">List of Workflow Log</h5>
         </div>
       </div>
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-      <div class="row">
-        <div class="col-12">
-          <div v-if="workflowlogs.length <= 0" style="text-align: center;font-size: 1.2rem;">
-            Hurrah! We processed all messages.
+
+      <Spinner v-if="loading"/>
+      <div v-else>
+        <NoMessage v-if="workflowlogs.length <= 0"/>
+        <div v-else>
+          <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+          <div class="row">
+            <div class="col-12">
+
+              <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                  <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">_Id</th>
+                    <th scope="col">GId</th>
+                    <th scope="col">TaskId</th>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Topic</th>
+                    <th scope="col">Message Id</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Statement</th>
+                    <th scope="col">CreatedTime</th>
+                    <th scope="col">Action</th>
+                  </tr>
+                  </thead>
+                  <tbody>
+                  <tr v-for="(item, key) in workflowlogs" :key="key" style="height: 3rem;line-height:3rem">
+                    <th scope="row">{{key+1}}</th>
+                    <th scope="row">{{item._id}}</th>
+                    <td><router-link to="" class="nav-link text-primary" style="display: contents">{{item.Gid}}</router-link></td>
+                    <td>{{item.TaskId}}</td>
+                    <td>{{item.Channel}}</td>
+                    <td>{{item.Topic}}</td>
+                    <td>{{item.MessageId}}</td>
+                    <td>
+                      {{item.Status}}
+                    </td>
+                    <td>{{item.Statement}}</td>
+                    <td>{{item.CreatedAt}}</td>
+                    <td class="text-center text-nowrap">
+                      <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
+                    </td>
+                  </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-          <div v-else class="table-responsive">
-            <table class="table table-striped table-hover">
-              <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">GId</th>
-                <th scope="col">TaskId</th>
-                <th scope="col">Channel</th>
-                <th scope="col">Topic</th>
-                <th scope="col">Message Id</th>
-                <th scope="col">Status</th>
-                <th scope="col">Statement</th>
-                <th scope="col">CreatedTime</th>
-                <th scope="col">Action</th>
-              </tr>
-              </thead>
-              <tbody>
-              <tr v-for="(item, key) in workflowlogs" :key="key" style="height: 3rem;line-height:3rem">
-                <th scope="row">{{item._id}}</th>
-                <td><router-link to="" class="nav-link text-primary" style="display: contents">{{item.Gid}}</router-link></td>
-                <td>{{item.TaskId}}</td>
-                <td>{{item.Channel}}</td>
-                <td>{{item.Topic}}</td>
-                <td>{{item.MessageId}}</td>
-                <td>
-                  {{item.Status}}
-                </td>
-                <td>{{item.Statement}}</td>
-                <td>{{item.CreatedAt}}</td>
-                <td class="text-center text-nowrap">
-                  <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
-                </td>
-              </tr>
-              </tbody>
-            </table>
-          </div>
+          <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
         </div>
       </div>
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
-
     </div>
     <Action :label="deleteLabel" :id="showDeleteModal" :data-id="deleteId" @action="deleteInfo">
       <template #title="{title}">
@@ -69,19 +75,26 @@ import DeleteIcon from "../../components/icons/delete_icon.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
 import LoginModal from "../../components/loginModal.vue";
+import Spinner from "../../components/spinner.vue";
+import NoMessage from "../../components/noMessage.vue";
 
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const [workflowlogs,page,pageSize,total,cursor] = [ref([]),ref(1),ref(10),ref(0),ref(0)];
 const [deleteLabel,showDeleteModal,deleteId] = [ref("deleteLabel"),ref("showDeleteModal"),ref("")];
 const [noticeId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
+const loading = ref(false);
 // logs
 const getWorkFLowLogs=(async (pageV,pageSizeV)=>{
+  loading.value = true;
   try {
     let res = await workflowApi.List(pageV,pageSizeV);
-    workflowlogs.value = res.data;
+    workflowlogs.value = res.data ?? [];
     total.value = res.total;
     page.value =  res.cursor;
     cursor.value = res.cursor;
+    setTimeout(()=>{
+      loading.value = false;
+    },800)
   }catch (err) {
     //401 error
     if (err?.response?.status === 401){

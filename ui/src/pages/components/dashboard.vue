@@ -47,9 +47,9 @@
     <div class="col bg-warning">
       <div class="inner">
         <h3>
-          <router-link to="" class="nav-link text-muted link-color">{{db_size}}</router-link>
+          <router-link to="db-size" class="nav-link text-muted link-color">{{db_size}}</router-link>
         </h3>
-        <h5 class="my-auto">Total Payload</h5>
+        <h5 class="my-auto">DB Size</h5>
       </div>
       <div class="small-box">
         <TotalIcon />

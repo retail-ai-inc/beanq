@@ -5,7 +5,10 @@
     "search": "Search",
     "logOut": "LogOut",
     "close": "Close",
-    "sureDelete": "Are you sure Delete？",
+    "sureDelete": "Are you sure to Delete？",
+    "sureRetry": "Are you sure to Retry？",
+
+    "noMsg": "Hurrah! We processed all messages.",
 
     "home": "Home",
     "schedule": "Schedule",

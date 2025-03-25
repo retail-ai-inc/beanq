@@ -9,11 +9,6 @@ const Base = {
             }, wait);
         };
     },
-    GetLang(i18n){
-        let ls = Storage.GetItem("lang") || "0";
-        let lang = parseInt(ls);
-        return i18n[lang].value;
-    },
     Alert(message,type){
         const alertPlaceholder = document.getElementById('payloadAlertInfo');
         alertPlaceholder.innerHTML = `<div class="alert alert-${type} alert-dismissible" id="my-alert" role="alert">
