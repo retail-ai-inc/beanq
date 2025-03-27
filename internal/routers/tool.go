@@ -3,11 +3,13 @@ package routers
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/spf13/cast"
-	"strings"
-	"time"
 )
 
 type ObjectStruct struct {
@@ -195,4 +197,20 @@ func ScheduleQueueKey(prefix string) string {
 }
 func QueueKey(prefix string) string {
 	return strings.Join([]string{prefix, "*", "stream"}, ":")
+}
+
+func ReturnHtml(w http.ResponseWriter, errorString string) {
+	html := `<html>
+	<head>
+		<meta charset="UTF-8">
+		<title>Error</title>
+	</head>
+	<body>
+		<div style="text-align:center;font-weight:bold;margin-top:40vh;">%s</div>
+	</body></html>`
+
+	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
+	nhtml := fmt.Sprintf(html, errorString)
+	_, _ = w.Write([]byte(nhtml))
+	w.WriteHeader(http.StatusInternalServerError)
 }

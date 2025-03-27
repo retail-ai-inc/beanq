@@ -87,7 +87,9 @@ func (t *UITool) HostName(ctx context.Context) error {
 		return err
 	}
 
-	keys, _, err := t.client.ZScan(ctx, tool.BeanqHostName, 0, fmt.Sprintf("*%s*", info.Hostname), 10).Result()
+	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
+
+	keys, _, err := t.client.ZScan(ctx, hostNameKey, 0, fmt.Sprintf("*%s*", info.Hostname), 10).Result()
 	if err != nil {
 		return err
 	}
@@ -99,14 +101,14 @@ func (t *UITool) HostName(ctx context.Context) error {
 		}
 		if v, ok := data["hostName"]; ok {
 			if cast.ToString(v) == info.Hostname {
-				t.client.ZRem(ctx, tool.BeanqHostName, key)
+				t.client.ZRem(ctx, hostNameKey, key)
 				data = nil
 				continue
 			}
 		}
 		if v, ok := data["expiredTime"]; ok {
 			if cast.ToInt64(v) < now.Unix() {
-				t.client.ZRem(ctx, tool.BeanqHostName, key)
+				t.client.ZRem(ctx, hostNameKey, key)
 				data = nil
 				continue
 			}
@@ -141,7 +143,7 @@ func (t *UITool) HostName(ctx context.Context) error {
 		return err
 	}
 
-	if err := t.client.ZAdd(ctx, tool.BeanqHostName, &redis.Z{
+	if err := t.client.ZAdd(ctx, hostNameKey, &redis.Z{
 		Score:  cast.ToFloat64(now.Unix()),
 		Member: bt,
 	}).Err(); err != nil {

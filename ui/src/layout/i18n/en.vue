@@ -7,6 +7,8 @@
     "close": "Close",
     "sureDelete": "Are you sure to Delete？",
     "sureRetry": "Are you sure to Retry？",
+    "success": "Success",
+    "fail": "Fail",
 
     "noMsg": "Hurrah! We processed all messages.",
 

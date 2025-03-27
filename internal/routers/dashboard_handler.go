@@ -173,8 +173,8 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// pod status
-
-		pods, _, err := t.client.ZScan(r.Context(), tool.BeanqHostName, 0, "*", 10).Result()
+		hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
+		pods, _, err := t.client.ZScan(r.Context(), hostNameKey, 0, "*", 10).Result()
 		if err != nil {
 			result.Code = berror.InternalServerErrorCode
 			result.Msg = err.Error()

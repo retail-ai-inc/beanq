@@ -3,16 +3,17 @@ package tool
 import (
 	"context"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/v3/helper/json"
-	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
-	"github.com/spf13/cast"
 	"hash/fnv"
 	"math"
 	"math/rand"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/v3/helper/json"
+	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/spf13/cast"
 )
 
 func makeKey(keys ...string) string {

@@ -1,7 +1,10 @@
 package routers
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -214,4 +217,99 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	}
 	res.Data = result
 	_ = res.Json(w, http.StatusOK)
+}
+
+type Config struct {
+	Google   GoogleCredential `json:"google"`
+	SMTP     SMTP             `json:"smtp"`
+	SendGrid SendGrid         `json:"sendGrid"`
+}
+
+func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+
+	var buf bytes.Buffer
+	defer r.Body.Close()
+
+	if _, err := io.Copy(&buf, r.Body); err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+	var config Config
+	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
+		res.Code = response.MissParameterCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+
+	data := make(map[string]any, 3)
+	data["google"] = config.Google
+	data["smtp"] = config.SMTP
+	data["sendGrid"] = config.SendGrid
+	if err := t.client.HSet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), data).Err(); err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	_ = res.Json(w, http.StatusOK)
+}
+
+func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+
+	data, err := t.client.HGetAll(r.Context(), strings.Join([]string{t.prefix, "config"}, ":")).Result()
+	if err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	res.Data = data
+	_ = res.Json(w, http.StatusOK)
+}
+
+type GoogleCredential struct {
+	ClientId     string `json:"clientId"`
+	ClientSecret string `json:"clientSecret"`
+	CallBackUrl  string `json:"callBackUrl"`
+}
+
+func (t GoogleCredential) MarshalBinary() ([]byte, error) {
+	return json.Marshal(t)
+}
+func (t GoogleCredential) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, t)
+}
+
+type SMTP struct {
+	Host     string `json:"host"`
+	Port     string `json:"port"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+}
+
+func (t SMTP) MarshalBinary() ([]byte, error) {
+	return json.Marshal(t)
+}
+func (t SMTP) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, t)
+}
+
+type SendGrid struct {
+	Key         string `json:"key"`
+	FromName    string `json:"fromName"`
+	FromAddress string `json:"fromAddress"`
+}
+
+func (t SendGrid) MarshalBinary() ([]byte, error) {
+	return json.Marshal(t)
+}
+func (t SendGrid) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, t)
 }

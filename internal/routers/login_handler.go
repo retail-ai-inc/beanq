@@ -1,7 +1,12 @@
 package routers
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
@@ -12,8 +17,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
-	"net/http"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -104,7 +107,25 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 
 func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 
-	gAuth := googleAuth.New()
+	config, err := t.client.HGetAll(r.Context(), strings.Join([]string{t.prefix, "config"}, ":")).Result()
+	if err != nil {
+		ReturnHtml(w, err.Error())
+		return
+	}
+
+	var google GoogleCredential
+	if v, ok := config["google"]; ok {
+		if err := json.NewDecoder(strings.NewReader(v)).Decode(&google); err != nil {
+			ReturnHtml(w, err.Error())
+			return
+		}
+	}
+
+	gAuth, err := googleAuth.New(google.ClientId, google.ClientSecret, google.CallBackUrl)
+	if err != nil {
+		ReturnHtml(w, err.Error())
+		return
+	}
 
 	state := time.Now().String()
 	url := gAuth.AuthCodeUrl(state)
@@ -118,21 +139,23 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	state := r.FormValue("state")
-	if state != "test_self" {
-		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+	code := r.FormValue("code")
+	clientId := t.ui.GoogleAuth.ClientId
+	clientSecret := t.ui.GoogleAuth.ClientSecret
+	callbackUrl := t.ui.GoogleAuth.CallbackUrl
+	auth, err := googleAuth.New(clientId, clientSecret, callbackUrl)
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-
-	code := r.FormValue("code")
-	auth := googleAuth.New()
-
 	token, err := auth.Exchange(r.Context(), code)
 
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 
@@ -140,7 +163,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 
@@ -149,7 +172,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	if err != nil || user == nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 
@@ -169,7 +192,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 	proto := r.Header.Get("X-Forwarded-Proto")

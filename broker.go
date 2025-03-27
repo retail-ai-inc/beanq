@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/internal"
@@ -11,11 +17,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )

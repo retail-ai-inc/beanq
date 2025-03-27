@@ -96,6 +96,8 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 	mux.HandleFunc("GET /redis/monitor", MigrateSSE(hdls.redisInfo.Monitor, client, mgo, prefix, ui, "redis_monitor"))
 	mux.HandleFunc("GET /redis/keys", MigrateMiddleWare(hdls.redisInfo.Keys, client, mgo, prefix, ui))
 	mux.HandleFunc("DELETE /redis/{key}", MigrateMiddleWare(hdls.redisInfo.DeleteKey, client, mgo, prefix, ui))
+	mux.HandleFunc("PUT /redis/config", MigrateMiddleWare(hdls.redisInfo.Config, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /redis/config", MigrateMiddleWare(hdls.redisInfo.ConfigInfo, client, mgo, prefix, ui))
 
 	mux.HandleFunc("POST /login", HeaderRule(hdls.login.Login))
 	mux.HandleFunc("GET /clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix, ui))
