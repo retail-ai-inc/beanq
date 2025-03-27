@@ -287,7 +287,7 @@ func (t GoogleCredential) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t GoogleCredential) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, t)
+	return json.Unmarshal(data, &t)
 }
 
 type SMTP struct {
@@ -301,7 +301,7 @@ func (t SMTP) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t SMTP) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, t)
+	return json.Unmarshal(data, &t)
 }
 
 type SendGrid struct {
@@ -314,7 +314,7 @@ func (t SendGrid) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t SendGrid) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, t)
+	return json.Unmarshal(data, &t)
 }
 
 type Rule struct {
@@ -327,5 +327,5 @@ func (t Rule) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t Rule) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, t)
+	return json.Unmarshal(data, &t)
 }
