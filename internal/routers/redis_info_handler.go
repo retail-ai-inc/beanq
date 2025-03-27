@@ -220,9 +220,10 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 }
 
 type Config struct {
-	Google   GoogleCredential `json:"google"`
-	SMTP     SMTP             `json:"smtp"`
-	SendGrid SendGrid         `json:"sendGrid"`
+	Google   *GoogleCredential `json:"google"`
+	SMTP     *SMTP             `json:"smtp"`
+	SendGrid *SendGrid         `json:"sendGrid"`
+	Rule     *Rule             `json:"rule"`
 }
 
 func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
@@ -247,9 +248,11 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := make(map[string]any, 3)
+
 	data["google"] = config.Google
 	data["smtp"] = config.SMTP
 	data["sendGrid"] = config.SendGrid
+	data["rule"] = config.Rule
 	if err := t.client.HSet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), data).Err(); err != nil {
 		res.Code = response.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -311,5 +314,18 @@ func (t SendGrid) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t SendGrid) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, t)
+}
+
+type Rule struct {
+	When []any `json:"when"`
+	If   []any `json:"if"`
+	Then []any `json:"then"`
+}
+
+func (t Rule) MarshalBinary() ([]byte, error) {
+	return json.Marshal(t)
+}
+func (t Rule) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, t)
 }
