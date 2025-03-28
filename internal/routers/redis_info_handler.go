@@ -247,7 +247,7 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := make(map[string]any, 3)
+	data := make(map[string]any, 4)
 
 	data["google"] = config.Google
 	data["smtp"] = config.SMTP

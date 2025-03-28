@@ -1,12 +1,13 @@
 package routers
 
 import (
-	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/response"
 )
 
 type Queue struct {
