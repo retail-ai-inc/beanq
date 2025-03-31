@@ -22,8 +22,12 @@
                       <th scope="col">Topic</th>
                       <th scope="col">State</th>
                       <th scope="col">Mood Type</th>
-                      <th scope="col">Memory usage(byte)</th>
-                      <th scope="col">Idle(s)</th>
+                      <th scope="col">Memory usage(byte)
+                        <HelpIcon title="The number of bytes required to serialize the object, which can be used to estimate memory usage"/>
+                      </th>
+                      <th scope="col">Idle(s)
+                        <HelpIcon title="Represents the number of seconds since a key was last accessed"/>
+                      </th>
                     </tr>
                     </thead>
                     <tbody>
@@ -61,6 +65,7 @@ import LoginModal from "../components/loginModal.vue";
 import Btoast from "../components/btoast.vue";
 import Spinner from "../components/spinner.vue";
 import NoMessage from "../components/noMessage.vue";
+import HelpIcon from "../components/icons/help_icon.vue";
 
 const [queues,page,pageSize,total,uRouter] = [ref([]),ref(1),ref(10),ref(1),useRouter()];
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
