@@ -42,7 +42,9 @@ func (t *Result) EventMsg(w http.ResponseWriter, eventName string) error {
 		return err
 	}
 	var builder strings.Builder
-	builder.Grow(9)
+	builder.Grow(10)
+
+	builder.WriteString("retry:300\n")
 
 	builder.WriteString("id:")
 	builder.WriteString(cast.ToString(time.Now().Unix()))

@@ -15,6 +15,7 @@ const dashboardApi = {
             unacked.push(val["unacked"]);
             total.push(val["total"]);
         })
+
         let subtextNotice = `${execTime}s`;
         if(execTime > 60){
             execTime = Math.floor(execTime / 60);
@@ -60,6 +61,14 @@ const dashboardApi = {
             type: 'value',
             axisLine: {
                 show: true,
+            },
+            axisLabel: {
+                formatter: function (value) {
+                    if (value < 1){
+                        value = 0;
+                    }
+                    return value + '/s';
+                }
             }
         };
         lineOpt.series = series;
@@ -119,6 +128,9 @@ const dashboardApi = {
             },
             axisLabel: {
                 formatter: function (value) {
+                    if(value<1){
+                        value = 0;
+                    }
                     return value + '/s';
                 }
             }

@@ -125,7 +125,7 @@ function sseConnect(){
   })
   sse.value.onerror = (err)=>{
     sse.value.close();
-    setTimeout(sseConnect,3000);
+    setTimeout(sseConnect,300);
   }
 }
 

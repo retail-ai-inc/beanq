@@ -1,7 +1,6 @@
 package routers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"runtime"
@@ -49,6 +48,7 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	if tim == "" {
 		tim = "10"
 	}
+
 	// prepare data for charts
 	uiTool := bredis.NewUITool(t.client, t.prefix)
 	timeDuration := time.Duration(cast.ToInt64(tim)) * time.Second
@@ -99,60 +99,43 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-timer.C:
 		}
-		timer.Reset(time.Duration(cast.ToInt64(tim)) * time.Second)
+		timer.Reset(timeDuration)
+		keysLen := 0
 
-		numCpu := runtime.NumCPU()
+		// get queue total
+		keys, err = client.Keys(nctx, strings.Join([]string{t.prefix, "*", "stream"}, ":"))
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "dashboard")
+			flusher.Flush()
+		}
+		keysLen = len(keys)
 
-		func() {
-			ctx8, cancel8 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel8()
-			// get queue total
-			keys, err = client.Keys(ctx8, strings.Join([]string{t.prefix, "*", "stream"}, ":"))
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-
-		keysLen := len(keys)
-
-		func() {
-			ctx9, cancel9 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel9()
-			// db size
-			dbSize, err = client.DbSize(ctx9)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-
-		func() {
-			ctx10, cancel10 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel10()
-			failCount, err = t.mog.DocumentCount(ctx10, "failed")
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
-		func() {
-			ctx11, cancel11 := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel11()
-			successCount, err = t.mog.DocumentCount(ctx11, "success")
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, "dashboard")
-				flusher.Flush()
-			}
-		}()
+		// db size
+		dbSize, err = client.DbSize(nctx)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "dashboard")
+			flusher.Flush()
+		}
+		// failed count
+		failCount, err = t.mog.DocumentCount(nctx, "failed")
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "dashboard")
+			flusher.Flush()
+		}
+		// success count
+		successCount, err = t.mog.DocumentCount(nctx, "success")
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, "dashboard")
+			flusher.Flush()
+		}
 
 		//queue messages
 		queues := make(map[string]any, 5)
@@ -180,12 +163,13 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			result.Msg = err.Error()
 			_ = result.EventMsg(w, "dashboard")
 			flusher.Flush()
+			continue
 		}
 
 		result.Data = map[string]any{
 			"queue_total":   keysLen,
 			"db_size":       dbSize,
-			"num_cpu":       numCpu,
+			"num_cpu":       runtime.NumCPU(),
 			"fail_count":    failCount,
 			"success_count": successCount,
 			"queues":        queues,

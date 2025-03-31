@@ -4,6 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
+	"os"
+	"runtime/debug"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
@@ -12,12 +19,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
-	"math/rand"
-	"os"
-	"runtime/debug"
-	"strings"
-	"sync"
-	"time"
 )
 
 type RdbBroker struct {
