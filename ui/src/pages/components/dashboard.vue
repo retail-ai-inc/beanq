@@ -58,19 +58,26 @@
   </div>
 </template>
 <script setup>
-import {defineProps} from "vue";
+import {ref,onMounted} from "vue";
 import QueueTotalIcon from "./icons/queue_total_icon.vue";
 import CpuTotalIcon from "./icons/cpu_total_icon.vue";
 import FailTotalIcon from "./icons/fail_total_icon.vue";
 import SuccessTotalIcon from "./icons/success_total_icon.vue";
 import TotalIcon from "./icons/total_icon.vue";
 
-const props = defineProps({
-  queue_total:0,
-  num_cpu:0,
-  fail_count:0,
-  success_count:0,
-  db_size:0
+const [queue_total,num_cpu,fail_count,success_count,db_size] = [ref(0),ref(0),ref(0),ref(0),ref(0)];
+
+onMounted(async ()=>{
+  try {
+    let res = await dashboardApi.Total();
+    queue_total.value = res?.queue_total || 0;
+    num_cpu.value = res?.num_cpu || 0;
+    fail_count.value = res?.fail_count || 0;
+    success_count.value = res?.success_count || 0;
+    db_size.value = res?.db_size || 0;
+  }catch (e) {
+
+  }
 })
 
 </script>

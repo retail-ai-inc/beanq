@@ -2,11 +2,12 @@ package tool
 
 import (
 	"context"
-	"github.com/go-redis/redis/v8"
-	"github.com/spf13/cast"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/spf13/cast"
 )
 
 func ClientFac(client redis.UniversalClient, prefix, nodeId string) IClient {

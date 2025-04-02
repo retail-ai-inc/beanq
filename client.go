@@ -233,6 +233,10 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	if err != nil {
 		logger.New().Error(err)
 	}
+	go func() {
+		// collect the number of messages in the queue
+		_ = c.broker.tool.QueueMessage(ctx)
+	}()
 	// compatible with unmodified env.json
 	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
 	httpport = fmt.Sprintf(":%s", httpport)
