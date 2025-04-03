@@ -49,7 +49,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 
 		}
 		timer.Reset(5 * time.Second)
-		total, pending, ready = 0, 0, 0
+		total, pending = 0, 0
 
 		// total data from all streams
 		streamkeys := t.client.Keys(ctx, strings.Join([]string{t.prefix, "*", ":stream"}, "")).Val()

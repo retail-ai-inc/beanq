@@ -147,7 +147,6 @@ func (t *Dashboard) Total(w http.ResponseWriter, r *http.Request) {
 		"success_count": successCount,
 	}
 	_ = result.Json(w, http.StatusOK)
-	return
 }
 
 func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
@@ -166,5 +165,4 @@ func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
 	}
 	result.Data = pods
 	_ = result.Json(w, http.StatusOK)
-	return
 }
