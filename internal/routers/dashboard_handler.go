@@ -9,6 +9,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/spf13/cast"
@@ -57,23 +58,38 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
+	nodeId := r.URL.Query().Get("nodeId")
+	client := tool.ClientFac(t.client, t.prefix, nodeId)
+
 	totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 	now := time.Now()
 	before := now.Add(-cast.ToDuration(cast.ToInt64(tim)) * time.Second)
-	queues, err := t.client.ZRangeByScore(ctx, totalkey, &redis.ZRangeBy{
-		Min:    cast.ToString(before.Unix()),
-		Max:    cast.ToString(now.Unix()),
-		Count:  100,
-		Offset: 0,
-	}).Result()
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
+	beforeStr := cast.ToString(before.Unix())
+	nowStr := cast.ToString(now.Unix())
+
+	count := int64(10)
+	offset := int64(0)
+
+	zcount := client.ZCount(ctx, totalkey, beforeStr, nowStr)
+	page := zcount / count
+
+	for {
+		if page <= 0 {
+			break
+		}
+		queues, err := client.ZRangeByScore(ctx, totalkey, beforeStr, nowStr, offset, count)
+		if err != nil {
+			logger.New().Error(err)
+			continue
+		}
+		result.Data = queues
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
-		return
+		offset += count
+		page--
 	}
-	result.Data = queues
+	result.Code = "1111"
+	result.Data = "DONE"
 	_ = result.EventMsg(w, "dashboard")
 	flusher.Flush()
 	//return

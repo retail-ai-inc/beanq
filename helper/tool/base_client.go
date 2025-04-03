@@ -295,6 +295,19 @@ func (t *BaseClient) Monitor(ctx context.Context) (string, error) {
 	return t.client.Do(ctx, "MONITOR").String(), nil
 }
 
+func (t *BaseClient) ZRangeByScore(ctx context.Context, key string, min, max string, offset, count int64) ([]string, error) {
+	return t.client.ZRangeByScore(ctx, key, &redis.ZRangeBy{
+		Min:    min,
+		Max:    max,
+		Offset: offset,
+		Count:  count,
+	}).Result()
+}
+
+func (t *BaseClient) ZCount(ctx context.Context, key string, min, max string) int64 {
+	return t.client.ZCount(ctx, key, min, max).Val()
+}
+
 func parseInfos(data string) map[string]any {
 	if strings.Contains(data, "\r\n") {
 		data = strings.ReplaceAll(data, "\r\n", "\n")

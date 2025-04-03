@@ -32,7 +32,7 @@ func NewUITool(client redis.UniversalClient, prefix string) *UITool {
 
 func (t *UITool) QueueMessage(ctx context.Context) error {
 
-	timer := timex.TimerPool.Get(5 * time.Millisecond)
+	timer := timex.TimerPool.Get(5 * time.Second)
 	defer timer.Stop()
 
 	var (
@@ -48,6 +48,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 		case <-timer.C:
 
 		}
+		timer.Reset(5 * time.Second)
 		total, pending, ready = 0, 0, 0
 
 		// total data from all streams

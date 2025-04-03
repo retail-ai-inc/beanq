@@ -79,8 +79,10 @@ function resize(){
   })
 }
 
+const queues = ref([]);
 watch(()=>execTime.value,(n,o)=>{
   execTime.value = n;
+  queues.value = [];
   sseConnect();
 })
 
@@ -100,6 +102,10 @@ function sseConnect(){
         sse.value.close();
         return
     }
+    if(code === "1111"){
+      sse.value.close();
+      return;
+    }
 
     let newdata = data.map(item=>{
       try {
@@ -108,14 +114,15 @@ function sseConnect(){
         return null;
       }
     })
-    data.queues = newdata.filter(item=>item !== null);
-    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues,execTime.value);
-    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues,execTime.value);
+    newdata = newdata.filter(item=>item !== null);
+    queues.value.push(...newdata);
+    queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value);
+    messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value);
   })
   sse.value.onerror = (err)=>{
     console.log(err)
     sse.value.close();
-    //setTimeout(sseConnect,300);
+    setTimeout(sseConnect,1500);
   }
 }
 
