@@ -23,9 +23,10 @@
 package beanq
 
 import (
+	"time"
+
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
-	"time"
 )
 
 type (

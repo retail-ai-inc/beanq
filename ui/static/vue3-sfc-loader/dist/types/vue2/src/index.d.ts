@@ -44,7 +44,7 @@ export declare const vueVersion: string;
  *		});
  *
  * })()
- * .catch(ex => console.error(ex));
+ * .capture(ex => console.error(ex));
  *
  * ```
  *

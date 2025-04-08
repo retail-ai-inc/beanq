@@ -15,6 +15,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
 
@@ -113,7 +114,7 @@ func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var google GoogleCredential
+	var google capture.GoogleCredential
 	if v, ok := config["google"]; ok {
 		if err := json.NewDecoder(strings.NewReader(v)).Decode(&google); err != nil {
 			ReturnHtml(w, err.Error())

@@ -180,7 +180,7 @@ function fileSize(filename) {
   try {
 
     return Fs.statSync(Path.join(__dirname, filename)).size;
-  } catch {
+  } capture {
 
     return -1;
   }

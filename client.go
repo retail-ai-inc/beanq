@@ -41,6 +41,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
@@ -228,11 +229,13 @@ func StaticFileInfo() (map[string]time.Time, error) {
 var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
-
+	capture.Fail.When(c.broker.captureConfig).Then(errors.New("aaa"))
 	files, err := StaticFileInfo()
 	if err != nil {
 		logger.New().Error(err)
+
 	}
+
 	go func() {
 		// collect the number of messages in the queue
 		_ = c.broker.tool.QueueMessage(ctx)

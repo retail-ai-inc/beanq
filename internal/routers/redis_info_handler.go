@@ -13,6 +13,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"golang.org/x/net/context"
 )
 
@@ -219,13 +220,6 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	_ = res.Json(w, http.StatusOK)
 }
 
-type Config struct {
-	Google   *GoogleCredential `json:"google"`
-	SMTP     *SMTP             `json:"smtp"`
-	SendGrid *SendGrid         `json:"sendGrid"`
-	Rule     *Rule             `json:"rule"`
-}
-
 func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
@@ -239,7 +233,7 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
-	var config Config
+	var config capture.Config
 	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
 		res.Code = response.MissParameterCode
 		res.Msg = err.Error()
@@ -275,58 +269,4 @@ func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	res.Data = data
 	_ = res.Json(w, http.StatusOK)
-}
-
-type GoogleCredential struct {
-	ClientId     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
-	CallBackUrl  string `json:"callBackUrl"`
-	Scheme       string `json:"scheme"`
-}
-
-func (t GoogleCredential) MarshalBinary() ([]byte, error) {
-	return json.Marshal(t)
-}
-func (t GoogleCredential) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, &t)
-}
-
-type SMTP struct {
-	Host     string `json:"host"`
-	Port     string `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-}
-
-func (t SMTP) MarshalBinary() ([]byte, error) {
-	return json.Marshal(t)
-}
-func (t SMTP) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, &t)
-}
-
-type SendGrid struct {
-	Key         string `json:"key"`
-	FromName    string `json:"fromName"`
-	FromAddress string `json:"fromAddress"`
-}
-
-func (t SendGrid) MarshalBinary() ([]byte, error) {
-	return json.Marshal(t)
-}
-func (t SendGrid) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, &t)
-}
-
-type Rule struct {
-	When []any `json:"when"`
-	If   []any `json:"if"`
-	Then []any `json:"then"`
-}
-
-func (t Rule) MarshalBinary() ([]byte, error) {
-	return json.Marshal(t)
-}
-func (t Rule) UnmarshalBinary(data []byte) error {
-	return json.Unmarshal(data, &t)
 }

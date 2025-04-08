@@ -2,8 +2,9 @@ package email
 
 import (
 	"crypto/tls"
-	"gopkg.in/gomail.v2"
 	"time"
+
+	"gopkg.in/gomail.v2"
 )
 
 type GoEmail struct {

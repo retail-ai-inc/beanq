@@ -46,27 +46,48 @@
                style="background: #fbfbfc;border: 1px solid #ccc;"
                v-for="(item,index) in rules.if" :key="index"
           >
-            <div>{{item.value}}</div>
+            <div>
+              {{item.value}}:<span v-for="(it,int) in item.topic" :key="int">{{it.topic}}</span>
+            </div>
             <div>
               <Delete_icon @click="deleteFilter(item)" style="cursor: pointer"/>
             </div>
           </div>
+          <div>
 
-          <div class="dropdown">
-            <a class="btn btn-primary dropdown-toggle d-flex justify-content-between align-items-center"
-               href="javascript:;" role="button"
-               data-bs-toggle="dropdown"
-               aria-expanded="false"
-               style="width: 100%;"
-            >
-              Add New Filter
-            </a>
+            <div class="dropdown">
+              <a class="btn btn-primary dropdown-toggle d-flex justify-content-between align-items-center"
+                 href="javascript:;" role="button"
+                 data-bs-toggle="dropdown"
+                 aria-expanded="false"
+                 style="width: 100%;"
+              >
+                Add New Filter
+              </a>
 
-            <ul class="dropdown-menu" style="width: 100%">
-              <li v-for="(item,index) in filters" :key="index" @click="addFilter(item)">
-                <a class="dropdown-item" href="javascript:;">{{item.value}}</a>
-              </li>
-            </ul>
+              <ul class="dropdown-menu" style="width: 100%">
+                <li v-for="(item,index) in filters" :key="index" @click="addFilter(item)">
+                  <a class="dropdown-item" href="javascript:;">{{item.value}}</a>
+                </li>
+              </ul>
+            </div>
+
+            <div class="dropdown" style="margin-top: .3rem">
+              <a class="btn btn-primary dropdown-toggle d-flex justify-content-between align-items-center"
+                 href="javascript:;" role="button"
+                 data-bs-toggle="dropdown"
+                 aria-expanded="false"
+                 style="width: 100%;"
+              >
+                Choose Topic
+              </a>
+
+              <ul class="dropdown-menu" style="width: 100%">
+                <li v-for="(item,index) in nchannel" :key="index" @click="addTopic(item)">
+                  <a class="dropdown-item" href="javascript:;">{{item.topic}}</a>
+                </li>
+              </ul>
+            </div>
           </div>
 
         </div>
@@ -150,10 +171,29 @@ const [triggers,filters,actions] = [
   ref([{key:"dlq",value:"dlq",text:"A new DLQ message is sent to the DLQ topic."},
     {key:"fail",value:"fail",text:"Consumer message failed"},
     {key:"system",value:"system",text:"Beanq system error"}]),
-  ref([{key:"default-channel",value:"default-channel"},{key:"order-channel",value:"order-channel"}]),
+  ref([]),
   ref([{key:"slack",value:"slack"},{key:"email",value:"email"}])
 ];
 
+const [channel,nchannel] = [ref([]),ref([])];
+const channels = (async()=>{
+  try {
+    let data = await request.get("queue/list",{"params":{"page":0,"pageSize":100}});
+    channel.value = data;
+    Object.entries(data).forEach(([key,value]) => {
+      filters.value.push({
+        key: key,
+        value: key
+      });
+    });
+  }catch (e) {
+    console.log(e);
+  }
+})
+
+onMounted(()=>{
+  channels();
+})
 
 const addItem= (arr,item) => {
   if(!Array.isArray(arr)){
@@ -165,7 +205,7 @@ const addItem= (arr,item) => {
   arr.push({
     key: item.key,
     value: item.value,
-    text: item.text
+    text: item?.text | "",
   });
   return arr;
 }
@@ -190,7 +230,27 @@ const deleteTrigger = (item) => {
 const addFilter= (item) => {
   rules.value.if = addItem(rules.value.if,item);
   emit('update:modelValue',rules.value);
+  nchannel.value = channel.value[item.key];
 }
+
+const addTopic= (item) => {
+
+  rules.value.if.forEach((i) => {
+    if(i.key === item.channel){
+      if(!i?.topic){
+        i.topic = [item];
+        return;
+      }
+      i.topic.forEach((t) => {
+        if(t.topic !== item.topic){
+          i.topic.push(item);
+        }
+      })
+    }
+  })
+  console.log("new if:",rules.value.if);
+}
+
 const deleteFilter = (item) => {
   rules.value.if = deleteItem(rules.value.if,item);
   emit('update:modelValue',rules.value);

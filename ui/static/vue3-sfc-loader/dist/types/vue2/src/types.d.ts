@@ -260,7 +260,7 @@ export type Options = {
      *					// doc: https://developer.mozilla.org/en-US/docs/Web/API/Storage
      *					window.localStorage.setItem(key, str);
      *					break;
-     *				} catch(ex) {
+     *				} capture(ex) {
      *					// here we handle DOMException: Failed to execute 'setItem' on 'Storage': Setting the value of 'XXX' exceeded the quota
      *
      *					window.localStorage.removeItem(window.localStorage.key(0));

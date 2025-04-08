@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"errors"
+
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
