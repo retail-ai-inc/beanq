@@ -151,6 +151,7 @@ func (t *Catch) Then(err error) {
 	if err == nil {
 		return
 	}
+
 	var nerr error
 	if host := t.config.SMTP.Host; host != "" {
 		if port := t.config.SMTP.Port; port != "" {

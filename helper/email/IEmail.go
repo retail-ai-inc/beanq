@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"embed"
-	_ "embed"
 	"errors"
-	"github.com/spf13/cast"
 	"html/template"
+
+	"github.com/spf13/cast"
 )
 
 //go:embed *.html
