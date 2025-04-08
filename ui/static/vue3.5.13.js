@@ -15496,7 +15496,7 @@ Use a v-bind binding combined with a v-on listener that emits update:x event ins
     }
 
     const prohibitedKeywordRE = new RegExp(
-        "\\b" + "arguments,await,break,case,capture,class,const,continue,debugger,default,delete,do,else,export,extends,finally,for,function,if,import,let,new,return,super,switch,throw,try,var,void,while,with,yield".split(",").join("\\b|\\b") + "\\b"
+        "\\b" + "arguments,await,break,case,catch,class,const,continue,debugger,default,delete,do,else,export,extends,finally,for,function,if,import,let,new,return,super,switch,throw,try,var,void,while,with,yield".split(",").join("\\b|\\b") + "\\b"
     );
     const stripStringRE = /'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*\$\{|\}(?:[^`\\]|\\.)*`|`(?:[^`\\]|\\.)*`/g;
     function validateBrowserExpression(node, context, asParams = false, asRawStatements = false) {
