@@ -47,7 +47,7 @@
                v-for="(item,index) in rules.if" :key="index"
           >
             <div>
-              {{item.value}}:<span v-for="(it,int) in item.topic" :key="int">{{it.topic}}</span>
+              {{item.value}}:<span v-for="(it,int) in item.topic" :key="int">{{it.topic}},</span>
             </div>
             <div>
               <Delete_icon @click="deleteFilter(item)" style="cursor: pointer"/>

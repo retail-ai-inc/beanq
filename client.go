@@ -229,11 +229,11 @@ func StaticFileInfo() (map[string]time.Time, error) {
 var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
-	capture.Fail.When(c.broker.captureConfig).Then(errors.New("aaa"))
+
 	files, err := StaticFileInfo()
 	if err != nil {
 		logger.New().Error(err)
-
+		capture.System.When(c.broker.captureConfig).Then(err)
 	}
 
 	go func() {
@@ -246,6 +246,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	if err := os.Setenv("GODEBUG", "httpmuxgo122=1"); err != nil {
 		logger.New().Error("Error setting environment variables")
+		capture.System.When(c.broker.captureConfig).Then(err)
 	}
 
 	mux := http.NewServeMux()
@@ -275,6 +276,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	log.Printf("server start on port %+v", httpport)
 	if err := http.ListenAndServe(httpport, mux); err != nil {
+		capture.System.When(c.broker.captureConfig).Then(err)
 		log.Fatalln(err)
 	}
 }

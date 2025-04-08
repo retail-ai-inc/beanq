@@ -127,7 +127,7 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	bk := t.fac.Mood(moodType)
+	bk := t.fac.Mood(moodType, t.captureConfig)
 	if bk == nil {
 		return bstatus.BrokerDriverError
 	}
@@ -178,7 +178,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 			return gerr
 		},
 	}
-	handler.brokerImpl = t.fac.Mood(moodType)
+	handler.brokerImpl = t.fac.Mood(moodType, t.captureConfig)
 	t.handlers = append(t.handlers, &handler)
 
 	return nil

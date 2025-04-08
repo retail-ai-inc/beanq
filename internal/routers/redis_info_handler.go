@@ -2,6 +2,7 @@ package routers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,7 +15,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
-	"golang.org/x/net/context"
 )
 
 type RedisInfo struct {

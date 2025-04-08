@@ -1,10 +1,13 @@
 package capture
 
 import (
-	"fmt"
 	"slices"
+	"time"
 
+	"github.com/retail-ai-inc/beanq/v3/helper/email"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/cast"
+	"golang.org/x/net/context"
 )
 
 type (
@@ -148,6 +151,26 @@ func (t *Catch) Then(err error) {
 	if err == nil {
 		return
 	}
-	fmt.Printf("%+v \n", t)
-	fmt.Printf("self:%+v,err:%+v \n", t, err)
+	var nerr error
+	if host := t.config.SMTP.Host; host != "" {
+		if port := t.config.SMTP.Port; port != "" {
+			if user := t.config.SMTP.User; user != "" {
+				if password := t.config.SMTP.Password; password != "" {
+					nerr = email.NewGoEmail(host, cast.ToInt(port), user, password).Send()
+				}
+			}
+		}
+	}
+	if nerr != nil {
+		if t.config.SendGrid.Key == "" {
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		nerr = email.NewSendGrid(ctx, t.config.SendGrid.Key).Send()
+	}
+	if nerr != nil {
+		logger.New().Error(nerr)
+	}
+
 }

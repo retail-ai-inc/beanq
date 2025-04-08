@@ -1,16 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	beanq "github.com/retail-ai-inc/beanq/v3"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 	"log"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
+
+	beanq "github.com/retail-ai-inc/beanq/v3"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/spf13/viper"
 )
 
 var (

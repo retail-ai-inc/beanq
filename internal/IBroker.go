@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 )
 
 // IBroker main job
@@ -23,7 +24,7 @@ type (
 		DeadLetter(ctx context.Context, channel, topic string)
 	}
 	IBrokerFactory interface {
-		Mood(moodType btype.MoodType) IBroker
+		Mood(moodType btype.MoodType, config *capture.Config) IBroker
 	}
 )
 
