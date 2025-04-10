@@ -2,6 +2,7 @@ package routers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -208,4 +209,35 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusFound)
+}
+
+func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
+	result, cancel := response.Get()
+	defer cancel()
+
+	var data = struct {
+		SMTP     capture.SMTP     `json:"smtp"`
+		SendGrid capture.SendGrid `json:"sendGrid"`
+		Tools    []capture.Then   `json:"tools"`
+	}{}
+
+	defer r.Body.Close()
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		result.Code = berror.MissParameterCode
+		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusBadRequest)
+		return
+	}
+	capture.System.When(&capture.Config{
+		SMTP:     data.SMTP,
+		SendGrid: data.SendGrid,
+		Rule: capture.Rule{
+			When: []capture.When{{Key: string(capture.System), Value: string(capture.System)}},
+			If:   nil,
+			Then: data.Tools,
+		},
+	}).Then(errors.New("test"))
+
+	_ = result.Json(w, http.StatusOK)
 }

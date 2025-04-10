@@ -50,10 +50,29 @@ func (t SendGrid) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, &t)
 }
 
+type Then struct {
+	Key   string `json:"key" redis:"key"`
+	Value string `json:"value" redis:"value"`
+}
+type When struct {
+	Key   string `json:"key" redis:"key"`
+	Value string `json:"value" redis:"value"`
+	Text  string `json:"text" redis:"text"`
+}
+type Topic struct {
+	Channel  string `json:"channel" redis:"channel"`
+	Topic    string `json:"topic" redis:"topic"`
+	MoodType string `json:"moodType" redis:"moodType"`
+}
+type If struct {
+	Key   string  `json:"key" redis:"key"`
+	Value string  `json:"value" redis:"value"`
+	Topic []Topic `json:"topic" redis:"topic"`
+}
 type Rule struct {
-	When []any `json:"when" redis:"when"`
-	If   []any `json:"if" redis:"if"`
-	Then []any `json:"then" redis:"then"`
+	When []When `json:"when" redis:"when"`
+	If   []If   `json:"if" redis:"if"`
+	Then []Then `json:"then" redis:"then"`
 }
 
 func (t Rule) MarshalBinary() ([]byte, error) {

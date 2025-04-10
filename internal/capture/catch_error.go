@@ -2,12 +2,10 @@ package capture
 
 import (
 	"slices"
-	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/email"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/spf13/cast"
-	"golang.org/x/net/context"
 )
 
 type (
@@ -27,8 +25,8 @@ type (
 
 	AlertRule struct {
 		When []CatchType
-		If   []Channel
-		Then string
+		If   []If
+		Then []Then
 	}
 )
 
@@ -44,46 +42,13 @@ func (t CatchType) When(config *Config) *Catch {
 
 	whens := make([]CatchType, 0)
 	for _, w := range config.Rule.When {
-		nw, err := cast.ToStringMapStringE(w)
-		if err == nil {
-			if v, ok := nw["key"]; ok {
-				whens = append(whens, CatchType(v))
-			}
-		}
-	}
-	ifs := make([]Channel, 0)
-	ch := Channel{
-		Channel: "",
-		Topic:   nil,
-	}
-	for _, v := range config.Rule.If {
-		ch = Channel{
-			Channel: "",
-			Topic:   nil,
-		}
-		if nv, ok := v.(map[string]any); ok {
-			if nv, ok := nv["key"]; ok {
-				ch.Channel = nv.(string)
-			}
-			if nv, ok := nv["topic"]; ok {
-				if nv, ok := nv.([]any); ok {
-					for _, vt := range nv {
-						if vt, ok := vt.(map[string]any); ok {
-							if vt, ok := vt["topic"]; ok {
-								ch.Topic = append(ch.Topic, vt.(string))
-							}
-						}
-					}
-				}
-			}
-		}
-		ifs = append(ifs, ch)
+		whens = append(whens, CatchType(w.Value))
 	}
 
 	capCfg := AlertRule{
 		When: whens,
-		If:   ifs,
-		Then: "",
+		If:   config.Rule.If,
+		Then: config.Rule.Then,
 	}
 
 	if len(capCfg.When) <= 0 {
@@ -116,7 +81,7 @@ func (t *Catch) If(chl *Channel) *Catch {
 
 	for _, v := range t.rule.If {
 
-		if v.Channel != chl.Channel {
+		if v.Key != chl.Channel {
 			continue
 		}
 		if len(v.Topic) <= 0 {
@@ -129,12 +94,14 @@ func (t *Catch) If(chl *Channel) *Catch {
 		}
 
 		for _, vt := range chl.Topic {
-			if slices.Contains(v.Topic, vt) {
-				return &Catch{
-					channel:   chl.Channel,
-					topic:     chl.Topic,
-					catchType: t.catchType,
-					config:    t.config,
+			for _, topic := range v.Topic {
+				if vt == topic.Topic {
+					return &Catch{
+						channel:   chl.Channel,
+						topic:     []string{vt},
+						catchType: t.catchType,
+						config:    t.config,
+					}
 				}
 			}
 		}
@@ -153,23 +120,34 @@ func (t *Catch) Then(err error) {
 	}
 
 	var nerr error
-	if host := t.config.SMTP.Host; host != "" {
-		if port := t.config.SMTP.Port; port != "" {
-			if user := t.config.SMTP.User; user != "" {
-				if password := t.config.SMTP.Password; password != "" {
-					nerr = email.NewGoEmail(host, cast.ToInt(port), user, password).Send()
-				}
-			}
+	host := t.config.SMTP.Host
+	port := t.config.SMTP.Port
+	user := t.config.SMTP.User
+	password := t.config.SMTP.Password
+
+	if host != "" && port != "" && user != "" && password != "" {
+		client := email.NewGoEmail(host, cast.ToInt(port), user, password)
+		client.From(user)
+		client.Subject("Test Notify")
+		client.TextBody(err.Error())
+		for _, then := range t.rule.Then {
+			client.To(then.Value)
+			nerr = client.Send()
 		}
 	}
 	if nerr != nil {
-		if t.config.SendGrid.Key == "" {
-			return
+		if t.config.SendGrid.Key != "" {
+			client := email.NewSendGrid(t.config.SendGrid.Key)
+			client.From(user)
+			client.Subject("Test Notify")
+			client.TextBody(err.Error())
+			for _, then := range t.rule.Then {
+				client.To(then.Value)
+				nerr = client.Send()
+			}
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		nerr = email.NewSendGrid(ctx, t.config.SendGrid.Key).Send()
 	}
+
 	if nerr != nil {
 		logger.New().Error(nerr)
 	}

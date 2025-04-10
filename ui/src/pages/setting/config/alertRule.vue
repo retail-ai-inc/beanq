@@ -143,13 +143,15 @@
 
         </div>
       </div>
+      <button type="button" class="btn btn-success m-3" @click="onTestNotify" style="margin-top: 2rem;">Send Test Notification</button>
     </div>
-
+    <Btoast :id="toastId" ref="toastRef"></Btoast>
   </div>
 </template>
 <script setup>
 import { ref,defineProps,computed,defineEmits,onMounted } from "vue";
 import Delete_icon from "../../components/icons/delete_icon.vue";
+import Btoast from "../../components/btoast.vue";
 
 const props = defineProps({
   modelValue:{
@@ -157,7 +159,9 @@ const props = defineProps({
     required: true,
   }
 })
-const emit = defineEmits(['update:modelValue']);
+const [toastId,toastRef] = [ref("toast-" + Math.random().toString(36)),ref("toastRef")];
+
+const emit = defineEmits(['update:modelValue','onTestNotify']);
 const rules = computed({
   get() {
     return props.modelValue;
@@ -186,14 +190,18 @@ const channels = (async()=>{
         value: key
       });
     });
-  }catch (e) {
-    console.log(e);
+  }catch (err) {
+    toastRef.value.show(err);
   }
 })
 
 onMounted(()=>{
   channels();
 })
+
+const onTestNotify = async()=>{
+  emit('onTestNotify',rules.value.then);
+}
 
 const addItem= (arr,item) => {
   if(!Array.isArray(arr)){

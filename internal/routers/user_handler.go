@@ -2,6 +2,9 @@ package routers
 
 import (
 	"context"
+	"log"
+	"net/http"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
@@ -10,8 +13,6 @@ import (
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
-	"log"
-	"net/http"
 )
 
 type User struct {
@@ -89,14 +90,11 @@ func (t *User) Add(w http.ResponseWriter, r *http.Request) {
 
 	go func(ctx2 context.Context) {
 
-		client, err := email.NewEmail(ctx2, viper.GetString("ui.sendGrid.key"))
-		if err != nil {
-			log.Printf("Email Error:%+v \n", err)
-		}
+		client := email.NewSendGrid(viper.GetString("ui.sendGrid.key"))
 		client.From("BeanqUI Manager")
 		client.To(account)
 		client.Subject("BeanqUI Manager")
-		_ = client.Body("Active Email", account, "")
+		_ = client.InviteHtmlBody("Active Email", account, "")
 		if err := client.Send(); err != nil {
 			log.Printf("Send Email Error:%+v \n", err)
 		}

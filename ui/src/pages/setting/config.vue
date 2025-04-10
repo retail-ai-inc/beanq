@@ -49,7 +49,9 @@
                       role="tabpanel"
                       aria-labelledby="alert-rule-tab"
                       tabindex="0"
-                      v-model="form.rule"/>
+                      v-model="form.rule"
+                      @onTestNotify="onTestNotify"
+            />
             <button type="button" class="btn btn-primary" @click="edit" style="margin-top: 2rem;">{{$t('edit')}}</button>
           </div>
         </div>
@@ -136,6 +138,34 @@ watch(()=> form.value.google.callBackUrl, (n, o) => {
     ele.style.cssText = "border-color: red;";
   }
 })
+
+const onTestNotify = async (a) => {
+  console.log(a)
+  try {
+    let data = {
+      smtp:{
+        host: form.value.smtp.host,
+        port: form.value.smtp.port,
+        user: form.value.smtp.user,
+        password: form.value.smtp.password,
+      },
+      sendGrid:{
+        key: form.value.grid.key,
+        fromName: form.value.grid.fromName,
+        fromAddress: form.value.grid.fromAddress
+      },
+      tools:a
+    }
+    let res = await request.post("/test/notify",data, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    console.log(res)
+  }catch (e) {
+    toastRef.value.show(e);
+  }
+}
 
 const list = async () => {
   try {

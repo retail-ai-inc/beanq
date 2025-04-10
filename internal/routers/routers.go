@@ -99,6 +99,8 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 	mux.HandleFunc("PUT /redis/config", MigrateMiddleWare(hdls.redisInfo.Config, client, mgo, prefix, ui))
 	mux.HandleFunc("GET /redis/config", MigrateMiddleWare(hdls.redisInfo.ConfigInfo, client, mgo, prefix, ui))
 
+	mux.HandleFunc("POST /test/notify", MigrateMiddleWare(hdls.login.TestNotify, client, mgo, prefix, ui))
+
 	mux.HandleFunc("POST /login", HeaderRule(hdls.login.Login))
 	mux.HandleFunc("GET /clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix, ui))
 
