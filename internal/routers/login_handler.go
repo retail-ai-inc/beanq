@@ -211,6 +211,31 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusFound)
 }
 
+func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+
+	result, err := t.client.HGet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), "google").Result()
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+	}
+
+	var data capture.GoogleCredential
+	if err := json.NewDecoder(strings.NewReader(result)).Decode(&data); err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+	}
+
+	b := false
+	if data.ClientId != "" && data.ClientSecret != "" && data.CallBackUrl != "" && data.Scheme != "" {
+		b = true
+	}
+	res.Data = b
+	_ = res.Json(w, http.StatusOK)
+}
 func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
@@ -219,6 +244,7 @@ func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
 		SMTP     capture.SMTP     `json:"smtp"`
 		SendGrid capture.SendGrid `json:"sendGrid"`
 		Tools    []capture.Then   `json:"tools"`
+		Slack    capture.Slack    `json:"slack"`
 	}{}
 
 	defer r.Body.Close()
@@ -231,6 +257,7 @@ func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
 	}
 	capture.System.When(&capture.Config{
 		SMTP:     data.SMTP,
+		Slack:    data.Slack,
 		SendGrid: data.SendGrid,
 		Rule: capture.Rule{
 			When: []capture.When{{Key: string(capture.System), Value: string(capture.System)}},

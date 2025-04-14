@@ -7,6 +7,7 @@ type Config struct {
 	SMTP     SMTP             `json:"smtp" redis:"smtp"`
 	SendGrid SendGrid         `json:"sendGrid" redis:"sendGrid"`
 	Rule     Rule             `json:"rule" redis:"rule"`
+	Slack    Slack            `json:"slack" redis:"slack"`
 }
 
 type GoogleCredential struct {
@@ -50,9 +51,17 @@ func (t SendGrid) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, &t)
 }
 
+type ThenParameters struct {
+	WorkSpace string `json:"workSpace" redis:"workSpace"`
+	Channel   string `json:"channel" redis:"channel"`
+	Tags      string `json:"tags" redis:"tags"`
+	Notes     string `json:"notes" redis:"notes"`
+}
+
 type Then struct {
-	Key   string `json:"key" redis:"key"`
-	Value string `json:"value" redis:"value"`
+	Key        string         `json:"key" redis:"key"`
+	Value      string         `json:"value" redis:"value"`
+	Parameters ThenParameters `json:"parameters" redis:"parameters"`
 }
 type When struct {
 	Key   string `json:"key" redis:"key"`
@@ -79,5 +88,16 @@ func (t Rule) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t Rule) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, &t)
+}
+
+type Slack struct {
+	BotAuthToken string `json:"botAuthToken" redis:"botAuthToken"`
+}
+
+func (t Slack) MarshalBinary() ([]byte, error) {
+	return json.Marshal(t)
+}
+func (t Slack) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, &t)
 }

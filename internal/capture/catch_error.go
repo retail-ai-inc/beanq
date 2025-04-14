@@ -2,10 +2,13 @@ package capture
 
 import (
 	"slices"
+	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/email"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	xslack "github.com/retail-ai-inc/beanq/v3/helper/slack"
 	"github.com/spf13/cast"
+	"golang.org/x/net/context"
 )
 
 type (
@@ -119,37 +122,54 @@ func (t *Catch) Then(err error) {
 		return
 	}
 
-	var nerr error
-	host := t.config.SMTP.Host
-	port := t.config.SMTP.Port
-	user := t.config.SMTP.User
-	password := t.config.SMTP.Password
+	for _, then := range t.rule.Then {
 
-	if host != "" && port != "" && user != "" && password != "" {
-		client := email.NewGoEmail(host, cast.ToInt(port), user, password)
-		client.From(user)
-		client.Subject("Test Notify")
-		client.TextBody(err.Error())
-		for _, then := range t.rule.Then {
-			client.To(then.Value)
-			nerr = client.Send()
-		}
-	}
-	if nerr != nil {
-		if t.config.SendGrid.Key != "" {
-			client := email.NewSendGrid(t.config.SendGrid.Key)
+		if then.Key == "email" {
+			host := t.config.SMTP.Host
+			port := t.config.SMTP.Port
+			user := t.config.SMTP.User
+			password := t.config.SMTP.Password
+			if host == "" || port == "" || user == "" || password == "" {
+				continue
+			}
+
+			client := email.NewGoEmail(host, cast.ToInt(port), user, password)
 			client.From(user)
 			client.Subject("Test Notify")
 			client.TextBody(err.Error())
-			for _, then := range t.rule.Then {
-				client.To(then.Value)
-				nerr = client.Send()
+			client.To(then.Value)
+			if err := client.Send(); err == nil {
+				continue
+			}
+			if t.config.SendGrid.Key == "" {
+				continue
+			}
+
+			client = email.NewSendGrid(t.config.SendGrid.Key)
+			client.From(t.config.SendGrid.FromAddress)
+			client.Subject("Test Notify")
+			client.TextBody(err.Error())
+			client.To(then.Value)
+			if err := client.Send(); err != nil {
+				logger.New().Error(err)
+				continue
+			}
+			logger.New().Error(err)
+		}
+		if then.Key == "slack" {
+			if t.config.Slack.BotAuthToken == "" {
+				continue
+			}
+			if then.Parameters.Channel == "" && then.Parameters.WorkSpace == "" {
+				continue
+			}
+			xclient := xslack.NewClient(t.config.Slack.BotAuthToken)
+			xclient.Channel(then.Parameters.Channel)
+			xclient.Color(xslack.Danger)
+			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+			if err := xclient.Send(ctx, xslack.Field{Title: "Beanq Error", Value: err.Error(), Short: true}); err != nil {
+				logger.New().Error(err)
 			}
 		}
 	}
-
-	if nerr != nil {
-		logger.New().Error(nerr)
-	}
-
 }

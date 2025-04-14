@@ -247,6 +247,7 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	data["smtp"] = config.SMTP
 	data["sendGrid"] = config.SendGrid
 	data["rule"] = config.Rule
+	data["slack"] = config.Slack
 	if err := t.client.HSet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), data).Err(); err != nil {
 		res.Code = response.InternalServerErrorCode
 		res.Msg = err.Error()

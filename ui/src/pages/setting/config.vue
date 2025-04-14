@@ -13,6 +13,7 @@
               <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Credential</button>
               <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">SMTP</button>
               <button class="nav-link" id="send-grid-tab" data-bs-toggle="tab" data-bs-target="#send-grid-pane" type="button" role="tab" aria-controls="send-grid-pane" aria-selected="false">SendGrid</button>
+              <button class="nav-link" id="slack-tab" data-bs-toggle="tab" data-bs-target="#slack-pane" type="button" role="tab" aria-controls="slack-pane" aria-selected="false">Slack</button>
               <button class="nav-link" id="alert-rule-tab" data-bs-toggle="tab" data-bs-target="#alert-rule-pane" type="button" role="tab" aria-controls="alert-rule-pane" aria-selected="false">Alert Rule</button>
             </div>
           </nav>
@@ -43,6 +44,13 @@
                       tabindex="0"
                       v-model="form.grid"
             />
+            <Slack class="tab-pane fade"
+                      id="slack-pane"
+                      role="tabpanel"
+                      aria-labelledby="slack-tab"
+                      tabindex="0"
+                      v-model="form.slack"
+            />
             <!--alert rule-->
             <AlertRule class="tab-pane fade"
                       id="alert-rule-pane"
@@ -70,6 +78,7 @@ import Google from "./config/google.vue";
 import Smtp from "./config/smtp.vue";
 import SendGrid from "./config/sendGrid.vue";
 import AlertRule from "./config/alertRule.vue";
+import Slack from "./config/slack.vue";
 
 const [noticeId,loginModal] = [ref("configBackdrop"),ref("loginModal")];
 const [toastId,toastRef] = [ref("toast-" + Math.random().toString(36)),ref("toastRef")]
@@ -92,6 +101,9 @@ const form = ref({
     fromName:"",
     fromAddress:""
   },
+  slack:{
+    botAuthToken:""
+  },
   rule:{
     when:[],
     if:[],
@@ -111,36 +123,36 @@ const [triggers,filters,actions] = [
 onMounted(()=>{
   list();
 })
+//
+// watch(() => form.value.google.clientId, (n, o) => {
+//   let ele = document.getElementById("clientId");
+//   if(n !== ""){
+//     ele.style.cssText = "border-color: #ced4da;";
+//   }else {
+//     ele.style.cssText = "border-color: red;";
+//   }
+// })
+//
+// watch(()=> form.value.google.clientSecret, (n, o) => {
+//   let ele = document.getElementById("clientSecret");
+//   if(n !== ""){
+//     ele.style.cssText = "border-color: #ced4da;";
+//   }else {
+//     ele.style.cssText = "border-color: red;";
+//   }
+// })
+//
+// watch(()=> form.value.google.callBackUrl, (n, o) => {
+//   let ele = document.getElementById("callBackUrl");
+//   if(n !== ""){
+//     ele.style.cssText = "border-color: #ced4da;";
+//   }else {
+//     ele.style.cssText = "border-color: red;";
+//   }
+// })
 
-watch(() => form.value.google.clientId, (n, o) => {
-  let ele = document.getElementById("clientId");
-  if(n !== ""){
-    ele.style.cssText = "border-color: #ced4da;";
-  }else {
-    ele.style.cssText = "border-color: red;";
-  }
-})
-
-watch(()=> form.value.google.clientSecret, (n, o) => {
-  let ele = document.getElementById("clientSecret");
-  if(n !== ""){
-    ele.style.cssText = "border-color: #ced4da;";
-  }else {
-    ele.style.cssText = "border-color: red;";
-  }
-})
-
-watch(()=> form.value.google.callBackUrl, (n, o) => {
-  let ele = document.getElementById("callBackUrl");
-  if(n !== ""){
-    ele.style.cssText = "border-color: #ced4da;";
-  }else {
-    ele.style.cssText = "border-color: red;";
-  }
-})
-
-const onTestNotify = async (a) => {
-  console.log(a)
+const onTestNotify = async (param) => {
+  console.log(param)
   try {
     let data = {
       smtp:{
@@ -154,14 +166,17 @@ const onTestNotify = async (a) => {
         fromName: form.value.grid.fromName,
         fromAddress: form.value.grid.fromAddress
       },
-      tools:a
+      tools:param,
+      slack:{
+        botAuthToken: form.value.slack.botAuthToken
+      }
     }
     let res = await request.post("/test/notify",data, {
       headers: {
         'Content-Type': 'application/json',
       },
     });
-    console.log(res)
+    toastRef.value.show("success");
   }catch (e) {
     toastRef.value.show(e);
   }
@@ -183,6 +198,9 @@ const list = async () => {
       let rule = JSON.parse(res.rule);
       form.value.rule = rule;
     }
+    if(res?.slack){
+      form.value.slack = JSON.parse(res.slack);
+    }
 
   }catch (err) {
     //401 error
@@ -198,18 +216,18 @@ const list = async () => {
 const edit = async () => {
 
   let value = form.value || {};
-  if (value.google.clientId === "") {
-    document.getElementById("clientId").style.cssText = "border-color: red;";
-    return;
-  }
-  if(value.google.clientSecret === ""){
-    document.getElementById("clientSecret").style.cssText = "border-color: red;";
-    return;
-  }
-  if(value.google.callBackUrl === ""){
-    document.getElementById("callBackUrl").style.cssText = "border-color: red;";
-    return;
-  }
+  // if (value.google.clientId === "") {
+  //   document.getElementById("clientId").style.cssText = "border-color: red;";
+  //   return;
+  // }
+  // if(value.google.clientSecret === ""){
+  //   document.getElementById("clientSecret").style.cssText = "border-color: red;";
+  //   return;
+  // }
+  // if(value.google.callBackUrl === ""){
+  //   document.getElementById("callBackUrl").style.cssText = "border-color: red;";
+  //   return;
+  // }
 
   let result = {
     google:{
@@ -228,6 +246,9 @@ const edit = async () => {
       key: value.grid.key,
       fromName: value.grid.fromName,
       fromAddress: value.grid.fromAddress
+    },
+    slack:{
+      botAuthToken: value.slack.botAuthToken
     },
     rule:{
       when: value.rule.when,

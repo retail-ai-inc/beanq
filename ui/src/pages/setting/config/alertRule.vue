@@ -111,10 +111,25 @@
                 </div>
               </div>
               <div class="row" v-if="item.key==='slack'">
-                <label for="slackInput" class="col-2 col-form-label text-end">{{item.key}} webhook:</label>
-                <div class="col-8">
-                  <input type="text" class="form-control" id="slackInput" v-model="item.value" placeholder="please input a slack webhook"/>
+                <div class="d-flex">
+                  <span class="d-flex align-items-center" style="white-space: nowrap">Send a notification to the</span>
+                  <span  class="d-flex align-items-center">
+                    <select id="disabledSelect" class="form-select" v-model="item.parameters.workSpace">
+                      <option :selected="item.parameters.workSpace === 'Retail AI Inc'">Retail AI Inc</option>
+                    </select>
+                  </span>
+                  <span  class="d-flex align-items-center" style="white-space: nowrap">Slack workspace to</span>
+                  <span  class="d-flex align-items-center"><input type="text" v-model="item.parameters.channel" class="form-control"/></span>
+                  <span  class="d-flex align-items-center" style="white-space: nowrap">and show tags</span>
+                  <span  class="d-flex align-items-center"><input type="text" v-model="item.parameters.tags" class="form-control"/></span>
+                  <span  class="d-flex align-items-center" style="white-space: nowrap">and notes</span>
+                  <span  class="d-flex align-items-center"><input type="text" v-model="item.parameters.notes"  class="form-control"/></span>
+                  <span  class="d-flex align-items-center" style="white-space: nowrap">in notification</span>
                 </div>
+<!--                <label for="slackInput" class="col-2 col-form-label text-end">{{item.key}} webhook:</label>-->
+<!--                <div class="col-8">-->
+<!--                  <input type="text" class="form-control" id="slackInput" v-model="item.value" placeholder="please input a slack webhook"/>-->
+<!--                </div>-->
               </div>
 
             </div>
@@ -265,6 +280,8 @@ const deleteFilter = (item) => {
 }
 const addAction= (item) => {
   rules.value.then = addItem(rules.value.then,item);
+  console.log(rules.value.then);
+  return
   emit('update:modelValue',rules.value);
 }
 const deleteAction = (item) => {
