@@ -90,7 +90,7 @@ function sseConnect(){
   if(sse.value){
     sse.value.close();
   }
-  sseUrl.value = `/dashboard/graphic?time=${execTime.value}`;
+  sseUrl.value = `dashboard/graphic?time=${execTime.value}`;
   sse.value = sseApi.Init(sseUrl.value);
   sse.value.onopen = () => {
     console.log("connect success")
