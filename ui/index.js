@@ -90,7 +90,8 @@
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
           { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)},
           { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)},
-          {path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)}
+          {path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)},
+          {path: 'config',component:()=>loadModule("./src/pages/setting/config.vue",options)}
         ]
   };
 

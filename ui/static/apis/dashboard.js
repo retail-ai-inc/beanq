@@ -1,20 +1,28 @@
 const dashboardApi = {
-    Total(){
+    Graphic(){
         return request.get("dashboard");
+    },
+    Total(){
+        return request.get("dashboard/total");
+    },
+    Pods(){
+        return request.get("dashboard/pods");
     },
     Nodes(){
         return request.get("nodes");
     },
     QueueLine(queues,execTime){
 
-        let vals = Object.values(queues);
+        let x = [];
         let ready = [],unacked = [],total = [];
 
-        vals.forEach(function (val,ind) {
-            ready.push(val["ready"]);
-            unacked.push(val["unacked"]);
-            total.push(val["total"]);
+        queues.forEach(function (val,ind) {
+            ready.push(val?.ready || 0);
+            unacked.push(val?.unacked || 0);
+            total.push(val?.total || 0);
+            x.push(val["time"]);
         })
+
         let subtextNotice = `${execTime}s`;
         if(execTime > 60){
             execTime = Math.floor(execTime / 60);
@@ -54,12 +62,25 @@ const dashboardApi = {
         lineOpt.xAxis = {
             type: 'category',
             boundaryGap: false,
-            data: Object.keys(queues),
+            data: x,
+            axisLabel: {
+                rotate: 70,
+                fontSize: 12,
+                inside: true
+            }
         };
         lineOpt.yAxis = {
             type: 'value',
             axisLine: {
                 show: true,
+            },
+            axisLabel: {
+                formatter: function (value) {
+                    if (value < 1){
+                        value = 0;
+                    }
+                    return value + '/s';
+                }
             }
         };
         lineOpt.series = series;
@@ -67,13 +88,12 @@ const dashboardApi = {
     },
     MessageRateLine(values,execTime){
 
-
-        let xdata = Object.keys(values);
-        let ydata = Object.values(values);
+        let xdata = [];
         let publish = [],confirm = [],deliver = [],redelivered = [],ack = [],get = [],nget = [];
-        ydata.forEach((val,ind)=>{
-            publish.push( parseInt( val["ready"] /10));
-            nget.push(parseInt(val["unacked"] / 10));
+        values.forEach((val,ind)=>{
+            publish.push( parseInt( (val?.ready || 0) /10));
+            nget.push(parseInt(val?.unacked || 0 / 10));
+            xdata.push(val["time"]);
         })
         confirm = deliver = redelivered = ack = get = publish;
 
@@ -109,8 +129,13 @@ const dashboardApi = {
         };
         line.xAxis = {
             type: 'category',
-                boundaryGap: false,
-                data: xdata
+            boundaryGap: false,
+            data: xdata,
+            axisLabel: {
+                rotate: 45,
+                fontSize: 12,
+                inside: true
+            }
         };
         line.yAxis = {
             type: 'value',
@@ -119,6 +144,9 @@ const dashboardApi = {
             },
             axisLabel: {
                 formatter: function (value) {
+                    if(value<1){
+                        value = 0;
+                    }
                     return value + '/s';
                 }
             }

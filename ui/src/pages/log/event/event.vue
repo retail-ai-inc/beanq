@@ -4,6 +4,7 @@
     <div class="container-fluid">
       <!--search-->
       <Search :form="form" @search="search"/>
+      <Spinner v-if="loading"/>
       <!--search end-->
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
       <hr>
@@ -99,6 +100,7 @@ import LoginModal from "../../components/loginModal.vue";
 import More from "../../components/more.vue";
 import TimeToolTips from "../../components/timeToolTips.vue";
 import Copy from "../../components/copy.vue";
+import Spinner from "../../components/spinner.vue";
 
 
 const [eventBtoastId,eventRef] = [ref("eventBtoastId"),ref(null)];
@@ -281,6 +283,8 @@ function detailEvent(item){
   uRouter.push("detail/"+item._id);
 }
 
+const loading = ref(false);
+
 function initEventSource(){
 
   let apiUrl = urlParams();
@@ -304,7 +308,9 @@ function initEventSource(){
       data.sseEvent.close();
       return
     }
-
+    setTimeout(()=>{
+      loading.value = false;
+    },500);
     data.eventLogs = body.data.data;
     data.page =  body.data.cursor;
     data.total = body.data.total;
@@ -321,7 +327,9 @@ onMounted(async()=>{
     topicName:topicName??""
   };
   data.page = Storage.GetItem("page")??1;
+  loading.value = true;
   initEventSource();
+
 })
 
 onUnmounted(()=>{

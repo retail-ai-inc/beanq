@@ -53,6 +53,8 @@ type (
 		Object(ctx context.Context, queueName string) (*ObjectStruct, error)
 		ClientList(ctx context.Context) ([]map[string]any, error)
 		ZCard(ctx context.Context, key string) (int64, error)
+		ZRangeByScore(ctx context.Context, key string, min, max string, offset, count int64) ([]string, error)
+		ZCount(ctx context.Context, key string, min, max string) int64
 	}
 
 	IClient interface {

@@ -2,11 +2,12 @@ package bredis
 
 import (
 	"context"
-	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )
 
 var (

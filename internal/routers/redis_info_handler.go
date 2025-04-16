@@ -1,7 +1,11 @@
 package routers
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -10,7 +14,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"golang.org/x/net/context"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 )
 
 type RedisInfo struct {
@@ -213,5 +217,57 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res.Data = result
+	_ = res.Json(w, http.StatusOK)
+}
+
+func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+
+	var buf bytes.Buffer
+	defer r.Body.Close()
+
+	if _, err := io.Copy(&buf, r.Body); err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+	var config capture.Config
+	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
+		res.Code = response.MissParameterCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+
+	data := make(map[string]any, 4)
+
+	data["google"] = config.Google
+	data["smtp"] = config.SMTP
+	data["sendGrid"] = config.SendGrid
+	data["rule"] = config.Rule
+	data["slack"] = config.Slack
+	if err := t.client.HSet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), data).Err(); err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	_ = res.Json(w, http.StatusOK)
+}
+
+func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+
+	data, err := t.client.HGetAll(r.Context(), strings.Join([]string{t.prefix, "config"}, ":")).Result()
+	if err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	res.Data = data
 	_ = res.Json(w, http.StatusOK)
 }

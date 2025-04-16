@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	beanq "github.com/retail-ai-inc/beanq/v3"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/spf13/viper"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
+
+	beanq "github.com/retail-ai-inc/beanq/v3"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/spf13/viper"
 )
 
 var (

@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
 )
@@ -19,7 +20,7 @@ type Normal struct {
 	maxLen int64
 }
 
-func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration) *Normal {
+func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Normal {
 
 	return &Normal{
 		maxLen: maxLen,
@@ -33,7 +34,8 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
-			consumers: consumerCount,
+			consumers:     consumerCount,
+			captureConfig: config,
 		},
 	}
 }

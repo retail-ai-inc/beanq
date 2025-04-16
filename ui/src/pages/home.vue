@@ -4,9 +4,13 @@
     <div class="row justify-content-end">
       <div class="col-1">
         <select class="form-select form-select-sm mb-3" aria-label="Large select example" v-model="execTime">
-          <option selected value="10">10 seconds</option>
-          <option value="25">25 seconds</option>
-          <option value="300">5 minutes</option>
+          <option selected value="300">5 minute</option>
+          <option value="1800">30 minute</option>
+          <option value="7200">2 hour</option>
+          <option value="18000">5 hour</option>
+          <option value="43200">12 hour</option>
+          <option value="86400">1 day</option>
+          <option value="172800">2 day</option>
         </select>
       </div>
     </div>
@@ -19,11 +23,7 @@
       </div>
     </div>
     <div class="container-fluid" style="margin-bottom: 40px">
-      <Dashboard :queue_total="queue_total"
-                 :num_cpu="num_cpu"
-                 :fail_count="fail_count"
-                 :success_count="success_count"
-                 :db_size="db_size"/>
+      <Dashboard />
     </div>
 
     <div v-for="(item, index) in pods" :key="index" style="margin-bottom: 2rem;">
@@ -61,21 +61,16 @@ import LoginModal from "./components/loginModal.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
-const [execTime,sseUrl] = [ref(10),ref("")];
+const [execTime,sseUrl] = [ref(300),ref("")];
 
 let [
-    queue_total,
-    db_size,
-    num_cpu,
-    fail_count,
-    success_count,
     queuedMessagesOption,
     messageRatesOption,
     nodeId,
     sse,
     resizeObserver,
     pods
-  ] = [ref(0),ref(0),ref(0),ref(0),ref(0),ref({}),ref({}),ref(""),ref(null),null,ref({})];
+  ] = [ref({}),ref({}),ref(""),ref(null),null,ref({})];
 
 
 function resize(){
@@ -84,8 +79,10 @@ function resize(){
   })
 }
 
+const queues = ref([]);
 watch(()=>execTime.value,(n,o)=>{
   execTime.value = n;
+  queues.value = [];
   sseConnect();
 })
 
@@ -93,7 +90,7 @@ function sseConnect(){
   if(sse.value){
     sse.value.close();
   }
-  sseUrl.value = `dashboard?time=${execTime.value}`;
+  sseUrl.value = `/dashboard/graphic?time=${execTime.value}`;
   sse.value = sseApi.Init(sseUrl.value);
   sse.value.onopen = () => {
     console.log("connect success")
@@ -105,27 +102,43 @@ function sseConnect(){
         sse.value.close();
         return
     }
-
-    queue_total.value = data.queue_total;
-    db_size.value = data.db_size;
-    num_cpu.value = data.num_cpu;
-    fail_count.value = data.fail_count;
-    success_count.value = data.success_count;
-
-    let npods = [];
-    for(let key in data?.pods){
-      if(key % 2 === 0){
-        npods.push(JSON.parse(data.pods[key]));
-      }
+    if(code === "1111"){
+      sse.value.close();
+      return;
     }
-    pods.value = npods;
 
-    queuedMessagesOption.value = dashboardApi.QueueLine(data.queues,execTime.value);
-    messageRatesOption.value = dashboardApi.MessageRateLine(data.queues,execTime.value);
+    let newdata = data.map(item=>{
+      try {
+        return JSON.parse(item);
+      }catch (e) {
+        return null;
+      }
+    })
+    newdata = newdata.filter(item=>item !== null);
+    queues.value.push(...newdata);
+    queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value);
+    messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value);
   })
   sse.value.onerror = (err)=>{
+    console.log(err)
     sse.value.close();
-    setTimeout(sseConnect,3000);
+    setTimeout(sseConnect,1500);
+  }
+}
+
+const getPods = async() => {
+  try {
+    let res = await dashboardApi.Pods();
+    let npods = res.map(item=>{
+      try {
+        return JSON.parse(item);
+      }catch (e) {
+        return null;
+      }
+    });
+    pods.value = npods.filter(item=>item !== null);
+  }catch (e) {
+
   }
 }
 
@@ -140,7 +153,7 @@ onMounted( () => {
   });
   const parentEle = homeEle.value.parentElement;
   resizeObserver.observe(parentEle);
-
+  getPods();
   sseConnect();
 
 })

@@ -3,7 +3,8 @@ package googleAuth
 import (
 	"context"
 	"encoding/json"
-	"github.com/spf13/viper"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -27,13 +28,11 @@ type GoogleOauthConfig struct {
 	config *oauth2.Config
 }
 
-func New() *GoogleOauthConfig {
-
-	clientId := viper.GetString("googleAuth.clientId")
-	clientSecret := viper.GetString("googleAuth.clientSecret")
-	redirectUrl := viper.GetString("googleAuth.callbackUrl")
-
-	return NewGoogleOauthConfig(clientId, clientSecret, redirectUrl)
+func New(clientId, clientSecret, redirectUrl string) (*GoogleOauthConfig, error) {
+	if clientId == "" || clientSecret == "" || redirectUrl == "" {
+		return nil, fmt.Errorf("[google auth]error:%w", errors.New("Missing Parameter"))
+	}
+	return NewGoogleOauthConfig(clientId, clientSecret, redirectUrl), nil
 }
 func NewGoogleOauthConfig(clientId, clientSecret, redirectUrl string) *GoogleOauthConfig {
 	//endpoint := oauth2.Endpoint{

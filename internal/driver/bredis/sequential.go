@@ -3,22 +3,24 @@ package bredis
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
-	"sync"
-	"time"
 )
 
 type Sequential struct {
 	base Base
 }
 
-func NewSequential(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Sequential {
+func NewSequential(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Sequential {
 
 	return &Sequential{
 		base: Base{
@@ -31,7 +33,8 @@ func NewSequential(client redis.UniversalClient, prefix string, consumerCount in
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
-			consumers: consumerCount,
+			consumers:     consumerCount,
+			captureConfig: config,
 		},
 	}
 }

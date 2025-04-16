@@ -3,6 +3,10 @@ package routers
 import (
 	"context"
 	"errors"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
@@ -10,9 +14,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
-	"net/http"
-	"strings"
-	"time"
 )
 
 type Log struct {
@@ -147,7 +148,7 @@ func (t *Log) retryHandler(ctx context.Context, id, msgType string) error {
 		return err
 	}
 
-	bk := bredis.NewSchedule(t.client, t.prefix, 10, 20*time.Minute)
+	bk := bredis.NewSchedule(t.client, t.prefix, 10, 20*time.Minute, nil)
 	if err := bk.Enqueue(ctx, data); err != nil {
 		return err
 	}

@@ -1,7 +1,13 @@
 package routers
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
 	"github.com/retail-ai-inc/beanq/v3/helper/bjwt"
@@ -10,10 +16,9 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
-	"net/http"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -104,7 +109,25 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 
 func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 
-	gAuth := googleAuth.New()
+	config, err := t.client.HGetAll(r.Context(), strings.Join([]string{t.prefix, "config"}, ":")).Result()
+	if err != nil {
+		ReturnHtml(w, err.Error())
+		return
+	}
+
+	var google capture.GoogleCredential
+	if v, ok := config["google"]; ok {
+		if err := json.NewDecoder(strings.NewReader(v)).Decode(&google); err != nil {
+			ReturnHtml(w, err.Error())
+			return
+		}
+	}
+
+	gAuth, err := googleAuth.New(google.ClientId, google.ClientSecret, google.CallBackUrl)
+	if err != nil {
+		ReturnHtml(w, err.Error())
+		return
+	}
 
 	state := time.Now().String()
 	url := gAuth.AuthCodeUrl(state)
@@ -118,21 +141,23 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	state := r.FormValue("state")
-	if state != "test_self" {
-		http.Redirect(w, r, "/login", http.StatusTemporaryRedirect)
+	code := r.FormValue("code")
+	clientId := t.ui.GoogleAuth.ClientId
+	clientSecret := t.ui.GoogleAuth.ClientSecret
+	callbackUrl := t.ui.GoogleAuth.CallbackUrl
+	auth, err := googleAuth.New(clientId, clientSecret, callbackUrl)
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-
-	code := r.FormValue("code")
-	auth := googleAuth.New()
-
 	token, err := auth.Exchange(r.Context(), code)
 
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 
@@ -140,7 +165,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 
@@ -149,7 +174,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	if err != nil || user == nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 
@@ -169,7 +194,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 	proto := r.Header.Get("X-Forwarded-Proto")
@@ -184,4 +209,62 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	w.Header().Set("Location", url)
 	w.WriteHeader(http.StatusFound)
+}
+
+func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
+	res, cancel := response.Get()
+	defer cancel()
+
+	result, err := t.client.HGet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), "google").Result()
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+	}
+
+	var data capture.GoogleCredential
+	if err := json.NewDecoder(strings.NewReader(result)).Decode(&data); err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+	}
+
+	b := false
+	if data.ClientId != "" && data.ClientSecret != "" && data.CallBackUrl != "" && data.Scheme != "" {
+		b = true
+	}
+	res.Data = b
+	_ = res.Json(w, http.StatusOK)
+}
+func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
+	result, cancel := response.Get()
+	defer cancel()
+
+	var data = struct {
+		SMTP     capture.SMTP     `json:"smtp"`
+		SendGrid capture.SendGrid `json:"sendGrid"`
+		Tools    []capture.Then   `json:"tools"`
+		Slack    capture.Slack    `json:"slack"`
+	}{}
+
+	defer r.Body.Close()
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		result.Code = berror.MissParameterCode
+		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusBadRequest)
+		return
+	}
+	capture.System.When(&capture.Config{
+		SMTP:     data.SMTP,
+		Slack:    data.Slack,
+		SendGrid: data.SendGrid,
+		Rule: capture.Rule{
+			When: []capture.When{{Key: string(capture.System), Value: string(capture.System)}},
+			If:   nil,
+			Then: data.Tools,
+		},
+	}).Then(errors.New("test"))
+
+	_ = result.Json(w, http.StatusOK)
 }

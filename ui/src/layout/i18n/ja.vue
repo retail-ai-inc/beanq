@@ -7,6 +7,8 @@
     "close": "閉じる",
     "sureDelete": "本当に削除しますか？",
     "sureRetry": "本当に再試行しますか？",
+    "success": "成功",
+    "fail": "に失敗",
 
     "noMsg": "萬歳！私たちはすべてのメッセージを処理しました。",
 
@@ -28,6 +30,7 @@
     "operationLog": "Operation Log",
     "user": "ユーザー",
     "role": "Role",
+    "config":"Config",
     "retryWarningHtml": "警告：プロジェクト再試行を元に戻すことはできません慎重に操作してください！",
     "retryInfoHtml": "この操作によりログデータが永久に再試行されます。予期しない操作を防ぐために、次のように入力して確認してください。"
   }

@@ -4,20 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
-	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 	"math/rand"
 	"os"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/internal"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
+	"github.com/spf13/cast"
+	"golang.org/x/sync/errgroup"
 )
 
 type RdbBroker struct {
@@ -38,16 +40,16 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 	}
 }
 
-func (t *RdbBroker) Mood(moodType btype.MoodType) public.IBroker {
+func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public.IBroker {
 
 	if moodType == btype.NORMAL {
-		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle)
+		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle, config)
 	}
 	if moodType == btype.SEQUENTIAL {
-		return NewSequential(t.client, t.prefix, t.consumers, t.deadLetterIdle)
+		return NewSequential(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
 	}
 	if moodType == btype.DELAY {
-		return NewSchedule(t.client, t.prefix, t.consumers, t.deadLetterIdle)
+		return NewSchedule(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
 	}
 	return nil
 }
@@ -63,6 +65,7 @@ type (
 		subType        btype.SubscribeType
 		deadLetterIdle time.Duration
 		consumers      int64
+		captureConfig  *capture.Config
 	}
 )
 
@@ -112,6 +115,10 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		length := len(pendings)
 		if length <= 0 {
 			if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+				capture.Dlq.When(t.captureConfig).If(&capture.Channel{
+					Channel: channel,
+					Topic:   []string{},
+				}).Then(err)
 				logger.New().Error(err)
 			}
 			continue
@@ -133,6 +140,7 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 				Stream: logicKey,
 				Values: val,
 			}).Err(); err != nil {
+				capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 				logger.New().Error(err)
 			}
 		}
@@ -142,9 +150,11 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			pipeliner.XDel(ctx, streamKey, pending.ID)
 			return nil
 		}); err != nil {
+			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 			logger.New().Error(err)
 		}
 		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 			logger.New().Error(err)
 		}
 	}
@@ -196,6 +206,10 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 						vv["status"] = bstatus.StatusFailed
 						vv["info"] = fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack())
 						if err := t.AddLog(ctx, vv); err != nil {
+							capture.Fail.When(t.captureConfig).If(&capture.Channel{
+								Channel: channel,
+								Topic:   []string{topic},
+							}).Then(err)
 							logger.New().Error(err)
 						}
 					}
@@ -207,6 +221,10 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 					Channel: channel,
 					Stream:  stream,
 				}, do); err != nil {
+					capture.Fail.When(t.captureConfig).If(&capture.Channel{
+						Channel: channel,
+						Topic:   []string{topic},
+					}).Then(err)
 					logger.New().Error(err)
 				}
 			}(message)

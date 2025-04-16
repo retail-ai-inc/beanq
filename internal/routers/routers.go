@@ -96,11 +96,18 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 	mux.HandleFunc("GET /redis/monitor", MigrateSSE(hdls.redisInfo.Monitor, client, mgo, prefix, ui, "redis_monitor"))
 	mux.HandleFunc("GET /redis/keys", MigrateMiddleWare(hdls.redisInfo.Keys, client, mgo, prefix, ui))
 	mux.HandleFunc("DELETE /redis/{key}", MigrateMiddleWare(hdls.redisInfo.DeleteKey, client, mgo, prefix, ui))
+	mux.HandleFunc("PUT /redis/config", MigrateMiddleWare(hdls.redisInfo.Config, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /redis/config", MigrateMiddleWare(hdls.redisInfo.ConfigInfo, client, mgo, prefix, ui))
+
+	mux.HandleFunc("POST /test/notify", MigrateMiddleWare(hdls.login.TestNotify, client, mgo, prefix, ui))
 
 	mux.HandleFunc("POST /login", HeaderRule(hdls.login.Login))
+	mux.HandleFunc("GET /login/allowGoogle", HeaderRule(hdls.login.LoginAllowGoogle))
 	mux.HandleFunc("GET /clients", MigrateMiddleWare(hdls.client.List, client, mgo, prefix, ui))
 
-	mux.HandleFunc("GET /dashboard", MigrateSSE(hdls.dashboard.Info, client, mgo, prefix, ui, "dashboard"))
+	mux.HandleFunc("GET /dashboard/graphic", MigrateSSE(hdls.dashboard.Info, client, mgo, prefix, ui, "dashboard"))
+	mux.HandleFunc("GET /dashboard/total", MigrateMiddleWare(hdls.dashboard.Total, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /dashboard/pods", MigrateMiddleWare(hdls.dashboard.Pods, client, mgo, prefix, ui))
 	mux.HandleFunc("GET /nodes", MigrateMiddleWare(hdls.dashboard.Nodes, client, mgo, prefix, ui))
 
 	mux.HandleFunc("GET /event_log/list", MigrateSSE(hdls.eventLog.List, client, mgo, prefix, ui, "event_log"))

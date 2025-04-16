@@ -41,6 +41,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
@@ -232,13 +233,20 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	files, err := StaticFileInfo()
 	if err != nil {
 		logger.New().Error(err)
+		capture.System.When(c.broker.captureConfig).Then(err)
 	}
+
+	go func() {
+		// collect the number of messages in the queue
+		_ = c.broker.tool.QueueMessage(ctx)
+	}()
 	// compatible with unmodified env.json
 	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
 	httpport = fmt.Sprintf(":%s", httpport)
 
 	if err := os.Setenv("GODEBUG", "httpmuxgo122=1"); err != nil {
 		logger.New().Error("Error setting environment variables")
+		capture.System.When(c.broker.captureConfig).Then(err)
 	}
 
 	mux := http.NewServeMux()
@@ -268,6 +276,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 
 	log.Printf("server start on port %+v", httpport)
 	if err := http.ListenAndServe(httpport, mux); err != nil {
+		capture.System.When(c.broker.captureConfig).Then(err)
 		log.Fatalln(err)
 	}
 }

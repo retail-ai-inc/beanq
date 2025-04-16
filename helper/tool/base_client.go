@@ -2,11 +2,12 @@ package tool
 
 import (
 	"context"
-	"github.com/go-redis/redis/v8"
-	"github.com/spf13/cast"
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/spf13/cast"
 )
 
 func ClientFac(client redis.UniversalClient, prefix, nodeId string) IClient {
@@ -292,6 +293,19 @@ func (t *BaseClient) ZCard(ctx context.Context, key string) (int64, error) {
 
 func (t *BaseClient) Monitor(ctx context.Context) (string, error) {
 	return t.client.Do(ctx, "MONITOR").String(), nil
+}
+
+func (t *BaseClient) ZRangeByScore(ctx context.Context, key string, min, max string, offset, count int64) ([]string, error) {
+	return t.client.ZRangeByScore(ctx, key, &redis.ZRangeBy{
+		Min:    min,
+		Max:    max,
+		Offset: offset,
+		Count:  count,
+	}).Result()
+}
+
+func (t *BaseClient) ZCount(ctx context.Context, key string, min, max string) int64 {
+	return t.client.ZCount(ctx, key, min, max).Val()
 }
 
 func parseInfos(data string) map[string]any {

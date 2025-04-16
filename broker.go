@@ -1,21 +1,26 @@
 package beanq
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 	"github.com/spf13/cast"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
-	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 )
@@ -36,13 +41,14 @@ type Handler struct {
 }
 
 type Broker struct {
-	status   public.IStatus
-	log      public.IProcessLog
-	client   any
-	fac      public.IBrokerFactory
-	config   *BeanqConfig
-	tool     *bredis.UITool
-	handlers []*Handler
+	status        public.IStatus
+	log           public.IProcessLog
+	client        any
+	fac           public.IBrokerFactory
+	config        *BeanqConfig
+	tool          *bredis.UITool
+	handlers      []*Handler
+	captureConfig *capture.Config
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
@@ -60,6 +66,8 @@ func NewBroker(config *BeanqConfig) *Broker {
 			broker.client = client
 			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, cfg.MaxLen, config.DeadLetterIdleTime)
 			broker.tool = bredis.NewUITool(client, cfg.Prefix)
+			// capture errors and send them to email or Slack
+			broker.captureConfig = getConfig(client, cfg.Prefix)
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}
@@ -67,6 +75,48 @@ func NewBroker(config *BeanqConfig) *Broker {
 	})
 	broker.config = config
 	return &broker
+}
+
+func getConfig(client redis.UniversalClient, prefix string) *capture.Config {
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	key := strings.Join([]string{prefix, "config"}, ":")
+
+	var config capture.Config
+
+	cmd := client.HGetAll(ctx, key)
+	if cmd.Err() != nil {
+		return nil
+	}
+	val := cmd.Val()
+
+	if v, ok := val["google"]; ok {
+		var google capture.GoogleCredential
+		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &google); err == nil {
+			config.Google = google
+		}
+	}
+	if v, ok := val["sendGrid"]; ok {
+		var sendGrid capture.SendGrid
+		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &sendGrid); err == nil {
+			config.SendGrid = sendGrid
+		}
+	}
+	if v, ok := val["rule"]; ok {
+		var rule capture.Rule
+		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &rule); err == nil {
+			config.Rule = rule
+		}
+	}
+	if v, ok := val["smtp"]; ok {
+		var smtp capture.SMTP
+		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &smtp); err == nil {
+			config.SMTP = smtp
+		}
+	}
+
+	return &config
 }
 
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
@@ -77,7 +127,7 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	bk := t.fac.Mood(moodType)
+	bk := t.fac.Mood(moodType, t.captureConfig)
 	if bk == nil {
 		return bstatus.BrokerDriverError
 	}
@@ -128,7 +178,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 			return gerr
 		},
 	}
-	handler.brokerImpl = t.fac.Mood(moodType)
+	handler.brokerImpl = t.fac.Mood(moodType, t.captureConfig)
 	t.handlers = append(t.handlers, &handler)
 
 	return nil

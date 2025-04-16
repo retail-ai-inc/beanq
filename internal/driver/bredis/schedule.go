@@ -2,6 +2,10 @@ package bredis
 
 import (
 	"context"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
@@ -9,11 +13,9 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
 	"golang.org/x/sync/errgroup"
-	"strings"
-	"sync"
-	"time"
 )
 
 type (
@@ -28,7 +30,7 @@ type (
 	PreWork func(ctx context.Context, prefix string, channel, topic string)
 )
 
-func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration) *Schedule {
+func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Schedule {
 	work := &Schedule{
 		base: Base{
 			client:         client,
@@ -40,7 +42,8 @@ func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int6
 			errGroup: sync.Pool{New: func() any {
 				return new(errgroup.Group)
 			}},
-			consumers: consumerCount,
+			consumers:     consumerCount,
+			captureConfig: config,
 		},
 	}
 	work.watcher = work.Watcher
@@ -71,6 +74,7 @@ func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamK
 			if err := tool.JsonDecode(val, &data); err != nil {
 				if err := t.base.AddLog(ctx, map[string]any{"moodType": btype.DELAY, "data": val, "addTime": time.Now()}); err != nil {
 					logger.New().Error("AddLog Error:", err)
+					capture.System.When(t.base.captureConfig).Then(err)
 				}
 				continue
 			}
@@ -172,10 +176,12 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 		timeOutKey := cast.ToString(time.Now().UnixMilli() + 1)
 
 		if err := t.base.client.Watch(ctx, t.watcher(ctx, timeOutKey, zSetKey, streamKey), zSetKey, streamKey); err != nil {
+			capture.System.When(t.base.captureConfig).Then(err)
 			logger.New().Error("Schedule Job Error:", err)
 		}
 		//release lock
 		if err := t.base.client.Del(ctx, lockId).Err(); err != nil {
+			capture.System.When(t.base.captureConfig).Then(err)
 			logger.New().Error("Schedule Lock Error", err)
 		}
 	}

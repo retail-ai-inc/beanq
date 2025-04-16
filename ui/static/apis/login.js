@@ -5,5 +5,8 @@ const loginApi = {
             expiredTime = 30
         }
         return  request.post("login", {username:username,password:password,expiredTime:expiredTime} )
-    }
+    },
+    AllowGoogle(){
+        return request.get("login/allowGoogle")
+    },
 }
