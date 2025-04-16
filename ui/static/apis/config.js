@@ -5,6 +5,11 @@ const configApi = {
     },
     // Update Configuration
     updateConfig(data){
-        return request.put("/redis/config",data);
+        return request.put("/redis/config",data,{
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+        });
     },
  }
