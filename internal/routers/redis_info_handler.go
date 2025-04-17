@@ -224,18 +224,31 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	var buf bytes.Buffer
+	buf := bytes.NewBuffer(nil)
 	defer r.Body.Close()
 
-	if _, err := io.Copy(&buf, r.Body); err != nil {
+	if _, err := io.Copy(buf, r.Body); err != nil {
 		res.Code = response.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
+
+	var NewConfig struct {
+		Data string `json:"data"`
+	}
+	decode := json.NewDecoder(buf)
+	if err := decode.Decode(&NewConfig); err != nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+
 	var config capture.Config
-	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
-		res.Code = response.MissParameterCode
+
+	if err := json.Unmarshal([]byte(NewConfig.Data), &config); err != nil {
+		res.Code = response.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusBadRequest)
 		return
