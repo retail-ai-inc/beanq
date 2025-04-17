@@ -228,7 +228,7 @@ const addItem= (arr,item) => {
   arr.push({
     key: item.key,
     value: item.value,
-    text: item?.text | "",
+    text: item?.text ?? "",
   });
   return arr;
 }
