@@ -1,19 +1,17 @@
 package beanq
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	bmongo2 "github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
@@ -67,7 +65,21 @@ func NewBroker(config *BeanqConfig) *Broker {
 			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, cfg.MaxLen, config.DeadLetterIdleTime)
 			broker.tool = bredis.NewUITool(client, cfg.Prefix)
 			// capture errors and send them to email or Slack
-			broker.captureConfig = getConfig(client, cfg.Prefix)
+
+			if config.History.On {
+				mcfg := config.Mongo
+				nmgo := bmongo2.NewMongo(mcfg.Host,
+					mcfg.Port, mcfg.UserName,
+					mcfg.Password,
+					mcfg.Database,
+					mcfg.Collections,
+					mcfg.ConnectTimeOut,
+					mcfg.MaxConnectionPoolSize,
+					mcfg.MaxConnectionLifeTime)
+
+				broker.captureConfig = getConfig(nmgo)
+			}
+
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}
@@ -77,46 +89,18 @@ func NewBroker(config *BeanqConfig) *Broker {
 	return &broker
 }
 
-func getConfig(client redis.UniversalClient, prefix string) *capture.Config {
+func getConfig(client *bmongo2.BMongo) *capture.Config {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	key := strings.Join([]string{prefix, "config"}, ":")
-
-	var config capture.Config
-
-	cmd := client.HGetAll(ctx, key)
-	if cmd.Err() != nil {
+	if client == nil {
 		return nil
 	}
-	val := cmd.Val()
-
-	if v, ok := val["google"]; ok {
-		var google capture.GoogleCredential
-		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &google); err == nil {
-			config.Google = google
-		}
+	cfg, err := client.ConfigInfo(ctx)
+	if err != nil {
+		return nil
 	}
-	if v, ok := val["sendGrid"]; ok {
-		var sendGrid capture.SendGrid
-		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &sendGrid); err == nil {
-			config.SendGrid = sendGrid
-		}
-	}
-	if v, ok := val["rule"]; ok {
-		var rule capture.Rule
-		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &rule); err == nil {
-			config.Rule = rule
-		}
-	}
-	if v, ok := val["smtp"]; ok {
-		var smtp capture.SMTP
-		if err := json.Unmarshal(bytes.NewBufferString(v).Bytes(), &smtp); err == nil {
-			config.SMTP = smtp
-		}
-	}
-
-	return &config
+	return cfg
 }
 
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {

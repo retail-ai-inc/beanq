@@ -36,7 +36,7 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 		queue:     NewQueue(client, prefix),
 		logs:      NewLogs(client, prefix),
 		log:       NewLog(client, mgo, prefix),
-		redisInfo: NewRedisInfo(client, prefix),
+		redisInfo: NewRedisInfo(client, prefix, mgo),
 		login:     NewLogin(client, mgo, prefix, ui),
 		client:    NewClient(client, prefix),
 		dashboard: NewDashboard(client, mgo, prefix),

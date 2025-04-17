@@ -3,6 +3,7 @@ package bmongo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -30,6 +32,7 @@ type BMongo struct {
 	managerCollection  string
 	optCollection      string
 	roleCollection     string
+	configCollection   string
 }
 
 func createCollection(ctx context.Context) error {
@@ -86,6 +89,8 @@ func NewMongo(host, port string,
 	maxConnectionLifeTime time.Duration) *BMongo {
 	mongoOnce.Do(func() {
 
+		port = strings.TrimLeft(port, ":")
+		port = fmt.Sprintf(":%s", port)
 		uri := strings.Join([]string{"mongodb://", host, port}, "")
 
 		opts := options.Client().ApplyURI(uri).
@@ -136,7 +141,7 @@ func NewMongo(host, port string,
 		if v, ok := collections["roles"]; ok {
 			mgo.roleCollection = v
 		}
-
+		mgo.configCollection = "config"
 		if err := createCollection(ctx); err != nil {
 			log.Fatal(err)
 		}
@@ -706,4 +711,36 @@ func (t *BMongo) LogsByPod(ctx context.Context, hostname string) ([]bson.M, erro
 		return nil, err
 	}
 	return data, nil
+}
+
+func (t *BMongo) AddConfig(ctx context.Context, config *capture.Config) error {
+
+	var data = struct {
+		Id     string         `bson:"_id"`
+		Config capture.Config `bson:"config"`
+	}{
+		Id:     "config",
+		Config: *config,
+	}
+
+	_, err := t.database.Collection(t.configCollection).UpdateOne(ctx,
+		bson.M{"_id": "config"},
+		bson.M{"$set": bson.M{"config": data.Config}}, options.Update().SetUpsert(true))
+	return err
+}
+
+func (t *BMongo) ConfigInfo(ctx context.Context) (*capture.Config, error) {
+
+	filter := bson.M{
+		"_id": "config",
+	}
+
+	var data struct {
+		Id     string         `bson:"_id"`
+		Config capture.Config `bson:"config"`
+	}
+	if err := t.database.Collection(t.configCollection).FindOne(ctx, filter).Decode(&data); err != nil {
+		return nil, err
+	}
+	return &data.Config, nil
 }
