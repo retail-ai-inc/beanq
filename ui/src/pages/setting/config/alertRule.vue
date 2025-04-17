@@ -229,6 +229,12 @@ const addItem= (arr,item) => {
     key: item.key,
     value: item.value,
     text: item?.text ?? "",
+    parameters:{
+      workSpace: "Retail AI Inc",
+      channel: "",
+      tags: "",
+      notes: ""
+    }
   });
   return arr;
 }
@@ -271,7 +277,6 @@ const addTopic= (item) => {
       })
     }
   })
-  console.log("new if:",rules.value.if);
 }
 
 const deleteFilter = (item) => {
@@ -280,8 +285,6 @@ const deleteFilter = (item) => {
 }
 const addAction= (item) => {
   rules.value.then = addItem(rules.value.then,item);
-  console.log(rules.value.then);
-  return
   emit('update:modelValue',rules.value);
 }
 const deleteAction = (item) => {
