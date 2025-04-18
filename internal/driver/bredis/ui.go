@@ -82,7 +82,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 			logger.New().Error(err)
 			continue
 		}
-		data = nil
+
 		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 
 		if err := t.client.ZAdd(ctx, totalkey, &redis.Z{
