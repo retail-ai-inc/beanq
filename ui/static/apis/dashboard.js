@@ -29,9 +29,9 @@ const dashboardApi = {
             subtextNotice = `${execTime}m`;
         }
         let series = [
-            {"name":"Ready","type":"line","data":ready},
-            {"name":"Unacked","type":"line","data":unacked},
-            {"name":"Total","type":"line","data":total}
+            {name:"Ready",type:"line",symbol: 'none',sampling: 'lttb',itemStyle: {color: '#198754'},data:ready},
+            {name:"Unacked",type:"line",symbol: 'none',sampling: 'lttb',itemStyle: {color: '#dc3545'},data:unacked},
+            {name:"Total",type:"line",symbol: 'none',sampling: 'lttb',itemStyle: {color: '#0d6efd'},data:total}
         ];
 
         let lineOpt = {};
@@ -56,6 +56,10 @@ const dashboardApi = {
         };
         lineOpt.toolbox = {
             feature: {
+                // dataZoom: {
+                //     yAxisIndex: 'none'
+                // },
+                // restore: {},
                 // saveAsImage: {}
             }
         };
@@ -83,6 +87,13 @@ const dashboardApi = {
                 }
             }
         };
+        lineOpt.dataZoom = [
+            {
+                type: 'inside',
+                start: 0,
+                end: 10
+            },
+        ];
         lineOpt.series = series;
         return lineOpt;
     },
@@ -151,42 +162,61 @@ const dashboardApi = {
                 }
             }
         };
+        let seriesConfig = {
+            symbol: 'none',
+            sampling: 'lttb'
+        };
+
         line.series = [
             {
                 name: 'Publish',
                 type: 'line',
-                data: publish
+                data: publish,
+                ...seriesConfig
             },
             {
                 name: 'Confirm',
                 type: 'line',
-                data: confirm
+                data: confirm,
+                ...seriesConfig
             },
             {
                 name: 'Deliver',
                 type: 'line',
-                data: deliver
+                data: deliver,
+                ...seriesConfig
             },
             {
                 name: 'Redelivered',
                 type: 'line',
-                data: redelivered
+                data: redelivered,
+                ...seriesConfig
             },
             {
                 name: 'Acknowledge',
                 type: 'line',
-                data: ack
+                data: ack,
+                ...seriesConfig
             },
             {
                 name: 'Get',
                 type: 'line',
-                data: get
+                data: get,
+                ...seriesConfig
             },
             {
                 name: 'Get(noack)',
                 type: 'line',
-                data: nget
+                data: nget,
+                ...seriesConfig
             }
+        ];
+        line.dataZoom = [
+            {
+                type: 'inside',
+                start: 0,
+                end: 10
+            },
         ];
         return line;
     },

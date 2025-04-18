@@ -40,6 +40,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 		pending int64
 		ready   int64
 	)
+	data := make(map[string]any, 4)
 
 	for {
 		select {
@@ -70,7 +71,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 		ready = total - pending
 
 		now := time.Now()
-		data := make(map[string]any, 0)
+
 		data["time"] = now.Format(time.DateTime)
 		data["total"] = total
 		data["pending"] = pending
@@ -81,7 +82,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 			logger.New().Error(err)
 			continue
 		}
-
+		data = nil
 		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 
 		if err := t.client.ZAdd(ctx, totalkey, &redis.Z{

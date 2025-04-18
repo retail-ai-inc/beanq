@@ -4,13 +4,12 @@
     <div class="row justify-content-end">
       <div class="col-1">
         <select class="form-select form-select-sm mb-3" aria-label="Large select example" v-model="execTime">
-          <option selected value="300">5 minute</option>
-          <option value="1800">30 minute</option>
-          <option value="7200">2 hour</option>
-          <option value="18000">5 hour</option>
-          <option value="43200">12 hour</option>
-          <option value="86400">1 day</option>
-          <option value="172800">2 day</option>
+          <option selected value="5m">5 minute</option>
+          <option value="10m">10 minute</option>
+          <option value="30m">30 minute</option>
+          <option value="6h">6 hour</option>
+          <option value="12h">12 hour</option>
+          <option value="24h">24 hour</option>
         </select>
       </div>
     </div>
@@ -61,7 +60,7 @@ import LoginModal from "./components/loginModal.vue";
 
 const [line1,line2,useR,homeEle] = [ref(null),ref(null),useRouter(),ref(null)];
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
-const [execTime,sseUrl] = [ref(300),ref("")];
+const [execTime,sseUrl] = [ref("5m"),ref("")];
 
 let [
     queuedMessagesOption,

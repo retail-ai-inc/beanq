@@ -42,9 +42,22 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
 
+	tm := 5 * time.Second
 	tim := r.URL.Query().Get("time")
 	if tim == "" {
-		tim = "10"
+		tim = "10s"
+	}
+	if strings.Contains(tim, "s") {
+		tim = strings.ReplaceAll(tim, "s", "")
+		tm = time.Duration(cast.ToInt64(tim)) * time.Second
+	}
+	if strings.Contains(tim, "m") {
+		tim = strings.ReplaceAll(tim, "m", "")
+		tm = time.Duration(cast.ToInt64(tim)) * 60 * time.Second
+	}
+	if strings.Contains(tim, "h") {
+		tim = strings.ReplaceAll(tim, "h", "")
+		tm = time.Duration(cast.ToInt64(tim)) * 60 * 60 * time.Second
 	}
 
 	flusher, ok := w.(http.Flusher)
@@ -64,18 +77,21 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 
 	totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 	now := time.Now()
-	before := now.Add(-cast.ToDuration(cast.ToInt64(tim)) * time.Second)
+	before := now.Add(-tm)
 	beforeStr := cast.ToString(before.Unix())
 	nowStr := cast.ToString(now.Unix())
 
-	count := int64(10)
+	count := int64(1000)
 	offset := int64(0)
 
 	zcount := client.ZCount(ctx, totalkey, beforeStr, nowStr)
 	page := zcount / count
 
+	newQueue := make([]map[string]any, 0, zcount)
+	m := make(map[string]any, 0)
+
 	for {
-		if page <= 0 {
+		if page < 0 {
 			break
 		}
 		queues, err := client.ZRangeByScore(ctx, totalkey, beforeStr, nowStr, offset, count)
@@ -83,19 +99,21 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			logger.New().Error(err)
 			continue
 		}
-		newQueue := make([]map[string]any, 0, len(queues))
-		m := make(map[string]any, 0)
+
 		for _, queue := range queues {
-			if err := json.Unmarshal([]byte(queue), &m); err != nil {
+			if err := json.NewDecoder(strings.NewReader(queue)).Decode(&m); err != nil {
 				continue
 			}
 			newQueue = append(newQueue, m)
+			m = nil
 		}
+		offset += count
+		page--
 		result.Data = newQueue
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
-		offset += count
-		page--
+		newQueue = nil
+
 	}
 	result.Code = "1111"
 	result.Data = "DONE"
