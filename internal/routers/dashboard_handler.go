@@ -88,7 +88,6 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	page := zcount / count
 
 	newQueue := make([]map[string]any, 0, zcount)
-	m := make(map[string]any, 0)
 
 	for {
 		if page < 0 {
@@ -101,19 +100,18 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		}
 
 		for _, queue := range queues {
+			m := make(map[string]any, 0)
 			if err := json.NewDecoder(strings.NewReader(queue)).Decode(&m); err != nil {
 				continue
 			}
 			newQueue = append(newQueue, m)
-			m = nil
 		}
 		offset += count
 		page--
 		result.Data = newQueue
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
-		newQueue = nil
-
+		newQueue = newQueue[:0]
 	}
 	result.Code = "1111"
 	result.Data = "DONE"

@@ -82,7 +82,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 			logger.New().Error(err)
 			continue
 		}
-
+		data = make(map[string]any, 4)
 		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 
 		if err := t.client.ZAdd(ctx, totalkey, &redis.Z{
@@ -108,13 +108,11 @@ func (t *UITool) HostName(ctx context.Context) error {
 	}
 
 	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
-
-	keys, _, err := t.client.ZScan(ctx, hostNameKey, 0, fmt.Sprintf("*%s*", info.Hostname), 10).Result()
+	data := make(map[string]any, 8)
+	keys, _, err := t.client.ZScan(ctx, hostNameKey, 0, "*", 20).Result()
 	if err != nil {
 		return err
 	}
-	data := make(map[string]any, 8)
-
 	for _, key := range keys {
 		if err := json.NewDecoder(strings.NewReader(key)).Decode(&data); err != nil {
 			continue
@@ -122,18 +120,18 @@ func (t *UITool) HostName(ctx context.Context) error {
 		if v, ok := data["hostName"]; ok {
 			if cast.ToString(v) == info.Hostname {
 				t.client.ZRem(ctx, hostNameKey, key)
-				data = nil
+				data = make(map[string]any, 8)
 				continue
 			}
 		}
 		if v, ok := data["expiredTime"]; ok {
 			if cast.ToInt64(v) < now.Unix() {
 				t.client.ZRem(ctx, hostNameKey, key)
-				data = nil
+				data = make(map[string]any, 8)
 				continue
 			}
 		}
-		data = nil
+		data = make(map[string]any, 8)
 	}
 	memory, err := mem.VirtualMemory()
 	if err != nil {

@@ -216,6 +216,7 @@ func (t *Broker) Start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				ticker.Reset(10 * time.Second)
 				if err := t.tool.HostName(ctx); err != nil {
 					fmt.Printf("hostname err:%+v \n", err)
 				}
