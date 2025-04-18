@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"encoding/json"
 	"net/http"
 	"runtime"
 	"strings"
@@ -82,7 +83,15 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			logger.New().Error(err)
 			continue
 		}
-		result.Data = queues
+		newQueue := make([]map[string]any, 0, len(queues))
+		m := make(map[string]any, 0)
+		for _, queue := range queues {
+			if err := json.Unmarshal([]byte(queue), &m); err != nil {
+				continue
+			}
+			newQueue = append(newQueue, m)
+		}
+		result.Data = newQueue
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
 		offset += count

@@ -96,25 +96,19 @@ function sseConnect(){
     console.log("connect success")
   }
   sse.value.addEventListener("dashboard",function (res) {
+
     const {code,msg,data} = JSON.parse(res.data);
     if (code === "1004"){
         loginModal.value.error(new Error(msg));
         sse.value.close();
-        return
+        return;
     }
     if(code === "1111"){
       sse.value.close();
       return;
     }
 
-    let newdata = data.map(item=>{
-      try {
-        return JSON.parse(item);
-      }catch (e) {
-        return null;
-      }
-    })
-    newdata = newdata.filter(item=>item !== null);
+    let newdata = data.filter(item=>item !== null);
     queues.value.push(...newdata);
     queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value);
     messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value);
