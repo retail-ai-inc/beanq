@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"compress/gzip"
 	"io/fs"
 	"log"
 	"net/http"
@@ -74,7 +75,6 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 				return
 			}
 		}
-		//
 		writer.Header().Set("Last-Modified", modFiles[path].UTC().Format(time.RFC1123))
 
 		handle := http.FileServer(http.FS(fd))
@@ -87,8 +87,12 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 		writer.Header().Set("Content-Encoding", "gzip")
 		writer.Header().Set("Vary", "Accept-Encoding")
 
-		gz := bgzip.NewGzipResponseWriter(writer)
-		defer gz.GzWriter.Close()
+		gz, err := bgzip.NewGzipResponseWriter(writer)
+		if err != nil {
+			http.Error(writer, "Not Found", http.StatusNotFound)
+			return
+		}
+		defer gz.Writer.(*gzip.Writer).Close()
 
 		handle.ServeHTTP(gz, request)
 	})

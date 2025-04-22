@@ -10,20 +10,21 @@ import (
 type GzipResponseWriter struct {
 	io.Writer
 	http.ResponseWriter
-	GzWriter *gzip.Writer
 }
 
 func (gzw *GzipResponseWriter) Write(data []byte) (int, error) {
 	return gzw.Writer.Write(data)
 }
 
-func NewGzipResponseWriter(w http.ResponseWriter) *GzipResponseWriter {
-	gw, _ := gzip.NewWriterLevel(w, gzip.DefaultCompression)
+func NewGzipResponseWriter(w http.ResponseWriter) (*GzipResponseWriter, error) {
+	gw, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
+	if err != nil {
+		return nil, err
+	}
 	return &GzipResponseWriter{
 		Writer:         gw,
 		ResponseWriter: w,
-		GzWriter:       gw,
-	}
+	}, nil
 }
 
 func MatchGzipEncoding(r *http.Request) bool {
