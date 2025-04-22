@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/bgzip"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 )
@@ -75,7 +76,21 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 		}
 		//
 		writer.Header().Set("Last-Modified", modFiles[path].UTC().Format(time.RFC1123))
-		http.FileServer(http.FS(fd)).ServeHTTP(writer, request)
+
+		handle := http.FileServer(http.FS(fd))
+
+		if !bgzip.MatchGzipEncoding(request) || !strings.Contains(request.URL.Path, ".js") && !strings.Contains(request.URL.Path, ".vue") {
+			handle.ServeHTTP(writer, request)
+			return
+		}
+
+		writer.Header().Set("Content-Encoding", "gzip")
+		writer.Header().Set("Vary", "Accept-Encoding")
+
+		gz := bgzip.NewGzipResponseWriter(writer)
+		defer gz.GzWriter.Close()
+
+		handle.ServeHTTP(gz, request)
 	})
 
 	mux.HandleFunc("GET /ping", HeaderRule(func(w http.ResponseWriter, r *http.Request) {

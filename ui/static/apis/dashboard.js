@@ -17,31 +17,63 @@ const dashboardApi = {
         let ready = [],unacked = [],total = [];
 
         queues.forEach(function (val,ind) {
-            ready.push(val?.ready || 0);
-            unacked.push(val?.unacked || 0);
-            total.push(val?.total || 0);
+            ready.push(val?.ready ?? 0);
+            unacked.push(val?.pending ?? 0);
+            total.push(val?.total ?? 0);
             x.push(val["time"]);
         })
-
-        let subtextNotice = `${execTime}s`;
+console.log("ready:",ready);
+        console.log("unacked:",unacked);
+        console.log("total:",total);
+        let subtextNotice = `${execTime}`;
         if(execTime > 60){
             execTime = Math.floor(execTime / 60);
             subtextNotice = `${execTime}m`;
         }
         let series = [
-            {name:"Ready",type:"line",symbol: 'none',sampling: 'lttb',itemStyle: {color: '#198754'},data:ready},
-            {name:"Unacked",type:"line",symbol: 'none',sampling: 'lttb',itemStyle: {color: '#dc3545'},data:unacked},
-            {name:"Total",type:"line",symbol: 'none',sampling: 'lttb',itemStyle: {color: '#0d6efd'},data:total}
+            {
+                name: 'Ready',
+                type: 'scatter',
+                data: ready,
+                symbolSize: 6,
+                sampling: 'lttb',
+                itemStyle: {
+                    color: '#198754'
+                }
+            },
+            {
+                name: 'Unacked',
+                type: 'scatter',
+                data: unacked,
+                symbolSize: 6,
+                sampling: 'lttb',
+                itemStyle: {
+                    color: '#dc3545'
+                }
+            },
+            {
+                name: 'Total',
+                type: 'scatter',
+                data: total,
+                symbolSize: 6,
+                sampling: 'lttb',
+                itemStyle: {
+                    color: '#0d6efd'
+                }
+            },
         ];
 
         let lineOpt = {};
 
         lineOpt.title = {
             text: 'Queued messages',
-            subtext:`(chart:last minute)(${subtextNotice})`
+            subtext:`(chart:last minute)(${subtextNotice})(Mouse scroll wheel to view more)`
         };
         lineOpt.tooltip = {
-            trigger: 'axis'
+            trigger: 'axis',
+            // formatter: function (params) {
+            //     console.log(params)
+            // }
         };
         lineOpt.legend = {
             data: ['Ready', 'Unacked', 'Total'],
@@ -65,10 +97,11 @@ const dashboardApi = {
         };
         lineOpt.xAxis = {
             type: 'category',
+            show: false,
             boundaryGap: false,
             data: x,
             axisLabel: {
-                rotate: 70,
+                //rotate: 70,
                 fontSize: 12,
                 inside: true
             }
@@ -102,17 +135,13 @@ const dashboardApi = {
         let xdata = [];
         let publish = [],confirm = [],deliver = [],redelivered = [],ack = [],get = [],nget = [];
         values.forEach((val,ind)=>{
-            publish.push( parseInt( (val?.ready || 0) /10));
-            nget.push(parseInt(val?.unacked || 0 / 10));
+            publish.push( parseInt( (val?.ready ?? 0) /10));
+            nget.push(parseInt(val?.unacked ?? 0 / 10));
             xdata.push(val["time"]);
         })
         confirm = deliver = redelivered = ack = get = publish;
 
-        let subtextNotice = `${execTime}s`;
-        if(execTime > 60){
-            execTime = Math.floor(execTime / 60);
-            subtextNotice = `${execTime}m`;
-        }
+        let subtextNotice = `${execTime}`;
 
         let line = {};
         line.title = {

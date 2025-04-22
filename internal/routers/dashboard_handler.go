@@ -87,8 +87,6 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	zcount := client.ZCount(ctx, totalkey, beforeStr, nowStr)
 	page := zcount / count
 
-	newQueue := make([]map[string]any, 0, zcount)
-
 	for {
 		if page < 0 {
 			break
@@ -98,7 +96,7 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			logger.New().Error(err)
 			continue
 		}
-
+		newQueue := make([]map[string]any, 0, len(queues))
 		for _, queue := range queues {
 			m := make(map[string]any, 0)
 			if err := json.NewDecoder(strings.NewReader(queue)).Decode(&m); err != nil {
@@ -117,7 +115,6 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	result.Data = "DONE"
 	_ = result.EventMsg(w, "dashboard")
 	flusher.Flush()
-	//return
 }
 
 func (t *Dashboard) Total(w http.ResponseWriter, r *http.Request) {
