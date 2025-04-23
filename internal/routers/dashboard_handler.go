@@ -96,23 +96,24 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			logger.New().Error(err)
 			continue
 		}
-		newQueue := make([]map[string]any, 0, len(queues))
+		newQueue := make([][]any, 0, len(queues))
 		for _, queue := range queues {
-			m := make(map[string]any, 0)
-			if err := json.NewDecoder(strings.NewReader(queue)).Decode(&m); err != nil {
+
+			data := make([]any, 0, 4)
+			if err := json.NewDecoder(strings.NewReader(queue)).Decode(&data); err != nil {
 				continue
 			}
-			newQueue = append(newQueue, m)
+			newQueue = append(newQueue, data)
 		}
 		offset += count
 		page--
 		result.Data = newQueue
 		_ = result.EventMsg(w, "dashboard")
 		flusher.Flush()
-		newQueue = newQueue[:0]
 	}
 	result.Code = "1111"
-	result.Data = "DONE"
+	result.Msg = "DONE"
+	result.Data = zcount
 	_ = result.EventMsg(w, "dashboard")
 	flusher.Flush()
 }

@@ -11,54 +11,49 @@ const dashboardApi = {
     Nodes(){
         return request.get("nodes");
     },
-    QueueLine(queues,execTime){
+    QueueLine(queues,execTime,count){
 
-        let x = [];
-        let ready = [],unacked = [],total = [];
-
-        queues.forEach(function (val,ind) {
-            ready.push(val?.ready ?? 0);
-            unacked.push(val?.pending ?? 0);
-            total.push(val?.total ?? 0);
-            x.push(val["time"]);
-        })
-console.log("ready:",ready);
-        console.log("unacked:",unacked);
-        console.log("total:",total);
         let subtextNotice = `${execTime}`;
         if(execTime > 60){
             execTime = Math.floor(execTime / 60);
             subtextNotice = `${execTime}m`;
         }
+
         let series = [
             {
-                name: 'Ready',
+                data: queues,
                 type: 'scatter',
-                data: ready,
-                symbolSize: 6,
-                sampling: 'lttb',
+                symbolSize: function (data) {
+                    let size = Math.sqrt(data[2]) / 2.5;
+                    if (size > 15) {
+                        size = 15;
+                    }
+                    if (size < 5) {
+                        size = 5;
+                    }
+                    return size;
+                },
+                emphasis: {
+                    focus: 'series',
+                    label: {
+                        show: false,
+                        position: 'top'
+                    }
+                },
                 itemStyle: {
-                    color: '#198754'
-                }
-            },
-            {
-                name: 'Unacked',
-                type: 'scatter',
-                data: unacked,
-                symbolSize: 6,
-                sampling: 'lttb',
-                itemStyle: {
-                    color: '#dc3545'
-                }
-            },
-            {
-                name: 'Total',
-                type: 'scatter',
-                data: total,
-                symbolSize: 6,
-                sampling: 'lttb',
-                itemStyle: {
-                    color: '#0d6efd'
+                    shadowBlur: 10,
+                    shadowColor: 'rgba(120, 36, 50, 0.5)',
+                    shadowOffsetY: 5,
+                    color: new echarts.graphic.RadialGradient(0.4, 0.3, 1, [
+                        {
+                            offset: 0,
+                            color: 'rgb(251, 118, 123)'
+                        },
+                        {
+                            offset: 1,
+                            color: 'rgb(204, 46, 72)'
+                        }
+                    ])
                 }
             },
         ];
@@ -70,13 +65,20 @@ console.log("ready:",ready);
             subtext:`(chart:last minute)(${subtextNotice})(Mouse scroll wheel to view more)`
         };
         lineOpt.tooltip = {
-            trigger: 'axis',
-            // formatter: function (params) {
-            //     console.log(params)
-            // }
+            trigger: 'item',
+            formatter: function (param) {
+                let html = `<div style="font-size: 12px">
+                            ${param.data[3]}
+                            <ul style="padding-left: .5rem;margin-bottom:0;list-style-type: none;">
+                                <li><span style="color:#198754">Ready:</span>${param.data[0]}</li>
+                                <li><span style="color:#dc3545">Pending:</span>${param.data[1]}</li>
+                                <li><span style="color:#0d6efd">Total:</span>${param.data[2]}</li>
+                            </ul>
+                    </div>`;
+                return html;
+            }
         };
         lineOpt.legend = {
-            data: ['Ready', 'Unacked', 'Total'],
             top:'18%'
         };
         lineOpt.grid = {
@@ -86,39 +88,20 @@ console.log("ready:",ready);
             bottom: '3%',
             containLabel: true
         };
-        lineOpt.toolbox = {
-            feature: {
-                // dataZoom: {
-                //     yAxisIndex: 'none'
-                // },
-                // restore: {},
-                // saveAsImage: {}
-            }
-        };
         lineOpt.xAxis = {
-            type: 'category',
-            show: false,
-            boundaryGap: false,
-            data: x,
-            axisLabel: {
-                //rotate: 70,
-                fontSize: 12,
-                inside: true
+            splitLine: {
+                lineStyle: {
+                    type: 'dashed'
+                }
             }
         };
         lineOpt.yAxis = {
-            type: 'value',
-            axisLine: {
-                show: true,
-            },
-            axisLabel: {
-                formatter: function (value) {
-                    if (value < 1){
-                        value = 0;
-                    }
-                    return value + '/s';
+            splitLine: {
+                lineStyle: {
+                    type: 'dashed'
                 }
-            }
+            },
+            scale: true
         };
         lineOpt.dataZoom = [
             {
@@ -135,9 +118,9 @@ console.log("ready:",ready);
         let xdata = [];
         let publish = [],confirm = [],deliver = [],redelivered = [],ack = [],get = [],nget = [];
         values.forEach((val,ind)=>{
-            publish.push( parseInt( (val?.ready ?? 0) /10));
-            nget.push(parseInt(val?.unacked ?? 0 / 10));
-            xdata.push(val["time"]);
+            publish.push( parseInt( val[0] /10));
+            nget.push(parseInt(val[1] / 10));
+            xdata.push(val[3]);
         })
         confirm = deliver = redelivered = ack = get = publish;
 

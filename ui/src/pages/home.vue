@@ -102,15 +102,18 @@ function sseConnect(){
         sse.value.close();
         return;
     }
-    if(code === "1111"){
+    if(code === "1111" && msg === "DONE"){
       sse.value.close();
-      return;
+    }
+    if (typeof data !== "object"){
+
+      queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value,data);
+      messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value);
+    }else{
+      queues.value.push(...data);
     }
 
-    let newdata = data.filter(item=>item !== null);
-    queues.value.push(...newdata);
-    queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value);
-    messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value);
+
   })
   sse.value.onerror = (err)=>{
     console.log(err)

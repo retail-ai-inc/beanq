@@ -40,8 +40,8 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 		pending int64
 		ready   int64
 	)
-	data := make(map[string]any, 4)
-
+	//data := make(map[string]any, 4)
+	sliceData := make([]any, 0, 4)
 	for {
 		select {
 		case <-ctx.Done():
@@ -72,17 +72,15 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 
 		now := time.Now()
 
-		data["time"] = now.Format(time.DateTime)
-		data["total"] = total
-		data["pending"] = pending
-		data["ready"] = ready
+		sliceData = append(sliceData, ready, pending, total, now.Format(time.DateTime))
 
-		bt, err := json.Marshal(data)
+		bt, err := json.Marshal(sliceData)
+		sliceData = sliceData[:0]
 		if err != nil {
 			logger.New().Error(err)
 			continue
 		}
-		data = make(map[string]any, 4)
+
 		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 
 		if err := t.client.ZAdd(ctx, totalkey, &redis.Z{
