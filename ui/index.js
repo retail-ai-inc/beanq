@@ -5,12 +5,11 @@
     legacy:false,
     locale:"ja",
   });
-
-  //vue create
   const options = {
 
     moduleCache: {
       vue: Vue,
+      '@popperjs/core': window.Popper,
       vueRouter: VueRouter,
       request:request,
       config:config,
@@ -121,6 +120,7 @@
     template: `<mainLayout/>`
   });
   app.component("v-chart",VueECharts);
+  app.use(VCalendar.default,{});
   app.use(router);
   app.use(i18n);
   app.mount('#app');
