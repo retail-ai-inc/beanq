@@ -16,6 +16,13 @@ func (gzw *GzipResponseWriter) Write(data []byte) (int, error) {
 	return gzw.Writer.Write(data)
 }
 
+func (gzw *GzipResponseWriter) Close() error {
+	if gw, ok := gzw.Writer.(*gzip.Writer); ok {
+		return gw.Close()
+	}
+	return nil
+}
+
 func NewGzipResponseWriter(w http.ResponseWriter) (*GzipResponseWriter, error) {
 	gw, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
 	if err != nil {

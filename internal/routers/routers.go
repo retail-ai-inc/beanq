@@ -1,7 +1,6 @@
 package routers
 
 import (
-	"compress/gzip"
 	"io/fs"
 	"log"
 	"net/http"
@@ -92,7 +91,7 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 			http.Error(writer, "Not Found", http.StatusNotFound)
 			return
 		}
-		defer gz.Writer.(*gzip.Writer).Close()
+		defer gz.Close()
 
 		handle.ServeHTTP(gz, request)
 	})
