@@ -17,7 +17,13 @@
             </label>
           </div>
 
-          <button type="button" class="btn btn-primary" style="margin-top: 0.625rem" @click="onSubmit">Login</button>
+          <button class="btn btn-primary" type="button" :disabled="disabled" @click="onSubmit">
+
+            <span v-if="disabled" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <span v-if="disabled">Loading...</span>
+            <span v-else>Login</span>
+          </button>
+
           <div id="errorMsg" style="color: red;margin-top:0.625rem;text-align: left">{{msg}}</div>
 
           <button type="button" class="btn btn-outline-secondary" @click="googleLogin" style="margin-top: 1rem;" v-if="showGoogleLogin">
@@ -47,7 +53,7 @@ const [formData,useRe] = [
 ];
 const expiredTimeBool = ref(false);
 
-const msg = ref("");
+const [disabled,msg] = [ref(false),ref("")];
 
 function handleKeyDown(event){
   if(event.key === "Enter"){
@@ -86,12 +92,15 @@ onUnmounted(()=>{
 
 async function onSubmit(event){
 
+  disabled.value = true;
+
   if (formData.user.username == "" || formData.user.password == ""){
     msg.value = "Username or Password are required";
+    disabled.value = false;
     return;
   }
-
   //,{headers:{"Content-Type":"multipart/form-data"}}
+
   try{
     let res = await loginApi.Login(formData.user.username,formData.user.password,expiredTimeBool.value);
     Storage.SetItem("token",res.token);
@@ -101,9 +110,12 @@ async function onSubmit(event){
     let nodesRes = await dashboardApi.Nodes();
     Storage.SetItem("nodes",nodesRes);
 
-    useRe.push("/admin/home");
+    setTimeout(()=>{
+      useRe.push("/admin/home");
+    },1500)
   }catch(err){
     msg.value = err.response.data.msg;
+    disabled.value = false;
   }
 }
 
