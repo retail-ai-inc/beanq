@@ -5,11 +5,11 @@
     legacy:false,
     locale:"ja",
   });
+
   const options = {
 
     moduleCache: {
       vue: Vue,
-      '@popperjs/core': window.Popper,
       vueRouter: VueRouter,
       request:request,
       config:config,
@@ -120,7 +120,7 @@
     template: `<mainLayout/>`
   });
   app.component("v-chart",VueECharts);
-  app.use(VCalendar.default,{});
+  app.component("vue-date-picker",VueDatePicker );
   app.use(router);
   app.use(i18n);
   app.mount('#app');

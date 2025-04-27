@@ -1,6 +1,32 @@
 <template>
 
   <div class="home" ref="homeEle">
+<!--    <div class="row">-->
+<!--      <div class="col d-flex">-->
+<!--        <div class="btn-group" role="group" aria-label="Basic radio toggle button group">-->
+<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio1" autocomplete="off" checked>-->
+<!--          <label class="btn btn-outline-primary" for="btnradio1">5 minute</label>-->
+
+<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio2" autocomplete="off">-->
+<!--          <label class="btn btn-outline-primary" for="btnradio2">10 minute</label>-->
+
+<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio3" autocomplete="off">-->
+<!--          <label class="btn btn-outline-primary" for="btnradio3">30 minute</label>-->
+
+<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio4" autocomplete="off">-->
+<!--          <label class="btn btn-outline-primary" for="btnradio4">6 hour</label>-->
+
+<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio5" autocomplete="off">-->
+<!--          <label class="btn btn-outline-primary" for="btnradio5">12 hour</label>-->
+
+<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio6" autocomplete="off">-->
+<!--          <label class="btn btn-outline-primary" for="btnradio6">24 hour</label>-->
+<!--        </div>-->
+<!--        <div style="width: 25rem;">-->
+<!--          <vue-date-picker range v-model="date" multi-calendars></vue-date-picker>-->
+<!--        </div>-->
+<!--      </div>-->
+<!--    </div>-->
     <div class="row justify-content-end">
       <div class="col-1">
         <select class="form-select form-select-sm mb-3" aria-label="Large select example" v-model="execTime">
@@ -71,6 +97,7 @@ let [
     pods
   ] = [ref({}),ref({}),ref(""),ref(null),null,ref({})];
 
+const date = ref([new Date(),new Date()]);
 
 function resize(){
   [line1.value,line2.value].forEach(chart=>{
