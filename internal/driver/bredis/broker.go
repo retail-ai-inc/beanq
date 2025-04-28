@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -160,18 +161,21 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 	}
 }
 
-func (t *Base) Enqueue(ctx context.Context, data map[string]any) error {
+func (t *Base) Enqueue(_ context.Context, _ map[string]any) error {
 	return nil
 }
 
 func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
 
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
-
-	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
+	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, 0)
+	// worker num
+	workerNum := runtime.GOMAXPROCS(0) - 1
+	if workerNum <= 0 {
+		workerNum = 2
+	}
 
 	for {
-
 		cmd := t.client.XReadGroup(ctx, readGroupArgs)
 		if err := cmd.Err(); err != nil {
 
@@ -188,104 +192,96 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 				logger.New().Info("Channel:[", channel, "]Topic:[", topic, "] Task Stop")
 				return
 			}
-			continue
 		}
 
 		streams := cmd.Val()
 		stream := streams[0].Stream
 		messages := streams[0].Messages
 
+		// Use Fan-Out mode to process tasks
 		var wait sync.WaitGroup
-		for _, message := range messages {
+		jobs, results := make(chan public.Stream, len(messages)), make(chan public.Stream, len(messages))
+		// start workers
+		// open core(num-1) goroutines
+		for i := 0; i < workerNum; i++ {
 			wait.Add(1)
-			go func(msg redis.XMessage) {
-				vv := msg.Values
-				defer func() {
-					if p := recover(); p != nil {
-						// receive the message
-						vv["status"] = bstatus.StatusFailed
-						vv["info"] = fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack())
-						if err := t.AddLog(ctx, vv); err != nil {
-							capture.Fail.When(t.captureConfig).If(&capture.Channel{
-								Channel: channel,
-								Topic:   []string{topic},
-							}).Then(err)
-							logger.New().Error(err)
-						}
-					}
-					wait.Done()
-				}()
-				if err := t.Consumer(ctx, &public.Stream{
-					Data:    vv,
-					Id:      msg.ID,
-					Channel: channel,
-					Stream:  stream,
-				}, do); err != nil {
-					capture.Fail.When(t.captureConfig).If(&capture.Channel{
-						Channel: channel,
-						Topic:   []string{topic},
-					}).Then(err)
-					logger.New().Error(err)
-				}
-			}(message)
+			go worker(jobs, results, do, &wait)
 		}
-		wait.Wait()
+		// send jobs
+		for _, message := range messages {
+			jobs <- public.Stream{
+				Data:    message.Values,
+				Id:      message.ID,
+				Channel: channel,
+				Stream:  stream,
+			}
+		}
+		close(jobs)
+		go func() {
+			wait.Wait()
+			close(results)
+		}()
+		// handler worker results
+		ids := make([]string, 0, len(messages))
+		for result := range results {
+			if err := t.AddLog(ctx, result.Data); err != nil {
+				logger.New().Error(err)
+				capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+			}
+			ids = append(ids, result.Id)
+		}
+		_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.XAck(ctx, stream, channel, ids...)
+			pipeliner.XDel(ctx, stream, ids...)
+			return nil
+		})
+		if err != nil {
+			logger.New().Error(err)
+			capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+		}
 	}
 }
 
-func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallBack) error {
+// consumer worker
+func worker(jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for job := range jobs {
+		val := job.Data
 
-	id := stream.Id
-	stm := stream.Stream
-	channel := stream.Channel
+		val["status"] = bstatus.StatusReceived
+		val["beginTime"] = time.Now()
+		timeToRun := cast.ToDuration(val["timeToRun"])
+		sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
 
-	val := stream.Data
+		retry, err := tool.RetryInfo(sessionCtx, func() (err error) {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
+				}
+			}()
+			err = handler(sessionCtx, val)
+			return
+		}, 3)
 
-	group := t.errGroup.Get().(*errgroup.Group)
-	defer func() {
-		t.errGroup.Put(group)
-	}()
-	val["status"] = bstatus.StatusReceived
-	val["beginTime"] = time.Now()
-	timeToRun := cast.ToDuration(val["timeToRun"])
-	sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
+		if err != nil {
+			//if h, ok := rh.subscribe.(IConsumeError); ok {
+			//	h.Error(sessionCtx, err)
+			//}
+			val["level"] = bstatus.ErrLevel
+			val["info"] = err.Error()
+			val["status"] = bstatus.StatusFailed
+		} else {
+			val["status"] = bstatus.StatusSuccess
+		}
 
-	retry, err := tool.RetryInfo(sessionCtx, func() error {
-		return handler(sessionCtx, val)
-	}, 3)
-
-	if err != nil {
-		//if h, ok := rh.subscribe.(IConsumeError); ok {
-		//	h.Error(sessionCtx, err)
-		//}
-		val["level"] = bstatus.ErrLevel
-		val["info"] = err.Error()
-		val["status"] = bstatus.StatusFailed
-	} else {
-		val["status"] = bstatus.StatusSuccess
+		val["endTime"] = time.Now()
+		val["retry"] = retry
+		val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).String()
+		hostname, _ := os.Hostname()
+		val["hostName"] = hostname
+		// `stream` confirmation message
+		cancel()
+		job.Data = val
+		result <- job
 	}
-
-	val["endTime"] = time.Now()
-	val["retry"] = retry
-	val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).String()
-	hostname, _ := os.Hostname()
-	val["hostName"] = hostname
-	// `stream` confirmation message
-	cancel()
-	// ------------------------
-	group.TryGo(func() error {
-		_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.XAck(ctx, stm, channel, id)
-			pipeliner.XDel(ctx, stm, id)
-			return nil
-		})
-		return err
-	})
-	group.TryGo(func() error {
-		return t.AddLog(ctx, val)
-	})
-	if err := group.Wait(); err != nil {
-		return err
-	}
-	return nil
 }
