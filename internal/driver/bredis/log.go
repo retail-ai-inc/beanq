@@ -3,13 +3,14 @@ package bredis
 import (
 	"context"
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	public "github.com/retail-ai-inc/beanq/v3/internal"
-	"strings"
-	"time"
 )
 
 type Log struct {
