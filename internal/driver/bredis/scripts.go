@@ -2,6 +2,7 @@ package bredis
 
 import (
 	_ "embed"
+
 	"github.com/go-redis/redis/v8"
 )
 

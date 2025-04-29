@@ -115,7 +115,8 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		}).Val()
 		length := len(pendings)
 		if length <= 0 {
-			if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+			//Replace `Del` with `Unlink` and hand it over to the Redis server for processing.
+			if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
 				capture.Dlq.When(t.captureConfig).If(&capture.Channel{
 					Channel: channel,
 					Topic:   []string{},
@@ -132,7 +133,7 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
 
 			if len(rangeV) <= 0 {
-				t.client.Del(ctx, deadLetterKey)
+				t.client.Unlink(ctx, deadLetterKey)
 				continue
 			}
 			val := rangeV[0].Values
@@ -154,7 +155,7 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 			logger.New().Error(err)
 		}
-		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+		if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
 			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 			logger.New().Error(err)
 		}
