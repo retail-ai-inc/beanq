@@ -169,7 +169,7 @@ func (t *Base) Enqueue(_ context.Context, _ map[string]any) error {
 func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
 
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
-	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, 0)
+	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, 500*time.Millisecond)
 	// worker num
 	workerNum := runtime.GOMAXPROCS(0) - 1
 	if workerNum <= 0 {
@@ -177,6 +177,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 	}
 
 	for {
+
 		cmd := t.client.XReadGroup(ctx, readGroupArgs)
 		if err := cmd.Err(); err != nil {
 
@@ -196,6 +197,9 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 		}
 
 		streams := cmd.Val()
+		if len(streams) <= 0 {
+			continue
+		}
 		stream := streams[0].Stream
 		messages := streams[0].Messages
 
@@ -228,6 +232,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 			if err := t.AddLog(ctx, result.Data); err != nil {
 				logger.New().Error(err)
 				capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+				continue
 			}
 			ids = append(ids, result.Id)
 		}
