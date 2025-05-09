@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
 
 	errorstack "github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
@@ -26,6 +29,8 @@ const (
 	RollbackResultProcessFailed
 )
 
+var ErrWorkflowFailure = errors.New("WORKFLOW FAILURE")
+
 type (
 	Workflow struct {
 		ctx              context.Context
@@ -38,6 +43,9 @@ type (
 		tasks            []Task
 		results          []error
 		currentIndex     int
+
+		transaction *TransGlobal
+		progresses  []TransBranch
 	}
 	WFMux interface {
 		Name() string
@@ -49,15 +57,67 @@ type (
 	}
 )
 
-func NewWorkflow(ctx context.Context, message *Message) *Workflow {
-	return &Workflow{
-		ctx:     ctx,
-		gid:     strings.Join([]string{message.Channel, message.Topic, message.Id}, "-"),
-		message: message,
-		tasks:   make([]Task, 0),
-		results: make([]error, 0),
-		record:  NewWorkflowRecord(),
+var (
+	workflowClient redis.UniversalClient
+	workflowConfig Redis
+)
+
+// make workflow as an independent module
+func InitWorkflow(config *BeanqConfig) {
+	workflowConfig = config.Redis
+	workflowClient = bredis.NewRdb(
+		workflowConfig.Host,
+		workflowConfig.Port,
+		workflowConfig.Password,
+		workflowConfig.Database,
+		workflowConfig.MaxRetries,
+		workflowConfig.DialTimeout,
+		workflowConfig.ReadTimeout,
+		workflowConfig.WriteTimeout,
+		workflowConfig.PoolTimeout,
+		workflowConfig.PoolSize,
+		workflowConfig.MinIdleConnections)
+}
+
+func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
+	gid := strings.Join([]string{message.Channel, message.Topic, message.Id}, "-")
+	// prepare workflow, get process from redis by gid
+	ts := NewTransStore(workflowClient, "workflow")
+	transGlobal := &TransGlobal{
+		Message: message,
 	}
+	err := transGlobal.New()
+	if err != nil {
+		return nil, errorstack.WithStack(err)
+	}
+
+	err = ts.MaySaveNew(ctx, transGlobal, nil)
+
+	var transBranch []TransBranch
+
+	if errors.Is(err, ErrUniqueConflict) {
+		// if exist, get global and branch trans info from redis
+		transGlobal, err = ts.FindGlobal(ctx, gid)
+		if err != nil {
+			return nil, errorstack.WithStack(err)
+		}
+
+		transBranch, err = ts.FindBranches(ctx, gid)
+		if err != nil {
+			return nil, errorstack.WithStack(err)
+		}
+	}
+
+	return &Workflow{
+		ctx:         ctx,
+		gid:         gid,
+		message:     message,
+		tasks:       make([]Task, 0),
+		results:     make([]error, 0),
+		record:      NewWorkflowRecord(),
+		transaction: transGlobal,
+		progresses:  transBranch,
+	}, nil
 }
 
 func (w *Workflow) Init(opts ...func(workflow *Workflow)) {
@@ -119,7 +179,7 @@ func (w *Workflow) CurrentTask() Task {
 }
 
 func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
-	var data = struct {
+	data := struct {
 		CreatedAt time.Time          `bson:"CreatedAt"`
 		UpdatedAt time.Time          `bson:"UpdatedAt"`
 		Channel   string             `bson:"Channel"`
@@ -147,6 +207,15 @@ func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
 }
 
 func (w *Workflow) Run() (err error) {
+	switch w.transaction.Status {
+	case StatusSucceed:
+		// already success
+		return nil
+	case StatusFailed:
+		return errorstack.Wrap(ErrWorkflowFailure, w.transaction.RollbackReason)
+	default:
+	}
+
 	if w.wfMux != nil {
 		if err := w.wfMux.LockContext(w.ctx); err != nil {
 			return errorstack.WithStack(err)
@@ -157,6 +226,9 @@ func (w *Workflow) Run() (err error) {
 			}
 		}()
 	}
+
+	// TODO save branch result 
+
 	for index, task := range w.tasks {
 		func() {
 			defer func() {
@@ -307,8 +379,10 @@ type WorkflowRecord struct {
 	async           bool
 }
 
-var workflowRecordOnce sync.Once
-var workflowRecord *WorkflowRecord
+var (
+	workflowRecordOnce sync.Once
+	workflowRecord     *WorkflowRecord
+)
 
 func NewWorkflowRecord() *WorkflowRecord {
 	var config struct {
