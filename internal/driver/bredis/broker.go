@@ -138,10 +138,26 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			}
 			val := rangeV[0].Values
 			val["logType"] = bstatus.Dlq
-			if err := t.client.XAdd(ctx, &redis.XAddArgs{
+
+			// logic XAddArgs
+			args := &redis.XAddArgs{
 				Stream: logicKey,
 				Values: val,
-			}).Err(); err != nil {
+			}
+
+			if v, ok := val["status"]; ok {
+				if v.(string) == bstatus.StatusPublished {
+					//  TODO:Re-enter the queue
+					var maxLenInt int64 = 2000
+					if maxLen, ok := val["maxLen"]; ok {
+						maxLenInt = maxLen.(int64)
+					}
+					// normal message XAddArgs
+					// Need to handle idempotent keys
+					args = NewZAddArgs(streamKey, "", "*", maxLenInt, 0, val)
+				}
+			}
+			if err := t.client.XAdd(ctx, args).Err(); err != nil {
 				capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 				logger.New().Error(err)
 			}
@@ -210,7 +226,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 		// open core(num-1) goroutines
 		for i := 0; i < workerNum; i++ {
 			wait.Add(1)
-			go worker(jobs, results, do, &wait)
+			go worker(ctx, jobs, results, do, &wait)
 		}
 		// send jobs
 		for _, message := range messages {
@@ -249,9 +265,16 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 }
 
 // consumer worker
-func worker(jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup) {
+func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for job := range jobs {
+
+		select {
+		case <-ctx.Done():
+			return
+		default:
+
+		}
 		val := job.Data
 
 		val["status"] = bstatus.StatusReceived
