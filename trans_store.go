@@ -39,6 +39,7 @@ type TransStore interface {
 	FindBranches(ctx context.Context, gid string) ([]TransBranch, error)
 	MaySaveNew(ctx context.Context, global *TransGlobal, branches []TransBranch) error
 	LockGlobalSaveBranches(ctx context.Context, gid string, status string, branches []TransBranch, branchStart int) error
+	ChangeGlobalStatus(ctx context.Context, global *TransGlobal, newStatus string, updates []string, finished bool, finishedExpire time.Duration) error
 }
 
 type transStore struct {
@@ -46,6 +47,8 @@ type transStore struct {
 	expire time.Duration
 	client redis.UniversalClient
 }
+
+var _ TransStore = (*transStore)(nil)
 
 type TransGlobalScanCondition struct {
 	Status          string
@@ -78,9 +81,10 @@ type TransGlobal struct {
 }
 
 type TransBranch struct {
-	ID           uint64     `json:"id"`
+	Index        int        `json:"index,omitempty"`
 	Gid          string     `json:"gid,omitempty"`
-	URL          string     `json:"url,omitempty"`
+	TaskID       string     `json:"task_id,omitempty"`
+	Statement    string     `json:"url,omitempty"`
 	BinData      []byte     `json:"bin_data,omitempty"`
 	BranchID     string     `json:"branch_id,omitempty"`
 	Op           string     `json:"op,omitempty"`
@@ -92,10 +96,11 @@ type TransBranch struct {
 	UpdateTime   *time.Time `json:"update_time" gorm:"autoUpdateTime"`
 }
 
-func NewTransStore(client redis.UniversalClient, prefix string) *transStore {
+func NewTransStore(client redis.UniversalClient, prefix string, dataExpire time.Duration) *transStore {
 	return &transStore{
 		prefix: prefix,
 		client: client,
+		expire: dataExpire,
 	}
 }
 
@@ -233,6 +238,40 @@ func (t *transStore) LockGlobalSaveBranches(ctx context.Context, gid string, sta
 	return handleRedisResult(ret, err)
 }
 
+func (t *transStore) ChangeGlobalStatus(
+	ctx context.Context,
+	global *TransGlobal,
+	newStatus string,
+	updates []string,
+	finished bool,
+	finishedExpire time.Duration,
+) error {
+	if finishedExpire < 0 {
+		// finished Trans data will expire in 1 days as default.
+		finishedExpire = time.Hour * 24
+	}
+
+	oldStatus := global.Status
+	global.Status = newStatus
+
+	args, err := newArgList(t.prefix, t.expire).
+		AppendGid(global.Gid).
+		AppendObject(global).
+		AppendRaw(oldStatus).
+		AppendRaw(finished).
+		AppendRaw(global.Gid).
+		AppendRaw(newStatus).
+		AppendObject(finishedExpire.Seconds()).
+		Result()
+	if err != nil {
+		return fmt.Errorf("[ChangeGlobalStatus] newArgList failed: %w", err)
+	}
+
+	ret, err := bredis.ChangeGlobalStatusScript.Run(ctx, t.client, args.Keys, args.List...).Result()
+
+	return handleRedisResult(ret, err)
+}
+
 func handleRedisResult(ret interface{}, err error) error {
 	if err == nil {
 		return nil
@@ -256,7 +295,6 @@ func handleRedisResult(ret interface{}, err error) error {
 type argList struct {
 	errs   error
 	prefix string
-	expire time.Duration
 	Keys   []string      // 1 global trans, 2 branches, 3 indices, 4 status
 	List   []interface{} // 1 redis prefix, 2 data expire
 }
@@ -264,10 +302,9 @@ type argList struct {
 func newArgList(prefix string, expire time.Duration) *argList {
 	a := &argList{
 		prefix: prefix,
-		expire: expire,
 	}
 
-	return a.AppendRaw(prefix).AppendObject(expire)
+	return a.AppendRaw(prefix).AppendObject(expire.Seconds())
 }
 
 func (a *argList) Result() (*argList, error) {

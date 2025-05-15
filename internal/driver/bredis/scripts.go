@@ -26,4 +26,8 @@ var (
 	//go:embed scripts/saveBranches.lua
 	saveBranchesLua    string
 	SaveBranchesScript = redis.NewScript(saveBranchesLua)
+
+	//go:embed scripts/changeGlobalStatus.lua
+	changeGlobalStatusLua    string
+	ChangeGlobalStatusScript = redis.NewScript(changeGlobalStatusLua)
 )

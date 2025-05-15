@@ -172,6 +172,7 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) 
 
 	return MessageS(m).ToMessage(), nil
 }
+
 func getRootPath() (string, error) {
 
 	_, filename, _, ok := runtime.Caller(0)
@@ -194,6 +195,7 @@ func getRootPath() (string, error) {
 	}
 	return dir, nil
 }
+
 func StaticFileInfo() (map[string]time.Time, error) {
 
 	files := make(map[string]time.Time, 0)
