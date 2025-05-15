@@ -54,8 +54,8 @@ type (
 		transStore       TransStore
 		transaction      *TransGlobal
 		progresses       []TransBranch
-		steps            map[string]*branchResult
 	}
+
 	WFMux interface {
 		Name() string
 		Value() string
@@ -63,15 +63,6 @@ type (
 		LockContext(ctx context.Context) error
 		UnlockContext(ctx context.Context) (bool, error)
 		ExtendContext(ctx context.Context) (bool, error)
-	}
-
-	branchResult struct {
-		taskID   string
-		branchID string
-		status   string
-		started  bool
-		op       string
-		err      error
 	}
 )
 
@@ -272,7 +263,7 @@ func (w *Workflow) Run() (err error) {
 
 				err = w.tasks.Run(w.ctx, &branch, OpCompensate)
 				if err != nil {
-					err2 := w.ChangeStatus(w.ctx, dtmcli.StatusAborting, withRollbackReason(err.Error()))
+					err2 := w.ChangeStatus(w.ctx, dtmcli.StatusAborting, withResult(err.Error()))
 					if err2 != nil {
 						err = errorstack.Wrap(err, err2.Error())
 					}
@@ -477,7 +468,6 @@ type task struct {
 	executeFunc  func(task Task) error
 	rollbackFunc func(task Task) error
 	statement    []byte
-	status       string
 }
 
 func (t *task) ID() string {

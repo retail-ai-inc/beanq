@@ -107,12 +107,12 @@ func main() {
 			return nil
 		})
 
-		berr := wf.OnRollbackResult(func(taskID string, berr error) error {
+		berr := wf.OnRollbackResult(func(taskID string, berr error)  {
 			if berr == nil {
-				return nil
+				return 
 			}
 			log.Printf("%s rollback error: %v\n", taskID, berr)
-			return nil
+			return 
 		}).Run()
 		if berr != nil {
 			return berr
