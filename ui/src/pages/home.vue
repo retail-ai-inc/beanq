@@ -105,7 +105,7 @@ function resize(){
   })
 }
 
-const queues = ref([]);
+const [queues,queuesCount] = [ref([]),ref(0)];
 watch(()=>execTime.value,(n,o)=>{
   execTime.value = n;
   queues.value = [];
@@ -130,12 +130,13 @@ function sseConnect(){
         return;
     }
     if(code === "1111" && msg === "DONE"){
+      queuesCount.value = data;
       sse.value.close();
     }
     if (typeof data !== "object"){
 
-      queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value,data);
-      messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value);
+      queuedMessagesOption.value = dashboardApi.QueueLine(queues.value,execTime.value,queuesCount.value);
+      messageRatesOption.value = dashboardApi.MessageRateLine(queues.value,execTime.value,queuesCount.value);
     }else{
       queues.value.push(...data);
     }

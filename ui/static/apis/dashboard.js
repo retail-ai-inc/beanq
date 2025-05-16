@@ -22,14 +22,14 @@ const dashboardApi = {
         let series = [
             {
                 data: queues,
+                large: true,
                 type: 'scatter',
                 symbolSize: function (data) {
                     let size = Math.sqrt(data[2]) / 2.5;
-                    if (size > 15) {
-                        size = 15;
-                    }
-                    if (size < 5) {
-                        size = 5;
+                    if(size >= 8){
+                        size = 8
+                    }else{
+                        size = 4
                     }
                     return size;
                 },
@@ -41,9 +41,9 @@ const dashboardApi = {
                     }
                 },
                 itemStyle: {
-                    shadowBlur: 10,
+                    shadowBlur: 3,
                     shadowColor: 'rgba(120, 36, 50, 0.5)',
-                    shadowOffsetY: 5,
+                    //shadowOffsetY: 2,
                     color: new echarts.graphic.RadialGradient(0.4, 0.3, 1, [
                         {
                             offset: 0,
@@ -101,19 +101,21 @@ const dashboardApi = {
                     type: 'dashed'
                 }
             },
-            scale: true
+            scale: true,
+            min:0,
+            max:5000
         };
         lineOpt.dataZoom = [
             {
                 type: 'inside',
                 start: 0,
-                end: 10
+                end: 100
             },
         ];
         lineOpt.series = series;
         return lineOpt;
     },
-    MessageRateLine(values,execTime){
+    MessageRateLine(values,execTime,count){
 
         let xdata = [];
         let publish = [],confirm = [],deliver = [],redelivered = [],ack = [],get = [],nget = [];

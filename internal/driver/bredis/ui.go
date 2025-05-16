@@ -62,17 +62,17 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 			}
 			total += t.client.XLen(ctx, streamkey).Val()
 		}
+		if total <= 0 {
+			continue
+		}
 		if pending < 0 {
 			pending = 0
-		}
-		if total < 0 {
-			total = 0
 		}
 		ready = total - pending
 
 		now := time.Now()
 
-		sliceData = append(sliceData, ready, pending, total, now.Format(time.DateTime))
+		sliceData = append(sliceData, total, pending, ready, now.Format(time.DateTime))
 
 		bt, err := json.Marshal(sliceData)
 		sliceData = sliceData[:0]
