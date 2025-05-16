@@ -63,7 +63,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 			total += t.client.XLen(ctx, streamkey).Val()
 		}
 		if total <= 0 {
-			continue
+			total = 0
 		}
 		if pending < 0 {
 			pending = 0
