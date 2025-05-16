@@ -15,9 +15,8 @@ import (
 )
 
 const (
+	// StatusPrepared status for global trans status.
 	StatusPrepared = "prepared"
-	// StatusSubmitted status for global trans status.
-	StatusSubmitted = "submitted"
 	// StatusSucceed status for global/branch trans status.
 	StatusSucceed = "succeed"
 	// StatusFailed status for global/branch trans status.

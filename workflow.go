@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dtm-labs/client/dtmcli"
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
@@ -99,6 +98,7 @@ func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
 		7*24*time.Hour)
 
 	transGlobal := &TransGlobal{
+		Status:  StatusPrepared,
 		Message: message,
 	}
 	err := transGlobal.New()
@@ -221,7 +221,7 @@ func (w *Workflow) Run() (err error) {
 	}
 	actions, compensates := w.initSteps()
 
-	if w.transaction.Status == StatusSubmitted {
+	if w.transaction.Status == StatusPrepared {
 		for _, branch := range actions() {
 			func() {
 				defer func() {
@@ -234,7 +234,7 @@ func (w *Workflow) Run() (err error) {
 
 				err = w.tasks.Run(w.ctx, &branch, OpAction)
 				if err != nil {
-					err2 := w.ChangeStatus(w.ctx, dtmcli.StatusAborting, withRollbackReason(err.Error()))
+					err2 := w.ChangeStatus(w.ctx, StatusAborting, withRollbackReason(err.Error()))
 					if err2 != nil {
 						err = errorstack.Wrap(err, err2.Error())
 					}
@@ -243,7 +243,7 @@ func (w *Workflow) Run() (err error) {
 		}
 
 		if err == nil {
-			err2 := w.ChangeStatus(w.ctx, dtmcli.StatusSucceed)
+			err2 := w.ChangeStatus(w.ctx, StatusSucceed)
 			if err2 != nil {
 				return err2
 			}
@@ -263,7 +263,7 @@ func (w *Workflow) Run() (err error) {
 
 				err = w.tasks.Run(w.ctx, &branch, OpCompensate)
 				if err != nil {
-					err2 := w.ChangeStatus(w.ctx, dtmcli.StatusAborting, withResult(err.Error()))
+					err2 := w.ChangeStatus(w.ctx, StatusAborting, withResult(err.Error()))
 					if err2 != nil {
 						err = errorstack.Wrap(err, err2.Error())
 					}
@@ -276,7 +276,7 @@ func (w *Workflow) Run() (err error) {
 		}
 
 		if err == nil {
-			err2 := w.ChangeStatus(w.ctx, dtmcli.StatusFailed)
+			err2 := w.ChangeStatus(w.ctx, StatusFailed)
 			if err2 != nil {
 				return err2
 			}
@@ -294,10 +294,10 @@ func (w *Workflow) ChangeStatus(ctx context.Context, status string, opts ...chan
 
 	updates := []string{"status", "update_time"}
 	now := time.Now()
-	if status == dtmcli.StatusSucceed {
+	if status == StatusSucceed {
 		w.transaction.FinishTime = &now
 		updates = append(updates, "finish_time")
-	} else if status == dtmcli.StatusFailed {
+	} else if status == StatusFailed {
 		w.transaction.RollbackTime = &now
 		updates = append(updates, "rollback_time")
 	}
@@ -369,6 +369,10 @@ func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
 	branchResults := w.progresses
 
 	shouldRun := func(current int) bool {
+		if branchResults[current].Status != StatusPrepared {
+			return false
+		}
+
 		// check the branch in previous step is succeed
 		if current >= 2 && branchResults[current-2].Status != StatusSucceed {
 			return false
@@ -380,12 +384,19 @@ func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
 	shouldRollback := func(current int) bool {
 		rollbacked := func(i int) bool {
 			// current compensate op rollbacked or related action still prepared
-			return branchResults[i].Status == StatusSucceed || branchResults[i+1].Status == StatusPrepared
+			return branchResults[i].Status == StatusSucceed ||
+				branchResults[i+1].Status == StatusPrepared
 		}
+
+		if branchResults[current].Status != StatusPrepared {
+			return false
+		}
+
 		if rollbacked(current) {
 			return false
 		}
-		// if !csc.Concurrent，then check the branch in next step is rollbacked
+
+		// check the branch in next step is rollbacked
 		if current < n-2 && !rollbacked(current+2) {
 			return false
 		}
@@ -396,9 +407,8 @@ func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
 	pickToRunActions := func() []TransBranch {
 		var toRun []TransBranch
 		for current := 1; current < n; current += 2 {
-			br := &branchResults[current]
-			if br.Status == dtmcli.StatusPrepared && shouldRun(current) {
-				toRun = append(toRun, *br)
+			if shouldRun(current) {
+				toRun = append(toRun, branchResults[current])
 			}
 		}
 
@@ -409,7 +419,7 @@ func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
 		var toRun []TransBranch
 		for current := n - 2; current >= 0; current -= 2 {
 			br := &branchResults[current]
-			if br.Status == StatusPrepared && shouldRollback(current) {
+			if shouldRollback(current) {
 				toRun = append(toRun, *br)
 			}
 		}
@@ -565,16 +575,17 @@ func (t *task) trackRecord(taskID string, status *TaskStatus) {
 }
 
 func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error) error {
+	// status only has two type: succeed or failed
 	var status string
+
 	switch {
 	case oerr == nil:
 		status = StatusSucceed
-	case branch.Op == OpAction && errors.Is(oerr, ErrWorkflowFailure):
-		branch.Error = fmt.Errorf("return failed: %w", oerr)
-		status = dtmcli.StatusFailed
 	case errors.Is(oerr, ErrWorkflowOngoing):
 		status = ""
 	default:
+		branch.Error = fmt.Errorf("failed reason: %w", oerr)
+		status = StatusFailed
 	}
 
 	if status != "" {
