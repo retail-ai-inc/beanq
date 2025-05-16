@@ -65,8 +65,7 @@ type TransGlobal struct {
 	QueryPrepared    string              `json:"query_prepared,omitempty"`
 	FinishTime       *time.Time          `json:"finish_time,omitempty"`
 	RollbackTime     *time.Time          `json:"rollback_time,omitempty"`
-	Result           string              `json:"result,omitempty"`
-	RollbackReason   string              `json:"rollback_reason,omitempty"`
+	Reason           string              `json:"reason,omitempty"`
 	Options          string              `json:"options,omitempty"`
 	CustomData       string              `json:"custom_data,omitempty"`
 	NextCronInterval time.Duration       `json:"next_cron_interval,omitempty"`
@@ -76,7 +75,6 @@ type TransGlobal struct {
 	UpdateTime       *time.Time          `json:"update_time"`
 	MessageData      string              `json:"message_data,omitempty"`
 	Message          *Message            `json:"-"`
-	BinPayloads      [][]byte            `json:"-" gorm:"-"`
 }
 
 type TransBranch struct {
@@ -90,9 +88,9 @@ type TransBranch struct {
 	Status       string     `json:"status,omitempty"`
 	FinishTime   *time.Time `json:"finish_time,omitempty"`
 	RollbackTime *time.Time `json:"rollback_time,omitempty"`
-	Error        error      `json:"-" gorm:"-"`
-	CreateTime   *time.Time `json:"create_time" gorm:"autoCreateTime"`
-	UpdateTime   *time.Time `json:"update_time" gorm:"autoUpdateTime"`
+	Error        error      `json:"-"`
+	CreateTime   *time.Time `json:"create_time"`
+	UpdateTime   *time.Time `json:"update_time"`
 }
 
 func NewTransStore(client redis.UniversalClient, prefix string, dataExpire time.Duration) *transStore {
@@ -233,7 +231,6 @@ func (t *transStore) LockGlobalSaveBranches(ctx context.Context, gid string, sta
 	}
 
 	ret, err := bredis.SaveBranchesScript.Run(ctx, t.client, args.Keys, args.List...).Result()
-
 	return handleRedisResult(ret, err)
 }
 
@@ -362,7 +359,11 @@ func (a *argList) AppendBranches(branches []TransBranch) *argList {
 	return a
 }
 
-func (t *TransGlobal) New() error {
+func NewTransGlobal(message *Message) (*TransGlobal, error) {
+	t := &TransGlobal{
+		Message: message,
+	}
+
 	t.Gid = t.Message.Id
 	t.TransType = "workflow"
 	t.Status = StatusPrepared
@@ -373,7 +374,7 @@ func (t *TransGlobal) New() error {
 
 	bs, err := json.Marshal(t.Message)
 	if err != nil {
-		return fmt.Errorf("SaveNew failed: %w", err)
+		return nil, fmt.Errorf("SaveNew failed: %w", err)
 	}
 
 	t.MessageData = string(bs)
@@ -385,7 +386,7 @@ func (t *TransGlobal) New() error {
 	t.CreateTime = &now
 	t.UpdateTime = &now
 
-	return nil
+	return t, nil
 }
 
 var (

@@ -42,7 +42,6 @@ var ErrWorkflowOngoing = errors.New("WORKFLOW ONGOING")
 type (
 	Workflow struct {
 		gid              string
-		alreadyExist     bool
 		currentIndex     int
 		ctx              context.Context
 		wfMux            WFMux
@@ -71,8 +70,7 @@ var (
 )
 
 // make workflow as an independent module
-func InitWorkflow(config *BeanqConfig) {
-	redisConfig := config.Redis
+func InitWorkflow(redisConfig *Redis) {
 	workflowClient = bredis.NewRdb(
 		redisConfig.Host,
 		redisConfig.Port,
@@ -86,10 +84,14 @@ func InitWorkflow(config *BeanqConfig) {
 		redisConfig.PoolSize,
 		redisConfig.MinIdleConnections)
 
-	workflowConfig = redisConfig
+	workflowConfig = *redisConfig
 }
 
 func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
+	if workflowClient == nil {
+		panic("workflow client not initialized")
+	}
+
 	gid := strings.Join([]string{message.Channel, message.Topic, message.Id}, "-")
 	// prepare workflow, get process from redis by gid
 	ts := NewTransStore(
@@ -97,44 +99,20 @@ func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
 		workflowConfig.Prefix+":"+"workflow",
 		7*24*time.Hour)
 
-	transGlobal := &TransGlobal{
-		Status:  StatusPrepared,
-		Message: message,
-	}
-	err := transGlobal.New()
+	transGlobal, err := NewTransGlobal(message)
 	if err != nil {
 		return nil, errorstack.WithStack(err)
 	}
 
-	err = ts.MaySaveNew(ctx, transGlobal, nil)
-
-	var transBranch []TransBranch
-
-	var alreadyExist bool
-	if errors.Is(err, ErrUniqueConflict) {
-		// if exist, get global and branch trans info from redis
-		transGlobal, err = ts.FindGlobal(ctx, gid)
-		if err != nil {
-			return nil, errorstack.WithStack(err)
-		}
-
-		transBranch, err = ts.FindBranches(ctx, gid)
-		if err != nil {
-			return nil, errorstack.WithStack(err)
-		}
-
-	}
-
 	return &Workflow{
-		ctx:          ctx,
-		gid:          gid,
-		message:      message,
-		tasks:        make([]task, 0),
-		record:       NewWorkflowRecord(),
-		transStore:   ts,
-		transaction:  transGlobal,
-		progresses:   transBranch,
-		alreadyExist: alreadyExist,
+		ctx:         ctx,
+		gid:         gid,
+		message:     message,
+		tasks:       make([]*task, 0),
+		record:      NewWorkflowRecord(),
+		transStore:  ts,
+		transaction: transGlobal,
+		progresses:  []TransBranch{},
 	}, nil
 }
 
@@ -184,153 +162,19 @@ func (w *Workflow) NewTask(ids ...string) *task {
 		id = ids[0]
 	}
 
-	t := task{
+	t := &task{
 		id: id,
 		wf: w,
 	}
 
 	w.tasks = append(w.tasks, t)
-	return &t
+	return t
 }
 
 func (w *Workflow) Run() (err error) {
-	switch w.transaction.Status {
-	case StatusSucceed:
-		// already success
-		return nil
-	case StatusFailed:
-		return errorstack.Wrap(ErrWorkflowFailure, w.transaction.RollbackReason)
-	default:
-	}
-
-	if w.wfMux != nil {
-		if err := w.wfMux.LockContext(w.ctx); err != nil {
-			return errorstack.WithStack(err)
-		}
-		defer func() {
-			if _, err := w.wfMux.UnlockContext(w.ctx); err != nil {
-				logger.New().Error(err)
-			}
-		}()
-	}
-
-	// save branch result
-	err = w.initProgresses()
-	if err != nil {
-		return err
-	}
-	actions, compensates := w.initSteps()
-
-	if w.transaction.Status == StatusPrepared {
-		for _, branch := range actions() {
-			func() {
-				defer func() {
-					if e := recover(); e != nil || err != nil {
-						if err == nil {
-							err = fmt.Errorf("%v", e)
-						}
-					}
-				}()
-
-				err = w.tasks.Run(w.ctx, &branch, OpAction)
-				if err != nil {
-					err2 := w.ChangeStatus(w.ctx, StatusAborting, withRollbackReason(err.Error()))
-					if err2 != nil {
-						err = errorstack.Wrap(err, err2.Error())
-					}
-				}
-			}()
-		}
-
-		if err == nil {
-			err2 := w.ChangeStatus(w.ctx, StatusSucceed)
-			if err2 != nil {
-				return err2
-			}
-		}
-	}
-
-	if w.transaction.Status == StatusAborting {
-		for _, branch := range compensates() {
-			func() {
-				defer func() {
-					if e := recover(); e != nil || err != nil {
-						if err == nil {
-							err = fmt.Errorf("%v", e)
-						}
-					}
-				}()
-
-				err = w.tasks.Run(w.ctx, &branch, OpCompensate)
-				if err != nil {
-					err2 := w.ChangeStatus(w.ctx, StatusAborting, withResult(err.Error()))
-					if err2 != nil {
-						err = errorstack.Wrap(err, err2.Error())
-					}
-				}
-
-				if w.onRollbackResult != nil {
-					w.onRollbackResult(branch.TaskID, err)
-				}
-			}()
-		}
-
-		if err == nil {
-			err2 := w.ChangeStatus(w.ctx, StatusFailed)
-			if err2 != nil {
-				return err2
-			}
-		}
-	}
-
-	return nil
-}
-
-func (w *Workflow) ChangeStatus(ctx context.Context, status string, opts ...changeStatusOption) error {
-	statusParams := &changeStatusParams{}
-	for _, opt := range opts {
-		opt(statusParams)
-	}
-
-	updates := []string{"status", "update_time"}
-	now := time.Now()
-	if status == StatusSucceed {
-		w.transaction.FinishTime = &now
-		updates = append(updates, "finish_time")
-	} else if status == StatusFailed {
-		w.transaction.RollbackTime = &now
-		updates = append(updates, "rollback_time")
-	}
-
-	if statusParams.rollbackReason != "" {
-		w.transaction.RollbackReason = statusParams.rollbackReason
-		updates = append(updates, "rollback_reason")
-	}
-
-	if statusParams.result != "" {
-		w.transaction.Result = statusParams.result
-		updates = append(updates, "result")
-	}
-
-	w.transaction.UpdateTime = &now
-	err := w.transStore.ChangeGlobalStatus(ctx, w.transaction, status, updates, status == StatusSucceed || status == StatusFailed, -1)
-	if err != nil {
-		return err
-	}
-	w.transaction.Status = status
-
-	return nil
-}
-
-func (w *Workflow) initProgresses() error {
-	if w.alreadyExist {
-		return nil
-	}
-
-	now := time.Now()
-
 	var progresses []TransBranch
 	var index int
+	now := time.Now()
 
 	for i, task := range w.tasks {
 		branchID := fmt.Sprintf("%02d", i+1)
@@ -355,12 +199,127 @@ func (w *Workflow) initProgresses() error {
 		}
 	}
 
-	err := w.transStore.LockGlobalSaveBranches(w.ctx, w.gid, StatusPrepared, progresses, -1)
-	if err != nil {
-		return errorstack.WithStack(err)
+	err = w.transStore.MaySaveNew(w.ctx, w.transaction, progresses)
+
+	if errors.Is(err, ErrUniqueConflict) {
+		// if exist, get global and branch trans info from redis
+		w.transaction, err = w.transStore.FindGlobal(w.ctx, w.gid)
+		if err != nil {
+			return errorstack.WithStack(err)
+		}
+
+		w.progresses, err = w.transStore.FindBranches(w.ctx, w.gid)
+		if err != nil {
+			return errorstack.WithStack(err)
+		}
+	}else{
+		w.progresses=progresses
 	}
 
-	w.progresses = progresses
+	switch w.transaction.Status {
+	case StatusSucceed:
+		// already success
+		return nil
+	case StatusFailed:
+		return errorstack.Wrap(ErrWorkflowFailure, w.transaction.Reason)
+	default:
+	}
+
+	if w.wfMux != nil {
+		if err := w.wfMux.LockContext(w.ctx); err != nil {
+			return errorstack.WithStack(err)
+		}
+		defer func() {
+			if _, err := w.wfMux.UnlockContext(w.ctx); err != nil {
+				logger.New().Error(err)
+			}
+		}()
+	}
+
+	actions, compensates := w.initSteps()
+
+	if w.transaction.Status == StatusPrepared {
+		for _, branch := range actions() {
+			err = w.executor(&branch, OpAction)
+			if err != nil {
+				break
+			}
+		}
+
+		if err == nil {
+			err2 := w.ChangeStatus(w.ctx, StatusSucceed)
+			if err2 != nil {
+				return err2
+			}
+		}
+	}
+
+	if w.transaction.Status == StatusAborting {
+		for _, branch := range compensates() {
+			err = w.executor(&branch, OpCompensate)
+			if err != nil {
+				break
+			}
+		}
+
+		if err == nil {
+			err2 := w.ChangeStatus(w.ctx, StatusFailed)
+			if err2 != nil {
+				return err2
+			}
+		}
+	}
+
+	return nil
+}
+
+func (w *Workflow) executor(branch *TransBranch, op string) (err error) {
+	defer func() {
+		if e := recover(); e != nil || err != nil {
+			if err == nil {
+				err = fmt.Errorf("%v", e)
+			}
+		}
+	}()
+
+	err = w.tasks.Run(w.ctx, branch, op)
+	if err != nil {
+		err2 := w.ChangeStatus(w.ctx, StatusAborting, err.Error())
+		if err2 != nil {
+			err = errorstack.Wrap(err, err2.Error())
+		}
+	}
+
+	if op == OpCompensate && w.onRollbackResult != nil {
+		w.onRollbackResult(branch.TaskID, err)
+	}
+
+	return err
+}
+
+func (w *Workflow) ChangeStatus(ctx context.Context, status string, reason ...string) error {
+	updates := []string{"status", "update_time"}
+	now := time.Now()
+	if status == StatusSucceed {
+		w.transaction.FinishTime = &now
+		updates = append(updates, "finish_time")
+	} else if status == StatusFailed {
+		w.transaction.RollbackTime = &now
+		updates = append(updates, "rollback_time")
+	}
+
+	if len(reason) > 0 && reason[0] != "" {
+		w.transaction.Reason = reason[0]
+		updates = append(updates, "reason")
+	}
+
+	w.transaction.UpdateTime = &now
+	err := w.transStore.ChangeGlobalStatus(ctx, w.transaction, status, updates, status == StatusSucceed || status == StatusFailed, -1)
+	if err != nil {
+		return err
+	}
+	w.transaction.Status = status
+
 	return nil
 }
 
@@ -437,7 +396,7 @@ type Task interface {
 	UpdateStatus(ctx context.Context, branch *TransBranch, oerr error) error
 }
 
-type tasks []task
+type tasks []*task
 
 func (t tasks) Run(ctx context.Context, branch *TransBranch, op string) error {
 	var err error
@@ -445,7 +404,7 @@ func (t tasks) Run(ctx context.Context, branch *TransBranch, op string) error {
 	taskID := branch.TaskID
 	for _, v := range t {
 		if v.id == taskID {
-			tk = &v
+			tk = v
 			break
 		}
 	}
@@ -644,6 +603,9 @@ func NewWorkflowRecord() *WorkflowRecord {
 			retry: config.Retry,
 			async: config.Async,
 			errorHandler: func(err error) {
+				if err == nil {
+					return
+				}
 				logger.New().Error(err)
 			},
 			asyncPool: newAsyncPool(-1),
@@ -757,23 +719,4 @@ func (t *TaskStatus) Error() error {
 
 func (t *TaskStatus) Statement() string {
 	return string(t.statement)
-}
-
-type changeStatusParams struct {
-	rollbackReason string
-	result         string
-}
-
-type changeStatusOption func(c *changeStatusParams)
-
-func withRollbackReason(rollbackReason string) changeStatusOption {
-	return func(c *changeStatusParams) {
-		c.rollbackReason = rollbackReason
-	}
-}
-
-func withResult(result string) changeStatusOption {
-	return func(c *changeStatusParams) {
-		c.result = result
-	}
 }

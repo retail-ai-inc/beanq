@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine
+FROM golang:1.23-alpine
 
 # This is necessary for China devps
 #RUN go env -w GOPROXY=https://goproxy.cn,direct

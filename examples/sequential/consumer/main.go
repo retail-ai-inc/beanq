@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 
 	beanq "github.com/retail-ai-inc/beanq/v3"
 	"github.com/spf13/viper"
@@ -53,27 +55,29 @@ func (t *seqCustomer) Handle(ctx context.Context, message *beanq.Message) error 
 	log.Printf("%s:%v\n", t.metadata, message)
 	return nil
 }
+
 func (t *seqCustomer) Cancel(ctx context.Context, message *beanq.Message) error {
 	return nil
 }
-func (t *seqCustomer) Error(ctx context.Context, err error) {
 
+func (t *seqCustomer) Error(ctx context.Context, err error) {
 }
 
-var index int
+var index int32
 
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
+	beanq.InitWorkflow(&config.Redis)
 
 	ctx := context.Background()
 	_, berr := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
-		index++
-		fmt.Println("index:", index)
+		atomic.AddInt32(&index, 1)
+		fmt.Println("index:", atomic.LoadInt32(&index))
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			if index%3 == 0 {
-				return fmt.Errorf("rollback error:%d", index)
-			} else if index%4 == 0 {
+			if atomic.LoadInt32(&index)%3 == 0 {
+				return fmt.Errorf("rollback error:%d", atomic.LoadInt32(&index))
+			} else if atomic.LoadInt32(&index)%4 == 0 {
 				panic("rollback panic test")
 			}
 			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
@@ -97,9 +101,9 @@ func main() {
 			log.Println(task.ID()+" rollback-3:", wf.Message().Id)
 			return nil
 		}).OnExecute(func(task beanq.Task) error {
-			if index%2 == 0 {
-				return fmt.Errorf("execute error: %d", index)
-			} else if index == 7 {
+			if atomic.LoadInt32(&index)%2 == 0 {
+				return fmt.Errorf("execute error: %d", atomic.LoadInt32(&index))
+			} else if atomic.LoadInt32(&index) == 7 {
 				panic("execute panic test")
 			}
 			log.Println(task.ID() + " job-3")
@@ -107,12 +111,12 @@ func main() {
 			return nil
 		})
 
-		berr := wf.OnRollbackResult(func(taskID string, berr error)  {
+		berr := wf.OnRollbackResult(func(taskID string, berr error) {
 			if berr == nil {
-				return 
+				return
 			}
 			log.Printf("%s rollback error: %v\n", taskID, berr)
-			return 
+			return
 		}).Run()
 		if berr != nil {
 			return berr
@@ -125,5 +129,4 @@ func main() {
 
 	// begin to consume information
 	csm.Wait(ctx)
-
 }
