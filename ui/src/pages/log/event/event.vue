@@ -15,7 +15,7 @@
               <thead>
                 <tr>
                   <th scope="col" class="w-table-number">#</th>
-                  <th scope="col" class="text-nowrap">MsgId</th>
+                  <th scope="col" class="text-nowrap">Message Id</th>
                   <th scope="col" class="text-nowrap">Channel</th>
                   <th scope="col" class="text-nowrap">Topic</th>
                   <th scope="col" class="text-nowrap">Mood Type</th>

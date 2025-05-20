@@ -33,7 +33,7 @@ onMounted(async ()=>{
   let paramid = uRoute.params.id;
   let res = await getDetail(paramid);
   let {_id,id,...data} = res;
-  detail.value = {ObjectId:_id,MsgId:id,...data};
+  detail.value = {ObjectId:_id,"Message Id":id,...data};
 })
 
 

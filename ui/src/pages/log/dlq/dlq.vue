@@ -17,7 +17,7 @@
             <thead>
             <tr>
               <th scope="col">#</th>
-              <th scope="col">MsgId</th>
+              <th scope="col">Message Id</th>
               <th scope="col">Channel</th>
               <th scope="col">Topic</th>
               <th scope="col">Mood Type</th>
