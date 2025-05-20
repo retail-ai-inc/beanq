@@ -198,15 +198,6 @@ func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	opts.SetLimit(pageSize)
 	opts.SetSort(bson.D{{Key: "addTime", Value: -1}})
 
-	id := cast.ToString(filter["_id"])
-	if id != "" {
-		if objectId, err := primitive.ObjectIDFromHex(id); err != nil {
-			return nil, 0, err
-		} else {
-			filter["_id"] = objectId
-		}
-	}
-
 	cursor, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
 	defer func() {
 		_ = cursor.Close(ctx)

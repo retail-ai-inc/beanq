@@ -17,8 +17,7 @@
             <thead>
             <tr>
               <th scope="col">#</th>
-              <th scope="col">_Id</th>
-              <th scope="col">Id</th>
+              <th scope="col">MsgId</th>
               <th scope="col">Channel</th>
               <th scope="col">Topic</th>
               <th scope="col">Mood Type</th>
@@ -29,11 +28,14 @@
             </thead>
             <tbody>
             <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
-              <th scope="row">{{key+1}}</th>
               <th scope="row">
-                <Copy :text="item._id" />
+                <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">
+                  {{key+1}}
+                </router-link>
               </th>
-              <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">{{maskString(item.id)}}</router-link></td>
+              <th scope="row">
+                <Copy :text="item.id" />
+              </th>
               <td>{{item.channel}}</td>
               <td><div @click="filter(item.topic)" style="cursor: copy">{{item.topic}}</div></td>
               <td>{{item.moodType}}</td>
@@ -108,6 +110,8 @@ const filter = ((topic)=>{
 })
 
 const search = (()=>{
+  sessionStorage.setItem("dlqSearch",JSON.stringify(form.value));
+  //page.value = 1;
   dlqLogs();
 })
 
@@ -140,8 +144,16 @@ async function dlqLogs() {
 }
 
 onMounted( ()=>{
+  if(sessionStorage.getItem("dlqSearch")){
+    form.value = JSON.parse(sessionStorage.getItem("dlqSearch"));
+  }
+  if(sessionStorage.getItem("DlqPage")){
+    page.value = parseInt(sessionStorage.getItem("DlqPage"));
+  }
+
   dlqLogs();
 })
+
 const [uRouter,route] = [useRouter(),useRoute()];
 function detailDlq(item){
   uRouter.push("/admin/log/dlq/detail/"+item._id);
@@ -208,7 +220,8 @@ async function deleteInfo(){
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
   cursor.value = cursorVal;
-  Storage.SetItem("page",pageVal);
+  sessionStorage.setItem("DlqPage",page.value);
+
   dlqLogs();
 }
 

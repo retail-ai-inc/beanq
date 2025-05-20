@@ -1,6 +1,6 @@
 <template>
   <div>
-
+    <GoBackButton/>
     <div class="container-fluid" style="padding: 1.5rem;border-radius: 0.25rem">
       <div class="row" v-for="(item,key) in detail" style="min-height: 2.5rem">
         <div class="col-1" style="font-weight: bold">
@@ -13,13 +13,14 @@
       </div>
 
     </div>
-
+    <GoBackButton/>
   </div>
 </template>
 <script setup>
 
 import {ref,onMounted} from "vue";
 import { useRoute } from 'vueRouter';
+import GoBackButton from "../../components/goBackButton.vue";
 
 function getDetail(id){
   return request.get("/event_log/detail",{"params":{"id":id}})
@@ -29,9 +30,11 @@ let detail = ref({});
 const uRoute = useRoute();
 
 onMounted(async ()=>{
-  let id = uRoute.params.id;
-  let res = await getDetail(id);
-  detail.value = res.data;
+  let paramid = uRoute.params.id;
+  let res = await getDetail(paramid);
+  let {_id,id,...data} = res;
+  detail.value = {ObjectId:_id,MsgId:id,...data};
+  
 })
 
 </script>

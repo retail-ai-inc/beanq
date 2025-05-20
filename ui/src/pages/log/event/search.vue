@@ -33,7 +33,7 @@
               <input type="text" class="form-control" id="formTopicName" name="formTopicName"  v-model="form.topicName" placeholder="Topic name">
             </div>
             <div class="col" style="padding-right: 1rem;">
-              <input type="text" class="form-control" id="formId" name="formId"  v-model="form.id" placeholder="Search by Id">
+              <input type="text" class="form-control" id="formId" name="formId"  v-model="form.id" placeholder="Search by MsgId">
             </div>
             <div class="col-auto">
               <button type="submit" class="btn btn-primary" @click="search">{{$t('search')}}</button>

@@ -15,8 +15,7 @@
               <thead>
                 <tr>
                   <th scope="col" class="w-table-number">#</th>
-                  <th scope="col" class="text-nowrap">_Id</th>
-                  <th scope="col" class="text-nowrap">Id</th>
+                  <th scope="col" class="text-nowrap">MsgId</th>
                   <th scope="col" class="text-nowrap">Channel</th>
                   <th scope="col" class="text-nowrap">Topic</th>
                   <th scope="col" class="text-nowrap">Mood Type</th>
@@ -28,9 +27,9 @@
               </thead>
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
-                  <td>{{key+1}}</td>
-                  <td class="text-right">
-                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{maskString(item._id)}}</router-link>
+                  <td>
+                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{key+1}}</router-link>
+
                   </td>
                   <td class="">
                     <Copy :text="item.id" />

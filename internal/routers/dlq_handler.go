@@ -50,7 +50,7 @@ func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 	filter := bson.M{}
 	filter["logType"] = bstatus.Dlq
 	if id != "" {
-		filter["_id"] = id
+		filter["id"] = id
 	}
 	if status != "" {
 		filter["status"] = status
