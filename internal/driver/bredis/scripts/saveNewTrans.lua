@@ -11,3 +11,5 @@ for k = 7, table.getn(ARGV) do
 	redis.call('RPUSH', KEYS[2], ARGV[k])
 end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
+
+return 0

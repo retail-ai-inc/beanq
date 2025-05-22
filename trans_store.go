@@ -29,7 +29,6 @@ const (
 var (
 	ErrNotFound       = errors.New("storage: NotFound")
 	ErrUniqueConflict = errors.New("storage: UniqueKeyConflict")
-	ErrUndefined      = errors.New("storage: Undefined")
 )
 
 type TransStore interface {
@@ -88,7 +87,7 @@ type TransBranch struct {
 	Status       string     `json:"status,omitempty"`
 	FinishTime   *time.Time `json:"finish_time,omitempty"`
 	RollbackTime *time.Time `json:"rollback_time,omitempty"`
-	Error        error      `json:"-"`
+	Error        error      `json:"error,omitempty"`
 	CreateTime   *time.Time `json:"create_time"`
 	UpdateTime   *time.Time `json:"update_time"`
 }
@@ -102,7 +101,7 @@ func NewTransStore(client redis.UniversalClient, prefix string, dataExpire time.
 }
 
 func (t *transStore) FindGlobal(ctx context.Context, gid string) (*TransGlobal, error) {
-	r, err := t.client.Get(ctx, t.prefix+"_g_"+gid).Result()
+	r, err := t.client.Get(ctx, t.prefix+":g:"+gid).Result()
 	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	}
@@ -133,7 +132,7 @@ func (t *transStore) ScanGlobals(ctx context.Context, position *string, limit in
 
 	for {
 		limit -= int64(len(globals))
-		keys, nextCursor, err := t.client.Scan(ctx, positionIndex, t.prefix+"_g_*", limit).Result()
+		keys, nextCursor, err := t.client.Scan(ctx, positionIndex, t.prefix+":g:*", limit).Result()
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +179,7 @@ func (t *transStore) ScanGlobals(ctx context.Context, position *string, limit in
 }
 
 func (t *transStore) FindBranches(ctx context.Context, gid string) ([]TransBranch, error) {
-	rs, err := t.client.LRange(ctx, t.prefix+"_b_"+gid, 0, -1).Result()
+	rs, err := t.client.LRange(ctx, t.prefix+":b:"+gid, 0, -1).Result()
 	if err != nil {
 		return nil, fmt.Errorf("[FindBranches] LRange failed: %w", err)
 	}
@@ -231,6 +230,7 @@ func (t *transStore) LockGlobalSaveBranches(ctx context.Context, gid string, sta
 	}
 
 	ret, err := bredis.SaveBranchesScript.Run(ctx, t.client, args.Keys, args.List...).Result()
+
 	return handleRedisResult(ret, err)
 }
 
@@ -272,8 +272,13 @@ func handleRedisResult(ret interface{}, err error) error {
 	if err == nil {
 		return nil
 	}
+
 	if !errors.Is(err, redis.Nil) {
 		return err
+	}
+
+	if ret == nil {
+		return fmt.Errorf("handleRedisResult] failed ret is nil, error=%w", err)
 	}
 
 	s, _ := ret.(string)
@@ -283,7 +288,7 @@ func handleRedisResult(ret interface{}, err error) error {
 	}[s]
 
 	if !ok {
-		return ErrUndefined
+		return fmt.Errorf("handleRedisResult] failed ret=%s", ret)
 	}
 	return err
 }
@@ -307,15 +312,20 @@ func (a *argList) Result() (*argList, error) {
 	return a, a.errs
 }
 
+func (a *argList) String() string {
+	bs, _ := json.MarshalIndent(a, "", "  ")
+	return string(bs)
+}
+
 func (a *argList) AppendGid(gid string) *argList {
 	if a.errs != nil {
 		return a
 	}
 
-	a.Keys = append(a.Keys, a.prefix+"_g_"+gid)
-	a.Keys = append(a.Keys, a.prefix+"_b_"+gid)
+	a.Keys = append(a.Keys, a.prefix+":g:"+gid)
+	a.Keys = append(a.Keys, a.prefix+":b:"+gid)
 	a.Keys = append(a.Keys, a.prefix+"_u")
-	a.Keys = append(a.Keys, a.prefix+"_s_"+gid)
+	a.Keys = append(a.Keys, a.prefix+":s:"+gid)
 	return a
 }
 

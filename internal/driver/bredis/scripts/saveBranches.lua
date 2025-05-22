@@ -15,6 +15,7 @@ if start == "-1" then
 		end
 	end
 end
+
 for k = 5, table.getn(ARGV) do
 	if start == "-1" then
 		redis.call('RPUSH', KEYS[2], ARGV[k])
@@ -23,3 +24,5 @@ for k = 5, table.getn(ARGV) do
 	end
 end
 redis.call('EXPIRE', KEYS[2], ARGV[2])
+
+return 0

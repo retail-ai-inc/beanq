@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -173,7 +174,7 @@ func (w *Workflow) NewTask(ids ...string) *task {
 
 func (w *Workflow) Run() (err error) {
 	var progresses []TransBranch
-	var index int
+	index := -1
 	now := time.Now()
 
 	for i, task := range w.tasks {
@@ -212,8 +213,8 @@ func (w *Workflow) Run() (err error) {
 		if err != nil {
 			return errorstack.WithStack(err)
 		}
-	}else{
-		w.progresses=progresses
+	} else {
+		w.progresses = progresses
 	}
 
 	switch w.transaction.Status {
@@ -238,36 +239,64 @@ func (w *Workflow) Run() (err error) {
 
 	actions, compensates := w.initSteps()
 
-	if w.transaction.Status == StatusPrepared {
-		for _, branch := range actions() {
-			err = w.executor(&branch, OpAction)
-			if err != nil {
-				break
-			}
+ACTION:
+	for w.transaction.Status == StatusPrepared {
+		select {
+		case <-w.ctx.Done():
+			err = w.ctx.Err()
+			break ACTION
+		default:
 		}
 
-		if err == nil {
-			err2 := w.ChangeStatus(w.ctx, StatusSucceed)
-			if err2 != nil {
-				return err2
+		ac := actions()
+		if len(ac) == 0 {
+			break ACTION
+		}
+
+		for _, branch := range ac {
+			err = w.executor(branch, OpAction)
+			if err != nil {
+				break ACTION
 			}
 		}
 	}
 
-	if w.transaction.Status == StatusAborting {
-		for _, branch := range compensates() {
-			err = w.executor(&branch, OpCompensate)
-			if err != nil {
-				break
-			}
+	if err == nil {
+		err2 := w.ChangeStatus(w.ctx, StatusSucceed)
+		if err2 != nil {
+			return err2
+		}
+		return nil
+	}
+
+COMPENSATE:
+	for w.transaction.Status == StatusAborting {
+		select {
+		case <-w.ctx.Done():
+			err = w.ctx.Err()
+			break COMPENSATE
+		default:
 		}
 
-		if err == nil {
-			err2 := w.ChangeStatus(w.ctx, StatusFailed)
-			if err2 != nil {
-				return err2
+		ac := compensates()
+		if len(ac) == 0 {
+			break COMPENSATE
+		}
+
+		for _, branch := range ac {
+			err = w.executor(branch, OpCompensate)
+			if err != nil {
+				break COMPENSATE
 			}
 		}
+	}
+
+	if err == nil {
+		err2 := w.ChangeStatus(w.ctx, StatusFailed)
+		if err2 != nil {
+			return err2
+		}
+		return nil
 	}
 
 	return nil
@@ -277,6 +306,7 @@ func (w *Workflow) executor(branch *TransBranch, op string) (err error) {
 	defer func() {
 		if e := recover(); e != nil || err != nil {
 			if err == nil {
+				logger.New().Panic(fmt.Sprintf("%v\n%s", e, string(debug.Stack())))
 				err = fmt.Errorf("%v", e)
 			}
 		}
@@ -318,14 +348,16 @@ func (w *Workflow) ChangeStatus(ctx context.Context, status string, reason ...st
 	if err != nil {
 		return err
 	}
-	w.transaction.Status = status
 
 	return nil
 }
 
-func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
+func (w *Workflow) initSteps() (actions, compensates func() []*TransBranch) {
 	n := len(w.progresses)
-	branchResults := w.progresses
+	branchResults := make([]*TransBranch, n)
+	for i := range w.progresses {
+		branchResults[i] = &w.progresses[i]
+	}
 
 	shouldRun := func(current int) bool {
 		if branchResults[current].Status != StatusPrepared {
@@ -363,8 +395,8 @@ func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
 		return true
 	}
 
-	pickToRunActions := func() []TransBranch {
-		var toRun []TransBranch
+	pickToRunActions := func() []*TransBranch {
+		var toRun []*TransBranch
 		for current := 1; current < n; current += 2 {
 			if shouldRun(current) {
 				toRun = append(toRun, branchResults[current])
@@ -374,12 +406,12 @@ func (w *Workflow) initSteps() (actions, compensates func() []TransBranch) {
 		return toRun
 	}
 
-	pickToRunCompensates := func() []TransBranch {
-		var toRun []TransBranch
+	pickToRunCompensates := func() []*TransBranch {
+		var toRun []*TransBranch
 		for current := n - 2; current >= 0; current -= 2 {
-			br := &branchResults[current]
+			br := branchResults[current]
 			if shouldRollback(current) {
-				toRun = append(toRun, *br)
+				toRun = append(toRun, br)
 			}
 		}
 		return toRun
@@ -552,9 +584,10 @@ func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error
 		branch.FinishTime = &now
 		branch.UpdateTime = &now
 		branch.Status = status
-		err := t.wf.transStore.LockGlobalSaveBranches(ctx, t.wf.transaction.Gid, status, []TransBranch{*branch}, branch.Index)
+	
+		err := t.wf.transStore.LockGlobalSaveBranches(ctx, t.wf.transaction.Gid, t.wf.transaction.Status, []TransBranch{*branch}, branch.Index)
 		if err != nil {
-			return errorstack.Wrap(err, oerr.Error())
+			return errorstack.WithStack(err)
 		}
 	}
 
@@ -592,12 +625,13 @@ func NewWorkflowRecord() *WorkflowRecord {
 		On    bool
 		Async bool
 	}
+
 	workflowRecordOnce.Do(func() {
 		err := viper.UnmarshalKey("queue.workflow.record", &config)
 		if err != nil {
 			logger.New().Info("no workflow configration, ignoring the record")
 		}
-		fmt.Printf("workflow:%+v \n", config)
+
 		workflowRecord = &WorkflowRecord{
 			on:    config.On,
 			retry: config.Retry,

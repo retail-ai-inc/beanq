@@ -11,3 +11,5 @@ if ARGV[5] == '1' then
 	redis.call('EXPIRE', KEYS[2], ARGV[8])
 	redis.call('EXPIRE', KEYS[4], ARGV[8])
 end
+
+return 0
