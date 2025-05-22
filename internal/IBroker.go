@@ -3,6 +3,7 @@ package public
 import (
 	"context"
 
+	"github.com/labstack/gommon/log"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 )
@@ -43,4 +44,10 @@ type (
 // IStatus check the status of the message based on the ID
 type IStatus interface {
 	Status(ctx context.Context, channel, topic, id string) (map[string]string, error)
+}
+
+func (CallBack) Error(ctx context.Context, err error) {
+	if err != nil {
+		log.Error(err)
+	}
 }

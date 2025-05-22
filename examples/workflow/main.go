@@ -103,6 +103,7 @@ func main() {
 		}
 		return nil
 	}))
+	
 	if berr != nil {
 		logger.New().Error(berr)
 	}

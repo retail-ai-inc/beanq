@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,7 +92,6 @@ func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
 		panic("workflow client not initialized")
 	}
 
-	gid := strings.Join([]string{message.Channel, message.Topic, message.Id}, "-")
 	// prepare workflow, get process from redis by gid
 	ts := NewTransStore(
 		workflowClient,
@@ -107,7 +105,7 @@ func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
 
 	return &Workflow{
 		ctx:         ctx,
-		gid:         gid,
+		gid:         message.Id,
 		message:     message,
 		tasks:       make([]*task, 0),
 		record:      NewWorkflowRecord(),
@@ -584,7 +582,7 @@ func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error
 		branch.FinishTime = &now
 		branch.UpdateTime = &now
 		branch.Status = status
-	
+
 		err := t.wf.transStore.LockGlobalSaveBranches(ctx, t.wf.transaction.Gid, t.wf.transaction.Status, []TransBranch{*branch}, branch.Index)
 		if err != nil {
 			return errorstack.WithStack(err)

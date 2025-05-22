@@ -7,8 +7,8 @@ import (
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
@@ -63,21 +63,22 @@ func (t *seqCustomer) Cancel(ctx context.Context, message *beanq.Message) error 
 func (t *seqCustomer) Error(ctx context.Context, err error) {
 }
 
-var index int32
-
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
 	beanq.InitWorkflow(&config.Redis)
 
 	ctx := context.Background()
-	_, berr := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
-		atomic.AddInt32(&index, 1)
-		fmt.Println("index:", atomic.LoadInt32(&index))
+	_, berr := csm.BQ().WithContext(ctx).SubscribeSequential("sequential-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+		index, err := strconv.Atoi(wf.GetGid())
+		if err != nil {
+			return err
+		}
+
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
-			if atomic.LoadInt32(&index)%3 == 0 {
-				return fmt.Errorf("rollback error:%d", atomic.LoadInt32(&index))
-			} else if atomic.LoadInt32(&index)%4 == 0 {
+			if index%3 == 0 {
+				return fmt.Errorf("rollback error:%d", index)
+			} else if index%4 == 0 {
 				panic("rollback panic test")
 			}
 			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
@@ -101,9 +102,9 @@ func main() {
 			log.Println(task.ID()+" rollback-3:", wf.Message().Id)
 			return nil
 		}).OnExecute(func(task beanq.Task) error {
-			if atomic.LoadInt32(&index)%2 == 0 {
-				return fmt.Errorf("execute error: %d", atomic.LoadInt32(&index))
-			} else if atomic.LoadInt32(&index) == 7 {
+			if index%2 == 0 {
+				return fmt.Errorf("execute error: %s %d", wf.GetGid(), index)
+			} else if index == 7 {
 				panic("execute panic test")
 			}
 			log.Println(task.ID() + " job-3")

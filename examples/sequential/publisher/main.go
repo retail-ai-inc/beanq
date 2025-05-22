@@ -64,7 +64,7 @@ func main() {
 			b, _ := json.Marshal(m)
 			bq := pub.BQ()
 			ctx := context.Background()
-			if err := bq.WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("delay-channel", "order-topic", b).Error(); err != nil {
+			if err := bq.WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("sequential-channel", "order-topic", b).Error(); err != nil {
 				logger.New().Error(err)
 			}
 		}()
