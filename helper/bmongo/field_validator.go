@@ -262,9 +262,11 @@ func (t Collection) createIndex(ctx context.Context, database *mongo.Database, k
 func (t Collection) getCollectionOptions(tp CollectionType) (*options.CreateCollectionOptions, error) {
 	if validator, ok := validators[tp]; ok {
 		opts := options.CreateCollection().SetValidator(validator)
-		if tp == OptType {
-			opts.SetValidationLevel("strict")
-		}
+		opts.SetValidationLevel("off")
+		// optLog will remove validationLevel
+		//if tp == OptType {
+		//	opts.SetValidationLevel("strict")
+		//}
 		return opts, nil
 	}
 

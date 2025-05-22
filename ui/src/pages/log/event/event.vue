@@ -14,7 +14,6 @@
             <table class="table table-striped table-hover" style="table-layout: auto;">
               <thead>
                 <tr>
-                  <th scope="col" class="w-table-number">#</th>
                   <th scope="col" class="text-nowrap">Message Id</th>
                   <th scope="col" class="text-nowrap">Channel</th>
                   <th scope="col" class="text-nowrap">Topic</th>
@@ -27,10 +26,6 @@
               </thead>
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
-                  <td>
-                    <router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailEvent(item)">{{key+1}}</router-link>
-
-                  </td>
                   <td class="">
                     <Copy :text="item.id" />
                   </td>
@@ -52,6 +47,7 @@
                     <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
                     <EditIcon @action="editModal(item)"/>
                     <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
+                    <DetailIcon @action="detailEvent(item)" style="margin:0 .25rem;"/>
                   </td>
                 </tr>
               </tbody>
@@ -91,6 +87,7 @@ import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
 import EditIcon from "../../components/icons/edit_icon.vue";
+import DetailIcon from "../../components/icons/detail_icon.vue";
 import Search from "./search.vue";
 import EditAction from "./editAction.vue";
 import Action from "../../components/action.vue";

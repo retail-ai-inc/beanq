@@ -33,7 +33,7 @@
                     <tbody>
                     <tr v-for="(d, k) in item" :key="k">
                       <th scope="row">
-                        <router-link to="" class="nav-link text-muted" v-on:click="detailQueue(d)">{{ d.topic }}</router-link>
+                        <router-link to="" class="nav-link text-muted" v-on:click="detailQueue(d)" style="color:#0d6efd !important;">{{ d.topic }}</router-link>
                       </th>
                       <td :class="d.state == 'Run' ? 'text-success-emphasis' : 'text-danger-emphasis'" class="align-middle">{{ d.state }}</td>
                       <td class="align-middle">{{d.moodType}}</td>
@@ -67,7 +67,7 @@ import Spinner from "../components/spinner.vue";
 import NoMessage from "../components/noMessage.vue";
 import HelpIcon from "../components/icons/help_icon.vue";
 
-const [queues,page,pageSize,total,uRouter] = [ref([]),ref(1),ref(10),ref(1),useRouter()];
+const [queues,page,pageSize,total,uRouter] = [ref([]),ref(1),ref(100),ref(1),useRouter()];
 const [loginId,loginModal] = [ref("staticBackdrop"),ref("loginModal")];
 const [id,toastRef] = [ref("userToast"),ref(null)];
 const loading = ref(false);
