@@ -77,7 +77,7 @@ type TransGlobal struct {
 }
 
 type TransBranch struct {
-	Index        int        `json:"index,omitempty"`
+	Index        int        `json:"index"`
 	Gid          string     `json:"gid,omitempty"`
 	TaskID       string     `json:"task_id,omitempty"`
 	Statement    string     `json:"url,omitempty"`

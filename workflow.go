@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
-	"strconv"
 	"sync"
 	"time"
 
@@ -19,13 +18,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-)
-
-const (
-	ExecuteSuccess = iota + 1
-	ExecuteFailed
-	RollbackSuccess
-	RollbackFailed
 )
 
 const (
@@ -481,13 +473,8 @@ func (t *task) Execute() error {
 	// business side handle the retry
 	err := t.executeFunc(t)
 
-	status := ExecuteSuccess
-	if err != nil {
-		status = ExecuteFailed
-	}
-
 	t.trackRecord(t.id, &TaskStatus{
-		status:    status,
+		option:    OpAction,
 		statement: t.Statement(),
 		err:       err,
 	})
@@ -501,13 +488,8 @@ func (t *task) Rollback() error {
 	}
 	err := t.rollbackFunc(t)
 
-	status := RollbackSuccess
-	if err != nil {
-		status = RollbackFailed
-	}
-
 	t.trackRecord(t.id, &TaskStatus{
-		status:    status,
+		option:    OpCompensate,
 		statement: t.Statement(),
 		err:       err,
 	})
@@ -536,6 +518,12 @@ func (t *task) Statement() []byte {
 
 func (t *task) trackRecord(taskID string, status *TaskStatus) {
 	w := t.wf
+
+	st := StatusSucceed
+	if status.err != nil {
+		st = StatusFailed
+	}
+
 	data := struct {
 		CreatedAt time.Time          `bson:"CreatedAt"`
 		UpdatedAt time.Time          `bson:"UpdatedAt"`
@@ -546,6 +534,7 @@ func (t *task) trackRecord(taskID string, status *TaskStatus) {
 		TaskID    string             `bson:"TaskId"`
 		Status    string             `bson:"Status"`
 		Statement string             `bson:"Statement"`
+		Error     error              `bson:"Error"`
 		Id        primitive.ObjectID `bson:"_id"`
 	}{
 		Id:        primitive.NewObjectID(),
@@ -554,10 +543,11 @@ func (t *task) trackRecord(taskID string, status *TaskStatus) {
 		MessageID: w.message.Id,
 		GID:       w.gid,
 		TaskID:    taskID,
-		Status:    status.Status(),
+		Status:    st,
 		Statement: status.Statement(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
+		Error:     status.Error(),
 	}
 
 	w.record.Write(w.ctx, data)
@@ -582,6 +572,7 @@ func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error
 		branch.FinishTime = &now
 		branch.UpdateTime = &now
 		branch.Status = status
+		branch.Error = oerr
 
 		err := t.wf.transStore.LockGlobalSaveBranches(ctx, t.wf.transaction.Gid, t.wf.transaction.Status, []TransBranch{*branch}, branch.Index)
 		if err != nil {
@@ -723,26 +714,7 @@ func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) error {
 type TaskStatus struct {
 	err       error
 	statement []byte
-	status    int
-}
-
-func (t *TaskStatus) Status() string {
-	switch t.status {
-	case ExecuteSuccess:
-		return "execute success"
-	case ExecuteFailed:
-		return "execute failed"
-	case RollbackSuccess:
-		return "rollback success"
-	case RollbackFailed:
-		return "rollback failed"
-	default:
-		return strconv.Itoa(t.status)
-	}
-}
-
-func (t *TaskStatus) String() string {
-	return fmt.Sprintf("[status:%s; statement:%s]\n", t.Status(), t.Statement())
+	option    string
 }
 
 func (t *TaskStatus) Error() error {

@@ -3,7 +3,7 @@ package public
 import (
 	"context"
 
-	"github.com/labstack/gommon/log"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 )
@@ -48,6 +48,6 @@ type IStatus interface {
 
 func (CallBack) Error(ctx context.Context, err error) {
 	if err != nil {
-		log.Error(err)
+		logger.New().Error(err)
 	}
 }
