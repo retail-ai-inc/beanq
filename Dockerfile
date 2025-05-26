@@ -25,8 +25,11 @@ RUN apk update &&  \
 
 RUN mkdir -p /var/www/example
 
+RUN go install github.com/go-delve/delve/cmd/dlv@v1.24.2
+
 # Set the Current Working Directory inside the container
 WORKDIR /var/www/example
 
+EXPOSE 9090 8888
+
 ENTRYPOINT ["make","ui"]
-EXPOSE 9090

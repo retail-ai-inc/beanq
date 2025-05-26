@@ -41,6 +41,14 @@ sequential-consumer:
 	mv temp.json env.json && \
 	go run -race ./main.go
 
+sequential-consumer-dlv:
+	@echo "start sequential consumer"
+	@cd examples/sequential/consumer && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
+	go build -race -o server ./main.go && \
+	dlv --headless --listen=:8888 --api-version=2 exec ./server
+
 sequential-publisher:
 	@echo "start sequential publisher"
 	@cd examples/sequential/publisher && \
