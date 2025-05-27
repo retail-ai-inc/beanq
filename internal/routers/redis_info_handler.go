@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
+	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
@@ -20,10 +21,11 @@ import (
 type RedisInfo struct {
 	client redis.UniversalClient
 	prefix string
+	mgo    *bmongo.BMongo
 }
 
-func NewRedisInfo(client redis.UniversalClient, prefix string) *RedisInfo {
-	return &RedisInfo{client: client, prefix: prefix}
+func NewRedisInfo(client redis.UniversalClient, prefix string, mongo *bmongo.BMongo) *RedisInfo {
+	return &RedisInfo{client: client, prefix: prefix, mgo: mongo}
 }
 func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 
@@ -241,19 +243,13 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data := make(map[string]any, 4)
-
-	data["google"] = config.Google
-	data["smtp"] = config.SMTP
-	data["sendGrid"] = config.SendGrid
-	data["rule"] = config.Rule
-	data["slack"] = config.Slack
-	if err := t.client.HSet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), data).Err(); err != nil {
+	if err := t.mgo.AddConfig(r.Context(), &config); err != nil {
 		res.Code = response.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
+
 	_ = res.Json(w, http.StatusOK)
 }
 
@@ -261,13 +257,13 @@ func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	data, err := t.client.HGetAll(r.Context(), strings.Join([]string{t.prefix, "config"}, ":")).Result()
+	result, err := t.mgo.ConfigInfo(r.Context())
 	if err != nil {
 		res.Code = response.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = data
+	res.Data = result
 	_ = res.Json(w, http.StatusOK)
 }

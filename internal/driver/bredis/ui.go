@@ -40,7 +40,8 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 		pending int64
 		ready   int64
 	)
-
+	//data := make(map[string]any, 4)
+	sliceData := make([]any, 0, 4)
 	for {
 		select {
 		case <-ctx.Done():
@@ -61,22 +62,20 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 			}
 			total += t.client.XLen(ctx, streamkey).Val()
 		}
+		if total <= 0 {
+			total = 0
+		}
 		if pending < 0 {
 			pending = 0
-		}
-		if total < 0 {
-			total = 0
 		}
 		ready = total - pending
 
 		now := time.Now()
-		data := make(map[string]any, 0)
-		data["time"] = now.Format(time.DateTime)
-		data["total"] = total
-		data["pending"] = pending
-		data["ready"] = ready
 
-		bt, err := json.Marshal(data)
+		sliceData = append(sliceData, total, pending, ready, now.Format(time.DateTime))
+
+		bt, err := json.Marshal(sliceData)
+		sliceData = sliceData[:0]
 		if err != nil {
 			logger.New().Error(err)
 			continue
@@ -107,13 +106,11 @@ func (t *UITool) HostName(ctx context.Context) error {
 	}
 
 	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
-
-	keys, _, err := t.client.ZScan(ctx, hostNameKey, 0, fmt.Sprintf("*%s*", info.Hostname), 10).Result()
+	data := make(map[string]any, 8)
+	keys, _, err := t.client.ZScan(ctx, hostNameKey, 0, "*", 20).Result()
 	if err != nil {
 		return err
 	}
-	data := make(map[string]any, 8)
-
 	for _, key := range keys {
 		if err := json.NewDecoder(strings.NewReader(key)).Decode(&data); err != nil {
 			continue
@@ -121,18 +118,18 @@ func (t *UITool) HostName(ctx context.Context) error {
 		if v, ok := data["hostName"]; ok {
 			if cast.ToString(v) == info.Hostname {
 				t.client.ZRem(ctx, hostNameKey, key)
-				data = nil
+				data = make(map[string]any, 8)
 				continue
 			}
 		}
 		if v, ok := data["expiredTime"]; ok {
 			if cast.ToInt64(v) < now.Unix() {
 				t.client.ZRem(ctx, hostNameKey, key)
-				data = nil
+				data = make(map[string]any, 8)
 				continue
 			}
 		}
-		data = nil
+		data = make(map[string]any, 8)
 	}
 	memory, err := mem.VirtualMemory()
 	if err != nil {

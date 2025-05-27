@@ -2,7 +2,7 @@
   <div class="container-fluid">
     <div class="row mb-4">
       <div class="col">
-        <h5 class="card-title">List of DeadLetter Log</h5>
+        <h5 class="card-title">List of Dead Letter Log</h5>
       </div>
     </div>
     <div class="dlq">
@@ -16,24 +16,20 @@
           <table class="table table-striped table-hover">
             <thead>
             <tr>
-              <th scope="col">#</th>
-              <th scope="col">_Id</th>
-              <th scope="col">Id</th>
+              <th scope="col">Message Id</th>
               <th scope="col">Channel</th>
               <th scope="col">Topic</th>
               <th scope="col">Mood Type</th>
-              <th scope="col">AddTime</th>
+              <th scope="col">Add Time</th>
               <th scope="col">Payload</th>
               <th scope="col">Action</th>
             </tr>
             </thead>
             <tbody>
             <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
-              <th scope="row">{{key+1}}</th>
               <th scope="row">
-                <Copy :text="item._id" />
+                <Copy :text="item.id" />
               </th>
-              <td><router-link to="" class="nav-link text-primary" style="display: contents" v-on:click="detailDlq(item)">{{maskString(item.id)}}</router-link></td>
               <td>{{item.channel}}</td>
               <td><div @click="filter(item.topic)" style="cursor: copy">{{item.topic}}</div></td>
               <td>{{item.moodType}}</td>
@@ -46,6 +42,7 @@
               <td class="text-center text-nowrap">
                 <RetryIcon @action="retryModal(item)" style="margin: 0 .25rem"/>
                 <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
+                <DetailIcon @action="detail(item)" style="margin:0 .25rem"/>
               </td>
             </tr>
             </tbody>
@@ -76,6 +73,7 @@ import { useRouter,useRoute } from 'vueRouter';
 import Pagination from "../../components/pagination.vue";
 import RetryIcon from "../../components/icons/retry_icon.vue";
 import DeleteIcon from "../../components/icons/delete_icon.vue";
+import DetailIcon from "../../components/icons/detail_icon.vue";
 import Action from "../../components/action.vue";
 import Btoast from "../../components/btoast.vue";
 import LoginModal from "../../components/loginModal.vue";
@@ -108,6 +106,8 @@ const filter = ((topic)=>{
 })
 
 const search = (()=>{
+  sessionStorage.setItem("dlqSearch",JSON.stringify(form.value));
+  //page.value = 1;
   dlqLogs();
 })
 
@@ -140,10 +140,18 @@ async function dlqLogs() {
 }
 
 onMounted( ()=>{
+  if(sessionStorage.getItem("dlqSearch")){
+    form.value = JSON.parse(sessionStorage.getItem("dlqSearch"));
+  }
+  if(sessionStorage.getItem("DlqPage")){
+    page.value = parseInt(sessionStorage.getItem("DlqPage"));
+  }
+
   dlqLogs();
 })
-const [uRouter,route] = [useRouter(),useRoute()];
-function detailDlq(item){
+
+const [uRouter] = [useRouter()];
+function detail(item){
   uRouter.push("/admin/log/dlq/detail/"+item._id);
 }
 
@@ -208,7 +216,8 @@ async function deleteInfo(){
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
   cursor.value = cursorVal;
-  Storage.SetItem("page",pageVal);
+  sessionStorage.setItem("DlqPage",page.value);
+
   dlqLogs();
 }
 

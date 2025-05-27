@@ -43,6 +43,10 @@ var (
 // It will be optimized in the later stage
 func (t CatchType) When(config *Config) *Catch {
 
+	if config == nil {
+		return nil
+	}
+
 	whens := make([]CatchType, 0)
 	for _, w := range config.Rule.When {
 		whens = append(whens, CatchType(w.Value))

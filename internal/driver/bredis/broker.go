@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -110,7 +111,8 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		}).Val()
 		length := len(pendings)
 		if length <= 0 {
-			if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+			//Replace `Del` with `Unlink` and hand it over to the Redis server for processing.
+			if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
 				capture.Dlq.When(t.captureConfig).If(&capture.Channel{
 					Channel: channel,
 					Topic:   []string{},
@@ -127,15 +129,31 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
 
 			if len(rangeV) <= 0 {
-				t.client.Del(ctx, deadLetterKey)
+				t.client.Unlink(ctx, deadLetterKey)
 				continue
 			}
 			val := rangeV[0].Values
 			val["logType"] = bstatus.Dlq
-			if err := t.client.XAdd(ctx, &redis.XAddArgs{
+
+			// logic XAddArgs
+			args := &redis.XAddArgs{
 				Stream: logicKey,
 				Values: val,
-			}).Err(); err != nil {
+			}
+
+			if v, ok := val["status"]; ok {
+				if v.(string) == bstatus.StatusPublished {
+					//  TODO:Re-enter the queue
+					var maxLenInt int64 = 2000
+					if maxLen, ok := val["maxLen"]; ok {
+						maxLenInt = maxLen.(int64)
+					}
+					// normal message XAddArgs
+					// Need to handle idempotent keys
+					args = NewZAddArgs(streamKey, "", "*", maxLenInt, 0, val)
+				}
+			}
+			if err := t.client.XAdd(ctx, args).Err(); err != nil {
 				capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 				logger.New().Error(err)
 			}
@@ -149,21 +167,25 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 			logger.New().Error(err)
 		}
-		if err := t.client.Del(ctx, deadLetterKey).Err(); err != nil {
+		if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
 			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
 			logger.New().Error(err)
 		}
 	}
 }
 
-func (t *Base) Enqueue(ctx context.Context, data map[string]any) error {
+func (t *Base) Enqueue(_ context.Context, _ map[string]any) error {
 	return nil
 }
 
 func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
-
-	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
+	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, 500*time.Millisecond)
+	// worker num
+	workerNum := runtime.GOMAXPROCS(0) - 1
+	if workerNum <= 0 {
+		workerNum = 2
+	}
 
 	for {
 
@@ -183,105 +205,110 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 				logger.New().Info("Channel:[", channel, "]Topic:[", topic, "] Task Stop")
 				return
 			}
-			continue
 		}
 
 		streams := cmd.Val()
+		if len(streams) <= 0 {
+			continue
+		}
 		stream := streams[0].Stream
 		messages := streams[0].Messages
 
+		// Use Fan-Out mode to process tasks
 		var wait sync.WaitGroup
-		for _, message := range messages {
+		jobs, results := make(chan public.Stream, len(messages)), make(chan public.Stream, len(messages))
+		// start workers
+		// open core(num-1) goroutines
+		for i := 0; i < workerNum; i++ {
 			wait.Add(1)
-			go func(msg redis.XMessage) {
-				vv := msg.Values
-				defer func() {
-					if p := recover(); p != nil {
-						// receive the message
-						vv["status"] = bstatus.StatusFailed
-						vv["info"] = fmt.Sprintf("[panic recover]: %+v\n%s\n", p, debug.Stack())
-						if err := t.AddLog(ctx, vv); err != nil {
-							capture.Fail.When(t.captureConfig).If(&capture.Channel{
-								Channel: channel,
-								Topic:   []string{topic},
-							}).Then(err)
-							logger.New().Error(err)
-						}
-					}
-					wait.Done()
-				}()
-				if err := t.Consumer(ctx, &public.Stream{
-					Data:    vv,
-					Id:      msg.ID,
-					Channel: channel,
-					Stream:  stream,
-				}, do); err != nil {
-					capture.Fail.When(t.captureConfig).If(&capture.Channel{
-						Channel: channel,
-						Topic:   []string{topic},
-					}).Then(err)
-					logger.New().Error(err)
-				}
-			}(message)
+			go worker(ctx, jobs, results, do, &wait)
 		}
-		wait.Wait()
+		// send jobs
+		for _, message := range messages {
+			jobs <- public.Stream{
+				Data:    message.Values,
+				Id:      message.ID,
+				Channel: channel,
+				Stream:  stream,
+			}
+		}
+		close(jobs)
+		go func() {
+			wait.Wait()
+			close(results)
+		}()
+		// handler worker results
+		ids := make([]string, 0, len(messages))
+		for result := range results {
+			if err := t.AddLog(ctx, result.Data); err != nil {
+				logger.New().Error(err)
+				capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+				continue
+			}
+			ids = append(ids, result.Id)
+		}
+		_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+			pipeliner.XAck(ctx, stream, channel, ids...)
+			pipeliner.XDel(ctx, stream, ids...)
+			return nil
+		})
+		if err != nil {
+			logger.New().Error(err)
+			capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+		}
 	}
 }
 
-func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallBack) error {
-	id := stream.Id
-	stm := stream.Stream
-	channel := stream.Channel
+// consumer worker
+func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for job := range jobs {
 
-	val := stream.Data
+		select {
+		case <-ctx.Done():
+			return
+		default:
 
-	group := t.errGroup.Get().(*errgroup.Group)
-	defer func() {
-		t.errGroup.Put(group)
-	}()
-	val["status"] = bstatus.StatusReceived
-	val["beginTime"] = time.Now()
-	timeToRun := cast.ToDuration(val["timeToRun"])
-	sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
-
-	retry, err := tool.RetryInfo(sessionCtx, func() error {
-		return handler(sessionCtx, val)
-	}, cast.ToInt(val["retry"]))
-
-	if err != nil {
-		if h, ok := interface{}(handler).(interface {
-			Error(ctx context.Context, err error)
-		}); ok {
-			h.Error(sessionCtx, err)
 		}
-		val["level"] = bstatus.ErrLevel
-		val["info"] = err.Error()
-		val["status"] = bstatus.StatusFailed
-	} else {
-		val["status"] = bstatus.StatusSuccess
-	}
+		val := job.Data
 
-	val["endTime"] = time.Now()
-	val["retry"] = retry
-	val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).String()
-	hostname, _ := os.Hostname()
-	val["hostName"] = hostname
-	// `stream` confirmation message
-	cancel()
-	// ------------------------
-	group.TryGo(func() error {
-		_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.XAck(ctx, stm, channel, id)
-			pipeliner.XDel(ctx, stm, id)
-			return nil
-		})
-		return err
-	})
-	group.TryGo(func() error {
-		return t.AddLog(ctx, val)
-	})
-	if err := group.Wait(); err != nil {
-		return err
+		val["status"] = bstatus.StatusReceived
+		val["beginTime"] = time.Now()
+		timeToRun := cast.ToDuration(val["timeToRun"])
+		sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
+
+		retry, err := tool.RetryInfo(sessionCtx, func() (err error) {
+			defer func() {
+				if p := recover(); p != nil {
+					err = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
+				}
+			}()
+			err = handler(sessionCtx, val)
+
+			return
+		}, cast.ToInt(val["retry"]))
+
+		if err != nil {
+			if h, ok := interface{}(handler).(interface {
+				Error(ctx context.Context, err error)
+			}); ok {
+				h.Error(sessionCtx, err)
+			}
+			val["level"] = bstatus.ErrLevel
+			val["info"] = err.Error()
+			val["status"] = bstatus.StatusFailed
+		} else {
+			val["status"] = bstatus.StatusSuccess
+		}
+
+		val["endTime"] = time.Now()
+		val["retry"] = retry
+		val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).String()
+		hostname, _ := os.Hostname()
+		val["hostName"] = hostname
+		// `stream` confirmation message
+		cancel()
+		job.Data = val
+		result <- job
 	}
-	return nil
 }

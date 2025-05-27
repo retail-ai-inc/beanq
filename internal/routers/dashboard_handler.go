@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"encoding/json"
 	"net/http"
 	"runtime"
 	"strings"
@@ -41,9 +42,22 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
 
+	tm := 5 * time.Second
 	tim := r.URL.Query().Get("time")
 	if tim == "" {
-		tim = "10"
+		tim = "10s"
+	}
+	if strings.Contains(tim, "s") {
+		tim = strings.ReplaceAll(tim, "s", "")
+		tm = time.Duration(cast.ToInt64(tim)) * time.Second
+	}
+	if strings.Contains(tim, "m") {
+		tim = strings.ReplaceAll(tim, "m", "")
+		tm = time.Duration(cast.ToInt64(tim)) * 60 * time.Second
+	}
+	if strings.Contains(tim, "h") {
+		tim = strings.ReplaceAll(tim, "h", "")
+		tm = time.Duration(cast.ToInt64(tim)) * 60 * 60 * time.Second
 	}
 
 	flusher, ok := w.(http.Flusher)
@@ -63,18 +77,18 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 
 	totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 	now := time.Now()
-	before := now.Add(-cast.ToDuration(cast.ToInt64(tim)) * time.Second)
+	before := now.Add(-tm)
 	beforeStr := cast.ToString(before.Unix())
 	nowStr := cast.ToString(now.Unix())
 
-	count := int64(10)
+	count := int64(1000)
 	offset := int64(0)
 
 	zcount := client.ZCount(ctx, totalkey, beforeStr, nowStr)
 	page := zcount / count
 
 	for {
-		if page <= 0 {
+		if page < 0 {
 			break
 		}
 		queues, err := client.ZRangeByScore(ctx, totalkey, beforeStr, nowStr, offset, count)
@@ -82,17 +96,26 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			logger.New().Error(err)
 			continue
 		}
-		result.Data = queues
-		_ = result.EventMsg(w, "dashboard")
-		flusher.Flush()
+		newQueue := make([][]any, 0, len(queues))
+		for _, queue := range queues {
+
+			data := make([]any, 0, 4)
+			if err := json.NewDecoder(strings.NewReader(queue)).Decode(&data); err != nil {
+				continue
+			}
+			newQueue = append(newQueue, data)
+		}
 		offset += count
 		page--
+		result.Data = newQueue
+		_ = result.EventMsg(w, "dashboard")
+		flusher.Flush()
 	}
 	result.Code = "1111"
-	result.Data = "DONE"
+	result.Msg = "DONE"
+	result.Data = zcount
 	_ = result.EventMsg(w, "dashboard")
 	flusher.Flush()
-	//return
 }
 
 func (t *Dashboard) Total(w http.ResponseWriter, r *http.Request) {

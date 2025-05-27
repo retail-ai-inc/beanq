@@ -6,7 +6,6 @@
     locale:"ja",
   });
 
-  //vue create
   const options = {
 
     moduleCache: {
@@ -121,6 +120,7 @@
     template: `<mainLayout/>`
   });
   app.component("v-chart",VueECharts);
+  app.component("vue-date-picker",VueDatePicker );
   app.use(router);
   app.use(i18n);
   app.mount('#app');

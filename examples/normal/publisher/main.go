@@ -51,7 +51,7 @@ func pubMoreAndPriorityInfo() {
 	m := make(map[string]string)
 
 	ctx := context.Background()
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1000; i++ {
 		m["delayMsg"] = "testing --------" + cast.ToString(i)
 		b, _ := json.Marshal(m)
 

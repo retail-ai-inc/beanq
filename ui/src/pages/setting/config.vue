@@ -186,20 +186,20 @@ const list = async () => {
   try {
     let res = await configApi.getConfig();
     if(res?.google){
-      form.value.google = JSON.parse(res.google);
+      form.value.google = res.google;
     }
     if(res?.smtp){
-      form.value.smtp = JSON.parse(res.smtp);
+      form.value.smtp = res.smtp;
     }
     if(res?.sendGrid){
-      form.value.sendGrid = JSON.parse(res.sendGrid);
+      form.value.sendGrid = res.sendGrid;
     }
     if(res?.rule){
-      let rule = JSON.parse(res.rule);
+      let rule = res.rule;
       form.value.rule = rule;
     }
     if(res?.slack){
-      form.value.slack = JSON.parse(res.slack);
+      form.value.slack = res.slack;
     }
 
   }catch (err) {
