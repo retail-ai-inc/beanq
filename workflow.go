@@ -562,11 +562,12 @@ func (t *task) Statement() []byte {
 }
 
 func (t *task) trackRecord(taskID string, status *TaskStatus) {
+	var skipper bool
 	w := t.wf
-
 	st := StatusSucceed
 	if status.err != nil {
 		st = StatusFailed
+		skipper = t.skipper(status.err)
 	}
 
 	data := struct {
@@ -580,6 +581,7 @@ func (t *task) trackRecord(taskID string, status *TaskStatus) {
 		Status    string             `bson:"Status"`
 		Statement string             `bson:"Statement"`
 		Error     string             `bson:"Error"`
+		Skipper   bool               `bson:"Skipper"`
 		Id        primitive.ObjectID `bson:"_id"`
 	}{
 		Id:        primitive.NewObjectID(),
@@ -593,6 +595,7 @@ func (t *task) trackRecord(taskID string, status *TaskStatus) {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 		Error:     status.Error(),
+		Skipper:   skipper,
 	}
 
 	w.record.Write(w.ctx, data)
