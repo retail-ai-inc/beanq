@@ -41,6 +41,14 @@ sequential-consumer:
 	mv temp.json env.json && \
 	go run -race ./main.go
 
+sequential-consumer-dlv:
+	@echo "start sequential consumer"
+	@cd examples/sequential/consumer && \
+	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	mv temp.json env.json && \
+	go build -race -o server ./main.go && \
+	dlv --headless --listen=:8888 --api-version=2 exec ./server
+
 sequential-publisher:
 	@echo "start sequential publisher"
 	@cd examples/sequential/publisher && \
@@ -96,6 +104,7 @@ clean:
 
 GOLANGCI_LINT_VERSION=v1.64.8
 GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
+
 lint: ## run all the lint tools, install golangci-lint if not exist
 	@if [ ! -x "$(GOLANGCI_LINT_TOOL)" ]; then \
 		echo "Installing golangci-lint..."; \
@@ -105,7 +114,7 @@ lint: ## run all the lint tools, install golangci-lint if not exist
 	$(GOLANGCI_LINT_TOOL)  run --fix -j 2 -v
 
 FIELDALIGNMENT_TOOL = $(GOPATH)/bin/fieldalignment
-.PHONY: vet
+
 vet: ## Field Alignment
 	@if [ ! -x "$(FIELDALIGNMENT_TOOL)" ]; then \
 		echo "Installing fieldalignment..."; \
@@ -114,7 +123,6 @@ vet: ## Field Alignment
 	@$(if $(wildcard $(FIELDALIGNMENT_TOOL)),echo "Running go vet with fieldalignment...";) \
 	go vet -vettool=$(FIELDALIGNMENT_TOOL) ./... || exit 0
 
-.PHONY: vet-fix
 vet-fix: ##If fixed, the annotation for struct fields will be removed
 	@if [ ! -x "$(FIELDALIGNMENT_TOOL)" ]; then \
 		echo "Installing fieldalignment..."; \
@@ -124,5 +132,6 @@ vet-fix: ##If fixed, the annotation for struct fields will be removed
 	$(FIELDALIGNMENT_TOOL) -fix ./... || exit 0
 
 
-.PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher\
- 		sequential sequential-publisher sequential-consumer sequential-publisher-ack ui clean
+.PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher \
+ 		sequential sequential-publisher sequential-consumer sequential-publisher-ack ui clean \
+		lint vet vet-fix

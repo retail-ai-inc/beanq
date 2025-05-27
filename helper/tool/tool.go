@@ -17,9 +17,7 @@ import (
 )
 
 func makeKey(keys ...string) string {
-
 	return strings.Join(keys, ":")
-
 }
 
 // MakeZSetKey create redis key for type sorted set
@@ -37,7 +35,6 @@ func MakeZSetKey(prefix, channel, topic string) string {
 
 // MakeStreamKey create key for type stream
 func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) string {
-
 	if channel == "" {
 		channel = boptions.DefaultOptions.DefaultChannel
 	}
@@ -58,7 +55,6 @@ func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) s
 
 // MakeStatusKey create key for type string
 func MakeStatusKey(prefix, channel, topic, id string) string {
-
 	channel = strings.Join([]string{"{", channel}, "")
 	topic = strings.Join([]string{topic, "}"}, "")
 
@@ -147,8 +143,8 @@ func JitterBackoff(min, max time.Duration, attempt int) time.Duration {
 }
 
 func randDuration(center time.Duration) time.Duration {
-	var ri = int64(center)
-	var jitter = rand.Int63n(ri)
+	ri := int64(center)
+	jitter := rand.Int63n(ri)
 	return time.Duration(math.Abs(float64(ri + jitter)))
 }
 
@@ -161,7 +157,6 @@ func HashKey(id []byte, flake uint64) uint64 {
 }
 
 func JsonDecode[T map[string]any | map[string]string](data string, m *T) error {
-
 	if err := json.NewDecoder(strings.NewReader(data)).Decode(m); err != nil {
 		return err
 	}

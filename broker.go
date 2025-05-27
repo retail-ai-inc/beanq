@@ -286,7 +286,10 @@ type (
 )
 
 func (c WorkflowHandler) Handle(ctx context.Context, message *Message) error {
-	workflow := NewWorkflow(ctx, message)
+	workflow,err:= NewWorkflow(ctx, message)
+	if err!=nil{
+		return err
+	}
 	return c(ctx, workflow)
 }
 

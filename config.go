@@ -113,16 +113,17 @@ type (
 		DebugLog `json:"debugLog"`
 		Queue
 		History                  `json:"history"`
-		Redis                    Redis         `json:"redis"`
-		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
-		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
-		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
-		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
-		PublishTimeOut           time.Duration `json:"publishTimeOut"`
-		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
-		MinConsumers             int64         `json:"minConsumers"`
-		JobMaxRetries            int           `json:"jobMaxRetries"`
-		ConsumerPoolSize         int           `json:"consumerPoolSize"`
+		Workflow                 WfRecordConfig `json:"workflow"`
+		Redis                    Redis          `json:"redis"`
+		DeadLetterIdleTime       time.Duration  `json:"deadLetterIdle"`
+		DeadLetterTicker         time.Duration  `json:"deadLetterTicker"`
+		KeepFailedJobsInHistory  time.Duration  `json:"keepFailedJobsInHistory"`
+		KeepSuccessJobsInHistory time.Duration  `json:"keepSuccessJobsInHistory"`
+		PublishTimeOut           time.Duration  `json:"publishTimeOut"`
+		ConsumeTimeOut           time.Duration  `json:"consumeTimeOut"`
+		MinConsumers             int64          `json:"minConsumers"`
+		JobMaxRetries            int            `json:"jobMaxRetries"`
+		ConsumerPoolSize         int            `json:"consumerPoolSize"`
 	}
 )
 
