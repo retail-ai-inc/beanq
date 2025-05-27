@@ -63,13 +63,13 @@ function initEventSource(){
     console.log("handshake success");
   }
   data.sseEvent.onerror = (err)=>{
-    console.log(err.error);
+    console.log(err);
     data.sseEvent.close();
     setTimeout(initEventSource,3000);
   }
   data.sseEvent.addEventListener("queue_detail", async function(res){
-    let body =  JSON.parse(res.data);
 
+    let body =  await JSON.parse(res.data);
     if (body.code === "1004"){
       loginModal.value.error(new Error(body.msg));
       data.sseEvent.close();

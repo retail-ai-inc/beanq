@@ -102,7 +102,7 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 	}))
 	mux.HandleFunc("GET /schedule", MigrateMiddleWare(hdls.schedule.List, client, mgo, prefix, ui))
 	mux.HandleFunc("GET /queue/list", MigrateMiddleWare(hdls.queue.List, client, mgo, prefix, ui))
-	mux.HandleFunc("GET /queue/detail", MigrateMiddleWare(hdls.queue.Detail, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /queue/detail", MigrateSSE(hdls.queue.Detail, client, mgo, prefix, ui, "queue_detail"))
 
 	mux.HandleFunc("GET /logs", MigrateMiddleWare(hdls.logs.List, client, mgo, prefix, ui))
 	mux.HandleFunc("GET /log", MigrateMiddleWare(hdls.log.List, client, mgo, prefix, ui))
