@@ -4,41 +4,48 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"strconv"
-	"strings"
+	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
+	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
+
 	errorstack "github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
-	ExecuteSuccess = iota + 1
-	ExecuteFailed
-	RollbackSuccess
-	RollbackFailed
-	RollbackResultProcessFailed
+	OpAction     = "action"
+	OpCompensate = "compensate"
 )
+
+// ErrWorkflowFailure error of FAILURE
+var ErrWorkflowFailure = errors.New("WORKFLOW FAILURE")
+
+// ErrWorfflowOngoing error of ONGOING
+var ErrWorkflowOngoing = errors.New("WORKFLOW ONGOING")
 
 type (
 	Workflow struct {
+		gid              string
+		currentIndex     int
 		ctx              context.Context
-		currentTask      Task
 		wfMux            WFMux
 		message          *Message
-		onRollbackResult func(taskID string, err error) error
+		onRollbackResult func(taskID string, err error)
 		record           *WorkflowRecord
-		gid              string
-		tasks            []Task
-		results          []error
-		currentIndex     int
+		tasks            tasks
+		transStore       TransStore
+		transaction      *TransGlobal
+		progresses       []TransBranch
+		skipper          func(error) bool
 	}
+
 	WFMux interface {
 		Name() string
 		Value() string
@@ -47,17 +54,81 @@ type (
 		UnlockContext(ctx context.Context) (bool, error)
 		ExtendContext(ctx context.Context) (bool, error)
 	}
+
+	WfRecordConfig struct {
+		Record struct {
+			Mongo *struct {
+				Database              string
+				Collection            string
+				UserName              string
+				Password              string
+				Host                  string
+				Port                  string
+				ConnectTimeOut        time.Duration
+				MaxConnectionPoolSize uint64
+				MaxConnectionLifeTime time.Duration
+			}
+			Retry int
+			On    bool
+			Async bool
+		}
+	}
 )
 
-func NewWorkflow(ctx context.Context, message *Message) *Workflow {
-	return &Workflow{
-		ctx:     ctx,
-		gid:     strings.Join([]string{message.Channel, message.Topic, message.Id}, "-"),
-		message: message,
-		tasks:   make([]Task, 0),
-		results: make([]error, 0),
-		record:  NewWorkflowRecord(),
+var (
+	workflowClient       redis.UniversalClient
+	workflowRedisConfig  *Redis
+	workflowRecordConfig *WfRecordConfig
+	workflowOnce         sync.Once
+)
+
+// make workflow as an independent module
+func InitWorkflow(redisConfig *Redis, recordConfig *WfRecordConfig) {
+	workflowOnce.Do(func() {
+		workflowClient = bredis.NewRdb(
+			redisConfig.Host,
+			redisConfig.Port,
+			redisConfig.Password,
+			redisConfig.Database,
+			redisConfig.MaxRetries,
+			redisConfig.DialTimeout,
+			redisConfig.ReadTimeout,
+			redisConfig.WriteTimeout,
+			redisConfig.PoolTimeout,
+			redisConfig.PoolSize,
+			redisConfig.MinIdleConnections)
+
+		workflowRedisConfig = redisConfig
+		workflowRecordConfig = recordConfig
+	})
+}
+
+func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
+	if workflowClient == nil {
+		panic("workflow client not initialized")
 	}
+
+	// prepare workflow, get process from redis by gid
+	ts := NewTransStore(
+		workflowClient,
+		workflowRedisConfig.Prefix+":"+"workflow",
+		7*24*time.Hour)
+
+	transGlobal, err := NewTransGlobal(message)
+	if err != nil {
+		return nil, errorstack.WithStack(err)
+	}
+
+	return &Workflow{
+		ctx:         ctx,
+		gid:         message.Id,
+		message:     message,
+		tasks:       make([]*task, 0),
+		record:      NewWorkflowRecord(),
+		transStore:  ts,
+		transaction: transGlobal,
+		progresses:  []TransBranch{},
+	}, nil
 }
 
 func (w *Workflow) Init(opts ...func(workflow *Workflow)) {
@@ -80,6 +151,12 @@ func WfOptionMux(mux WFMux) func(workflow *Workflow) {
 	}
 }
 
+func WfSkipper(skipper func(error) bool) func(workflow *Workflow) {
+	return func(worflow *Workflow) {
+		worflow.skipper = skipper
+	}
+}
+
 func (w *Workflow) SetGid(gid string) {
 	w.gid = gid
 }
@@ -89,7 +166,7 @@ func (w *Workflow) GetGid() string {
 }
 
 // OnRollbackResult handle rollback error
-func (w *Workflow) OnRollbackResult(handler func(taskID string, err error) error) *Workflow {
+func (w *Workflow) OnRollbackResult(handler func(taskID string, err error)) *Workflow {
 	w.onRollbackResult = handler
 	return w
 }
@@ -98,55 +175,86 @@ func (w *Workflow) Message() *Message {
 	return w.message
 }
 
-func (w *Workflow) NewTask(ids ...string) *BaseTask {
+func (w *Workflow) NewTask(ids ...string) *task {
 	w.currentIndex++
 
 	id := fmt.Sprintf("TASK-%d", w.currentIndex)
 	if len(ids) > 0 {
 		id = ids[0]
 	}
-	task := &BaseTask{
-		id: id,
-		wf: w,
-	}
-	w.tasks = append(w.tasks, task)
-	w.results = make([]error, len(w.tasks))
-	return task
-}
 
-func (w *Workflow) CurrentTask() Task {
-	return w.currentTask
-}
-
-func (w *Workflow) TrackRecord(taskID string, status TaskStatus) {
-	var data = struct {
-		CreatedAt time.Time          `bson:"CreatedAt"`
-		UpdatedAt time.Time          `bson:"UpdatedAt"`
-		Channel   string             `bson:"Channel"`
-		Topic     string             `bson:"Topic"`
-		MessageID string             `bson:"MessageId"`
-		GID       string             `bson:"Gid"`
-		TaskID    string             `bson:"TaskId"`
-		Status    string             `bson:"Status"`
-		Statement string             `bson:"Statement"`
-		Id        primitive.ObjectID `bson:"_id"`
-	}{
-		Id:        primitive.NewObjectID(),
-		Channel:   w.message.Channel,
-		Topic:     w.message.Topic,
-		MessageID: w.message.Id,
-		GID:       w.gid,
-		TaskID:    taskID,
-		Status:    status.Status(),
-		Statement: status.Statement(),
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+	skipper := func(error) bool {
+		return false
 	}
 
-	w.record.Write(w.ctx, data)
+	if w.skipper != nil {
+		skipper = w.skipper
+	}
+
+	t := &task{
+		id:      id,
+		wf:      w,
+		skipper: skipper,
+	}
+
+	w.tasks = append(w.tasks, t)
+	return t
 }
 
 func (w *Workflow) Run() (err error) {
+	var progresses []TransBranch
+	index := -1
+	now := time.Now()
+
+	for i, task := range w.tasks {
+		branchID := fmt.Sprintf("%02d", i+1)
+
+		for _, op := range []string{OpCompensate, OpAction} {
+			index++
+			progresses = append(progresses, TransBranch{
+				Index:        index,
+				Gid:          w.gid,
+				Statement:    string(task.Statement()),
+				BinData:      []byte{},
+				BranchID:     branchID,
+				TaskID:       task.ID(),
+				Op:           op,
+				Status:       StatusPrepared,
+				FinishTime:   nil,
+				RollbackTime: nil,
+				Error:        "",
+				CreateTime:   &now,
+				UpdateTime:   &now,
+			})
+		}
+	}
+
+	err = w.transStore.MaySaveNew(w.ctx, w.transaction, progresses)
+
+	if errors.Is(err, ErrUniqueConflict) {
+		// if exist, get global and branch trans info from redis
+		w.transaction, err = w.transStore.FindGlobal(w.ctx, w.gid)
+		if err != nil {
+			return errorstack.WithStack(err)
+		}
+
+		w.progresses, err = w.transStore.FindBranches(w.ctx, w.gid)
+		if err != nil {
+			return errorstack.WithStack(err)
+		}
+	} else {
+		w.progresses = progresses
+	}
+
+	switch w.transaction.Status {
+	case StatusSucceed:
+		// already success
+		return nil
+	case StatusFailed:
+		return errorstack.Wrap(ErrWorkflowFailure, w.transaction.Reason)
+	default:
+	}
+
 	if w.wfMux != nil {
 		if err := w.wfMux.LockContext(w.ctx); err != nil {
 			return errorstack.WithStack(err)
@@ -157,92 +265,188 @@ func (w *Workflow) Run() (err error) {
 			}
 		}()
 	}
-	for index, task := range w.tasks {
-		func() {
-			defer func() {
-				if e := recover(); e != nil || err != nil {
-					if err == nil {
-						err = fmt.Errorf("%v", e)
-					}
-					w.results[index] = err
-					w.TrackRecord(task.ID(), TaskStatus{
-						status:    ExecuteFailed,
-						statement: task.Statement(),
-						err:       err,
-					})
-					w.rollback(index)
-				}
-			}()
 
-			w.currentTask = task
-			if err = task.Execute(); err == nil {
-				w.results[index] = nil
-				w.TrackRecord(task.ID(), TaskStatus{
-					status:    ExecuteSuccess,
-					statement: task.Statement(),
-					err:       nil,
-				})
+	actions, compensates := w.initSteps()
+
+ACTION:
+	for w.transaction.Status == StatusPrepared {
+		select {
+		case <-w.ctx.Done():
+			err = w.ctx.Err()
+			break ACTION
+		default:
+		}
+
+		ac := actions()
+		if len(ac) == 0 {
+			break ACTION
+		}
+
+		for _, branch := range ac {
+			err = w.executor(branch, OpAction)
+			if err != nil {
+				break ACTION
 			}
-		}()
-
-		if err != nil {
-			return err
 		}
 	}
+
+	if err == nil {
+		err2 := w.ChangeStatus(w.ctx, StatusSucceed)
+		if err2 != nil {
+			return err2
+		}
+		return nil
+	}
+
+COMPENSATE:
+	for w.transaction.Status == StatusAborting {
+		select {
+		case <-w.ctx.Done():
+			err = w.ctx.Err()
+			break COMPENSATE
+		default:
+		}
+
+		ac := compensates()
+		if len(ac) == 0 {
+			break COMPENSATE
+		}
+
+		for _, branch := range ac {
+			err = w.executor(branch, OpCompensate)
+			if err != nil {
+				break COMPENSATE
+			}
+		}
+	}
+
+	if err == nil {
+		err2 := w.ChangeStatus(w.ctx, StatusFailed)
+		if err2 != nil {
+			return err2
+		}
+		return nil
+	}
+
 	return nil
 }
 
-func (w *Workflow) rollback(from int) {
-	for i := from - 1; i >= 0; i-- {
-		err := func(index int) error {
-			var err error
-			task := w.tasks[index]
-
-			defer func() {
-				if e := recover(); e != nil || err != nil {
-					// handle rollback error
-					if err == nil {
-						err = fmt.Errorf("%v", e)
-					}
-
-					w.TrackRecord(task.ID(), TaskStatus{
-						status:    RollbackFailed,
-						statement: task.Statement(),
-						err:       err,
-					})
-
-					if w.onRollbackResult != nil {
-						err = w.onRollbackResult(task.ID(), err)
-						if err != nil {
-							w.TrackRecord(task.ID(), TaskStatus{
-								status:    RollbackResultProcessFailed,
-								statement: task.Statement(),
-								err:       err,
-							})
-						}
-					}
-				}
-			}()
-
-			err = task.Rollback()
+func (w *Workflow) executor(branch *TransBranch, op string) (err error) {
+	defer func() {
+		if e := recover(); e != nil || err != nil {
 			if err == nil {
-				w.TrackRecord(task.ID(), TaskStatus{
-					status:    RollbackSuccess,
-					statement: task.Statement(),
-					err:       nil,
-				})
+				logger.New().Panic(fmt.Sprintf("%v\n%s", e, string(debug.Stack())))
+				err = fmt.Errorf("%v", e)
 			}
-			return err
-		}(i)
-		if err != nil {
-			// if meet some error when execute rollback func, should not continue the rollback process.
-			break
+		}
+	}()
+
+	err = w.tasks.Run(w.ctx, branch, op)
+	if err != nil {
+		err2 := w.ChangeStatus(w.ctx, StatusAborting, err.Error())
+		if err2 != nil {
+			err = errorstack.Wrap(err, err2.Error())
 		}
 	}
+
+	if op == OpCompensate && w.onRollbackResult != nil {
+		w.onRollbackResult(branch.TaskID, err)
+	}
+
+	return err
 }
 
-func (w *Workflow) Results() []error {
-	return w.results
+func (w *Workflow) ChangeStatus(ctx context.Context, status string, reason ...string) error {
+	updates := []string{"status", "update_time"}
+	now := time.Now()
+	if status == StatusSucceed {
+		w.transaction.FinishTime = &now
+		updates = append(updates, "finish_time")
+	} else if status == StatusFailed {
+		w.transaction.RollbackTime = &now
+		updates = append(updates, "rollback_time")
+	}
+
+	if len(reason) > 0 && reason[0] != "" {
+		w.transaction.Reason = reason[0]
+		updates = append(updates, "reason")
+	}
+
+	w.transaction.UpdateTime = &now
+	err := w.transStore.ChangeGlobalStatus(ctx, w.transaction, status, updates, status == StatusSucceed || status == StatusFailed, -1)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *Workflow) initSteps() (actions, compensates func() []*TransBranch) {
+	n := len(w.progresses)
+	branchResults := make([]*TransBranch, n)
+	for i := range w.progresses {
+		branchResults[i] = &w.progresses[i]
+	}
+
+	shouldRun := func(current int) bool {
+		if branchResults[current].Status != StatusPrepared {
+			return false
+		}
+
+		// check the branch in previous step is succeed
+		if current >= 2 && branchResults[current-2].Status != StatusSucceed {
+			return false
+		}
+
+		return true
+	}
+
+	shouldRollback := func(current int) bool {
+		rollbacked := func(i int) bool {
+			// current compensate op rollbacked or related action still prepared
+			return branchResults[i].Status == StatusSucceed ||
+				branchResults[i+1].Status == StatusPrepared
+		}
+
+		if branchResults[current].Status != StatusPrepared {
+			return false
+		}
+
+		if rollbacked(current) {
+			return false
+		}
+
+		// check the branch in next step is rollbacked
+		if current < n-2 && !rollbacked(current+2) {
+			return false
+		}
+
+		return true
+	}
+
+	pickToRunActions := func() []*TransBranch {
+		var toRun []*TransBranch
+		for current := 1; current < n; current += 2 {
+			if shouldRun(current) {
+				toRun = append(toRun, branchResults[current])
+			}
+		}
+
+		return toRun
+	}
+
+	pickToRunCompensates := func() []*TransBranch {
+		var toRun []*TransBranch
+		for current := n - 2; current >= 0; current -= 2 {
+			br := branchResults[current]
+			if shouldRollback(current) {
+				toRun = append(toRun, br)
+			}
+		}
+		return toRun
+	}
+
+	return pickToRunActions, pickToRunCompensates
 }
 
 type Task interface {
@@ -250,52 +454,185 @@ type Task interface {
 	Execute() error
 	Rollback() error
 	Statement() []byte
+	UpdateStatus(ctx context.Context, branch *TransBranch, oerr error) error
 }
 
-// BaseTask ...
-type BaseTask struct {
+type tasks []*task
+
+func (t tasks) Run(ctx context.Context, branch *TransBranch, op string) error {
+	var err error
+	var tk *task
+	taskID := branch.TaskID
+	for _, v := range t {
+		if v.id == taskID {
+			tk = v
+			break
+		}
+	}
+
+	if tk == nil {
+		return errorstack.New("no task to run")
+	}
+
+	switch op {
+	case OpAction:
+		err = tk.Execute()
+	case OpCompensate:
+		err = tk.Rollback()
+	default:
+		err = errorstack.New("unspport task option")
+	}
+
+	err = tk.UpdateStatus(ctx, branch, err)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// task ...
+type task struct {
 	id           string
 	wf           *Workflow
 	executeFunc  func(task Task) error
 	rollbackFunc func(task Task) error
 	statement    []byte
+	skipper      func(error) bool
 }
 
-func (t *BaseTask) ID() string {
+func (t *task) ID() string {
 	return t.id
 }
 
-func (t *BaseTask) Execute() error {
+func (t *task) Execute() error {
 	if t.executeFunc == nil {
 		return errors.New("executeFunc is nil")
 	}
-	return t.executeFunc(t)
+
+	// business side handle the retry
+	err := t.executeFunc(t)
+
+	t.trackRecord(t.id, &TaskStatus{
+		option:    OpAction,
+		statement: t.Statement(),
+		err:       err,
+	})
+
+	return err
 }
 
-func (t *BaseTask) Rollback() error {
+func (t *task) Skipper(skipper func(error) bool) *task {
+	t.skipper = skipper
+	return t
+}
+
+func (t *task) Rollback() error {
 	if t.rollbackFunc == nil {
 		return nil
 	}
-	return t.rollbackFunc(t)
+	err := t.rollbackFunc(t)
+
+	t.trackRecord(t.id, &TaskStatus{
+		option:    OpCompensate,
+		statement: t.Statement(),
+		err:       err,
+	})
+
+	return err
 }
 
-func (t *BaseTask) OnExecute(fn func(task Task) error) *BaseTask {
+func (t *task) OnExecute(fn func(task Task) error) *task {
 	t.executeFunc = fn
 	return t
 }
 
-func (t *BaseTask) OnRollback(fn func(task Task) error) *BaseTask {
+func (t *task) OnRollback(fn func(task Task) error) *task {
 	t.rollbackFunc = fn
 	return t
 }
 
-func (t *BaseTask) WithRecordStatement(statement []byte) *BaseTask {
+func (t *task) WithRecordStatement(statement []byte) *task {
 	t.statement = statement
 	return t
 }
 
-func (t *BaseTask) Statement() []byte {
+func (t *task) Statement() []byte {
 	return t.statement
+}
+
+func (t *task) trackRecord(taskID string, status *TaskStatus) {
+	var skipper bool
+	w := t.wf
+	st := StatusSucceed
+	if status.err != nil {
+		st = StatusFailed
+		skipper = t.skipper(status.err)
+	}
+
+	data := struct {
+		CreatedAt time.Time          `bson:"CreatedAt"`
+		UpdatedAt time.Time          `bson:"UpdatedAt"`
+		Channel   string             `bson:"Channel"`
+		Topic     string             `bson:"Topic"`
+		GID       string             `bson:"Gid"`
+		TaskID    string             `bson:"TaskId"`
+		Option    string             `bson:"Option"`
+		Status    string             `bson:"Status"`
+		Statement string             `bson:"Statement"`
+		Error     string             `bson:"Error"`
+		Skipper   bool               `bson:"Skipper"`
+		Id        primitive.ObjectID `bson:"_id"`
+	}{
+		Id:        primitive.NewObjectID(),
+		Channel:   w.message.Channel,
+		Topic:     w.message.Topic,
+		GID:       w.gid,
+		TaskID:    taskID,
+		Option:    status.option,
+		Status:    st,
+		Statement: status.Statement(),
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Error:     status.Error(),
+		Skipper:   skipper,
+	}
+
+	w.record.Write(w.ctx, data)
+}
+
+func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error) error {
+	// status only has two type: succeed or failed
+	var status string
+
+	switch {
+	case oerr == nil:
+		status = StatusSucceed
+	case t.skipper(oerr):
+		status = StatusSucceed
+		branch.Error = oerr.Error()
+		oerr = nil
+	case errors.Is(oerr, ErrWorkflowOngoing):
+		status = ""
+		branch.Error = oerr.Error()
+	default:
+		status = StatusFailed
+		branch.Error = oerr.Error()
+	}
+
+	if status != "" {
+		now := time.Now()
+		branch.FinishTime = &now
+		branch.UpdateTime = &now
+		branch.Status = status
+
+		err := t.wf.transStore.LockGlobalSaveBranches(ctx, t.wf.transaction.Gid, t.wf.transaction.Status, []TransBranch{*branch}, branch.Index)
+		if err != nil {
+			return errorstack.WithStack(err)
+		}
+	}
+
+	return errorstack.WithStack(oerr)
 }
 
 type WorkflowRecord struct {
@@ -307,37 +644,23 @@ type WorkflowRecord struct {
 	async           bool
 }
 
-var workflowRecordOnce sync.Once
-var workflowRecord *WorkflowRecord
+var (
+	workflowRecordOnce sync.Once
+	workflowRecord     *WorkflowRecord
+)
 
 func NewWorkflowRecord() *WorkflowRecord {
-	var config struct {
-		Mongo *struct {
-			Database              string
-			Collection            string
-			UserName              string
-			Password              string
-			Host                  string
-			Port                  string
-			ConnectTimeOut        time.Duration
-			MaxConnectionPoolSize uint64
-			MaxConnectionLifeTime time.Duration
-		}
-		Retry int
-		On    bool
-		Async bool
-	}
 	workflowRecordOnce.Do(func() {
-		err := viper.UnmarshalKey("queue.workflow.record", &config)
-		if err != nil {
-			logger.New().Info("no workflow configration, ignoring the record")
-		}
-		fmt.Printf("workflow:%+v \n", config)
+		config := workflowRecordConfig.Record
+
 		workflowRecord = &WorkflowRecord{
 			on:    config.On,
 			retry: config.Retry,
 			async: config.Async,
 			errorHandler: func(err error) {
+				if err == nil {
+					return
+				}
 				logger.New().Error(err)
 			},
 			asyncPool: newAsyncPool(-1),
@@ -423,30 +746,14 @@ func (w *WorkflowRecord) SyncWrite(ctx context.Context, data any) error {
 type TaskStatus struct {
 	err       error
 	statement []byte
-	status    int
+	option    string
 }
 
-func (t *TaskStatus) Status() string {
-	switch t.status {
-	case ExecuteSuccess:
-		return "execute success"
-	case ExecuteFailed:
-		return "execute failed"
-	case RollbackSuccess:
-		return "rollback success"
-	case RollbackFailed:
-		return "rollback failed"
-	default:
-		return strconv.Itoa(t.status)
+func (t *TaskStatus) Error() string {
+	if t.err == nil {
+		return ""
 	}
-}
-
-func (t *TaskStatus) String() string {
-	return fmt.Sprintf("[status:%s; statement:%s]\n", t.Status(), t.Statement())
-}
-
-func (t *TaskStatus) Error() error {
-	return t.err
+	return t.err.Error()
 }
 
 func (t *TaskStatus) Statement() string {

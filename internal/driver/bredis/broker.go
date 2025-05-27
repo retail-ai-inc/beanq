@@ -15,7 +15,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
 	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal"
+	public "github.com/retail-ai-inc/beanq/v3/internal"
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
@@ -41,7 +41,6 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 }
 
 func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public.IBroker {
-
 	if moodType == btype.NORMAL {
 		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle, config)
 	}
@@ -69,14 +68,11 @@ type (
 	}
 )
 
-var (
-	DefaultBlockDuration BlockDuration = func() time.Duration {
-		return time.Duration(rand.Int63n(9)+1) * time.Second
-	}
-)
+var DefaultBlockDuration BlockDuration = func() time.Duration {
+	return time.Duration(rand.Int63n(9)+1) * time.Second
+}
 
 func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
-
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 	logicKey := tool.MakeLogicKey(t.prefix)
 	deadLetterKey := strings.Join([]string{streamKey, "dead_letter_lock"}, ":")
@@ -165,7 +161,6 @@ func (t *Base) Enqueue(ctx context.Context, data map[string]any) error {
 }
 
 func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 
 	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, t.blockDuration())
@@ -234,7 +229,6 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 }
 
 func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler public.CallBack) error {
-
 	id := stream.Id
 	stm := stream.Stream
 	channel := stream.Channel
@@ -252,12 +246,14 @@ func (t *Base) Consumer(ctx context.Context, stream *public.Stream, handler publ
 
 	retry, err := tool.RetryInfo(sessionCtx, func() error {
 		return handler(sessionCtx, val)
-	}, 3)
+	}, cast.ToInt(val["retry"]))
 
 	if err != nil {
-		//if h, ok := rh.subscribe.(IConsumeError); ok {
-		//	h.Error(sessionCtx, err)
-		//}
+		if h, ok := interface{}(handler).(interface {
+			Error(ctx context.Context, err error)
+		}); ok {
+			h.Error(sessionCtx, err)
+		}
 		val["level"] = bstatus.ErrLevel
 		val["info"] = err.Error()
 		val["status"] = bstatus.StatusFailed

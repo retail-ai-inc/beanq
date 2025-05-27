@@ -44,6 +44,7 @@ func initCnf() *beanq.BeanqConfig {
 	})
 	return &bqConfig
 }
+
 func main() {
 	config := initCnf()
 	pub := beanq.New(config)
@@ -52,10 +53,10 @@ func main() {
 	fmt.Printf("now:%+v \n", now)
 	wg := sync.WaitGroup{}
 
-	wg.Add(10)
-	for i := 1; i <= 10; i++ {
+	n := 10
+	wg.Add(n)
+	for i := 1; i <= n; i++ {
 		go func() {
-
 			defer wg.Done()
 			m := make(map[string]any, 2)
 			m["delayMsg"] = "new msg" + cast.ToString(i)
@@ -63,10 +64,9 @@ func main() {
 			b, _ := json.Marshal(m)
 			bq := pub.BQ()
 			ctx := context.Background()
-			if err := bq.WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("delay-channel", "order-topic", b).Error(); err != nil {
+			if err := bq.WithContext(ctx).SetId(cast.ToString(i)).PublishInSequential("sequential-channel", "order-topic", b).Error(); err != nil {
 				logger.New().Error(err)
 			}
-
 		}()
 	}
 
