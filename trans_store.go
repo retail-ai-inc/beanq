@@ -87,7 +87,7 @@ type TransBranch struct {
 	Status       string     `json:"status,omitempty"`
 	FinishTime   *time.Time `json:"finish_time,omitempty"`
 	RollbackTime *time.Time `json:"rollback_time,omitempty"`
-	Error        error      `json:"error,omitempty"`
+	Error        string     `json:"error,omitempty"`
 	CreateTime   *time.Time `json:"create_time"`
 	UpdateTime   *time.Time `json:"update_time"`
 }

@@ -14,7 +14,6 @@ import (
 
 	errorstack "github.com/pkg/errors"
 	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -44,6 +43,7 @@ type (
 		transStore       TransStore
 		transaction      *TransGlobal
 		progresses       []TransBranch
+		skipper          func(error) bool
 	}
 
 	WFMux interface {
@@ -54,29 +54,53 @@ type (
 		UnlockContext(ctx context.Context) (bool, error)
 		ExtendContext(ctx context.Context) (bool, error)
 	}
+
+	WfRecordConfig struct {
+		Record struct {
+			Mongo *struct {
+				Database              string
+				Collection            string
+				UserName              string
+				Password              string
+				Host                  string
+				Port                  string
+				ConnectTimeOut        time.Duration
+				MaxConnectionPoolSize uint64
+				MaxConnectionLifeTime time.Duration
+			}
+			Retry int
+			On    bool
+			Async bool
+		}
+	}
 )
 
 var (
-	workflowClient redis.UniversalClient
-	workflowConfig Redis
+	workflowClient       redis.UniversalClient
+	workflowRedisConfig  *Redis
+	workflowRecordConfig *WfRecordConfig
+	workflowOnce         sync.Once
 )
 
 // make workflow as an independent module
-func InitWorkflow(redisConfig *Redis) {
-	workflowClient = bredis.NewRdb(
-		redisConfig.Host,
-		redisConfig.Port,
-		redisConfig.Password,
-		redisConfig.Database,
-		redisConfig.MaxRetries,
-		redisConfig.DialTimeout,
-		redisConfig.ReadTimeout,
-		redisConfig.WriteTimeout,
-		redisConfig.PoolTimeout,
-		redisConfig.PoolSize,
-		redisConfig.MinIdleConnections)
+func InitWorkflow(redisConfig *Redis, recordConfig *WfRecordConfig) {
+	workflowOnce.Do(func() {
+		workflowClient = bredis.NewRdb(
+			redisConfig.Host,
+			redisConfig.Port,
+			redisConfig.Password,
+			redisConfig.Database,
+			redisConfig.MaxRetries,
+			redisConfig.DialTimeout,
+			redisConfig.ReadTimeout,
+			redisConfig.WriteTimeout,
+			redisConfig.PoolTimeout,
+			redisConfig.PoolSize,
+			redisConfig.MinIdleConnections)
 
-	workflowConfig = *redisConfig
+		workflowRedisConfig = redisConfig
+		workflowRecordConfig = recordConfig
+	})
 }
 
 func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
@@ -87,7 +111,7 @@ func NewWorkflow(ctx context.Context, message *Message) (*Workflow, error) {
 	// prepare workflow, get process from redis by gid
 	ts := NewTransStore(
 		workflowClient,
-		workflowConfig.Prefix+":"+"workflow",
+		workflowRedisConfig.Prefix+":"+"workflow",
 		7*24*time.Hour)
 
 	transGlobal, err := NewTransGlobal(message)
@@ -127,6 +151,12 @@ func WfOptionMux(mux WFMux) func(workflow *Workflow) {
 	}
 }
 
+func WfSkipper(skipper func(error) bool) func(workflow *Workflow) {
+	return func(worflow *Workflow) {
+		worflow.skipper = skipper
+	}
+}
+
 func (w *Workflow) SetGid(gid string) {
 	w.gid = gid
 }
@@ -153,9 +183,18 @@ func (w *Workflow) NewTask(ids ...string) *task {
 		id = ids[0]
 	}
 
+	skipper := func(error) bool {
+		return false
+	}
+
+	if w.skipper != nil {
+		skipper = w.skipper
+	}
+
 	t := &task{
-		id: id,
-		wf: w,
+		id:      id,
+		wf:      w,
+		skipper: skipper,
 	}
 
 	w.tasks = append(w.tasks, t)
@@ -183,7 +222,7 @@ func (w *Workflow) Run() (err error) {
 				Status:       StatusPrepared,
 				FinishTime:   nil,
 				RollbackTime: nil,
-				Error:        nil,
+				Error:        "",
 				CreateTime:   &now,
 				UpdateTime:   &now,
 			})
@@ -459,6 +498,7 @@ type task struct {
 	executeFunc  func(task Task) error
 	rollbackFunc func(task Task) error
 	statement    []byte
+	skipper      func(error) bool
 }
 
 func (t *task) ID() string {
@@ -480,6 +520,11 @@ func (t *task) Execute() error {
 	})
 
 	return err
+}
+
+func (t *task) Skipper(skipper func(error) bool) *task {
+	t.skipper = skipper
+	return t
 }
 
 func (t *task) Rollback() error {
@@ -529,20 +574,20 @@ func (t *task) trackRecord(taskID string, status *TaskStatus) {
 		UpdatedAt time.Time          `bson:"UpdatedAt"`
 		Channel   string             `bson:"Channel"`
 		Topic     string             `bson:"Topic"`
-		MessageID string             `bson:"MessageId"`
 		GID       string             `bson:"Gid"`
 		TaskID    string             `bson:"TaskId"`
+		Option    string             `bson:"Option"`
 		Status    string             `bson:"Status"`
 		Statement string             `bson:"Statement"`
-		Error     error              `bson:"Error"`
+		Error     string             `bson:"Error"`
 		Id        primitive.ObjectID `bson:"_id"`
 	}{
 		Id:        primitive.NewObjectID(),
 		Channel:   w.message.Channel,
 		Topic:     w.message.Topic,
-		MessageID: w.message.Id,
 		GID:       w.gid,
 		TaskID:    taskID,
+		Option:    status.option,
 		Status:    st,
 		Statement: status.Statement(),
 		CreatedAt: time.Now(),
@@ -560,11 +605,16 @@ func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error
 	switch {
 	case oerr == nil:
 		status = StatusSucceed
+	case t.skipper(oerr):
+		status = StatusSucceed
+		branch.Error = oerr.Error()
+		oerr = nil
 	case errors.Is(oerr, ErrWorkflowOngoing):
 		status = ""
+		branch.Error = oerr.Error()
 	default:
-		branch.Error = fmt.Errorf("failed reason: %w", oerr)
 		status = StatusFailed
+		branch.Error = oerr.Error()
 	}
 
 	if status != "" {
@@ -572,7 +622,6 @@ func (t *task) UpdateStatus(ctx context.Context, branch *TransBranch, oerr error
 		branch.FinishTime = &now
 		branch.UpdateTime = &now
 		branch.Status = status
-		branch.Error = oerr
 
 		err := t.wf.transStore.LockGlobalSaveBranches(ctx, t.wf.transaction.Gid, t.wf.transaction.Status, []TransBranch{*branch}, branch.Index)
 		if err != nil {
@@ -598,28 +647,8 @@ var (
 )
 
 func NewWorkflowRecord() *WorkflowRecord {
-	var config struct {
-		Mongo *struct {
-			Database              string
-			Collection            string
-			UserName              string
-			Password              string
-			Host                  string
-			Port                  string
-			ConnectTimeOut        time.Duration
-			MaxConnectionPoolSize uint64
-			MaxConnectionLifeTime time.Duration
-		}
-		Retry int
-		On    bool
-		Async bool
-	}
-
 	workflowRecordOnce.Do(func() {
-		err := viper.UnmarshalKey("queue.workflow.record", &config)
-		if err != nil {
-			logger.New().Info("no workflow configration, ignoring the record")
-		}
+		config := workflowRecordConfig.Record
 
 		workflowRecord = &WorkflowRecord{
 			on:    config.On,
@@ -717,8 +746,11 @@ type TaskStatus struct {
 	option    string
 }
 
-func (t *TaskStatus) Error() error {
-	return t.err
+func (t *TaskStatus) Error() string {
+	if t.err == nil {
+		return ""
+	}
+	return t.err.Error()
 }
 
 func (t *TaskStatus) Statement() string {

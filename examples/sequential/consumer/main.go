@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	_ "net/http/pprof"
@@ -63,10 +64,12 @@ func (t *seqCustomer) Cancel(ctx context.Context, message *beanq.Message) error 
 func (t *seqCustomer) Error(ctx context.Context, err error) {
 }
 
+var SkipError = errors.New("SKIP ERROR")
+
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
-	beanq.InitWorkflow(&config.Redis)
+	beanq.InitWorkflow(&config.Redis, &config.Workflow)
 
 	ctx := context.Background()
 	_, berr := csm.BQ().WithContext(ctx).SubscribeSequential("sequential-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
@@ -75,11 +78,31 @@ func main() {
 			return err
 		}
 
-		wf.NewTask().OnRollback(func(task beanq.Task) error {
+		wf.Init(beanq.WfSkipper(func(err error) bool {
+			if err == nil {
+				return true
+			}
+			if errors.Is(err, SkipError) {
+				return true
+			}
+			return false
+		}))
+
+		wf.NewTask().Skipper(func(err error) bool {
+			if err == nil {
+				return true
+			}
+			if errors.Is(err, SkipError) {
+				return true
+			}
+			return false
+		}).OnRollback(func(task beanq.Task) error {
 			if index%3 == 0 {
 				return fmt.Errorf("rollback error:%d", index)
 			} else if index%4 == 0 {
 				panic("rollback panic test")
+			} else if index%5 == 0 {
+				return fmt.Errorf("rollback error:%w", SkipError)
 			}
 			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
 			return nil
@@ -104,7 +127,9 @@ func main() {
 		}).OnExecute(func(task beanq.Task) error {
 			if index%2 == 0 {
 				return fmt.Errorf("execute error: %s %d", wf.GetGid(), index)
-			} else if index == 7 {
+			} else if index%3 == 0 {
+				return fmt.Errorf("execute error:%w", SkipError)
+			} else if index%7 == 0 {
 				panic("execute panic test")
 			}
 			log.Println(task.ID() + " job-3")
