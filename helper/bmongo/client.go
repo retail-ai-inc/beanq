@@ -35,21 +35,6 @@ type BMongo struct {
 	configCollection   string
 }
 
-// Will improve later
-var collections = map[CollectionType]func(ctx context.Context, bmongo *BMongo) error{
-	EventType: func(ctx context.Context, bmongo *BMongo) error {
-
-		event := Collection(bmongo.eventCollection)
-		if err := event.Create(ctx, bmongo.database, EventType); err != nil {
-			return err
-		}
-		if err := event.CreateIndex(ctx, bmongo.database, "id", 1); err != nil {
-			return err
-		}
-		return nil
-	},
-}
-
 func createCollection(ctx context.Context) error {
 
 	//event log
