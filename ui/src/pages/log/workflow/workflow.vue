@@ -19,33 +19,35 @@
                 <table class="table table-striped table-hover">
                   <thead>
                   <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">_Id</th>
                     <th scope="col">GId</th>
-                    <th scope="col">TaskId</th>
+                    <th scope="col">Task Id</th>
                     <th scope="col">Channel</th>
                     <th scope="col">Topic</th>
-                    <th scope="col">Message Id</th>
                     <th scope="col">Status</th>
+                    <th scope="col">Option</th>
                     <th scope="col">Statement</th>
-                    <th scope="col">CreatedTime</th>
+                    <th scope="col">Error</th>
+                    <th scope="col">Created AT</th>
+                    <th scope="col">Updated AT</th>
                     <th scope="col">Action</th>
                   </tr>
                   </thead>
                   <tbody>
                   <tr v-for="(item, key) in workflowlogs" :key="key" style="height: 3rem;line-height:3rem">
-                    <th scope="row">{{key+1}}</th>
-                    <th scope="row">{{item._id}}</th>
                     <td><router-link to="" class="nav-link text-primary" style="display: contents">{{item.Gid}}</router-link></td>
                     <td>{{item.TaskId}}</td>
                     <td>{{item.Channel}}</td>
                     <td>{{item.Topic}}</td>
-                    <td>{{item.MessageId}}</td>
                     <td>
                       {{item.Status}}
                     </td>
+                    <td>
+                      {{item.Option}}
+                    </td>
                     <td>{{item.Statement}}</td>
+                    <td>{{item.Error}}</td>
                     <td>{{item.CreatedAt}}</td>
+                    <td>{{item.UpdatedAT}}</td>
                     <td class="text-center text-nowrap">
                       <DeleteIcon @action="deleteModal(item)" style="margin:0 .25rem;"/>
                     </td>

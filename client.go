@@ -43,6 +43,8 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/retail-ai-inc/beanq/v3/internal/routers"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/retail-ai-inc/beanq/v3/helper/timex"
 	"github.com/rs/xid"
@@ -274,7 +276,38 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		)
 	}
 
-	routers.NewRouters(mux, views, files, c.broker.client.(redis.UniversalClient), mog, c.broker.config.Redis.Prefix, c.broker.config.UI)
+	var workflowMongoCollection *mongo.Collection
+	workflowRecordCfg := c.broker.config.Workflow.Record
+	if workflowRecordCfg.On && workflowRecordCfg.Mongo != nil && workflowRecordCfg.Mongo.Database != "" {
+		connURI := "mongodb://" + workflowRecordCfg.Mongo.Host + ":" + workflowRecordCfg.Mongo.Port
+		opts := options.Client().
+			ApplyURI(connURI).
+			SetConnectTimeout(workflowRecordCfg.Mongo.ConnectTimeOut).
+			SetMaxPoolSize(workflowRecordCfg.Mongo.MaxConnectionPoolSize).
+			SetMaxConnIdleTime(workflowRecordCfg.Mongo.MaxConnectionLifeTime)
+
+		if workflowRecordCfg.Mongo.UserName != "" && workflowRecordCfg.Mongo.Password != "" {
+			opts.SetAuth(options.Credential{
+				AuthSource: workflowRecordCfg.Mongo.Database,
+				Username:   workflowRecordCfg.Mongo.UserName,
+				Password:   workflowRecordCfg.Mongo.Password,
+			})
+		}
+
+		client, err := mongo.Connect(ctx, opts)
+		if err != nil {
+			panic(err)
+		}
+		workflowMongoCollection = client.Database(workflowRecordCfg.Mongo.Database).Collection(workflowRecordCfg.Mongo.Collection)
+	}
+
+	routers.NewRouters(
+		mux,
+		views,
+		files,
+		c.broker.client.(redis.UniversalClient),
+		mog, workflowMongoCollection,
+		c.broker.config.Redis.Prefix, c.broker.config.UI)
 
 	log.Printf("server start on port %+v", httpport)
 	if err := http.ListenAndServe(httpport, mux); err != nil {

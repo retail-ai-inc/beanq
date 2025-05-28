@@ -1,23 +1,24 @@
 package routers
 
 import (
-	"github.com/go-redis/redis/v8"
+	"math"
+	"net/http"
+
 	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
-	"net/http"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type WorkFlow struct {
-	client redis.UniversalClient
-	prefix string
-	mgo    *bmongo.BMongo
+	workflowCollection *mongo.Collection
 }
 
-func NewWorkFlow(client redis.UniversalClient, mongo *bmongo.BMongo, prefix string) *WorkFlow {
-	return &WorkFlow{client: client, mgo: mongo, prefix: prefix}
+func NewWorkFlow(collection *mongo.Collection) *WorkFlow {
+	return &WorkFlow{workflowCollection: collection}
 }
 
 func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
@@ -34,20 +35,48 @@ func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 	if pageSize <= 0 {
 		pageSize = 10
 	}
-	filter := bson.M{}
 
-	datas := make(map[string]any, 3)
-	data, total, err := t.mgo.WorkFLowLogs(r.Context(), filter, page, pageSize)
+	ctx := r.Context()
+
+	skip := (page - 1) * pageSize
+	if skip < 0 {
+		skip = 0
+	}
+	opts := options.Find()
+	opts.SetSkip(skip)
+	opts.SetLimit(pageSize)
+	opts.SetSort(bson.D{{Key: "CreatedAt", Value: -1}})
+
+	filter := bson.M{}
+	cursor, err := t.workflowCollection.Find(ctx, filter, opts)
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	if err != nil {
-		result.Code = "1001"
+		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
-	if err == nil {
-		datas["data"] = data
-		datas["total"] = total
-		datas["cursor"] = page
-		result.Data = datas
+	var data []bson.M
+	if err := cursor.All(ctx, &data); err != nil {
+		result.Code = berror.InternalServerErrorCode
+		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
 	}
+	total, err := t.workflowCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		result.Code = berror.InternalServerErrorCode
+		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
+	}
+	datas := make(map[string]any, 3)
+	datas["data"] = data
+	datas["total"] = math.Ceil(float64(total) / float64(pageSize))
+	datas["cursor"] = page
+	result.Data = datas
 	_ = result.Json(w, http.StatusOK)
 }
 
@@ -56,14 +85,29 @@ func (t *WorkFlow) Delete(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
+	ctx := r.Context()
 	id := r.PostFormValue("id")
-	count, err := t.mgo.DeleteWorkFlow(r.Context(), id)
+
+	filter := bson.M{}
+	if id != "" {
+		nid, err := primitive.ObjectIDFromHex(id)
+		if err != nil {
+			res.Code = berror.InternalServerErrorCode
+			res.Msg = err.Error()
+			_ = res.Json(w, http.StatusInternalServerError)
+			return
+		}
+		filter["_id"] = nid
+	}
+
+	result, err := t.workflowCollection.DeleteOne(ctx, filter)
 	if err != nil {
-		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = count
+
+	res.Data = result.DeletedCount
 	_ = res.Json(w, http.StatusOK)
 }
