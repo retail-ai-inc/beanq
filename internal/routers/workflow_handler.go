@@ -48,6 +48,15 @@ func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 	opts.SetSort(bson.D{{Key: "CreatedAt", Value: -1}})
 
 	filter := bson.M{}
+	if channel := query.Get("channel"); channel != "" {
+		filter["Channel"] = channel
+	}
+	if topic := query.Get("topic"); topic != "" {
+		filter["Topic"] = topic
+	}
+	if status := query.Get("status"); status != "" {
+		filter["Status"] = status
+	}
 	cursor, err := t.workflowCollection.Find(ctx, filter, opts)
 	defer func() {
 		_ = cursor.Close(ctx)
