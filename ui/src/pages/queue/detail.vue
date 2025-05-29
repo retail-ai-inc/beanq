@@ -15,7 +15,7 @@
         </thead>
         <tbody class="table-body">
         <tr v-if="queueDetail.length === 0">
-          <th scope="row" colspan="7" style="text-align: center">
+          <th scope="row" colspan="7" style="text-align: center;font-weight: normal">
             Hurrah! We processed all messages.
           </th>
         </tr>

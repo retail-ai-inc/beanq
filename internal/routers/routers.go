@@ -11,6 +11,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bgzip"
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type Handles struct {
@@ -30,7 +31,14 @@ type Handles struct {
 	pod       *Pod
 }
 
-func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, ui ui.Ui) {
+func NewRouters(
+	mux *http.ServeMux,
+	fs2 fs.FS,
+	modFiles map[string]time.Time,
+	client redis.UniversalClient,
+	mgo *bmongo.BMongo,
+	workflowCollection *mongo.Collection,
+	prefix string, ui ui.Ui) {
 
 	hdls := Handles{
 		schedule:  NewSchedule(client, prefix),
@@ -44,7 +52,7 @@ func NewRouters(mux *http.ServeMux, fs2 fs.FS, modFiles map[string]time.Time, cl
 		eventLog:  NewEventLog(client, mgo, prefix),
 		user:      NewUser(client, mgo, prefix),
 		dlq:       NewDlq(client, mgo, prefix),
-		workflow:  NewWorkFlow(client, mgo, prefix),
+		workflow:  NewWorkFlow(workflowCollection),
 		role:      NewRole(mgo),
 		pod:       NewPod(client, mgo, prefix),
 	}

@@ -36,7 +36,7 @@
                         <router-link to="" class="nav-link text-muted" v-on:click="detailQueue(d)" style="color:#0d6efd !important;">{{ d.topic }}</router-link>
                       </th>
                       <td :class="d.state == 'Run' ? 'text-success-emphasis' : 'text-danger-emphasis'" class="align-middle">{{ d.state }}</td>
-                      <td class="align-middle">{{d.moodType}}</td>
+                      <td class="align-middle">{{d.moodType.replace("_stream","")}}</td>
                       <td class="align-middle">{{ d.size }}</td>
                       <td class="align-middle">{{ d.idle }}</td>
                     </tr>
