@@ -82,12 +82,14 @@ func AuthSSE(next func(w http.ResponseWriter, r *http.Request), client redis.Uni
 
 		if token.UserName != ui.Root.UserName {
 			roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
-			if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
-				result.Code = berror.AuthExpireCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, name)
-				flusher.Flush()
-				return
+			if roleId > 0 {
+				if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
+					result.Code = berror.AuthExpireCode
+					result.Msg = err.Error()
+					_ = result.EventMsg(w, name)
+					flusher.Flush()
+					return
+				}
 			}
 		}
 
@@ -145,11 +147,13 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 
 		if token.UserName != ui.Root.UserName {
 			roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
-			if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
-				result.Code = berror.AuthExpireCode
-				result.Msg = err.Error()
-				_ = result.Json(w, http.StatusUnauthorized)
-				return
+			if roleId > 0 {
+				if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
+					result.Code = berror.AuthExpireCode
+					result.Msg = err.Error()
+					_ = result.Json(w, http.StatusUnauthorized)
+					return
+				}
 			}
 		}
 

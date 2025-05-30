@@ -106,14 +106,15 @@ function expand(){
 const hasRoles = ref([]);
 onMounted(async () => {
 
-  langTag.value = Storage.GetItem("i18n") || "en";
+  langTag.value = await Storage.GetItem("i18n") || "en";
   language.value = _.find(props.hlang,(v)=>{
     return v.flag === langTag.value;
   })?.label;
 
   i18n.global.locale.value = langTag.value;
 
-  let roles = JSON.parse(Storage.GetItem("roles"));
+  let roles = await Storage.GetItem("roles");
+
   if(_.isEmpty(roles)){
     let navs = roleApi.TileTree(nav.value);
     for(let i = 0;i<navs.length;i++){
@@ -122,6 +123,7 @@ onMounted(async () => {
   }else{
     hasRoles.value = roles;
   }
+
   expand();
 
   route.value = uroute.path;
