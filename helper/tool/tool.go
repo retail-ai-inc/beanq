@@ -64,10 +64,16 @@ func MakeStatusKey(prefix, channel, topic, id string) string {
 	return makeKey(prefix, channel, topic, "=-status-=", id)
 }
 
-func MakeSequentialLockKey(prefix, channel, topic, orderKey string) string {
+func MakeSequenceLockKey(prefix, channel, topic, orderKey string) string {
 	channel = strings.Join([]string{"{", channel}, "")
 	topic = strings.Join([]string{topic, "}"}, "")
 	return makeKey(prefix, channel, topic, "lock", orderKey)
+}
+
+func MakeSequenceDataKey(prefix,channel,topic,id string)string{
+	channel = strings.Join([]string{"{", channel}, "")
+	topic = strings.Join([]string{topic, "}"}, "")
+	return makeKey(prefix, channel, topic, "order", id)
 }
 
 // MakeDynamicKey create key for dynamic

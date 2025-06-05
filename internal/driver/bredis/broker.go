@@ -238,7 +238,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 		for result := range results {
 
 			if orderKey, ok := result.Data["orderKey"]; ok {
-				orderRediKey := tool.MakeSequentialLockKey(t.prefix, channel, topic, cast.ToString(orderKey))
+				orderRediKey := tool.MakeSequenceLockKey(t.prefix, channel, topic, cast.ToString(orderKey))
 				t.client.HDel(ctx, orderRediKey)
 			}
 

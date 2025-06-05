@@ -32,7 +32,7 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	if moodType == btype.SEQUENCE {
+	if moodType == btype.SEQUENCE || moodType == btype.SEQUENCE_BY_LOCK {
 
 		channel, id, topic := "", "", ""
 		if v, ok := data["channel"]; ok {
@@ -46,10 +46,14 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 		}
 
 		key := tool.MakeStatusKey(t.prefix, channel, topic, id)
+		if moodType == btype.SEQUENCE_BY_LOCK {
+			key = tool.MakeSequenceDataKey(t.prefix, channel, topic, id)
+		}
 		if err := SaveHSetScript.Run(ctx, t.client, []string{key}, data).Err(); err != nil {
 			return err
 		}
 	}
+
 	data["logType"] = bstatus.Logic
 	// write job log into redis
 	if err := t.client.XAdd(ctx, &redis.XAddArgs{

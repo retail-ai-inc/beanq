@@ -43,7 +43,7 @@ type (
 
 // IStatus check the status of the message based on the ID
 type IStatus interface {
-	Status(ctx context.Context, channel, topic, id string) (map[string]string, error)
+	Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error)
 }
 
 func (CallBack) Error(ctx context.Context, err error) {

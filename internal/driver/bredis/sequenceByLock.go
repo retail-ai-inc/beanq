@@ -46,7 +46,7 @@ func (t *SequenceByLock) Enqueue(ctx context.Context, data map[string]any) error
 	}
 
 	streamKey := tool.MakeStreamKey(t.base.subType, t.base.prefix, channel, topic)
-	orderRediKey := tool.MakeSequentialLockKey(t.base.prefix, channel, topic, orderKey)
+	orderRediKey := tool.MakeSequenceLockKey(t.base.prefix, channel, topic, orderKey)
 
 	err := SequenceByLockScript.Run(ctx, t.base.client, []string{streamKey, orderRediKey}, data).Err()
 	if err != nil {

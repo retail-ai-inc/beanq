@@ -165,9 +165,9 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.Start(ctx)
 }
 
-func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*Message, error) {
+func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string, isOrder bool) (*Message, error) {
 
-	m, err := c.broker.Status(ctx, channel, topic, id)
+	m, err := c.broker.Status(ctx, channel, topic, id, isOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -399,20 +399,21 @@ func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payl
 		moodType:    btype.SEQUENCE_BY_LOCK,
 		executeTime: time.Now(),
 	}
-	sequentialCmd := &SequenceCmd{
+	sequenceCmd := &SequenceCmd{
 		err:     nil,
 		channel: channel,
 		topic:   topic,
 		ctx:     b.ctx,
 		client:  b.client,
+		isOrder: true,
 	}
 	if err := b.process(cmd); err != nil {
-		sequentialCmd.err = err
+		sequenceCmd.err = err
 	} else {
-		sequentialCmd.id = b.id
+		sequenceCmd.id = b.id
 	}
 
-	return sequentialCmd
+	return sequenceCmd
 }
 
 func (b *BQClient) process(cmd IBaseCmd) error {
@@ -560,6 +561,20 @@ func (t cmdAble) SubscribeToSequence(channel, topic string, handle IConsumeHandl
 	return cmd, nil
 }
 
+func (t cmdAble) SubscribeToSequenceByLock(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	cmd := &Subscribe{
+		channel:       channel,
+		topic:         topic,
+		moodType:      btype.SEQUENCE_BY_LOCK,
+		handle:        handle,
+		subscribeType: btype.SequentialByLockSubscribe,
+	}
+	if err := t(cmd); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
 type (
 	// Publish command:publish
 	Publish struct {
@@ -609,6 +624,7 @@ type SequenceCmd struct {
 	channel string
 	topic   string
 	id      string
+	isOrder bool
 }
 
 func (s *SequenceCmd) Error() error {
@@ -620,7 +636,7 @@ func (s *SequenceCmd) WaitingAck() (*Message, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	nack, err := s.client.broker.Status(s.ctx, s.channel, s.topic, s.id)
+	nack, err := s.client.broker.Status(s.ctx, s.channel, s.topic, s.id, s.isOrder)
 	if err != nil {
 		return nil, err
 	}
