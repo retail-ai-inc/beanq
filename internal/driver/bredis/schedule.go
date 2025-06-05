@@ -3,7 +3,6 @@ package bredis
 import (
 	"context"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -15,7 +14,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -39,11 +37,8 @@ func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int6
 			prefix:         prefix,
 			deadLetterIdle: deadLetterIdle,
 			blockDuration:  DefaultBlockDuration,
-			errGroup: sync.Pool{New: func() any {
-				return new(errgroup.Group)
-			}},
-			consumers:     consumerCount,
-			captureConfig: config,
+			consumers:      consumerCount,
+			captureConfig:  config,
 		},
 	}
 	work.watcher = work.Watcher

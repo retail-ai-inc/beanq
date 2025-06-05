@@ -20,7 +20,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 )
 
 type RdbBroker struct {
@@ -45,11 +44,14 @@ func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public
 	if moodType == btype.NORMAL {
 		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle, config)
 	}
-	if moodType == btype.SEQUENTIAL {
-		return NewSequential(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
+	if moodType == btype.SEQUENCE {
+		return NewSequence(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
 	}
 	if moodType == btype.DELAY {
 		return NewSchedule(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
+	}
+	if moodType == btype.SEQUENCE_BY_LOCK {
+		return NewSequenceByLock(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
 	}
 	return nil
 }
@@ -57,8 +59,7 @@ func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public
 type (
 	BlockDuration func() time.Duration
 	Base          struct {
-		errGroup sync.Pool
-		client   redis.UniversalClient
+		client redis.UniversalClient
 		public.IProcessLog
 		blockDuration  BlockDuration
 		prefix         string
@@ -80,11 +81,6 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 
 	ticker := time.NewTicker(DefaultBlockDuration())
 	defer ticker.Stop()
-
-	r := t.errGroup.Get().(*errgroup.Group)
-	defer func() {
-		t.errGroup.Put(r)
-	}()
 
 	deadLetterIdleTime := t.deadLetterIdle
 
@@ -240,6 +236,12 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 		// handler worker results
 		ids := make([]string, 0, len(messages))
 		for result := range results {
+
+			if orderKey, ok := result.Data["orderKey"]; ok {
+				orderRediKey := tool.MakeSequentialLockKey(t.prefix, channel, topic, cast.ToString(orderKey))
+				t.client.HDel(ctx, orderRediKey)
+			}
+
 			if err := t.AddLog(ctx, result.Data); err != nil {
 				logger.New().Error(err)
 				capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)

@@ -72,7 +72,7 @@ func main() {
 	beanq.InitWorkflow(&config.Redis, &config.Workflow)
 
 	ctx := context.Background()
-	_, berr := csm.BQ().WithContext(ctx).SubscribeSequential("sequential-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+	_, berr := csm.BQ().WithContext(ctx).SubscribeToSequence("sequential-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
 		index, err := strconv.Atoi(wf.GetGid())
 		if err != nil {
 			return err

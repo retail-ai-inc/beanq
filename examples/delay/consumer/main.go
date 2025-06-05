@@ -2,14 +2,15 @@ package main
 
 import (
 	"context"
-	beanq "github.com/retail-ai-inc/beanq/v3"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/spf13/viper"
 	"log"
 	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"
+
+	beanq "github.com/retail-ai-inc/beanq/v3"
+	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -48,7 +49,7 @@ func main() {
 
 	// register delay consumer
 
-	_, err := csm.BQ().WithContext(ctx).SubscribeDelay("delay-channel", "order-topic", beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).SubscribeToDelay("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			logger.New().With("delay-channel", "delay-topic--------").Info(message.Payload)
 			return nil

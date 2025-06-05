@@ -366,15 +366,40 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
-func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
+func (b *BQClient) PublishInSequence(channel, topic string, payload []byte) *SequenceCmd {
 	cmd := &Publish{
 		channel:     channel,
 		topic:       topic,
 		payload:     payload,
-		moodType:    btype.SEQUENTIAL,
+		moodType:    btype.SEQUENCE,
 		executeTime: time.Now(),
 	}
-	sequentialCmd := &SequentialCmd{
+	sequentialCmd := &SequenceCmd{
+		err:     nil,
+		channel: channel,
+		topic:   topic,
+		ctx:     b.ctx,
+		client:  b.client,
+	}
+	if err := b.process(cmd); err != nil {
+		sequentialCmd.err = err
+	} else {
+		sequentialCmd.id = b.id
+	}
+
+	return sequentialCmd
+}
+
+func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payload []byte) *SequenceCmd {
+	cmd := &Publish{
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
+		orderKey:    orderKey,
+		moodType:    btype.SEQUENCE_BY_LOCK,
+		executeTime: time.Now(),
+	}
+	sequentialCmd := &SequenceCmd{
 		err:     nil,
 		channel: channel,
 		topic:   topic,
@@ -402,8 +427,8 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			topic = b.client.Topic
 		}
 
-		b.waitAck = cmd.moodType == btype.SEQUENTIAL
-		if cmd.moodType == btype.SEQUENTIAL {
+		b.waitAck = cmd.moodType == btype.SEQUENCE
+		if cmd.moodType == btype.SEQUENCE {
 			if b.id == "" {
 				return errors.New("please configure a unique ID")
 			}
@@ -412,6 +437,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		message := &Message{
 			Topic:       topic,
 			Channel:     channel,
+			OrderKey:    cmd.orderKey,
 			Payload:     string(cmd.payload),
 			MoodType:    cmd.moodType,
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
@@ -506,7 +532,7 @@ func (t cmdAble) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseS
 	return cmd, nil
 }
 
-func (t cmdAble) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (t cmdAble) SubscribeToDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
@@ -520,11 +546,11 @@ func (t cmdAble) SubscribeDelay(channel, topic string, handle IConsumeHandle) (I
 	return cmd, nil
 }
 
-func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (t cmdAble) SubscribeToSequence(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
-		moodType:      btype.SEQUENTIAL,
+		moodType:      btype.SEQUENCE,
 		handle:        handle,
 		subscribeType: btype.SequentialSubscribe,
 	}
@@ -540,6 +566,7 @@ type (
 		executeTime time.Time
 		channel     string
 		topic       string
+		orderKey    string
 		moodType    btype.MoodType
 		payload     []byte
 	}
@@ -575,7 +602,7 @@ func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
 }
 
-type SequentialCmd struct {
+type SequenceCmd struct {
 	err     error
 	ctx     context.Context
 	client  *Client
@@ -584,12 +611,12 @@ type SequentialCmd struct {
 	id      string
 }
 
-func (s *SequentialCmd) Error() error {
+func (s *SequenceCmd) Error() error {
 	return s.err
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck() (*Message, error) {
+func (s *SequenceCmd) WaitingAck() (*Message, error) {
 	if s.err != nil {
 		return nil, s.err
 	}

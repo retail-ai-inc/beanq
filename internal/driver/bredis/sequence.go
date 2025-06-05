@@ -3,7 +3,6 @@ package bredis
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -13,16 +12,15 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 )
 
-type Sequential struct {
+type Sequence struct {
 	base Base
 }
 
-func NewSequential(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Sequential {
+func NewSequence(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Sequence {
 
-	return &Sequential{
+	return &Sequence{
 		base: Base{
 			client:         client,
 			IProcessLog:    NewProcessLog(client, prefix),
@@ -30,16 +28,13 @@ func NewSequential(client redis.UniversalClient, prefix string, consumerCount in
 			prefix:         prefix,
 			deadLetterIdle: deadLetterIdle,
 			blockDuration:  DefaultBlockDuration,
-			errGroup: sync.Pool{New: func() any {
-				return new(errgroup.Group)
-			}},
-			consumers:     consumerCount,
-			captureConfig: config,
+			consumers:      consumerCount,
+			captureConfig:  config,
 		},
 	}
 }
 
-func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
+func (t *Sequence) Enqueue(ctx context.Context, data map[string]any) error {
 
 	channel := ""
 	topic := ""
@@ -71,7 +66,7 @@ func (t *Sequential) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Sequential) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
+func (t *Sequence) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
 
 	go func() {
 		t.base.DeadLetter(ctx, channel, topic)
