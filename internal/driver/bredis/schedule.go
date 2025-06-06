@@ -47,6 +47,12 @@ func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int6
 	return work
 }
 
+func (t *Schedule) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
+
+	return nil
+
+}
+
 func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error {
 
 	return func(tx *redis.Tx) error {

@@ -66,6 +66,10 @@ func main() {
 			log.Printf("ID:%+v \n", result.Id)
 		}
 	}
+
+	//Force delete a key
+	//pub.ForceUnlock(context.Background(), "delay-channel", "order-topic", "aa")
+
 	// this is a single check for ACK
 	// result, berr := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
 	// if berr != nil {

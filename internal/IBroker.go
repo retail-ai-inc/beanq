@@ -20,6 +20,7 @@ type (
 	IBroker  interface {
 		Enqueue(ctx context.Context, data map[string]any) error
 		Dequeue(ctx context.Context, channel, topic string, do CallBack)
+		ForceUnlock(ctx context.Context, channel, topic, orderKey string) error
 	}
 	IDeadLetter interface {
 		DeadLetter(ctx context.Context, channel, topic string)

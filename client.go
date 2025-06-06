@@ -133,6 +133,11 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 	return client
 }
 
+// ForceUnlock force delete a order key
+func (c *Client) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
+	return c.broker.ForceUnlock(ctx, channel, topic, orderKey)
+}
+
 func WithCaptureExceptionOption(handler func(ctx context.Context, err any)) ClientOption {
 	return func(client *Client) {
 		client.captureException = handler

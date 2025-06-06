@@ -103,6 +103,12 @@ func getConfig(client *bmongo2.BMongo) *capture.Config {
 	return cfg
 }
 
+func (t *Broker) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
+
+	return t.fac.Mood(btype.SEQUENCE_BY_LOCK, t.captureConfig).ForceUnlock(ctx, channel, topic, orderKey)
+
+}
+
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 
 	moodType := btype.NORMAL

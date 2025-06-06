@@ -35,6 +35,11 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 	}
 }
 
+func (t *Normal) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
+
+	return nil
+
+}
 func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 
 	channel := ""

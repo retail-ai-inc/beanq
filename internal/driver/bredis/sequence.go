@@ -33,6 +33,11 @@ func NewSequence(client redis.UniversalClient, prefix string, consumerCount int6
 		},
 	}
 }
+func (t *Sequence) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
+
+	return nil
+
+}
 
 func (t *Sequence) Enqueue(ctx context.Context, data map[string]any) error {
 

@@ -31,6 +31,13 @@ func NewSequenceByLock(client redis.UniversalClient, prefix string, consumerCoun
 	return &SequenceByLock{base: base}
 }
 
+func (t *SequenceByLock) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
+
+	key := tool.MakeSequenceLockKey(t.base.prefix, channel, topic, orderKey)
+	return t.base.client.Del(ctx, key).Err()
+
+}
+
 func (t *SequenceByLock) Enqueue(ctx context.Context, data map[string]any) error {
 
 	channel, topic, orderKey := "", "", ""
