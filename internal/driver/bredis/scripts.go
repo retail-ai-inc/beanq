@@ -11,6 +11,10 @@ var (
 	hashDuplicateIdLua    string
 	HashDuplicateIdScript = redis.NewScript(hashDuplicateIdLua)
 
+	//go:embed scripts/sequenceByLock.lua
+	sequenceByLockLua    string
+	SequenceByLockScript = redis.NewScript(sequenceByLockLua)
+
 	//go:embed scripts/addLogicLock.lua
 	addLogicLockLua    string
 	AddLogicLockScript = redis.NewScript(addLogicLockLua)

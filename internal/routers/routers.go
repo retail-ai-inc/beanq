@@ -15,20 +15,21 @@ import (
 )
 
 type Handles struct {
-	schedule  *Schedule
-	queue     *Queue
-	logs      *Logs
-	log       *Log
-	redisInfo *RedisInfo
-	login     *Login
-	client    *Client
-	dashboard *Dashboard
-	eventLog  *EventLog
-	user      *User
-	dlq       *Dlq
-	workflow  *WorkFlow
-	role      *Role
-	pod       *Pod
+	schedule     *Schedule
+	queue        *Queue
+	logs         *Logs
+	log          *Log
+	redisInfo    *RedisInfo
+	login        *Login
+	client       *Client
+	dashboard    *Dashboard
+	eventLog     *EventLog
+	user         *User
+	dlq          *Dlq
+	workflow     *WorkFlow
+	role         *Role
+	pod          *Pod
+	sequenceLock *SequenceLock
 }
 
 func NewRouters(
@@ -41,20 +42,21 @@ func NewRouters(
 	prefix string, ui ui.Ui) {
 
 	hdls := Handles{
-		schedule:  NewSchedule(client, prefix),
-		queue:     NewQueue(client, prefix),
-		logs:      NewLogs(client, prefix),
-		log:       NewLog(client, mgo, prefix),
-		redisInfo: NewRedisInfo(client, prefix, mgo),
-		login:     NewLogin(client, mgo, prefix, ui),
-		client:    NewClient(client, prefix),
-		dashboard: NewDashboard(client, mgo, prefix),
-		eventLog:  NewEventLog(client, mgo, prefix),
-		user:      NewUser(client, mgo, prefix),
-		dlq:       NewDlq(client, mgo, prefix),
-		workflow:  NewWorkFlow(workflowCollection),
-		role:      NewRole(mgo),
-		pod:       NewPod(client, mgo, prefix),
+		schedule:     NewSchedule(client, prefix),
+		queue:        NewQueue(client, prefix),
+		logs:         NewLogs(client, prefix),
+		log:          NewLog(client, mgo, prefix),
+		redisInfo:    NewRedisInfo(client, prefix, mgo),
+		login:        NewLogin(client, mgo, prefix, ui),
+		client:       NewClient(client, prefix),
+		dashboard:    NewDashboard(client, mgo, prefix),
+		eventLog:     NewEventLog(client, mgo, prefix),
+		user:         NewUser(client, mgo, prefix, ui),
+		dlq:          NewDlq(client, mgo, prefix),
+		workflow:     NewWorkFlow(workflowCollection),
+		role:         NewRole(mgo),
+		pod:          NewPod(client, mgo, prefix),
+		sequenceLock: NewSequenceLock(client, prefix),
 	}
 
 	mux.HandleFunc("GET /", func(writer http.ResponseWriter, request *http.Request) {
@@ -142,10 +144,14 @@ func NewRouters(
 	mux.HandleFunc("POST /event_log/edit", MigrateMiddleWare(hdls.eventLog.Edit, client, mgo, prefix, ui))
 	mux.HandleFunc("POST /event_log/retry", MigrateMiddleWare(hdls.eventLog.Retry, client, mgo, prefix, ui))
 
+	mux.HandleFunc("GET /sequenceLock/list", MigrateMiddleWare(hdls.sequenceLock.List, client, mgo, prefix, ui))
+	mux.HandleFunc("DELETE /sequenceLock/unlock/{key}", MigrateMiddleWare(hdls.sequenceLock.UnLock, client, mgo, prefix, ui))
+
 	mux.HandleFunc("GET /user/list", MigrateMiddleWare(hdls.user.List, client, mgo, prefix, ui))
 	mux.HandleFunc("POST /user/add", MigrateMiddleWare(hdls.user.Add, client, mgo, prefix, ui))
 	mux.HandleFunc("POST /user/del", MigrateMiddleWare(hdls.user.Delete, client, mgo, prefix, ui))
 	mux.HandleFunc("POST /user/edit", MigrateMiddleWare(hdls.user.Edit, client, mgo, prefix, ui))
+	mux.HandleFunc("POST /user/check", MigrateMiddleWare(hdls.user.Check, client, mgo, prefix, ui))
 
 	mux.HandleFunc("GET /role/list", MigrateMiddleWare(hdls.role.List, nil, mgo, "", ui))
 	mux.HandleFunc("POST /role/add", MigrateMiddleWare(hdls.role.Add, nil, mgo, "", ui))

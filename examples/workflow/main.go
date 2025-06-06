@@ -51,7 +51,7 @@ func main() {
 	config := initCnf()
 	csm := beanq.New(config)
 
-	_, berr := csm.BQ().WithContext(ctx).SubscribeSequential("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+	_, berr := csm.BQ().WithContext(ctx).SubscribeToSequence("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
 		index++
 		fmt.Println("index:", index)
 		wf.NewTask().OnRollback(func(task beanq.Task) error {
@@ -93,7 +93,7 @@ func main() {
 
 		berr := wf.OnRollbackResult(func(taskID string, berr error) {
 			if berr == nil {
-				return 
+				return
 			}
 			log.Printf("%s rollback error: %v\n", taskID, berr)
 			return
@@ -103,7 +103,7 @@ func main() {
 		}
 		return nil
 	}))
-	
+
 	if berr != nil {
 		logger.New().Error(berr)
 	}

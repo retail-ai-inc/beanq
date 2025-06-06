@@ -25,6 +25,7 @@
       dashboardApi,
       logApi,
       roleApi,
+      sequenceLockApi
       //apis end
     },
 
@@ -83,14 +84,15 @@
           { path: 'log/workflow',component:()=>loadModule("./src/pages/log/workflow/workflow.vue",options)},
           { path: 'log/dlq',component:()=>loadModule("./src/pages/log/dlq/dlq.vue",options)},
           { path: 'log/dlq/detail/:id',component:()=>loadModule("./src/pages/log/dlq/detail.vue",options)},
-          {path: 'log/workflow',component:()=>loadModule("./src/pages/log/workflow/workflow.vue",options)},
+          { path: 'log/workflow',component:()=>loadModule("./src/pages/log/workflow/workflow.vue",options)},
+          { path: 'log/sequence_lock',component:()=>loadModule("./src/pages/log/sequence_lock/list.vue",options)},
           { path: 'redis', component: () => loadModule("./src/pages/redis/info.vue", options) },
           { path:'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
           { path:'optLog',component:()=>loadModule("./src/pages/setting/optLog.vue",options)},
           { path:'role',component:()=>loadModule("./src/pages/setting/role.vue",options)},
-          {path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)},
-          {path: 'config',component:()=>loadModule("./src/pages/setting/config.vue",options)}
+          { path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)},
+          { path: 'config',component:()=>loadModule("./src/pages/setting/config.vue",options)}
         ]
   };
 

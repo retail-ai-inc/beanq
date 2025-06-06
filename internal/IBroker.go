@@ -20,6 +20,7 @@ type (
 	IBroker  interface {
 		Enqueue(ctx context.Context, data map[string]any) error
 		Dequeue(ctx context.Context, channel, topic string, do CallBack)
+		ForceUnlock(ctx context.Context, channel, topic, orderKey string) error
 	}
 	IDeadLetter interface {
 		DeadLetter(ctx context.Context, channel, topic string)
@@ -43,7 +44,7 @@ type (
 
 // IStatus check the status of the message based on the ID
 type IStatus interface {
-	Status(ctx context.Context, channel, topic, id string) (map[string]string, error)
+	Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error)
 }
 
 func (CallBack) Error(ctx context.Context, err error) {

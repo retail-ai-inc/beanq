@@ -10,6 +10,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v3/helper/email"
 	"github.com/retail-ai-inc/beanq/v3/helper/response"
+	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
@@ -20,10 +21,11 @@ type User struct {
 	client  redis.UniversalClient
 	mgo     *bmongo.BMongo
 	prefix  string
+	ui      ui.Ui
 }
 
-func NewUser(client redis.UniversalClient, x *bmongo.BMongo, prefix string) *User {
-	return &User{client: client, mgo: x, prefix: prefix}
+func NewUser(client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) *User {
+	return &User{client: client, mgo: x, prefix: prefix, ui: ui}
 }
 
 func (t *User) List(w http.ResponseWriter, r *http.Request) {
@@ -156,4 +158,28 @@ func (t *User) Edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = res.Json(w, http.StatusOK)
+}
+
+func (t *User) Check(w http.ResponseWriter, r *http.Request) {
+
+	res, cancel := response.Get()
+	defer cancel()
+
+	username := r.Context().Value("username")
+	pwd := r.FormValue("password")
+
+	if username == t.ui.Root.UserName && pwd == t.ui.Root.Password {
+		_ = res.Json(w, http.StatusOK)
+		return
+	}
+
+	if _, err := t.mgo.CheckUser(r.Context(), username.(string), pwd); err == nil {
+		_ = res.Json(w, http.StatusOK)
+		return
+	}
+	res.Code = berror.SuccessCode
+	res.Msg = "Unauthorized"
+	res.Data = "Unauthorized"
+	_ = res.Json(w, http.StatusOK)
+
 }

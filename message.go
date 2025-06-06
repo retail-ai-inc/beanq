@@ -23,10 +23,11 @@
 package beanq
 
 import (
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"strconv"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v3/helper/json"
@@ -43,6 +44,7 @@ type (
 		Level        bstatus.LevelMsg `json:"level"`
 		Topic        string           `json:"topic"`
 		Channel      string           `json:"channel"`
+		OrderKey     string           `json:"orderKey"`
 		Payload      string           `json:"payload"`
 		AddTime      string           `json:"addTime"`
 		Consumer     string           `json:"consumer"`
@@ -67,6 +69,7 @@ func (m Message) ToMap() map[string]any {
 	data["id"] = m.Id
 	data["topic"] = m.Topic
 	data["channel"] = m.Channel
+	data["orderKey"] = m.OrderKey
 	data["maxLen"] = m.MaxLen
 	data["retry"] = m.Retry
 	data["priority"] = m.Priority

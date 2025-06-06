@@ -223,7 +223,7 @@ func (t *EventLog) Retry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var bk public.IBroker
-	if moodType == string(btype.SEQUENTIAL) {
+	if moodType == string(btype.SEQUENCE) {
 		_ = res.Json(w, http.StatusOK)
 		return
 	}
