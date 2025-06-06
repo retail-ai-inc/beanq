@@ -14,6 +14,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
+	"golang.org/x/net/context"
 )
 
 func Recover() {
@@ -163,6 +164,7 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 			_ = result.Json(w, http.StatusInternalServerError)
 			return
 		}
+		r = r.WithContext(context.WithValue(r.Context(), "username", token.UserName))
 		next(w, r)
 	}
 }

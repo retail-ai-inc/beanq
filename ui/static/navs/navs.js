@@ -25,6 +25,10 @@ const Nav = [
                     {id:15,label:"Delete",mark:"delete",value:"",pid:13},
                     {id:16,label:"Retry",mark:"retry",value:"",pid:13}
                 ]
+            },
+            {id:32,label: "Sequence Lock",mark:"sequenceLock",to:"/admin/log/sequence_lock",value:"",pid:4,children: [
+                    {id:33,label:"Unlock",mark:"unlock",value:"",pid:32},
+                ]
             }
         ]
     },

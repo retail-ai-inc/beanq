@@ -116,11 +116,13 @@ onMounted(async () => {
   let roles = await Storage.GetItem("roles");
 
   if(_.isEmpty(roles)){
+
     let navs = roleApi.TileTree(nav.value);
     for(let i = 0;i<navs.length;i++){
       hasRoles.value.push(navs[i].id);
     }
   }else{
+
     hasRoles.value = roles;
   }
 
