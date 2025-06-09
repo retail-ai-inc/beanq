@@ -133,6 +133,11 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 	return client
 }
 
+// ForceUnlock force delete a order key
+func (c *Client) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
+	return c.broker.ForceUnlock(ctx, channel, topic, orderKey)
+}
+
 func WithCaptureExceptionOption(handler func(ctx context.Context, err any)) ClientOption {
 	return func(client *Client) {
 		client.captureException = handler
@@ -165,9 +170,9 @@ func (c *Client) Wait(ctx context.Context) {
 	c.broker.Start(ctx)
 }
 
-func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*Message, error) {
+func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string, isOrder bool) (*Message, error) {
 
-	m, err := c.broker.Status(ctx, channel, topic, id)
+	m, err := c.broker.Status(ctx, channel, topic, id, isOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -366,15 +371,15 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
-func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *SequentialCmd {
+func (b *BQClient) PublishInSequence(channel, topic string, payload []byte) *SequenceCmd {
 	cmd := &Publish{
 		channel:     channel,
 		topic:       topic,
 		payload:     payload,
-		moodType:    btype.SEQUENTIAL,
+		moodType:    btype.SEQUENCE,
 		executeTime: time.Now(),
 	}
-	sequentialCmd := &SequentialCmd{
+	sequentialCmd := &SequenceCmd{
 		err:     nil,
 		channel: channel,
 		topic:   topic,
@@ -390,6 +395,32 @@ func (b *BQClient) PublishInSequential(channel, topic string, payload []byte) *S
 	return sequentialCmd
 }
 
+func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payload []byte) *SequenceCmd {
+	cmd := &Publish{
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
+		orderKey:    orderKey,
+		moodType:    btype.SEQUENCE_BY_LOCK,
+		executeTime: time.Now(),
+	}
+	sequenceCmd := &SequenceCmd{
+		err:     nil,
+		channel: channel,
+		topic:   topic,
+		ctx:     b.ctx,
+		client:  b.client,
+		isOrder: true,
+	}
+	if err := b.process(cmd); err != nil {
+		sequenceCmd.err = err
+	} else {
+		sequenceCmd.id = b.id
+	}
+
+	return sequenceCmd
+}
+
 func (b *BQClient) process(cmd IBaseCmd) error {
 	switch cmd := cmd.(type) {
 	case *Publish:
@@ -402,8 +433,8 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			topic = b.client.Topic
 		}
 
-		b.waitAck = cmd.moodType == btype.SEQUENTIAL
-		if cmd.moodType == btype.SEQUENTIAL {
+		b.waitAck = cmd.moodType == btype.SEQUENCE
+		if cmd.moodType == btype.SEQUENCE {
 			if b.id == "" {
 				return errors.New("please configure a unique ID")
 			}
@@ -412,6 +443,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		message := &Message{
 			Topic:       topic,
 			Channel:     channel,
+			OrderKey:    cmd.orderKey,
 			Payload:     string(cmd.payload),
 			MoodType:    cmd.moodType,
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
@@ -506,7 +538,7 @@ func (t cmdAble) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseS
 	return cmd, nil
 }
 
-func (t cmdAble) SubscribeDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (t cmdAble) SubscribeToDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
@@ -520,13 +552,27 @@ func (t cmdAble) SubscribeDelay(channel, topic string, handle IConsumeHandle) (I
 	return cmd, nil
 }
 
-func (t cmdAble) SubscribeSequential(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+func (t cmdAble) SubscribeToSequence(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
-		moodType:      btype.SEQUENTIAL,
+		moodType:      btype.SEQUENCE,
 		handle:        handle,
 		subscribeType: btype.SequentialSubscribe,
+	}
+	if err := t(cmd); err != nil {
+		return nil, err
+	}
+	return cmd, nil
+}
+
+func (t cmdAble) SubscribeToSequenceByLock(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	cmd := &Subscribe{
+		channel:       channel,
+		topic:         topic,
+		moodType:      btype.SEQUENCE_BY_LOCK,
+		handle:        handle,
+		subscribeType: btype.SequentialByLockSubscribe,
 	}
 	if err := t(cmd); err != nil {
 		return nil, err
@@ -540,6 +586,7 @@ type (
 		executeTime time.Time
 		channel     string
 		topic       string
+		orderKey    string
 		moodType    btype.MoodType
 		payload     []byte
 	}
@@ -575,25 +622,26 @@ func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
 }
 
-type SequentialCmd struct {
+type SequenceCmd struct {
 	err     error
 	ctx     context.Context
 	client  *Client
 	channel string
 	topic   string
 	id      string
+	isOrder bool
 }
 
-func (s *SequentialCmd) Error() error {
+func (s *SequenceCmd) Error() error {
 	return s.err
 }
 
 // WaitingAck ...
-func (s *SequentialCmd) WaitingAck() (*Message, error) {
+func (s *SequenceCmd) WaitingAck() (*Message, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
-	nack, err := s.client.broker.Status(s.ctx, s.channel, s.topic, s.id)
+	nack, err := s.client.broker.Status(s.ctx, s.channel, s.topic, s.id, s.isOrder)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,7 @@ func (BqError) BQError() string {
 }
 
 var (
-	ErrIdempotent     = BqError("duplicate id")
-	BrokerDriverError = BqError("broker driver error, please check")
+	ErrIdempotent       = BqError("duplicate id")
+	BrokerDriverError   = BqError("broker driver error, please check")
+	SequentialLockError = BqError("Locking, please try again")
 )

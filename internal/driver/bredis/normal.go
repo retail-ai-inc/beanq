@@ -3,7 +3,6 @@ package bredis
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -12,7 +11,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/internal/btype"
 	"github.com/retail-ai-inc/beanq/v3/internal/capture"
 	"github.com/spf13/cast"
-	"golang.org/x/sync/errgroup"
 )
 
 type Normal struct {
@@ -31,15 +29,17 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 			prefix:         prefix,
 			deadLetterIdle: deadLetterIdle,
 			blockDuration:  DefaultBlockDuration,
-			errGroup: sync.Pool{New: func() any {
-				return new(errgroup.Group)
-			}},
-			consumers:     consumerCount,
-			captureConfig: config,
+			consumers:      consumerCount,
+			captureConfig:  config,
 		},
 	}
 }
 
+func (t *Normal) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
+
+	return nil
+
+}
 func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 
 	channel := ""

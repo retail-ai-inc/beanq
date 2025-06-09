@@ -103,6 +103,12 @@ func getConfig(client *bmongo2.BMongo) *capture.Config {
 	return cfg
 }
 
+func (t *Broker) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
+
+	return t.fac.Mood(btype.SEQUENCE_BY_LOCK, t.captureConfig).ForceUnlock(ctx, channel, topic, orderKey)
+
+}
+
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 
 	moodType := btype.NORMAL
@@ -131,9 +137,9 @@ func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.C
 
 }
 
-func (t *Broker) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {
+func (t *Broker) Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error) {
 
-	data, err := t.status.Status(ctx, channel, topic, id)
+	data, err := t.status.Status(ctx, channel, topic, id, isOrder)
 	if err != nil {
 		// todo
 		return nil, err
@@ -286,8 +292,8 @@ type (
 )
 
 func (c WorkflowHandler) Handle(ctx context.Context, message *Message) error {
-	workflow,err:= NewWorkflow(ctx, message)
-	if err!=nil{
+	workflow, err := NewWorkflow(ctx, message)
+	if err != nil {
 		return err
 	}
 	return c(ctx, workflow)

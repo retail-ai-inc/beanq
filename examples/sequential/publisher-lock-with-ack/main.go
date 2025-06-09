@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -44,32 +43,37 @@ func initCnf() *beanq.BeanqConfig {
 	})
 	return &bqConfig
 }
-
 func main() {
+
 	config := initCnf()
 	pub := beanq.New(config)
 
-	now := time.Now()
-	fmt.Printf("now:%+v \n", now)
-	wg := sync.WaitGroup{}
+	for i := 0; i < 3; i++ {
+		id := cast.ToString(i)
 
-	n := 10
-	wg.Add(n)
-	for i := 1; i <= n; i++ {
-		go func() {
-			defer wg.Done()
-			m := make(map[string]any, 2)
-			m["delayMsg"] = "new msg" + cast.ToString(i)
-			m["id"] = cast.ToString(i)
-			b, _ := json.Marshal(m)
-			bq := pub.BQ()
-			ctx := context.Background()
-			if err := bq.WithContext(ctx).SetId(cast.ToString(i)).PublishInSequence("sequential-channel", "order-topic", b).Error(); err != nil {
-				logger.New().Error(err)
-			}
-		}()
+		m := make(map[string]any)
+		m["delayMsg"] = "new msg" + id
+
+		b, _ := json.Marshal(m)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+		defer cancel()
+		result, err := pub.BQ().WithContext(ctx).
+			SetId(id).
+			PublishInSequenceByLock("delay-channel", "order-topic", "aa", b).WaitingAck()
+		if err != nil {
+			logger.New().Error(err, m)
+		} else {
+			log.Printf("ID:%+v \n", result.Id)
+		}
 	}
 
-	wg.Wait()
-	fmt.Printf("after:%+v,sub:%+v \n", time.Now(), time.Now().Sub(now))
+	//Force delete a key
+	//pub.ForceUnlock(context.Background(), "delay-channel", "order-topic", "aa")
+
+	// this is a single check for ACK
+	// result, berr := pub.CheckAckStatus(context.Background(), "delay-channel", "cp0smosf6ntt0aqcpgtg")
+	// if berr != nil {
+	// 	panic(berr)
+	// }
+	// log.Println(result)
 }

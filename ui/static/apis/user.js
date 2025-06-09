@@ -11,5 +11,8 @@ const userApi = {
     },
     Edit(data){
         return request.post(`/user/edit`,data);
+    },
+    Check(password){
+        return request.post(`/user/check`,{password:password})
     }
 }

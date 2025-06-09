@@ -51,7 +51,7 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 			Detail:   "",
 			Active:   0,
 			RoleId:   "",
-			Roles:    nil,
+			Roles:    []int{},
 		}
 		err error
 	)

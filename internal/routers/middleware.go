@@ -14,6 +14,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v3/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
+	"golang.org/x/net/context"
 )
 
 func Recover() {
@@ -82,12 +83,14 @@ func AuthSSE(next func(w http.ResponseWriter, r *http.Request), client redis.Uni
 
 		if token.UserName != ui.Root.UserName {
 			roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
-			if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
-				result.Code = berror.AuthExpireCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, name)
-				flusher.Flush()
-				return
+			if roleId > 0 {
+				if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
+					result.Code = berror.AuthExpireCode
+					result.Msg = err.Error()
+					_ = result.EventMsg(w, name)
+					flusher.Flush()
+					return
+				}
 			}
 		}
 
@@ -145,11 +148,13 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 
 		if token.UserName != ui.Root.UserName {
 			roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
-			if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
-				result.Code = berror.AuthExpireCode
-				result.Msg = err.Error()
-				_ = result.Json(w, http.StatusUnauthorized)
-				return
+			if roleId > 0 {
+				if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
+					result.Code = berror.AuthExpireCode
+					result.Msg = err.Error()
+					_ = result.Json(w, http.StatusUnauthorized)
+					return
+				}
 			}
 		}
 
@@ -159,6 +164,7 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 			_ = result.Json(w, http.StatusInternalServerError)
 			return
 		}
+		r = r.WithContext(context.WithValue(r.Context(), "username", token.UserName))
 		next(w, r)
 	}
 }
