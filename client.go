@@ -328,11 +328,12 @@ func (c *Client) Ping() {
 type BQClient struct {
 	ctx context.Context
 	cmdAble
-	client        *Client
-	dynamicOption *dynamicOption
-	id            string
-	priority      float64
-	waitAck       bool
+	client          *Client
+	dynamicOption   *dynamicOption
+	id              string
+	priority        float64
+	waitAck         bool
+	lockOrderKeyTTL time.Duration
 }
 
 func (b *BQClient) WithContext(ctx context.Context) *BQClient {
@@ -371,6 +372,12 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
+func (b *BQClient) SetLockOrderKeyTTL(duration time.Duration) *BQClient {
+
+	b.lockOrderKeyTTL = duration
+	return b
+}
+
 func (b *BQClient) PublishInSequence(channel, topic string, payload []byte) *SequenceCmd {
 	cmd := &Publish{
 		channel:     channel,
@@ -397,12 +404,13 @@ func (b *BQClient) PublishInSequence(channel, topic string, payload []byte) *Seq
 
 func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payload []byte) *SequenceCmd {
 	cmd := &Publish{
-		channel:     channel,
-		topic:       topic,
-		payload:     payload,
-		orderKey:    orderKey,
-		moodType:    btype.SEQUENCE_BY_LOCK,
-		executeTime: time.Now(),
+		channel:         channel,
+		topic:           topic,
+		payload:         payload,
+		orderKey:        orderKey,
+		lockOrderKeyTTL: b.lockOrderKeyTTL,
+		moodType:        btype.SEQUENCE_BY_LOCK,
+		executeTime:     time.Now(),
 	}
 	sequenceCmd := &SequenceCmd{
 		err:     nil,
@@ -441,9 +449,11 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		}
 		// make message
 		message := &Message{
-			Topic:       topic,
-			Channel:     channel,
-			OrderKey:    cmd.orderKey,
+			Topic:           topic,
+			Channel:         channel,
+			OrderKey:        cmd.orderKey,
+			LockOrderKeyTTL: cmd.lockOrderKeyTTL,
+
 			Payload:     string(cmd.payload),
 			MoodType:    cmd.moodType,
 			AddTime:     cmd.executeTime.Format(timex.DateTime),
@@ -583,12 +593,13 @@ func (t cmdAble) SubscribeToSequenceByLock(channel, topic string, handle IConsum
 type (
 	// Publish command:publish
 	Publish struct {
-		executeTime time.Time
-		channel     string
-		topic       string
-		orderKey    string
-		moodType    btype.MoodType
-		payload     []byte
+		executeTime     time.Time
+		channel         string
+		topic           string
+		orderKey        string
+		lockOrderKeyTTL time.Duration
+		moodType        btype.MoodType
+		payload         []byte
 	}
 
 	// Subscribe command:subscribe

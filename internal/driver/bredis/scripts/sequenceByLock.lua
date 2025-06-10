@@ -1,7 +1,8 @@
 local streamKey = KEYS[1]
 local orderRediKey = KEYS[2]
 
-local fields = ARGV
+local expireTime = tonumber(ARGV[1])
+local fields = ARGV[2]
 
 local rediKeyStatus = redis.call('HGET',orderRediKey,"status")
 if rediKeyStatus == 'pending' then
@@ -18,5 +19,9 @@ redis.call('XADD', streamKey, '*', unpack(message))
 table.insert(message, 'status')
 table.insert(message, 'pending')
 redis.call('HSET',orderRediKey,unpack(message))
+
+if expireTime > 0 then
+    redis.call('EXPIRE',orderRediKey,expireTime)
+end
 
 return true
