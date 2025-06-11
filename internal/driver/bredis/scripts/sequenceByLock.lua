@@ -1,8 +1,8 @@
 local streamKey = KEYS[1]
 local orderRediKey = KEYS[2]
+local expireTime = tonumber(KEYS[3])
 
-local expireTime = tonumber(ARGV[1])
-local fields = ARGV[2]
+local fields = ARGV
 
 local rediKeyStatus = redis.call('HGET',orderRediKey,"status")
 if rediKeyStatus == 'pending' then

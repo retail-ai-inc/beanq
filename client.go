@@ -372,6 +372,7 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
+// If duration <= 0, it will never expire unless ForceUnlock is used to force deletion.
 func (b *BQClient) SetLockOrderKeyTTL(duration time.Duration) *BQClient {
 
 	b.lockOrderKeyTTL = duration

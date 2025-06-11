@@ -54,11 +54,10 @@ func (t *SequenceByLock) Enqueue(ctx context.Context, data map[string]any) error
 	if v, ok := data["lockOrderKeyTTL"]; ok {
 		lockOrderKeyTTL = cast.ToDuration(v)
 	}
-
 	streamKey := tool.MakeStreamKey(t.base.subType, t.base.prefix, channel, topic)
 	orderRediKey := tool.MakeSequenceLockKey(t.base.prefix, channel, topic, orderKey)
 
-	err := SequenceByLockScript.Run(ctx, t.base.client, []string{streamKey, orderRediKey}, lockOrderKeyTTL.Seconds(), data).Err()
+	err := SequenceByLockScript.Run(ctx, t.base.client, []string{streamKey, orderRediKey, cast.ToString(lockOrderKeyTTL.Seconds())}, data).Err()
 	if err != nil {
 		return bstatus.SequentialLockError
 	}
