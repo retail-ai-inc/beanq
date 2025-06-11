@@ -58,7 +58,7 @@ func main() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 		defer cancel()
 		result, err := pub.BQ().WithContext(ctx).
-			SetId(id).
+			SetId(id).SetLockOrderKeyTTL(10*time.Second).
 			PublishInSequenceByLock("delay-channel", "order-topic", "aa", b).WaitingAck()
 		if err != nil {
 			logger.New().Error(err, m)
