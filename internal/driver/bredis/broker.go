@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -23,35 +22,37 @@ import (
 )
 
 type RdbBroker struct {
-	client         redis.UniversalClient
-	prefix         string
-	maxLen         int64
-	consumers      int64
-	deadLetterIdle time.Duration
+	client           redis.UniversalClient
+	prefix           string
+	maxLen           int64
+	consumers        int64
+	consumerPoolSize int
+	deadLetterIdle   time.Duration
 }
 
-func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, duration time.Duration) *RdbBroker {
+func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, consumerPoolSize int, duration time.Duration) *RdbBroker {
 	return &RdbBroker{
-		client:         client,
-		prefix:         prefix,
-		maxLen:         maxLen,
-		consumers:      consumers,
-		deadLetterIdle: duration,
+		client:           client,
+		prefix:           prefix,
+		maxLen:           maxLen,
+		consumers:        consumers,
+		consumerPoolSize: consumerPoolSize,
+		deadLetterIdle:   duration,
 	}
 }
 
 func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public.IBroker {
 	if moodType == btype.NORMAL {
-		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.deadLetterIdle, config)
+		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
 	}
 	if moodType == btype.SEQUENCE {
-		return NewSequence(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
+		return NewSequence(t.client, t.prefix, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
 	}
 	if moodType == btype.DELAY {
-		return NewSchedule(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
+		return NewSchedule(t.client, t.prefix, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
 	}
 	if moodType == btype.SEQUENCE_BY_LOCK {
-		return NewSequenceByLock(t.client, t.prefix, t.consumers, t.deadLetterIdle, config)
+		return NewSequenceByLock(t.client, t.prefix, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
 	}
 	return nil
 }
@@ -61,12 +62,13 @@ type (
 	Base          struct {
 		client redis.UniversalClient
 		public.IProcessLog
-		blockDuration  BlockDuration
-		prefix         string
-		subType        btype.SubscribeType
-		deadLetterIdle time.Duration
-		consumers      int64
-		captureConfig  *capture.Config
+		blockDuration    BlockDuration
+		prefix           string
+		subType          btype.SubscribeType
+		deadLetterIdle   time.Duration
+		consumers        int64
+		consumerPoolSize int
+		captureConfig    *capture.Config
 	}
 )
 
@@ -178,10 +180,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, 500*time.Millisecond)
 	// worker num
-	workerNum := runtime.GOMAXPROCS(0) - 1
-	if workerNum <= 0 {
-		workerNum = 2
-	}
+	workerNum := t.consumerPoolSize
 
 	for {
 

@@ -18,19 +18,20 @@ type Normal struct {
 	maxLen int64
 }
 
-func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Normal {
+func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Normal {
 
 	return &Normal{
 		maxLen: maxLen,
 		base: Base{
-			client:         client,
-			IProcessLog:    NewProcessLog(client, prefix),
-			subType:        btype.NormalSubscribe,
-			prefix:         prefix,
-			deadLetterIdle: deadLetterIdle,
-			blockDuration:  DefaultBlockDuration,
-			consumers:      consumerCount,
-			captureConfig:  config,
+			client:           client,
+			IProcessLog:      NewProcessLog(client, prefix),
+			subType:          btype.NormalSubscribe,
+			prefix:           prefix,
+			deadLetterIdle:   deadLetterIdle,
+			blockDuration:    DefaultBlockDuration,
+			consumers:        consumerCount,
+			consumerPoolSize: consumerPoolSize,
+			captureConfig:    config,
 		},
 	}
 }

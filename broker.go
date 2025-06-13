@@ -62,7 +62,7 @@ func NewBroker(config *BeanqConfig) *Broker {
 			broker.status = bredis.NewStatus(client, cfg.Prefix)
 			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 			broker.client = client
-			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, cfg.MaxLen, config.DeadLetterIdleTime)
+			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, config.MinConsumers, config.ConsumerPoolSize, config.DeadLetterIdleTime)
 			broker.tool = bredis.NewUITool(client, cfg.Prefix)
 			// capture errors and send them to email or Slack
 
