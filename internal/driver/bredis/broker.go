@@ -213,7 +213,6 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 		var wait sync.WaitGroup
 		jobs, results := make(chan public.Stream, len(messages)), make(chan public.Stream, len(messages))
 		// start workers
-		// open core(num-1) goroutines
 		for i := 0; i < workerNum; i++ {
 			wait.Add(1)
 			go worker(ctx, jobs, results, do, &wait)
