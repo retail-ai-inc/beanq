@@ -262,28 +262,36 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 // consumer worker
 func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for job := range jobs {
 
-		select {
-		case <-ctx.Done():
+	select {
+	case <-ctx.Done():
+		return
+	case v, ok := <-jobs:
+		if !ok {
 			return
-		default:
-
 		}
-		val := job.Data
+
+		val := v.Data
+		//deep copy for handler: prevent data race.
+		//In the future, maybe only payload will be needed
+		copiedVal := make(map[string]any, len(val))
+		for k, v := range val {
+			copiedVal[k] = v
+		}
 
 		val["status"] = bstatus.StatusReceived
 		val["beginTime"] = time.Now()
 		timeToRun := cast.ToDuration(val["timeToRun"])
 		sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
 
-		retry, err := tool.RetryInfo(sessionCtx, func() (err error) {
+		retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
 			defer func() {
 				if p := recover(); p != nil {
-					err = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
+					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
 				}
 			}()
-			err = handler(sessionCtx, val)
+
+			handlerErr = handler(sessionCtx, copiedVal)
 
 			return
 		}, cast.ToInt(val["retry"]))
@@ -308,7 +316,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		val["hostName"] = hostname
 		// `stream` confirmation message
 		cancel()
-		job.Data = val
-		result <- job
+		v.Data = val
+		result <- v
 	}
 }
