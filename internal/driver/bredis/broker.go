@@ -215,7 +215,7 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 		// start workers
 		for i := 0; i < workerNum; i++ {
 			wait.Add(1)
-			go worker(ctx, jobs, results, do, &wait)
+			go worker(ctx, jobs, results, do, &wait, t.captureConfig)
 		}
 		// send jobs
 		for _, message := range messages {
@@ -260,27 +260,28 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 }
 
 // consumer worker
-func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup) {
+func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup, config *capture.Config) {
 	defer wg.Done()
 
 	select {
 	case <-ctx.Done():
 		return
-	case v, ok := <-jobs:
+	case job, ok := <-jobs:
 		if !ok {
 			return
 		}
 
-		val := v.Data
+		val := job.Data
 		//deep copy for handler: prevent data race.
-		//In the future, maybe only payload will be needed
+		//In the future, maybe only `payload`,`channel`,`topic` will be needed
 		copiedVal := make(map[string]any, len(val))
 		for k, v := range val {
 			copiedVal[k] = v
 		}
 
+		now := time.Now()
 		val["status"] = bstatus.StatusReceived
-		val["beginTime"] = time.Now()
+		val["beginTime"] = now
 		timeToRun := cast.ToDuration(val["timeToRun"])
 		sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
 
@@ -288,6 +289,21 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 			defer func() {
 				if p := recover(); p != nil {
 					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
+				}
+			}()
+			go func() {
+				ticker := time.NewTicker(time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-sessionCtx.Done():
+						return
+					case <-ticker.C:
+						if time.Now().Sub(now) > 10*time.Second {
+							capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v \n", copiedVal)
+							capture.System.When(config).If(nil).Then(capErr)
+						}
+					}
 				}
 			}()
 
@@ -316,7 +332,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		val["hostName"] = hostname
 		// `stream` confirmation message
 		cancel()
-		v.Data = val
-		result <- v
+		job.Data = val
+		result <- job
 	}
 }
