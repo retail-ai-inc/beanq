@@ -2,6 +2,7 @@ package bredis
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -282,6 +283,14 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		now := time.Now()
 		val["status"] = bstatus.StatusReceived
 		val["beginTime"] = now
+
+		var timeToRunLimit []time.Duration
+		if err := json.Unmarshal([]byte((val["timeToRunLimit"]).(string)), &timeToRunLimit); err != nil {
+			capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
+			return
+		}
+		timeToRunLimitLen := len(timeToRunLimit)
+
 		timeToRun := cast.ToDuration(val["timeToRun"])
 		sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
 
@@ -291,21 +300,29 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
 				}
 			}()
-			go func() {
-				ticker := time.NewTicker(time.Second)
-				defer ticker.Stop()
-				for {
-					select {
-					case <-sessionCtx.Done():
-						return
-					case <-ticker.C:
-						if time.Now().Sub(now) > 10*time.Second {
-							capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v \n", copiedVal)
-							capture.System.When(config).If(nil).Then(capErr)
+			if timeToRunLimitLen > 0 {
+				go func(limit []time.Duration) {
+					ticker := time.NewTicker(time.Second)
+					defer ticker.Stop()
+					i := 0
+
+					for {
+						select {
+						case <-sessionCtx.Done():
+							return
+						case <-ticker.C:
+							if i >= timeToRunLimitLen {
+								return
+							}
+							if time.Since(now) >= limit[i] {
+								i++
+								capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v \n", copiedVal)
+								capture.System.When(config).If(nil).Then(capErr)
+							}
 						}
 					}
-				}
-			}()
+				}(timeToRunLimit)
+			}
 
 			handlerErr = handler(sessionCtx, copiedVal)
 
