@@ -122,7 +122,7 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 	}
 	if moodType == string(btype.DELAY) {
 
-		bk = bredis.NewSchedule(t.client, t.prefix, 10, 20*time.Minute, nil)
+		bk = bredis.NewSchedule(t.client, t.prefix, 100, 10, 20*time.Minute, nil)
 		if err := bk.Enqueue(nctx, data); err != nil {
 			res.Msg = err.Error()
 			res.Code = berror.InternalServerErrorCode
@@ -133,7 +133,7 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	bk = bredis.NewNormal(t.client, t.prefix, 2000, 10, 20, nil)
+	bk = bredis.NewNormal(t.client, t.prefix, 2000, 100, 10, 20, nil)
 	if err := bk.Enqueue(nctx, data); err != nil {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode

@@ -66,12 +66,13 @@ type (
 	Client struct {
 		captureException func(ctx context.Context, err any)
 		broker           *Broker
-		Topic            string        `json:"topic"`
-		Channel          string        `json:"channel"`
-		MaxLen           int64         `json:"maxLen"`
-		Retry            int           `json:"retry"`
-		Priority         float64       `json:"priority"`
-		TimeToRun        time.Duration `json:"timeToRun"`
+		Topic            string          `json:"topic"`
+		Channel          string          `json:"channel"`
+		MaxLen           int64           `json:"maxLen"`
+		Retry            int             `json:"retry"`
+		Priority         float64         `json:"priority"`
+		TimeToRun        time.Duration   `json:"timeToRun"`
+		TimeToRunLimit   []time.Duration `json:"timeToRunLimit"`
 	}
 
 	dynamicOption struct {
@@ -372,6 +373,14 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
+func (b *BQClient) SetTimeToRun(duration time.Duration, limit ...time.Duration) *BQClient {
+	if duration > 0 {
+		b.client.TimeToRun = duration
+		b.client.TimeToRunLimit = limit
+	}
+	return b
+}
+
 // If duration <= 0, it will never expire unless ForceUnlock is used to force deletion.
 func (b *BQClient) SetLockOrderKeyTTL(duration time.Duration) *BQClient {
 
@@ -463,10 +472,11 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 			Id:       b.id,
 			Priority: b.priority,
 
-			MaxLen:       b.client.MaxLen,
-			Retry:        b.client.Retry,
-			PendingRetry: 0,
-			TimeToRun:    b.client.TimeToRun,
+			MaxLen:         b.client.MaxLen,
+			Retry:          b.client.Retry,
+			PendingRetry:   0,
+			TimeToRun:      b.client.TimeToRun,
+			TimeToRunLimit: b.client.TimeToRunLimit,
 		}
 
 		if err := cmd.filter(message); err != nil {

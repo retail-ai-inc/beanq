@@ -18,18 +18,19 @@ type Sequence struct {
 	base Base
 }
 
-func NewSequence(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Sequence {
+func NewSequence(client redis.UniversalClient, prefix string, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Sequence {
 
 	return &Sequence{
 		base: Base{
-			client:         client,
-			IProcessLog:    NewProcessLog(client, prefix),
-			subType:        btype.SequentialSubscribe,
-			prefix:         prefix,
-			deadLetterIdle: deadLetterIdle,
-			blockDuration:  DefaultBlockDuration,
-			consumers:      consumerCount,
-			captureConfig:  config,
+			client:           client,
+			IProcessLog:      NewProcessLog(client, prefix),
+			subType:          btype.SequentialSubscribe,
+			prefix:           prefix,
+			deadLetterIdle:   deadLetterIdle,
+			blockDuration:    DefaultBlockDuration,
+			consumers:        consumerCount,
+			consumerPoolSize: consumerPoolSize,
+			captureConfig:    config,
 		},
 	}
 }

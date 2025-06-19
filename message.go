@@ -35,7 +35,8 @@ import (
 )
 
 type (
-	Message struct {
+	TimeToRunLimit []time.Duration
+	Message        struct {
 		ExecuteTime     time.Time        `json:"executeTime"`
 		EndTime         time.Time        `json:"endTime"`
 		BeginTime       time.Time        `json:"beginTime"`
@@ -55,6 +56,7 @@ type (
 		Id              string           `json:"id"`
 		Retry           int              `json:"retry"`
 		TimeToRun       time.Duration    `json:"timeToRun"`
+		TimeToRunLimit  TimeToRunLimit   `json:"timeToRunLimit"`
 		MaxLen          int64            `json:"maxLen"`
 		Priority        float64          `json:"priority"`
 		PendingRetry    int64            `json:"pendingRetry"`
@@ -80,7 +82,15 @@ func (m Message) ToMap() map[string]any {
 	data["executeTime"] = m.ExecuteTime
 	data["moodType"] = m.MoodType
 	data["timeToRun"] = m.TimeToRun
+	data["timeToRunLimit"] = m.TimeToRunLimit
 	return data
+}
+
+func (t TimeToRunLimit) MarshalBinary() (data []byte, err error) {
+	return json.Marshal(t)
+}
+func (t TimeToRunLimit) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, t)
 }
 
 type MessageM map[string]any

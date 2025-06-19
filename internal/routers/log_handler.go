@@ -148,7 +148,7 @@ func (t *Log) retryHandler(ctx context.Context, id, msgType string) error {
 		return err
 	}
 
-	bk := bredis.NewSchedule(t.client, t.prefix, 10, 20*time.Minute, nil)
+	bk := bredis.NewSchedule(t.client, t.prefix, 100, 10, 20*time.Minute, nil)
 	if err := bk.Enqueue(ctx, data); err != nil {
 		return err
 	}

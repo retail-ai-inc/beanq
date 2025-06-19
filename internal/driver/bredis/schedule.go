@@ -28,17 +28,18 @@ type (
 	PreWork func(ctx context.Context, prefix string, channel, topic string)
 )
 
-func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, deadLetterIdle time.Duration, config *capture.Config) *Schedule {
+func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Schedule {
 	work := &Schedule{
 		base: Base{
-			client:         client,
-			IProcessLog:    NewProcessLog(client, prefix),
-			subType:        btype.DelaySubscribe,
-			prefix:         prefix,
-			deadLetterIdle: deadLetterIdle,
-			blockDuration:  DefaultBlockDuration,
-			consumers:      consumerCount,
-			captureConfig:  config,
+			client:           client,
+			IProcessLog:      NewProcessLog(client, prefix),
+			subType:          btype.DelaySubscribe,
+			prefix:           prefix,
+			deadLetterIdle:   deadLetterIdle,
+			blockDuration:    DefaultBlockDuration,
+			consumers:        consumerCount,
+			consumerPoolSize: consumerPoolSize,
+			captureConfig:    config,
 		},
 	}
 	work.watcher = work.Watcher

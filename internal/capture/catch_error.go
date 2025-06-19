@@ -122,12 +122,12 @@ func (t *Catch) Then(err error) {
 	if t == nil {
 		return
 	}
+
 	if err == nil {
 		return
 	}
 
 	for _, then := range t.rule.Then {
-
 		if then.Key == "email" {
 			host := t.config.SMTP.Host
 			port := t.config.SMTP.Port
@@ -139,11 +139,13 @@ func (t *Catch) Then(err error) {
 
 			client := email.NewGoEmail(host, cast.ToInt(port), user, password)
 			client.From(user)
-			client.Subject("Test Notify")
+			client.Subject("Notify")
 			client.TextBody(err.Error())
 			client.To(then.Value)
 			if err := client.Send(); err == nil {
 				continue
+			} else {
+				logger.New().Error(err)
 			}
 			if t.config.SendGrid.Key == "" {
 				continue
@@ -151,7 +153,7 @@ func (t *Catch) Then(err error) {
 
 			client = email.NewSendGrid(t.config.SendGrid.Key)
 			client.From(t.config.SendGrid.FromAddress)
-			client.Subject("Test Notify")
+			client.Subject("Notify")
 			client.TextBody(err.Error())
 			client.To(then.Value)
 			if err := client.Send(); err != nil {
