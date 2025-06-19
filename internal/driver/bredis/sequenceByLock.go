@@ -40,7 +40,7 @@ func (t *SequenceByLock) ForceUnlock(ctx context.Context, channel, topic, orderK
 
 func (t *SequenceByLock) Enqueue(ctx context.Context, data map[string]any) error {
 
-	channel, topic, orderKey := "", "", ""
+	channel, topic, orderKey, lockOrderKeyTTL := "", "", "", time.Duration(0)
 
 	if v, ok := data["channel"]; ok {
 		channel = cast.ToString(v)
@@ -51,11 +51,13 @@ func (t *SequenceByLock) Enqueue(ctx context.Context, data map[string]any) error
 	if v, ok := data["orderKey"]; ok {
 		orderKey = cast.ToString(v)
 	}
-
+	if v, ok := data["lockOrderKeyTTL"]; ok {
+		lockOrderKeyTTL = cast.ToDuration(v)
+	}
 	streamKey := tool.MakeStreamKey(t.base.subType, t.base.prefix, channel, topic)
 	orderRediKey := tool.MakeSequenceLockKey(t.base.prefix, channel, topic, orderKey)
 
-	err := SequenceByLockScript.Run(ctx, t.base.client, []string{streamKey, orderRediKey}, data).Err()
+	err := SequenceByLockScript.Run(ctx, t.base.client, []string{streamKey, orderRediKey, cast.ToString(lockOrderKeyTTL.Seconds())}, data).Err()
 	if err != nil {
 		return bstatus.SequentialLockError
 	}

@@ -36,27 +36,28 @@ import (
 
 type (
 	Message struct {
-		ExecuteTime  time.Time        `json:"executeTime"`
-		EndTime      time.Time        `json:"endTime"`
-		BeginTime    time.Time        `json:"beginTime"`
-		Response     any              `json:"response"`
-		Info         bstatus.FlagInfo `json:"info"`
-		Level        bstatus.LevelMsg `json:"level"`
-		Topic        string           `json:"topic"`
-		Channel      string           `json:"channel"`
-		OrderKey     string           `json:"orderKey"`
-		Payload      string           `json:"payload"`
-		AddTime      string           `json:"addTime"`
-		Consumer     string           `json:"consumer"`
-		RunTime      string           `json:"runTime"`
-		MoodType     btype.MoodType   `json:"moodType"`
-		Status       bstatus.Status   `json:"status"`
-		Id           string           `json:"id"`
-		Retry        int              `json:"retry"`
-		TimeToRun    time.Duration    `json:"timeToRun"`
-		MaxLen       int64            `json:"maxLen"`
-		Priority     float64          `json:"priority"`
-		PendingRetry int64            `json:"pendingRetry"`
+		ExecuteTime     time.Time        `json:"executeTime"`
+		EndTime         time.Time        `json:"endTime"`
+		BeginTime       time.Time        `json:"beginTime"`
+		Response        any              `json:"response"`
+		Info            bstatus.FlagInfo `json:"info"`
+		Level           bstatus.LevelMsg `json:"level"`
+		Topic           string           `json:"topic"`
+		Channel         string           `json:"channel"`
+		OrderKey        string           `json:"orderKey"`
+		LockOrderKeyTTL time.Duration    `json:"lockOrderKeyTTL"`
+		Payload         string           `json:"payload"`
+		AddTime         string           `json:"addTime"`
+		Consumer        string           `json:"consumer"`
+		RunTime         string           `json:"runTime"`
+		MoodType        btype.MoodType   `json:"moodType"`
+		Status          bstatus.Status   `json:"status"`
+		Id              string           `json:"id"`
+		Retry           int              `json:"retry"`
+		TimeToRun       time.Duration    `json:"timeToRun"`
+		MaxLen          int64            `json:"maxLen"`
+		Priority        float64          `json:"priority"`
+		PendingRetry    int64            `json:"pendingRetry"`
 	}
 )
 
@@ -70,6 +71,7 @@ func (m Message) ToMap() map[string]any {
 	data["topic"] = m.Topic
 	data["channel"] = m.Channel
 	data["orderKey"] = m.OrderKey
+	data["lockOrderKeyTTL"] = m.LockOrderKeyTTL
 	data["maxLen"] = m.MaxLen
 	data["retry"] = m.Retry
 	data["priority"] = m.Priority
@@ -101,6 +103,12 @@ func (data MessageM) ToMessage() *Message {
 			if v, ok := val.(string); ok {
 				msg.Channel = v
 			}
+		case "orderKey":
+			if v, ok := val.(string); ok {
+				msg.OrderKey = v
+			}
+		case "lockOrderKeyTTL":
+			msg.LockOrderKeyTTL = cast.ToDuration(val)
 		case "maxLen":
 			if v, ok := val.(int64); ok {
 				msg.MaxLen = v
@@ -158,6 +166,12 @@ func (data MessageS) ToMessage() *Message {
 		}
 		if k == "channel" {
 			msg.Channel = v
+		}
+		if k == "orderKey" {
+			msg.OrderKey = v
+		}
+		if k == "lockOrderKeyTTL" {
+			msg.LockOrderKeyTTL = cast.ToDuration(v)
 		}
 		if k == "consumer" {
 			msg.Consumer = v
