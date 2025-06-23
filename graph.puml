@@ -1,0 +1,590 @@
+@startuml
+top to bottom direction
+package .{
+annotation . {
+-const maxRetryDelayMilliSec: INT
+-const minRetryDelayMilliSec: INT
+-const StatusFailed: STRING
+-const StatusSucceed: STRING
+-const StatusAborting: STRING
+-const StatusPrepared: STRING
+-const OpAction: STRING
+-const OpCompensate: STRING
+-var defaultCaptureException: 
+-var broker: Broker
+-var NilCancel: 
+-var brokerOnce: Once
+-var NilHandle: 
+-var views: FS
+-var password: 
+-var port: 
+-var database: 
+-var host: 
+-var on: 
+-var username: 
+-var touchScript: 
+-var touchWithSetNXScript: 
+-var ErrFailed: 
+-var ErrExtendFailed: 
+-var ErrLockAlreadyExpired: 
+-var deleteScript: 
+-var maxWaitTime: 
+-var ErrNotFound: 
+-var ErrUniqueConflict: 
+-var minWaitTime: 
+-var ErrWorkflowOngoing: 
+-var workflowRecordConfig: *WfRecordConfig
+-var workflowOnce: Once
+-var workflowRecord: *WorkflowRecord
+-var workflowClient: UniversalClient
+-var ErrWorkflowFailure: 
+-var workflowRedisConfig: *Redis
+-var workflowRecordOnce: Once
+-newAsyncPool(poolSize int): *asyncPool
++NewBroker(config *BeanqConfig): *Broker
+-getConfig(client *BMongo): *Config
++GetBrokerDriver(): T
++New(config *BeanqConfig, options ... ClientOption): *Client
++WithCaptureExceptionOption(handler func(ctx Context, err any) ): ClientOption
+-getRootPath(): string, error
++StaticFileInfo(): map[string]Time, error
++DynamicKeyOpt(key string): DynamicOption
+-messageToStruct(message any): *Message
++NewMuxClient(client UniversalClient): *MuxClient
+-genValue(): string, error
++NewScript(keyCount int, src string): *Script
+-noErrNil(err error): error
++WithExpiry(expiry Duration): MuxOption
++WithTries(tries int): MuxOption
++WithRetryDelay(delay Duration): MuxOption
++WithSetNXOnExtend(): MuxOption
++WithRetryDelayFunc(delayFunc DelayFunc): MuxOption
++WithDriftFactor(factor float64): MuxOption
++WithTimeoutFactor(factor float64): MuxOption
++WithGenValueFunc(genValueFunc func() string, error): MuxOption
++WithValue(v string): MuxOption
++WithFailFast(b bool): MuxOption
++WithShufflePools(b bool): MuxOption
++NewTransStore(client UniversalClient, prefix string, dataExpire Duration): *transStore
+-handleRedisResult(ret interface, err error): error
+-newArgList(prefix string, expire Duration): *argList
++NewTransGlobal(message *Message): *TransGlobal, error
+-jitterBackoff(attempt Duration): Duration
+-randDuration(center Duration): Duration
++InitWorkflow(redisConfig *Redis, recordConfig *WfRecordConfig)
++NewWorkflow(ctx Context, message *Message): *Workflow, error
++WfOptionRecordErrorHandler(handler func( error) ): func(workflow *Workflow) 
++WfOptionMux(mux WFMux): func(workflow *Workflow) 
++WfSkipper(skipper func( error) bool): func(workflow *Workflow) 
++NewWorkflowRecord(): *WorkflowRecord
+}
+interface IConsumeHandle{
++Handle(ctx Context, message *Message): error
+}
+interface IConsumeCancel{
++Cancel(ctx Context, message *Message): error
+}
+interface IConsumeError{
++Error(ctx Context, err error)
+}
+interface IBaseSubscribeCmd{
++Run(ctx Context)
+}
+interface IBaseCmd{
+-filter(message *Message): error
+}
+interface MuxOption{
++Apply( *Mutex)
+}
+interface TransStore{
++FindGlobal(ctx Context, gid string): *TransGlobal, error
++ScanGlobals(ctx Context, position *string, limit int64, condition TransGlobalScanCondition): []TransGlobal, error
++FindBranches(ctx Context, gid string): []TransBranch, error
++MaySaveNew(ctx Context, global *TransGlobal, branches []TransBranch): error
++LockGlobalSaveBranches(ctx Context, gid string, status string, branches []TransBranch, branchStart int): error
++ChangeGlobalStatus(ctx Context, global *TransGlobal, newStatus string, updates []string, finished bool, finishedExpire Duration): error
+}
+interface WFMux{
++Name(): string
++Value(): string
++Until(): Time
++LockContext(ctx Context): error
++UnlockContext(ctx Context): bool, error
++ExtendContext(ctx Context): bool, error
+}
+interface Task{
++ID(): string
++Execute(): error
++Rollback(): error
++Statement(): []byte
++UpdateStatus(ctx Context, branch *TransBranch, oerr error): error
+}
+class asyncPool {
+-pool: *Pool
+-captureException: func(ctx Context, err any) 
++Execute(ctx Context, fn func(c Context) error, durations ... Duration)
++Release()
+}
+class Broker {
+-status: IStatus
+-log: IProcessLog
+-client: any
+-fac: IBrokerFactory
+-config: *BeanqConfig
+-tool: *UITool
+-handlers: []*Handler
+-captureConfig: *Config
++ForceUnlock(ctx Context, channel string, topic string, orderKey string): error
++Enqueue(ctx Context, data map[string]any): error
++Dequeue(ctx Context, channel string, topic string, do CallBack)
++Status(ctx Context, channel string, topic string, id string, isOrder bool): map[string]string, error
++AddConsumer(moodType MoodType, channel string, topic string, subscribe IConsumeHandle): error
++Migrate(ctx Context, data []map[string]any): error
++Start(ctx Context)
++WaitSignal(cancel CancelFunc): chan bool
+}
+class Handler {
+-brokerImpl: IBroker
+-do: func(ctx Context, data map[string]any) error
+-broker: string
+-prefix: string
+-channel: string
+-topic: string
+-moodType: MoodType
+
+}
+class DefaultHandle {
++DoHandle: func(ctx Context, message *Message) error
++DoCancel: func(ctx Context, message *Message) error
++DoError: func(ctx Context, err error) 
++Handle(ctx Context, message *Message): error
++Cancel(ctx Context, message *Message): error
++Error(ctx Context, err error)
+}
+class WorkflowHandler {
+
++Handle(ctx Context, message *Message): error
+}
+class Publish {
+-executeTime: Time
+-channel: string
+-topic: string
+-orderKey: string
+-lockOrderKeyTTL: Duration
+-moodType: MoodType
+-payload: []byte
+-filter(message *Message): error
+}
+class SequenceCmd {
+-err: error
+-ctx: Context
+-client: *Client
+-channel: string
+-topic: string
+-id: string
+-isOrder: bool
++Error(): error
++WaitingAck(): *Message, error
+}
+class ClientOption {
+
+
+}
+class cmdAble {
+
++Publish(channel string, topic string, payload []byte): error
++PublishAtTime(channel string, topic string, payload []byte, atTime Time): error
++Subscribe(channel string, topic string, handle IConsumeHandle): IBaseSubscribeCmd, error
++SubscribeToDelay(channel string, topic string, handle IConsumeHandle): IBaseSubscribeCmd, error
++SubscribeToSequence(channel string, topic string, handle IConsumeHandle): IBaseSubscribeCmd, error
++SubscribeToSequenceByLock(channel string, topic string, handle IConsumeHandle): IBaseSubscribeCmd, error
+}
+class dynamicOption {
+-key: string
+-on: bool
+
+}
+class BQClient {
+-ctx: Context
++: cmdAble
+-client: *Client
+-dynamicOption: *dynamicOption
+-id: string
+-priority: float64
+-waitAck: bool
+-lockOrderKeyTTL: Duration
++WithContext(ctx Context): *BQClient
++Dynamic(options ... DynamicOption): *BQClient
++SetId(id string): *BQClient
++GetId(): string
++Priority(priority float64): *BQClient
++SetTimeToRun(duration Duration, limit ... Duration): *BQClient
++SetLockOrderKeyTTL(duration Duration): *BQClient
++PublishInSequence(channel string, topic string, payload []byte): *SequenceCmd
++PublishInSequenceByLock(channel string, topic string, orderKey string, payload []byte): *SequenceCmd
+-process(cmd IBaseCmd): error
+}
+class Subscribe {
+-handle: IConsumeHandle
+-channel: string
+-topic: string
+-moodType: MoodType
+-subscribeType: SubscribeType
+-filter(message *Message): error
++Run(ctx Context)
+}
+class Client {
+-captureException: func(ctx Context, err any) 
+-broker: *Broker
++Topic: string
++Channel: string
++MaxLen: int64
++Retry: int
++Priority: float64
++TimeToRun: Duration
++TimeToRunLimit: []Duration
++ForceUnlock(ctx Context, channel string, topic string, orderKey string): error
++BQ(): *BQClient
++Wait(ctx Context)
++CheckAckStatus(ctx Context, channel string, topic string, id string, isOrder bool): *Message, error
++ServeHttp(ctx Context)
++Ping()
+}
+class DynamicOption {
+
+
+}
+class BeanqConfig {
++Health: Health
++Broker: string
++UI: Ui
++: DebugLog
++: Queue
++: History
++Workflow: WfRecordConfig
++Redis: Redis
++DeadLetterIdleTime: Duration
++DeadLetterTicker: Duration
++KeepFailedJobsInHistory: Duration
++KeepSuccessJobsInHistory: Duration
++PublishTimeOut: Duration
++ConsumeTimeOut: Duration
++MinConsumers: int64
++JobMaxRetries: int
++ConsumerPoolSize: int
+-init()
+}
+class DebugLog {
++Path: string
++On: bool
+
+}
+class Health {
++Port: string
++Host: string
+
+}
+class Redis {
++Host: string
++Port: string
++Password: string
++Prefix: string
++Database: int
++MaxLen: int64
++MinIdleConnections: int
++DialTimeout: Duration
++ReadTimeout: Duration
++WriteTimeout: Duration
++PoolTimeout: Duration
++MaxRetries: int
++PoolSize: int
+
+}
+class Queue {
++Topic: string
++DelayChannel: string
++DelayTopic: string
++Channel: string
++MaxLen: int64
++Priority: float64
++TimeToRun: Duration
+
+}
+class History {
++Mongo: interface{}
++On: bool
+
+}
+class UI {
++Stmt: interface{}
++GoogleAuth: interface{}
++SendGrid: interface{}
++Root: interface{}
++On: bool
++Issuer: string
++Subject: string
++JwtKey: string
++Port: string
++ExpiresAt: Duration
+
+}
+class MessageS {
+
++ToMessage(): *Message
+}
+class TimeToRunLimit {
+
++MarshalBinary(): []byte, error
++UnmarshalBinary(data []byte): error
+}
+class Message {
++ExecuteTime: Time
++EndTime: Time
++BeginTime: Time
++Response: any
++Info: FlagInfo
++Level: LevelMsg
++Topic: string
++Channel: string
++OrderKey: string
++LockOrderKeyTTL: Duration
++Payload: string
++AddTime: string
++Consumer: string
++RunTime: string
++MoodType: MoodType
++Status: Status
++Id: string
++Retry: int
++TimeToRun: Duration
++TimeToRunLimit: TimeToRunLimit
++MaxLen: int64
++Priority: float64
++PendingRetry: int64
++MarshalBinary(): []byte, error
++ToMap(): map[string]any
+}
+class MessageM {
+
++ToMessage(): *Message
+}
+class DelayFunc {
+
+
+}
+class Script {
++Src: string
++Hash: string
++KeyCount: int
+
+}
+class OptionFunc {
+
++Apply(mutex *Mutex)
+}
+class Mutex {
+-until: Time
+-delayFunc: DelayFunc
+-genValueFunc: func() string, error
+-name: string
+-value: string
+-pools: []UniversalClient
+-tries: int
+-driftFactor: float64
+-timeoutFactor: float64
+-quorum: int
+-expiry: Duration
+-shuffle: bool
+-failFast: bool
+-setNXOnExtend: bool
++Name(): string
++Value(): string
++Until(): Time
++LockContext(ctx Context): error
+-lockContext(ctx Context, tries int): error
++UnlockContext(ctx Context): bool, error
++ExtendContext(ctx Context): bool, error
+-acquire(ctx Context, client UniversalClient, value string): bool, error
+-release(ctx Context, client UniversalClient, value string): bool, error
++Eval(ctx Context, client UniversalClient, script *Script, keysAndArgs ... interface): interface, error
+-touch(ctx Context, client UniversalClient, value string, expiry int): bool, error
+-actOnPoolsAsync(actFn func(client UniversalClient) bool, error): int, error
+}
+class MuxClient {
+-client: UniversalClient
+-prefix: string
+-expireTime: Duration
++SetPrefix(prefix string): *MuxClient
++SetExpireTime(expireTime Duration): *MuxClient
++NewMutex(name string, options ... MuxOption): *Mutex
+}
+class transStore {
+-prefix: string
+-expire: Duration
+-client: UniversalClient
++FindGlobal(ctx Context, gid string): *TransGlobal, error
++ScanGlobals(ctx Context, position *string, limit int64, condition TransGlobalScanCondition): []TransGlobal, error
++FindBranches(ctx Context, gid string): []TransBranch, error
++MaySaveNew(ctx Context, global *TransGlobal, branches []TransBranch): error
++LockGlobalSaveBranches(ctx Context, gid string, status string, branches []TransBranch, branchStart int): error
++ChangeGlobalStatus(ctx Context, global *TransGlobal, newStatus string, updates []string, finished bool, finishedExpire Duration): error
+}
+class TransBranch {
++Index: int
++Gid: string
++TaskID: string
++Statement: string
++BinData: []byte
++BranchID: string
++Op: string
++Status: string
++FinishTime: *Time
++RollbackTime: *Time
++Error: string
++CreateTime: *Time
++UpdateTime: *Time
+
+}
+class argList {
+-errs: error
+-prefix: string
++Keys: []string
++List: []interface
++Result(): *argList, error
++String(): string
++AppendGid(gid string): *argList
++AppendRaw(v interface): *argList
++AppendObject(v interface): *argList
++AppendBranches(branches []TransBranch): *argList
+}
+class TransGlobal {
++Gid: string
++TransType: string
++Steps: []map[string]string
++Payloads: []string
++Status: string
++QueryPrepared: string
++FinishTime: *Time
++RollbackTime: *Time
++Reason: string
++Options: string
++CustomData: string
++NextCronInterval: Duration
++NextCronTime: *Time
++Owner: string
++CreateTime: *Time
++UpdateTime: *Time
++MessageData: string
++Message: *Message
+
+}
+class TransGlobalScanCondition {
++Status: string
++TransType: string
++CreateTimeStart: Time
++CreateTimeEnd: Time
+
+}
+class WfRecordConfig {
++Record: interface{}
+
+}
+class tasks {
+
++Run(ctx Context, branch *TransBranch, op string): error
+}
+class TaskStatus {
+-err: error
+-statement: []byte
+-option: string
++Error(): string
++Statement(): string
+}
+class task {
+-id: string
+-wf: *Workflow
+-executeFunc: func(task Task) error
+-rollbackFunc: func(task Task) error
+-statement: []byte
+-skipper: func( error) bool
++ID(): string
++Execute(): error
++Skipper(skipper func( error) bool): *task
++Rollback(): error
++OnExecute(fn func(task Task) error): *task
++OnRollback(fn func(task Task) error): *task
++WithRecordStatement(statement []byte): *task
++Statement(): []byte
+-trackRecord(taskID string, status *TaskStatus)
++UpdateStatus(ctx Context, branch *TransBranch, oerr error): error
+}
+class Workflow {
+-gid: string
+-currentIndex: int
+-ctx: Context
+-wfMux: WFMux
+-message: *Message
+-onRollbackResult: func(taskID string, err error) 
+-record: *WorkflowRecord
+-tasks: tasks
+-transStore: TransStore
+-transaction: *TransGlobal
+-progresses: []TransBranch
+-skipper: func( error) bool
++Init(opts ... func(workflow *Workflow) )
++SetGid(gid string)
++GetGid(): string
++OnRollbackResult(handler func(taskID string, err error) ): *Workflow
++Message(): *Message
++NewTask(ids ... string): *task
++Run(): error
+-executor(branch *TransBranch, op string): error
++ChangeStatus(ctx Context, status string, reason ... string): error
+-initSteps(): func() []*TransBranch, func() []*TransBranch
+}
+class WorkflowRecord {
+-errorHandler: func( error) 
+-mongoCollection: *Collection
+-asyncPool: *asyncPool
+-retry: int
+-on: bool
+-async: bool
+-setErrorHandler(handler func( error) )
++Write(ctx Context, data any)
++SyncWrite(ctx Context, data any): error
+}
+}
+"WorkflowRecord" --> "asyncPool"
+"Client" --> "Broker"
+"Broker" --> "BeanqConfig"
+"SequenceCmd" --> "Client"
+"BQClient" --> "cmdAble"
+"BQClient" --> "dynamicOption"
+"BQClient" --> "Client"
+"BeanqConfig" --> "DebugLog"
+"BeanqConfig" --> "Health"
+"BeanqConfig" --> "Redis"
+"BeanqConfig" --> "Queue"
+"BeanqConfig" --> "History"
+"BeanqConfig" --> "WfRecordConfig"
+"Message" --> "TimeToRunLimit"
+"TransGlobal" --> "Message"
+"Workflow" --> "Message"
+"Mutex" --> "DelayFunc"
+"Workflow" --> "TransBranch"
+"Workflow" --> "TransGlobal"
+"Workflow" --> "tasks"
+"task" --> "Workflow"
+"Workflow" --> "WorkflowRecord"
+"DefaultHandle" --|> "IConsumeHandle"
+"DefaultHandle" --|> "IConsumeCancel"
+"DefaultHandle" --|> "IConsumeError"
+"WorkflowHandler" --|> "IConsumeHandle"
+"Publish" --|> "IBaseCmd"
+"Subscribe" --|> "IBaseSubscribeCmd"
+"Subscribe" --|> "IBaseCmd"
+"OptionFunc" --|> "MuxOption"
+"Mutex" --|> "WFMux"
+"transStore" --|> "TransStore"
+"task" --|> "Task"
+@enduml
