@@ -1,0 +1,62 @@
+name: Fuzz Testing with Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  fuzz_testing:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+
+      - name: Install dependencies for coverage merge (gocovmerge)
+        run: |
+          go install github.com/wadey/gocovmerge@latest
+
+      - name: Run make to execute fuzz tests and generate coverage
+        run: |
+          make fuzz
+
+      - name: Upload coverage report as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: fuzz-coverage-report
+          path: coverage/
+
+      - name: Upload any crash cases found during fuzzing
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: fuzz-crash-cases
+          path: |
+            failpoint*
+            log*
+
+      - name: Check for failures in fuzz tests
+        run: |
+          if [ "$$(find . -type f -name \"failpoint\" -o -name \"log\" | wc -l)" -gt 0 ]; then \
+            echo "❌ Some fuzz tests failed or crashed. Please check the logs and artifacts."; \
+            exit 1; \
+          else \
+            echo "✅ All fuzz tests passed without crashes."; \
+          fi
+
+      - name: Upload coverage to Codecov (optional)
+        if: success() && github.event_name == 'push'
+        uses: codecov/codecov-action@v3
+        with:
+          file: coverage/final.out
+          flags: fuzz
+          name: fuzz-coverage

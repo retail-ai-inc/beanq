@@ -63,14 +63,14 @@ sequential-publisher-ack:
 	mv temp.json env.json && \
 	go run -race ./main.go
 
-ui:
+ui: ## Start ui
 	@echo "start ui on port:9090"
 	@cd examples/ui && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
 	go run -race ./main.go
 
-clean:
+clean: ## Clean up all test configuration information
 	@echo "start.."
 
 	@echo "delay clean"
@@ -123,7 +123,7 @@ vet: ## Field Alignment
 	@$(if $(wildcard $(FIELDALIGNMENT_TOOL)),echo "Running go vet with fieldalignment...";) \
 	go vet -vettool=$(FIELDALIGNMENT_TOOL) ./... || exit 0
 
-vet-fix: ##If fixed, the annotation for struct fields will be removed
+vet-fix: ## If fixed, the annotation for struct fields will be removed
 	@if [ ! -x "$(FIELDALIGNMENT_TOOL)" ]; then \
 		echo "Installing fieldalignment..."; \
 		go install golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@latest; \
@@ -131,6 +131,30 @@ vet-fix: ##If fixed, the annotation for struct fields will be removed
 	@$(if $(wildcard $(FIELDALIGNMENT_TOOL)),echo "Running fieldalignment -fix...";) \
 	$(FIELDALIGNMENT_TOOL) -fix ./... || exit 0
 
+.PHONY: fuzz-generate
+fuzz-generate: ## generate fuzz test data
+	@echo "generate fuzz test file"
+	@if ! command -v fzgen >/dev/null 2>&1; then \
+		go install github.com/thepudds/fzgen/cmd/fzgen@latest; \
+	fi
+	go generate -x ./... || exit 0
+	@echo "done!"
+
+FUZZ_PATTERN = ^Fuzz_
+FUZZ_TESTS = $(shell go list ./test/fuzz | xargs go test -list=$(FUZZ_PATTERN) | grep $(FUZZ_PATTERN))
+
+.PHONY:$(FUZZ_TESTS)
+$(FUZZ_TESTS):
+	@echo "🚀 Running fuzz test: $@"
+	go test -fuzz=$@ -fuzztime=10s
+
+.PHONY:fuzz
+fuzz:$(FUZZ_TESTS) ## start fuzzing test
+	
+.PHONY: help
+help: ## show list of commands if they are with descriptions
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher \
  		sequential sequential-publisher sequential-consumer sequential-publisher-ack ui clean \

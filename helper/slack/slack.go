@@ -1,3 +1,4 @@
+//go:generate fzgen -o ../../test/fuzz/slackfuzz_test.go
 package xslack
 
 import (

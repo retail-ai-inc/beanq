@@ -1,3 +1,4 @@
+//go:generate fzgen -o ../../test/fuzz/emailfuzz_test.go
 package email
 
 import (
