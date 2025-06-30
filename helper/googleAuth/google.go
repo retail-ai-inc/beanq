@@ -1,3 +1,4 @@
+//go:generate fzgen -o ../../test/fuzz/googlefuzz_test.go
 package googleAuth
 
 import (

@@ -1,3 +1,4 @@
+//go:generate fzgen -o ../../test/fuzz/jwtfuzz_test.go
 package bjwt
 
 import (

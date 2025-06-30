@@ -1,3 +1,4 @@
+//go:generate fzgen -o ../../test/fuzz/fuzz_test.go
 package logger
 
 import (

@@ -1,3 +1,4 @@
+//go:generate fzgen -o ../../test/fuzz/gzipfuzz_test.go
 package bgzip
 
 import (
