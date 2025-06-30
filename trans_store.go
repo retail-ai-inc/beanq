@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/cast"
 )
 

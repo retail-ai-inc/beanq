@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 )
 
 type Status struct {

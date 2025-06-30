@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/bgzip"
-	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/ui"
+	"github.com/retail-ai-inc/beanq/v4/helper/bgzip"
+	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
+	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 

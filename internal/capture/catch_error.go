@@ -4,9 +4,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/email"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	xslack "github.com/retail-ai-inc/beanq/v3/helper/slack"
+	"github.com/retail-ai-inc/beanq/v4/helper/email"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	xslack "github.com/retail-ai-inc/beanq/v4/helper/slack"
 	"github.com/spf13/cast"
 	"golang.org/x/net/context"
 )

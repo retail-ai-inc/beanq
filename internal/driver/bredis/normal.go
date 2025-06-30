@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
-	"github.com/retail-ai-inc/beanq/v3/internal/capture"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
+	"github.com/retail-ai-inc/beanq/v4/internal"
+	"github.com/retail-ai-inc/beanq/v4/internal/btype"
+	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/spf13/cast"
 )
 

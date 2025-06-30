@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/response"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v4/helper/response"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 )
 
 type SequenceLock struct {
@@ -53,7 +53,7 @@ func (t *SequenceLock) UnLock(w http.ResponseWriter, r *http.Request) {
 		_ = result.Json(w, http.StatusInternalServerError)
 		return
 	}
-	
+
 	if err := t.client.Del(r.Context(), tool.MakeSequenceLockKey(t.prefix, keys[0], keys[1], keys[2])).Err(); err != nil {
 		result.Code = response.InternalServerErrorCode
 		result.Msg = err.Error()

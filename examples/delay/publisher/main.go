@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	beanq "github.com/retail-ai-inc/beanq/v3"
-	"github.com/retail-ai-inc/beanq/v3/helper/json"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	beanq "github.com/retail-ai-inc/beanq/v4"
+	"github.com/retail-ai-inc/beanq/v4/helper/json"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/spf13/cast"
 	"github.com/spf13/viper"
 )

@@ -1,6 +1,6 @@
 package capture
 
-import "github.com/retail-ai-inc/beanq/v3/helper/json"
+import "github.com/retail-ai-inc/beanq/v4/helper/json"
 
 type Config struct {
 	Google   GoogleCredential `json:"google" redis:"google"`

@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
-	"github.com/retail-ai-inc/beanq/v3/helper/timex"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	public "github.com/retail-ai-inc/beanq/v3/internal"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/helper/timex"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
+	public "github.com/retail-ai-inc/beanq/v4/internal"
 )
 
 type Log struct {
