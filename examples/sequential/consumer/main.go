@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 
-	beanq "github.com/retail-ai-inc/beanq/v3"
+	beanq "github.com/retail-ai-inc/beanq/v4"
 	"github.com/spf13/viper"
 )
 
