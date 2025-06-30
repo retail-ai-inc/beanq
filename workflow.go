@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
-	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 
 	errorstack "github.com/pkg/errors"
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

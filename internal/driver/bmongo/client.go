@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"

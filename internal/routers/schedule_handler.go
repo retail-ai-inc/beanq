@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/response"
-	"github.com/retail-ai-inc/beanq/v3/helper/tool"
+	"github.com/retail-ai-inc/beanq/v4/helper/berror"
+	"github.com/retail-ai-inc/beanq/v4/helper/response"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 )
 
 type Schedule struct {

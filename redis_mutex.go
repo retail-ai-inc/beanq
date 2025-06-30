@@ -13,11 +13,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
 	"io"
 	mRand "math/rand"
 	"strings"
 	"time"
+
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hashicorp/go-multierror"

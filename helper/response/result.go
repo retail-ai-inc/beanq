@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/json"
+	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/spf13/cast"
 )
 

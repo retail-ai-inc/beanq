@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/internal/capture"
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

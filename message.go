@@ -26,11 +26,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/json"
+	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/spf13/cast"
 )
 

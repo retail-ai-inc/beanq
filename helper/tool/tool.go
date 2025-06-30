@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/json"
-	"github.com/retail-ai-inc/beanq/v3/internal/boptions"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
+	"github.com/retail-ai-inc/beanq/v4/helper/json"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
+	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/spf13/cast"
 )
 
@@ -70,7 +70,7 @@ func MakeSequenceLockKey(prefix, channel, topic, orderKey string) string {
 	return makeKey(prefix, channel, topic, "lock", orderKey)
 }
 
-func MakeSequenceDataKey(prefix,channel,topic,id string)string{
+func MakeSequenceDataKey(prefix, channel, topic, id string) string {
 	channel = strings.Join([]string{"{", channel}, "")
 	topic = strings.Join([]string{topic, "}"}, "")
 	return makeKey(prefix, channel, topic, "order", id)

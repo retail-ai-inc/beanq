@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v3/helper/berror"
-	"github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/json"
-	"github.com/retail-ai-inc/beanq/v3/helper/response"
-	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
+	"github.com/retail-ai-inc/beanq/v4/helper/berror"
+	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
+	"github.com/retail-ai-inc/beanq/v4/helper/json"
+	"github.com/retail-ai-inc/beanq/v4/helper/response"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/cast"
 )
 

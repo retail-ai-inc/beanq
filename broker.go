@@ -11,16 +11,16 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
-	bmongo2 "github.com/retail-ai-inc/beanq/v3/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/helper/bstatus"
-	"github.com/retail-ai-inc/beanq/v3/internal"
-	"github.com/retail-ai-inc/beanq/v3/internal/btype"
-	"github.com/retail-ai-inc/beanq/v3/internal/capture"
-	"github.com/retail-ai-inc/beanq/v3/internal/driver/bmongo"
-	"github.com/retail-ai-inc/beanq/v3/internal/driver/bredis"
+	bmongo2 "github.com/retail-ai-inc/beanq/v4/helper/bmongo"
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/internal"
+	"github.com/retail-ai-inc/beanq/v4/internal/btype"
+	"github.com/retail-ai-inc/beanq/v4/internal/capture"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bmongo"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/cast"
 
-	"github.com/retail-ai-inc/beanq/v3/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 )
 
 var (
