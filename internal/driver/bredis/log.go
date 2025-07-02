@@ -77,6 +77,7 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 				datas = append(datas, v.Values)
 			}
 		}
+
 		if t.log != nil {
 			if err := t.log.Migrate(ctx, datas); err != nil {
 				logger.New().Error(err)

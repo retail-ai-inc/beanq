@@ -55,9 +55,7 @@ func (t *Schedule) ForceUnlock(_ context.Context, channel, topic, orderKey strin
 }
 
 func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error {
-
 	return func(tx *redis.Tx) error {
-
 		vals, err := tx.ZRevRangeByScore(ctx, zsetKey, &redis.ZRangeBy{
 			Min:   "0",
 			Max:   zsetMax,
@@ -103,7 +101,6 @@ func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamK
 }
 
 func (t *Schedule) Enqueue(ctx context.Context, data map[string]any) error {
-
 	bt, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -139,8 +136,7 @@ func (t *Schedule) Enqueue(ctx context.Context, data map[string]any) error {
 	return err
 }
 
-func (t *Schedule) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
+func (t *Schedule) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	go func() {
 		t.preWork(ctx, t.base.prefix, channel, topic)
 	}()
@@ -151,7 +147,6 @@ func (t *Schedule) Dequeue(ctx context.Context, channel, topic string, do public
 }
 
 func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic string) {
-
 	var (
 		zSetKey   = tool.MakeZSetKey(prefix, channel, topic)
 		streamKey = tool.MakeStreamKey(t.base.subType, prefix, channel, topic)
@@ -169,7 +164,7 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 
 		}
 		timer.Reset(1 * time.Second)
-		//lock
+		// lock
 		lockId := strings.Join([]string{prefix, channel, topic, "lock"}, ":")
 		if v := AddLogicLockScript.Run(ctx, t.base.client, []string{lockId}).Val(); v.(int64) == 1 {
 			continue
@@ -181,7 +176,7 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 			capture.System.When(t.base.captureConfig).Then(err)
 			logger.New().Error("Schedule Job Error:", err)
 		}
-		//release lock
+		// release lock
 		if err := t.base.client.Del(ctx, lockId).Err(); err != nil {
 			capture.System.When(t.base.captureConfig).Then(err)
 			logger.New().Error("Schedule Lock Error", err)

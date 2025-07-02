@@ -23,7 +23,6 @@ func NewMongoLog(ctx context.Context,
 	maxConnectionPoolSize uint64,
 	database, collection, userName, password string,
 ) *MongoLog {
-
 	uri := strings.Join([]string{"mongodb://", host, port}, "")
 
 	opts := options.Client().ApplyURI(uri).
@@ -55,7 +54,6 @@ func NewMongoLog(ctx context.Context,
 }
 
 func (t *MongoLog) Migrate(ctx context.Context, data []map[string]any) error {
-
 	datas := make(bson.A, 0, len(data))
 	for _, v := range data {
 		delete(v, "_id")

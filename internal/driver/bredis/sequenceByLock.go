@@ -66,7 +66,7 @@ func (t *SequenceByLock) Enqueue(ctx context.Context, data map[string]any) error
 	return nil
 }
 
-func (t *SequenceByLock) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
+func (t *SequenceByLock) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 
 	go func() {
 		t.base.DeadLetter(ctx, channel, topic)

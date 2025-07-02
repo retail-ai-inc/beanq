@@ -2,11 +2,9 @@ package tool
 
 import (
 	"context"
-	"fmt"
 	"hash/fnv"
 	"math"
 	"math/rand"
-	"runtime/debug"
 	"strings"
 	"time"
 
@@ -104,32 +102,22 @@ func MakeLogicKey(prefix string) string {
 	return makeKey(prefix, "beanq-logic-log")
 }
 
-func doTimeout(ctx context.Context, f func() error) error {
-	errCh := make(chan error, 1)
-	go func() {
-		defer func() {
-			if ne := recover(); ne != nil {
-				errCh <- fmt.Errorf("error:%+v,stack:%s", ne, string(debug.Stack()))
-				return
-			}
-		}()
-		errCh <- f()
-	}()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errCh:
-		return err
-	}
-}
-
 // RetryInfo retry=0 means no retries, but it will be executed at least once.
-func RetryInfo(ctx context.Context, f func() error, retry int) (i int, err error) {
+func RetryInfo(ctx context.Context, f func() error, retry int, matcher ...func(error) bool) (i int, err error) {
 	for i = 0; i <= retry; i++ {
-		err = doTimeout(ctx, f)
+		err = f()
 		if err == nil {
-			return
+			return i, nil
+		}
+
+		for _, m := range matcher {
+			if !m(err) {
+				return i, err
+			}
+		}
+
+		if i == retry {
+			return i, err
 		}
 
 		waitTime := JitterBackoff(500*time.Millisecond, time.Second, i)

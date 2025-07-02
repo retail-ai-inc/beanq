@@ -42,6 +42,11 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 	}
 }
 
+//func (t *RdbBroker) Migrate(ctx context.Context, log public.IMigrateLog) error {
+//	migrate := NewLog(t.client, t.prefix)
+//	return migrate.Migrate(ctx, log)
+//}
+
 func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public.IBroker {
 	if moodType == btype.NORMAL {
 		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
@@ -177,7 +182,8 @@ func (t *Base) Enqueue(_ context.Context, _ map[string]any) error {
 	return nil
 }
 
-func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
+func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
+
 	streamKey := tool.MakeStreamKey(t.subType, t.prefix, channel, topic)
 	readGroupArgs := NewReadGroupArgs(channel, streamKey, []string{streamKey, ">"}, t.consumers, 500*time.Millisecond)
 	// worker num
@@ -247,21 +253,22 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 				continue
 			}
 			ids = append(ids, result.Id)
-		}
-		_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
-			pipeliner.XAck(ctx, stream, channel, ids...)
-			pipeliner.XDel(ctx, stream, ids...)
-			return nil
-		})
-		if err != nil {
-			logger.New().Error(err)
-			capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+
+			_, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
+				pipeliner.XAck(ctx, stream, channel, ids...)
+				pipeliner.XDel(ctx, stream, ids...)
+				return nil
+			})
+			if err != nil {
+				logger.New().Error(err)
+				capture.Fail.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+			}
 		}
 	}
 }
 
 // consumer worker
-func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallBack, wg *sync.WaitGroup, config *capture.Config) {
+func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallbackWithRetry, wg *sync.WaitGroup, config *capture.Config) {
 	defer wg.Done()
 
 	select {
@@ -324,7 +331,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 				}(timeToRunLimit)
 			}
 
-			handlerErr = handler(sessionCtx, copiedVal)
+			_, handlerErr = handler(sessionCtx, copiedVal)
 
 			return
 		}, cast.ToInt(val["retry"]))

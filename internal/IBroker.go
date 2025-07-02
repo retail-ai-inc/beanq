@@ -16,10 +16,11 @@ type (
 		Channel string
 		Stream  string
 	}
-	CallBack func(ctx context.Context, data map[string]any) error
-	IBroker  interface {
+	CallbackWithRetry func(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	IBroker           interface {
 		Enqueue(ctx context.Context, data map[string]any) error
-		Dequeue(ctx context.Context, channel, topic string, do CallBack)
+
+		Dequeue(ctx context.Context, channel, topic string, do CallbackWithRetry)
 		ForceUnlock(ctx context.Context, channel, topic, orderKey string) error
 	}
 	IDeadLetter interface {
@@ -47,7 +48,7 @@ type IStatus interface {
 	Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error)
 }
 
-func (CallBack) Error(ctx context.Context, err error) {
+func (CallbackWithRetry) Error(ctx context.Context, err error) {
 	if err != nil {
 		logger.New().Error(err)
 	}

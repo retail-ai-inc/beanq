@@ -13,6 +13,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	bmongo2 "github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
@@ -29,13 +30,35 @@ var (
 )
 
 type Handler struct {
-	brokerImpl public.IBroker
-	do         func(ctx context.Context, data map[string]any) error
-	broker     string
-	prefix     string
-	channel    string
-	topic      string
-	moodType   btype.MoodType
+	brokerImpl      public.IBroker
+	do              func(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	channel         string
+	topic           string
+	moodType        btype.MoodType
+	retryConditions []RetryConditionFunc
+	broker          string
+	prefix          string
+}
+
+func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
+	broker.Dequeue(ctx, h.channel, h.topic, func(ctx context.Context, data map[string]any, retry ...int) (int, error) {
+		if len(retry) == 0 {
+			return h.do(ctx, data)
+		}
+
+		return tool.RetryInfo(ctx, func() error {
+			_, err := h.do(ctx, data)
+			return err
+		}, retry[0], func(err error) bool {
+			for _, v := range h.retryConditions {
+				bl := v(data, err)
+				if !bl {
+					return bl
+				}
+			}
+			return true
+		})
+	})
 }
 
 type Broker struct {
@@ -50,7 +73,6 @@ type Broker struct {
 }
 
 func NewBroker(config *BeanqConfig) *Broker {
-
 	brokerOnce.Do(func() {
 		switch config.Broker {
 		case "redis":
@@ -83,7 +105,6 @@ func NewBroker(config *BeanqConfig) *Broker {
 		default:
 			logger.New().Panic("not support broker type:", config.Broker)
 		}
-
 	})
 	broker.config = config
 	return &broker
@@ -110,7 +131,6 @@ func (t *Broker) ForceUnlock(ctx context.Context, channel, topic, orderKey strin
 }
 
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
-
 	moodType := btype.NORMAL
 
 	if v, ok := data["moodType"]; ok {
@@ -133,12 +153,10 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
+func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 }
 
 func (t *Broker) Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error) {
-
 	data, err := t.status.Status(ctx, channel, topic, id, isOrder)
 	if err != nil {
 		// todo
@@ -155,7 +173,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 		channel:  channel,
 		topic:    topic,
 		moodType: moodType,
-		do: func(ctx context.Context, message map[string]any) error {
+		do: func(ctx context.Context, message map[string]any, retry ...int) (int, error) {
 
 			var gerr error
 			msg := messageToStruct(message)
@@ -165,7 +183,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 					gerr = errors.Join(gerr, h.Cancel(ctx, msg))
 				}
 			}
-			return gerr
+			return 0, gerr
 		},
 	}
 	handler.brokerImpl = t.fac.Mood(moodType, t.captureConfig)
@@ -196,7 +214,6 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 	}
 
 	return migrate.Migrate(ctx, nil)
-
 }
 
 func (t *Broker) Start(ctx context.Context) {
@@ -252,8 +269,11 @@ func (t *Broker) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	return done
 }
 
-func GetBrokerDriver[T any]() T {
+func (t *Broker) Mood(m btype.MoodType) public.IBroker {
+	return t.fac.Mood(m, t.captureConfig)
+}
 
+func GetBrokerDriver[T any]() T {
 	if broker.config.Broker == "" {
 		logger.New().Panic("the broker has not been initialized yet")
 	}
@@ -265,8 +285,8 @@ func GetBrokerDriver[T any]() T {
 
 // consumer...
 var (
-	NilHandle = errors.New("beanq:handle is nil")
-	NilCancel = errors.New("beanq:cancel is nil")
+	ErrNilHandle = errors.New("beanq:handle is nil")
+	ErrNilCancel = errors.New("beanq:cancel is nil")
 )
 
 type (
@@ -282,6 +302,7 @@ type (
 		Error(ctx context.Context, err error)
 	}
 )
+
 type (
 	DefaultHandle struct {
 		DoHandle func(ctx context.Context, message *Message) error
@@ -303,18 +324,27 @@ func (c DefaultHandle) Handle(ctx context.Context, message *Message) error {
 	if c.DoHandle != nil {
 		return c.DoHandle(ctx, message)
 	}
-	return NilHandle
+	return ErrNilHandle
 }
 
 func (c DefaultHandle) Cancel(ctx context.Context, message *Message) error {
 	if c.DoCancel != nil {
 		return c.DoCancel(ctx, message)
 	}
-	return NilCancel
+	return ErrNilCancel
 }
 
 func (c DefaultHandle) Error(ctx context.Context, err error) {
 	if c.DoError != nil {
 		c.DoError(ctx, err)
 	}
+}
+
+var MigrateLogDiscard public.IMigrateLog = discard{}
+
+type discard struct{}
+
+// Migrate this will display nothing for the logs on ui-side.
+func (discard) Migrate(ctx context.Context, data []map[string]any) error {
+	return nil
 }
