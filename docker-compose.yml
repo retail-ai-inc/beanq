@@ -6,15 +6,14 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
+      args:
+        - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     init: true
     tty: true
     ports:
       - "8080:9090"
       - "8888:8888"
     container_name: example
-    volumes:
-      - ./:/var/www/example:rw
-      - ~/go/pkg:/go/pkg
     depends_on:
       - redis
       - mongo
@@ -27,11 +26,14 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile-normal-consumer
+      args:
+        - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     init: true
     tty: true
+    environment:
+      - USE_CHINA_PROXY=${USE_CHINA_PROXY}
     volumes:
       - ./:/var/www/example:rw
-      - ~/go/pkg:/go/pkg
     depends_on:
       - redis
       - mongo
@@ -55,11 +57,13 @@ services:
       - "27017:27017"
     container_name: mongo-beanq
     restart: on-failure
-    command: [--auth]
+    command: [ --auth ]
     environment:
+      MONGO_DATA_DIR: /data/db
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
     volumes:
+      - mongo_data:/data/db:delegated
       - ./dbs/mongo/init.js:/docker-entrypoint-initdb.d/init.js:ro
     networks:
       - beanq
@@ -67,4 +71,5 @@ networks:
   beanq:
     name: beanq-network
 
-
+volumes:
+  mongo_data:    

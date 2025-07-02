@@ -11,7 +11,6 @@ import (
 const signkey = "!@$!@$werwWER"
 
 func TestMakeHsToken(t *testing.T) {
-
 	claim := Claim{
 		UserName:         "username",
 		RegisteredClaims: jwt.RegisteredClaims{},
@@ -21,7 +20,7 @@ func TestMakeHsToken(t *testing.T) {
 }
 
 func TestParseHsToken(t *testing.T) {
-	str := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJVc2VyTmFtZSI6InRyaWFsIiwiaXNzIjoiVHJpYWwgQ2hpbmEiLCJzdWIiOiJiZWFucSBtb25pdG9yIHVpIiwiZXhwIjoxNzA0NjkwMzcyfQ.dXX_TxFi-ASQWnHbXJrnc2ZteGHEzxWLffuSw6GRLgo "
+	str := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJVc2VyTmFtZSI6InVzZXJuYW1lIn0.LY3S1nfl0t5nk-yfChVEFtKtRw-oLUVpzrrsZU0reGY"
 	token, err := ParseHsToken(str, []byte(signkey))
 	if err != nil {
 		log.Fatalln(err)

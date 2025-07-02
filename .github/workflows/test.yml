@@ -1,0 +1,39 @@
+name: Test
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '**.json'
+      - 'Dockerfile'
+      - 'Makefile'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        go: [ '1.22.x']
+        os: [ ubuntu-latest ]
+
+    name: Run Build
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run tests inside the container
+        run: make test
+
+      - name: Stop and remove containers
+        run: make clean-test
