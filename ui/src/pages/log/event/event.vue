@@ -14,6 +14,7 @@
             <table class="table table-striped table-hover" style="table-layout: auto;">
               <thead>
                 <tr>
+                  <th scope="col" class="text-nowrap">#</th>
                   <th scope="col" class="text-nowrap">Message Id</th>
                   <th scope="col" class="text-nowrap">Channel</th>
                   <th scope="col" class="text-nowrap">Topic</th>
@@ -26,6 +27,7 @@
               </thead>
               <tbody>
                 <tr v-for="(item, key) in eventLogs" :key="key" style="height: 2rem;line-height:2rem">
+                  <td>{{item.auto_id}}</td>
                   <td class="">
                     <Copy :text="item.id" />
                   </td>
@@ -307,7 +309,15 @@ function initEventSource(){
     setTimeout(()=>{
       loading.value = false;
     },500);
-    data.eventLogs = body.data.data;
+    let ndata = body.data.data || [];
+    ndata = ndata.map((item,index)=>{
+      return {
+        ...item,
+        auto_id:(data.page-1) * data.pageSize + index + 1
+      }
+    })
+
+    data.eventLogs = ndata;
     data.page =  body.data.cursor;
     data.total = body.data.total;
   })
