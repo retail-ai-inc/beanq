@@ -16,6 +16,7 @@
           <table class="table table-striped table-hover">
             <thead>
             <tr>
+              <th scope="col">#</th>
               <th scope="col">Message Id</th>
               <th scope="col">Channel</th>
               <th scope="col">Topic</th>
@@ -28,6 +29,7 @@
             </thead>
             <tbody>
             <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
+              <td>{{item.auto_id}}</td>
               <th scope="row">
                 {{item.id}}
               </th>
@@ -119,7 +121,14 @@ async function sequenceLockLogs() {
     if(Object.keys(res).length > 0){
       logs.value.push(res);
     }
-
+    let ndata = res.data || [];
+    ndata = ndata.map((item,index)=>{
+      return {
+        ...item,
+        auto_id: (page.value - 1) * pageSize.value + index + 1
+      }
+    })
+    logs.value = ndata;
     setTimeout(()=>{
       loading.value = false;
     },800);

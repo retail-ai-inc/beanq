@@ -16,6 +16,7 @@
           <table class="table table-striped table-hover">
             <thead>
             <tr>
+              <th scope="col">#</th>
               <th scope="col">Message Id</th>
               <th scope="col">Channel</th>
               <th scope="col">Topic</th>
@@ -27,6 +28,9 @@
             </thead>
             <tbody>
             <tr v-for="(item, key) in logs" :key="key" style="height: 3rem;line-height:3rem">
+              <th scope="row">
+                {{item.auto_id}}
+              </th>
               <th scope="row">
                 <Copy :text="item.id" />
               </th>
@@ -120,8 +124,14 @@ async function dlqLogs() {
   try {
     let res = await dlqApi.List(page.value,pageSize.value,form.value.id,form.value.status,form.value.moodType,form.value.topicName);
     const{cursor:resCursor,data,total:resTotal} = res;
-
-    logs.value = data ?? [];
+    let ndata = data || [];
+    ndata = ndata.map((item,index)=>{
+      return {
+        ...item,
+        auto_id:(page.value -1 ) * pageSize.value + index + 1
+      }
+    })
+    logs.value = ndata ?? [];
     total.value = resTotal;
     page.value =  resCursor;
     cursor.value = resCursor;
