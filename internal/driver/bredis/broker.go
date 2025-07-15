@@ -285,10 +285,12 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		val["beginTime"] = now
 
 		var timeToRunLimit []time.Duration
-		if err := json.Unmarshal([]byte((val["timeToRunLimit"]).(string)), &timeToRunLimit); err != nil {
-			capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
-			return
+		if v, ok := val["timeToRunLimit"]; ok {
+			if err := json.Unmarshal([]byte(v.(string)), &timeToRunLimit); err != nil {
+				capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
+			}
 		}
+
 		timeToRunLimitLen := len(timeToRunLimit)
 
 		timeToRun := cast.ToDuration(val["timeToRun"])
