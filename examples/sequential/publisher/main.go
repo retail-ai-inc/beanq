@@ -23,7 +23,7 @@ var (
 
 func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
-		var envPath string = "./"
+		envPath := "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
 			envPath = filepath.Dir(file)
 		}
@@ -71,5 +71,5 @@ func main() {
 	}
 
 	wg.Wait()
-	fmt.Printf("after:%+v,sub:%+v \n", time.Now(), time.Now().Sub(now))
+	fmt.Printf("after:%+v,sub:%+v \n", time.Now(), time.Since(now))
 }

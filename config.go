@@ -174,21 +174,21 @@ func (t *BeanqConfig) init() {
 	if t.TimeToRun == 0 {
 		t.TimeToRun = boptions.DefaultOptions.TimeToRun
 	}
-	if t.History.Mongo.Collections == nil {
-		t.History.Mongo.Collections = map[string]string{
+	if t.Mongo.Collections == nil {
+		t.Mongo.Collections = map[string]string{
 			"event":    "event_logs",
 			"workflow": "workflow_logs",
 			"manager":  "managers",
 			"opt":      "opt_logs",
 		}
 	}
-	if t.History.Mongo.ConnectTimeOut == 0 {
-		t.History.Mongo.ConnectTimeOut = 10 * time.Second
+	if t.Mongo.ConnectTimeOut == 0 {
+		t.Mongo.ConnectTimeOut = 10 * time.Second
 	}
-	if t.History.Mongo.MaxConnectionPoolSize == 0 {
-		t.History.Mongo.MaxConnectionPoolSize = 200
+	if t.Mongo.MaxConnectionPoolSize == 0 {
+		t.Mongo.MaxConnectionPoolSize = 200
 	}
-	if t.History.Mongo.MaxConnectionLifeTime == 0 {
-		t.History.Mongo.MaxConnectionLifeTime = 600 * time.Second
+	if t.Mongo.MaxConnectionLifeTime == 0 {
+		t.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
 }

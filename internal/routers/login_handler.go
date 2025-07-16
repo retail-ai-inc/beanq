@@ -229,10 +229,8 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 	}
 
-	b := false
-	if data.ClientId != "" && data.ClientSecret != "" && data.CallBackUrl != "" && data.Scheme != "" {
-		b = true
-	}
+	b := data.ClientId != "" && data.ClientSecret != "" && data.CallBackUrl != "" && data.Scheme != ""
+
 	res.Data = b
 	_ = res.Json(w, http.StatusOK)
 }

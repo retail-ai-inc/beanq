@@ -87,10 +87,8 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	zcount := client.ZCount(ctx, totalkey, beforeStr, nowStr)
 	page := zcount / count
 
-	for {
-		if page < 0 {
-			break
-		}
+	for page >= 0 {
+
 		queues, err := client.ZRangeByScore(ctx, totalkey, beforeStr, nowStr, offset, count)
 		if err != nil {
 			logger.New().Error(err)

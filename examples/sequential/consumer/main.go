@@ -25,7 +25,8 @@ var (
 
 func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
-		var envPath string = "./"
+
+		envPath := "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
 			envPath = filepath.Dir(file)
 		}
@@ -47,24 +48,28 @@ func initCnf() *beanq.BeanqConfig {
 	return &bqConfig
 }
 
+//nolint:unused
 type seqCustomer struct {
 	metadata string
 }
 
+//nolint:unused
 func (t *seqCustomer) Handle(ctx context.Context, message *beanq.Message) error {
 	time.Sleep(time.Second * 4)
 	log.Printf("%s:%v\n", t.metadata, message)
 	return nil
 }
 
+//nolint:unused
 func (t *seqCustomer) Cancel(ctx context.Context, message *beanq.Message) error {
 	return nil
 }
 
+//nolint:unused
 func (t *seqCustomer) Error(ctx context.Context, err error) {
 }
 
-var SkipError = errors.New("SKIP ERROR")
+var ErrorSkip = errors.New("SKIP ERROR")
 
 func main() {
 	config := initCnf()
@@ -82,7 +87,7 @@ func main() {
 			if err == nil {
 				return true
 			}
-			if errors.Is(err, SkipError) {
+			if errors.Is(err, ErrorSkip) {
 				return true
 			}
 			return false
@@ -92,7 +97,7 @@ func main() {
 			if err == nil {
 				return true
 			}
-			if errors.Is(err, SkipError) {
+			if errors.Is(err, ErrorSkip) {
 				return true
 			}
 			return false
@@ -102,7 +107,7 @@ func main() {
 			} else if index%4 == 0 {
 				panic("rollback panic test")
 			} else if index%5 == 0 {
-				return fmt.Errorf("rollback error:%w", SkipError)
+				return fmt.Errorf("rollback error:%w", ErrorSkip)
 			}
 			log.Println(task.ID()+" rollback-1:", wf.Message().Id)
 			return nil
@@ -128,7 +133,7 @@ func main() {
 			if index%2 == 0 {
 				return fmt.Errorf("execute error: %s %d", wf.GetGid(), index)
 			} else if index%3 == 0 {
-				return fmt.Errorf("execute error:%w", SkipError)
+				return fmt.Errorf("execute error:%w", ErrorSkip)
 			} else if index%7 == 0 {
 				panic("execute panic test")
 			}
@@ -142,7 +147,6 @@ func main() {
 				return
 			}
 			log.Printf("%s rollback error: %v\n", taskID, berr)
-			return
 		}).Run()
 		if berr != nil {
 			return berr
