@@ -175,15 +175,39 @@ func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
 
-	// pod status
-	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
-	pods, err := t.client.ZRange(r.Context(), hostNameKey, 0, -1).Result()
-	if err != nil {
-		result.Code = berror.InternalServerErrorCode
-		result.Msg = err.Error()
-		_ = result.Json(w, http.StatusInternalServerError)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	flusher, ok := w.(http.Flusher)
+	defer flusher.Flush()
+	if !ok {
+		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	result.Data = pods
-	_ = result.Json(w, http.StatusOK)
+
+	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			// pod status
+			pods, err := t.client.ZRange(r.Context(), hostNameKey, 0, -1).Result()
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, "pods")
+				return
+			}
+			result.Data = pods
+			_ = result.EventMsg(w, "pods")
+			flusher.Flush()
+			ticker.Reset(10 * time.Second)
+		}
+	}
 }
