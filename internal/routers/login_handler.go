@@ -220,6 +220,7 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	var data capture.GoogleCredential
@@ -227,6 +228,7 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
 
 	b := data.ClientId != "" && data.ClientSecret != "" && data.CallBackUrl != "" && data.Scheme != ""
