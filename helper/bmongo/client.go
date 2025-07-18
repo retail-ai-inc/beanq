@@ -382,7 +382,7 @@ func (t *BMongo) DeleteUser(ctx context.Context, id string) (int64, error) {
 func (t *BMongo) CheckRole(ctx context.Context, userName string, roleId int) error {
 	// Validate userName as an email address
 	if !isValidEmail(userName) {
-		return errors.New("Invalid email address")
+		return errors.New("invalid email address")
 	}
 	var user User
 	if err := t.database.Collection(t.managerCollection).FindOne(ctx, bson.M{"account": userName, "active": 1}).Decode(&user); err != nil {
@@ -401,7 +401,7 @@ func (t *BMongo) CheckRole(ctx context.Context, userName string, roleId int) err
 			return nil
 		}
 	}
-	return errors.New("No Permission")
+	return errors.New("no permission")
 }
 
 func isValidEmail(email string) bool {

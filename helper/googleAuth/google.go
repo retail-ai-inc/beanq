@@ -30,7 +30,7 @@ type GoogleOauthConfig struct {
 
 func New(clientId, clientSecret, redirectUrl string) (*GoogleOauthConfig, error) {
 	if clientId == "" || clientSecret == "" || redirectUrl == "" {
-		return nil, fmt.Errorf("[google auth]error:%w", errors.New("Missing Parameter"))
+		return nil, fmt.Errorf("[google auth]error:%w", errors.New("missing parameter"))
 	}
 	return NewGoogleOauthConfig(clientId, clientSecret, redirectUrl), nil
 }

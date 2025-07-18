@@ -1,17 +1,26 @@
+version: 2
+
 linters:
+  default: standard
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
     - unused
-
+    - misspell
+    - gosec
+    - gocyclo
+    - prealloc
+  exclusions:
+    warn-unused: true
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go$
+        linters:
+          - unused
 run:
+  concurrency: 4
   timeout: 5m
-
-issues:
-  exclude-rules:
-    - path: _test\.go$
-      linters:
-        - unused

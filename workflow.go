@@ -359,10 +359,11 @@ func (w *Workflow) executor(branch *TransBranch, op string) (err error) {
 func (w *Workflow) ChangeStatus(ctx context.Context, status string, reason ...string) error {
 	updates := []string{"status", "update_time"}
 	now := time.Now()
-	if status == StatusSucceed {
+	switch status {
+	case StatusSucceed:
 		w.transaction.FinishTime = &now
 		updates = append(updates, "finish_time")
-	} else if status == StatusFailed {
+	case StatusFailed:
 		w.transaction.RollbackTime = &now
 		updates = append(updates, "rollback_time")
 	}

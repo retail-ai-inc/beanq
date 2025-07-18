@@ -78,6 +78,7 @@ type (
 	}
 )
 
+//nolint:gosec
 var DefaultBlockDuration BlockDuration = func() time.Duration {
 	return time.Duration(rand.Int63n(9)+1) * time.Second
 }
@@ -292,10 +293,12 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		val["beginTime"] = now
 
 		var timeToRunLimit []time.Duration
-		if err := json.Unmarshal([]byte((val["timeToRunLimit"]).(string)), &timeToRunLimit); err != nil {
-			capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
-			return
+		if v, ok := val["timeToRunLimit"]; ok {
+			if err := json.Unmarshal([]byte(v.(string)), &timeToRunLimit); err != nil {
+				capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
+			}
 		}
+
 		timeToRunLimitLen := len(timeToRunLimit)
 
 		timeToRun := cast.ToDuration(val["timeToRun"])
@@ -304,7 +307,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
 			defer func() {
 				if p := recover(); p != nil {
-					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
+					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s", p, debug.Stack())
 				}
 			}()
 			if timeToRunLimitLen > 0 {
@@ -323,7 +326,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 							}
 							if time.Since(now) >= limit[i] {
 								i++
-								capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v \n", copiedVal)
+								capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v", copiedVal)
 								capture.System.When(config).If(nil).Then(capErr)
 							}
 						}

@@ -20,6 +20,7 @@
                 <table class="table table-striped table-hover">
                   <thead>
                   <tr>
+                    <th scope="col">#</th>
                     <th scope="col">GId</th>
                     <th scope="col">Task Id</th>
                     <th scope="col">Channel</th>
@@ -35,6 +36,7 @@
                   </thead>
                   <tbody>
                   <tr v-for="(item, key) in workflowlogs" :key="key" style="height: 3rem;line-height:3rem">
+                    <td>{{item.auto_id}}</td>
                     <td><router-link to="" class="nav-link text-primary" style="display: contents">{{item.Gid}}</router-link></td>
                     <td>{{item.TaskId}}</td>
                     <td>{{item.Channel}}</td>
@@ -92,7 +94,17 @@ const getWorkFLowLogs=(async (pageV,pageSizeV,channelName,topicName,status)=>{
   loading.value = true;
   try {
     let res = await workflowApi.List(pageV,pageSizeV,channelName,topicName,status);
-    workflowlogs.value = res.data ?? [];
+
+    let ndata = res.data || [];
+
+    ndata = ndata.map((item,index)=>{
+      return {
+        ...item,
+        auto_id:(pageV -1 ) * pageSizeV + index + 1
+      }
+    })
+
+    workflowlogs.value = ndata;
     total.value = res.total;
     page.value =  res.cursor;
     cursor.value = res.cursor;

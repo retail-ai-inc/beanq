@@ -95,7 +95,7 @@ let [
     sse,
     resizeObserver,
     pods
-  ] = [ref({}),ref({}),ref(""),ref(null),null,ref({})];
+  ] = [ref({}),ref({}),ref(""),ref(null),null,ref([])];
 
 const date = ref([new Date(),new Date()]);
 
@@ -149,20 +149,38 @@ function sseConnect(){
     setTimeout(sseConnect,1500);
   }
 }
+let [ssePod] = [ref(null)];
+function getPods(){
 
-const getPods = async() => {
-  try {
-    let res = await dashboardApi.Pods();
-    let npods = res.map(item=>{
-      try {
+  if(ssePod.value){
+    ssePod.value.close();
+  }
+  ssePod.value = sseApi.Init(`dashboard/pods`);
+  ssePod.value.onopen = () => {
+    console.log("connect success")
+  }
+  ssePod.value.addEventListener("pods",function (res) {
+
+    const {code,msg,data} = JSON.parse(res.data);
+
+    if (code === "1004"){
+      loginModal.value.error(new Error(msg));
+      sse.value.close();
+      return;
+    }
+
+    pods.value = data.map(item=>{
+      try{
         return JSON.parse(item);
-      }catch (e) {
-        return null;
+      }catch (e){
+        return undefined
       }
-    });
-    pods.value = npods.filter(item=>item !== null);
-  }catch (e) {
-
+    }).filter(item=>(item !== undefined) && (item !== null) && (item !== "") && (Object.keys( item).length !== 0))
+  })
+  ssePod.value.onerror = (err)=>{
+    console.log(err)
+    ssePod.value.close();
+    setTimeout(ssePod,1500);
   }
 }
 
@@ -185,6 +203,9 @@ onUnmounted(()=>{
 
   if(sse.value){
     sse.value.close();
+  }
+  if(ssePod.value){
+    ssePod.value.close();
   }
   if(resizeObserver){
     resizeObserver.disconnect();

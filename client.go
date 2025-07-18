@@ -107,19 +107,19 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 		config.History.On = true
 	}
 	if *database != "" {
-		config.History.Mongo.Database = *database
+		config.Mongo.Database = *database
 	}
 	if *username != "" {
-		config.History.Mongo.UserName = *username
+		config.Mongo.UserName = *username
 	}
 	if *password != "" {
-		config.History.Mongo.Password = *password
+		config.Mongo.Password = *password
 	}
 	if *host != "" {
-		config.History.Mongo.Host = *host
+		config.Mongo.Host = *host
 	}
 	if *port != "" {
-		config.History.Mongo.Port = *port
+		config.Mongo.Port = *port
 	}
 
 	client := &Client{
@@ -419,7 +419,14 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		c.broker.config.Redis.Prefix, c.broker.config.UI)
 
 	log.Printf("server start on port %+v", httpport)
-	if err := http.ListenAndServe(httpport, mux); err != nil {
+	server := &http.Server{
+		Addr:         httpport,
+		Handler:      mux,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		capture.System.When(c.broker.captureConfig).Then(err)
 		log.Fatalln(err)
 	}

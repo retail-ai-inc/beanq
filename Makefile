@@ -123,16 +123,16 @@ clean:
 
 	@echo "done!"
 
-GOLANGCI_LINT_VERSION=v1.64.8
+GOLANGCI_LINT_VERSION=v2.2.1
 GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
 
-lint: ## run all the lint tools, install golangci-lint if not exist
+lint: ## run all the lint tools, install golangci-lint if not exist,will use .golangci.yml config
 	@if [ ! -x "$(GOLANGCI_LINT_TOOL)" ]; then \
 		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null; \
 	fi
 	@$(if $(wildcard $(GOLANGCI_LINT_TOOL)),echo "Running golangci-lint...";) \
-	$(GOLANGCI_LINT_TOOL)  run --fix -j 2 -v
+	$(GOLANGCI_LINT_TOOL)  run -v
 
 FIELDALIGNMENT_TOOL = $(GOPATH)/bin/fieldalignment
 

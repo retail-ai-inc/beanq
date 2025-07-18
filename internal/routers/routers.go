@@ -135,7 +135,7 @@ func NewRouters(
 
 	mux.HandleFunc("GET /dashboard/graphic", MigrateSSE(hdls.dashboard.Info, client, mgo, prefix, ui, "dashboard"))
 	mux.HandleFunc("GET /dashboard/total", MigrateMiddleWare(hdls.dashboard.Total, client, mgo, prefix, ui))
-	mux.HandleFunc("GET /dashboard/pods", MigrateMiddleWare(hdls.dashboard.Pods, client, mgo, prefix, ui))
+	mux.HandleFunc("GET /dashboard/pods", MigrateSSE(hdls.dashboard.Pods, client, mgo, prefix, ui, "pods"))
 	mux.HandleFunc("GET /nodes", MigrateMiddleWare(hdls.dashboard.Nodes, client, mgo, prefix, ui))
 
 	mux.HandleFunc("GET /event_log/list", MigrateSSE(hdls.eventLog.List, client, mgo, prefix, ui, "event_log"))

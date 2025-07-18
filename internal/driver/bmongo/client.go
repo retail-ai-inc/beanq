@@ -61,7 +61,7 @@ func (t *MongoLog) Migrate(ctx context.Context, data []map[string]any) error {
 	}
 
 	if _, err := t.database.Collection(t.collection).InsertMany(ctx, datas); err != nil {
-		return fmt.Errorf("Mongo Error:%w \n", err)
+		return fmt.Errorf("mongo error:%w", err)
 	}
 	return nil
 }

@@ -285,7 +285,9 @@ func GetBrokerDriver[T any]() T {
 
 // consumer...
 var (
+	//nolint:staticcheck
 	ErrNilHandle = errors.New("beanq:handle is nil")
+	//nolint:staticcheck
 	ErrNilCancel = errors.New("beanq:cancel is nil")
 )
 
