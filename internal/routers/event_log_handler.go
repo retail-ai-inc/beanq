@@ -35,6 +35,9 @@ func (t *EventLog) List(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		cancel()
 	}()
+
+	eventName := cast.ToString(r.Context().Value(EventName{}))
+
 	query := r.URL.Query()
 	page := cast.ToInt64(query.Get("page"))
 	pageSize := cast.ToInt64(query.Get("pageSize"))
@@ -102,7 +105,7 @@ func (t *EventLog) List(w http.ResponseWriter, r *http.Request) {
 				result.Data = datas
 			}
 
-			_ = result.EventMsg(w, "event_log")
+			_ = result.EventMsg(w, eventName)
 			flush.Flush()
 			ticker.Reset(5 * time.Second)
 		}

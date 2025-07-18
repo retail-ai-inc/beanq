@@ -101,6 +101,8 @@ func AuthSSE(next func(w http.ResponseWriter, r *http.Request), client redis.Uni
 			flusher.Flush()
 			return
 		}
+		r = r.WithContext(context.WithValue(r.Context(), EventName{}, name))
+
 		next(w, r)
 	}
 }
