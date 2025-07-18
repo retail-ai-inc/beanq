@@ -102,19 +102,19 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 		config.History.On = true
 	}
 	if *database != "" {
-		config.History.Mongo.Database = *database
+		config.Mongo.Database = *database
 	}
 	if *username != "" {
-		config.History.Mongo.UserName = *username
+		config.Mongo.UserName = *username
 	}
 	if *password != "" {
-		config.History.Mongo.Password = *password
+		config.Mongo.Password = *password
 	}
 	if *host != "" {
-		config.History.Mongo.Host = *host
+		config.Mongo.Host = *host
 	}
 	if *port != "" {
-		config.History.Mongo.Port = *port
+		config.Mongo.Port = *port
 	}
 
 	client := &Client{

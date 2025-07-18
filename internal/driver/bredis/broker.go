@@ -299,7 +299,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 		retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
 			defer func() {
 				if p := recover(); p != nil {
-					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s\n", p, debug.Stack())
+					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s", p, debug.Stack())
 				}
 			}()
 			if timeToRunLimitLen > 0 {
@@ -318,7 +318,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 							}
 							if time.Since(now) >= limit[i] {
 								i++
-								capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v \n", copiedVal)
+								capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v", copiedVal)
 								capture.System.When(config).If(nil).Then(capErr)
 							}
 						}

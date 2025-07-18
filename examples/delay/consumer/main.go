@@ -20,7 +20,7 @@ var (
 
 func initCnf() beanq.BeanqConfig {
 	configOnce.Do(func() {
-		var envPath string = "./"
+		envPath := "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
 			envPath = filepath.Dir(file)
 		}

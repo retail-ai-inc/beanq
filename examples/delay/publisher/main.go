@@ -22,7 +22,8 @@ var (
 
 func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
-		var envPath string = "./"
+
+		envPath := "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
 			envPath = filepath.Dir(file)
 		}
@@ -54,10 +55,10 @@ func pubDelayInfo() {
 	m := make(map[string]any)
 	ctx := context.Background()
 	now := time.Now()
-	delayT := now
+
 	for i := 0; i < 10; i++ {
 
-		delayT = now
+		delayT := now
 		y := 0
 		m["delayMsg"] = "new msg" + cast.ToString(i)
 

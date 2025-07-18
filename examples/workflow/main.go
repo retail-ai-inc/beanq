@@ -21,7 +21,7 @@ var (
 
 func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
-		var envPath string = "./"
+		envPath := "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
 			envPath = filepath.Dir(file)
 		}
@@ -96,7 +96,6 @@ func main() {
 				return
 			}
 			log.Printf("%s rollback error: %v\n", taskID, berr)
-			return
 		}).Run()
 		if berr != nil {
 			return berr
