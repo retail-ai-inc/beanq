@@ -5,47 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"path/filepath"
-	"runtime"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 
-	beanq "github.com/retail-ai-inc/beanq/v4"
-	"github.com/spf13/viper"
+	"github.com/retail-ai-inc/beanq/v4"
 )
-
-var (
-	configOnce sync.Once
-	bqConfig   beanq.BeanqConfig
-)
-
-func initCnf() *beanq.BeanqConfig {
-	configOnce.Do(func() {
-
-		envPath := "./"
-		if _, file, _, ok := runtime.Caller(0); ok {
-			envPath = filepath.Dir(file)
-		}
-
-		vp := viper.New()
-		vp.AddConfigPath(envPath)
-		vp.SetConfigType("json")
-		vp.SetConfigName("env")
-
-		if err := vp.ReadInConfig(); err != nil {
-			log.Fatalf("Unable to open beanq env.json file: %v", err)
-		}
-
-		// IMPORTANT: Unmarshal the env.json into global Config object.
-		if err := vp.Unmarshal(&bqConfig); err != nil {
-			log.Fatalf("Unable to unmarshal the beanq env.json file: %v", err)
-		}
-	})
-	return &bqConfig
-}
 
 //nolint:unused
 type seqCustomer struct {
@@ -71,7 +37,12 @@ func (t *seqCustomer) Error(ctx context.Context, err error) {
 var ErrorSkip = errors.New("SKIP ERROR")
 
 func main() {
-	config := initCnf()
+
+	config, err := beanq.NewConfig("./", "json", "env")
+	if err != nil {
+		logger.New().Error(err)
+		return
+	}
 	csm := beanq.New(config)
 	beanq.InitWorkflow(&config.Redis, &config.Workflow)
 

@@ -483,10 +483,12 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
-func (b *BQClient) SetTimeToRun(duration time.Duration, limit ...time.Duration) *BQClient {
+// SetTimeToRun
+// When the consumer execution time exceeds the limit, an alert will be sent
+func (b *BQClient) SetTimeToRun(duration time.Duration, limits ...time.Duration) *BQClient {
 	if duration > 0 {
 		b.client.TimeToRun = duration
-		b.client.TimeToRunLimit = limit
+		b.client.TimeToRunLimit = limits
 	}
 	return b
 }

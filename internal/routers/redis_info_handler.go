@@ -65,7 +65,13 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ticker.C:
 			d, err := client.Info(nctx)
-
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
+			}
 			memory, err = client.Memory(nctx)
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
