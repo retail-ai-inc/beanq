@@ -184,6 +184,7 @@ Publish delayed messages, taking execution time and priority as examples
 # Sequence Queue
 
 It is equivalent to the key of the event, which allows only one event to be consumed at the same time.
+
 	package main
 
 	import (
@@ -228,7 +229,6 @@ It is equivalent to the key of the event, which allows only one event to be cons
 		}
 
 	}
-
 
 # Work Flow
 

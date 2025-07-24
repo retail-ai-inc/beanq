@@ -23,6 +23,9 @@ func NewMongoLog(ctx context.Context,
 	maxConnectionPoolSize uint64,
 	database, collection, userName, password string,
 ) *MongoLog {
+
+	port = strings.TrimLeft(port, ":")
+	port = fmt.Sprintf(":%s", port)
 	uri := strings.Join([]string{"mongodb://", host, port}, "")
 
 	opts := options.Client().ApplyURI(uri).

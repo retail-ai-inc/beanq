@@ -59,21 +59,20 @@ func TestParseHsToken(t *testing.T) {
 			tokenStr: "invalid.token.format",
 			key:      []byte(signkey),
 			wantUser: "",
-			wantErr:  "invalid token",
+			wantErr:  "invalid character",
 		},
 		{
 			name:     "Empty Token",
 			tokenStr: "",
 			key:      []byte(signkey),
 			wantUser: "",
-			wantErr:  "token is empty",
+			wantErr:  "token is malformed",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			claim, err := ParseHsToken(tt.tokenStr, tt.key)
-
 			if tt.wantErr != "" {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)

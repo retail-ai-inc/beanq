@@ -203,6 +203,12 @@ const (
 	DefaultConfigType = "json"
 )
 
+var (
+	once    sync.Once
+	config  BeanqConfig
+	initErr error
+)
+
 // NewConfig initializes a BeanqConfig from a configuration file using viper.
 // It ensures thread-safe initialization and validates inputs.
 // Parameters:
@@ -222,12 +228,6 @@ func NewConfig(configPath string, configType string, configName string) (*BeanqC
 	if configName == "" {
 		configName = DefaultConfigName
 	}
-
-	var (
-		once    sync.Once
-		config  BeanqConfig
-		initErr error
-	)
 
 	once.Do(func() {
 		vp := viper.New()

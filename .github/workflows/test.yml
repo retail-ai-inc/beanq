@@ -32,6 +32,27 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
+      - name: Run tests
+        run: |
+          go test -race ./... -v > test-results.txt
+        continue-on-error: true
+
+      - name: Comment Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const testResults = fs.readFileSync('test-results.txt', 'utf8');
+            const commentBody = `### Go Test Results\n\`\`\`\n${testResults}\n\`\`\``;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+
       - name: Run tests inside the container
         run: make test
 

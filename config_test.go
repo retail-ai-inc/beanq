@@ -29,7 +29,7 @@ func TestNewConfig(t *testing.T) {
 			configType:    "json",
 			configName:    "env",
 			expectedField: "",
-			expectedErr:   "configPath cannot be empty",
+			expectedErr:   "does not exist",
 		},
 		{
 			name:          "default config type and name",

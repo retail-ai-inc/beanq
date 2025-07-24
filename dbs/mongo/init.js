@@ -1,17 +1,10 @@
-db = db.getSiblingDB('admin');
+db = db.getSiblingDB('beanq_logs');
 
-if(db.auth("root", "root")){
-    print("root pass")
-}else{
-    print("root verification failed")
-}
-
-ndb = db.getSiblingDB('lollipop_logs');
-
-ndb.createUser({
-    user: "lollipop_logs",
+db.createUser({
+    user: "beanq",
     pwd: "secret",
     roles: [
-        { role: "readWrite", db: "lollipop_logs" }
+        { role: "readWrite", db: "beanq_logs" },
+        { role: "dbAdmin", db: "beanq_logs"}
     ]
 });

@@ -190,6 +190,10 @@ func (c *Client) Wait(ctx context.Context) {
 	}
 
 	go func() {
+
+		if ctx.Err() != nil {
+			return
+		}
 		err := c.broker.Migrate(ctx, nil)
 		if err != nil {
 			panic(err)

@@ -1,42 +1,4 @@
 services:
-  ## UI service
-  example:
-    build:
-      context: ./
-      dockerfile: Dockerfile
-      args:
-        - USE_CHINA_PROXY=${USE_CHINA_PROXY}
-    init: true
-    tty: true
-    ports:
-      - "8080:9090"
-      - "8888:8888"
-    container_name: example
-    depends_on:
-      - redis
-      - mongo
-    networks:
-      - beanq
-  ## Consumer service,Multiple can be activated.
-  ## Example:
-  ## docker-compose up --build -d --scale example-normal-consumer=3
-  example-normal-consumer:
-    build:
-      context: ./
-      dockerfile: Dockerfile-normal-consumer
-      args:
-        - USE_CHINA_PROXY=${USE_CHINA_PROXY}
-    init: true
-    tty: true
-    environment:
-      - USE_CHINA_PROXY=${USE_CHINA_PROXY}
-    volumes:
-      - ./:/var/www/example:rw
-    depends_on:
-      - redis
-      - mongo
-    networks:
-      - beanq
   ## Redis service
   redis:
     image: redis:5.0.12
@@ -46,6 +8,11 @@ services:
     container_name: redis-beanq
     restart: always
     command: redis-server --requirepass secret
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      retries: 3
+      interval: 5s
+      timeout: 5s
     networks:
       - beanq
   ## Mongo service
@@ -60,6 +27,12 @@ services:
       MONGO_DATA_DIR: /data/db
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: root
+      MONGO_INITDB_DATABASE: beanq_logs
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.runCommand('ping')"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
     volumes:
       - mongo_data:/data/db:delegated
       - ./dbs/mongo/init.js:/docker-entrypoint-initdb.d/init.js:ro
