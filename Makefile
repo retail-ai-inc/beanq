@@ -4,9 +4,17 @@ SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
 .PHONY: test
 test:
 	@echo "start test"
-	@docker compose up -d --build
-	go test -v -race -cover -coverprofile=coverage.txt -covermode=atomic -coverpkg=./...
-	
+	@set -e;\
+	docker compose down -v || true
+	docker compose up -d --build
+	sleep 10
+	go test -v -race -cover -coverprofile=coverage.txt ./...
+
+.PHONY: clean-docker-compose
+clean-docker-compose:
+	@echo "clean docker compose"
+	@docker compose down -v || true
+
 .PHONY: clean-test
 clean-test:
 	@echo "clean test"

@@ -31,7 +31,6 @@ jobs:
           go-version: ${{ matrix.go }}
           cache: true
           cache-dependency-path: go.sum
-
       - name: Run tests
         run: |
           make test
@@ -60,3 +59,6 @@ jobs:
         with:
           name: coverage-report
           path: coverage.html
+
+      - name: Clean Docker Compose
+        run: make clean-docker-compose
