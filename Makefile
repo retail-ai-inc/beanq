@@ -5,7 +5,7 @@ SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
 test:
 	@echo "start test"
 	@docker compose up -d --build
-	go test -v -race -cover -coverprofile=coverage.out -coverpkg=./...
+	go test -v -race -cover -coverprofile=coverage.txt -covermode=atomic -coverpkg=./...
 	
 .PHONY: clean-test
 clean-test:

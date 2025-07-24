@@ -34,7 +34,7 @@ jobs:
 
       - name: Run tests
         run: |
-          go test -race ./... -v > test-results.txt
+          make test
         continue-on-error: true
 
       - name: Comment Test Results
@@ -44,7 +44,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const testResults = fs.readFileSync('test-results.txt', 'utf8');
+            const testResults = fs.readFileSync('coverage.txt', 'utf8');
             const commentBody = `### Go Test Results\n\`\`\`\n${testResults}\n\`\`\``;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -52,3 +52,11 @@ jobs:
               repo: context.repo.repo,
               body: commentBody
             });
+      - name: Generate HTML coverage report
+        run: go tool cover -html=coverage.txt -o coverage.html
+
+      - name: Archive coverage report
+        uses: actions/upload-artifact@v2
+        with:
+          name: coverage-report
+          path: coverage.html
