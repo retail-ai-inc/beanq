@@ -52,9 +52,3 @@ jobs:
               repo: context.repo.repo,
               body: commentBody
             });
-
-      - name: Run tests inside the container
-        run: make test
-
-      - name: Stop and remove containers
-        run: make clean-test
