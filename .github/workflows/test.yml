@@ -54,37 +54,71 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const testResults = fs.readFileSync('coverage_summary.txt', 'utf8');
-            
-            // Parse the coverage data
+
+            let testResults;
+            try {
+              testResults = fs.readFileSync('coverage_summary.txt', 'utf8');
+            } catch (error) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '❌ Unable to generate test coverage report: coverage_summary.txt file not found。'
+              });
+              process.exit(1);
+            }
+
             const lines = testResults.trim().split('\n');
             const tableRows = lines.map(line => {
-              const parts = line.split(/\s+/);
-              if (parts.length >= 3) {
-                const funcName = parts.slice(0, -2).join(' ');
-                const coverage = parts[parts.length - 2];
-                const hitRate = parts[parts.length - 1];
-                return `| \`${funcName}\` | ${coverage} | ${hitRate} |`;
+              const parts = line.trim().split(/\s+/);
+
+              if (parts.length >= 2) {
+                const coverage = parts[parts.length - 1];
+                const funcName = parts.slice(0, -1).join(' ');
+                return `| \`${funcName}\` | ${coverage} |`;
               }
               return null;
             }).filter(row => row !== null);
-            
-            // Create a markdown table
-            const tableHeader = '| Function | Coverage | Hit Rate |\n| --- | --- | --- |';
+
+            if (tableRows.length === 0) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '⚠️ No functions with more than 0.0% coverage can be reported。'
+              });
+              process.exit(0);
+            }
+
+            const tableHeader = '| Function | Coverage |\n| --- | --- |';
             const tableContent = tableRows.join('\n');
             const markdownTable = tableHeader + '\n' + tableContent;
-            
-            // Calculate total coverage
-            const totalLine = lines.find(line => line.includes('total:'));
-            const totalCoverage = totalLine ? totalLine.split(/\s+/).slice(-2).join(' ') : 'N/A';
-            
+
+            let totalCoverage = 'N/A';
+            try {
+              const totalLine = fs.readFileSync('total_coverage.txt', 'utf8').trim();
+              totalCoverage = totalLine ? totalLine.split(/\s+/).slice(-2).join(' ') : 'N/A';
+            } catch (error) {
+              console.log('Total coverage file not found, using N/A');
+            }
+
+            const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts`;
             const commentBody = `## 🧪 Test Coverage Report
-            \n### 📊 Overall Coverage: \`${totalCoverage}\`
-            \n<details>
+
+            ### 📊 Overall Coverage: \`${totalCoverage}\`
+
+            <details>
             <summary>📋 Detailed Coverage Report</summary>
-            \n${markdownTable}
-            \n</details>
-            \n> 📝 *This report shows code coverage for the changes in this pull request.*`;
+
+            ${markdownTable}
+
+            </details>
+
+            ### 📥 Download Reports
+            - [Coverage Summary (txt)](${artifactUrl})
+            - [Coverage HTML Report](${artifactUrl})
+
+            > 📝 *This report shows code coverage for the changes in this pull request.*`;
 
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -92,8 +126,5 @@ jobs:
               repo: context.repo.repo,
               body: commentBody
             });
-            #### Download Full Report
-            - [Coverage HTML Report](https://github.com/<owner>/<repo>/actions/runs/<run-id>/artifacts)
-
       - name: Clean Docker Compose
         run: make clean-docker-compose
