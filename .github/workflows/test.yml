@@ -35,7 +35,17 @@ jobs:
         run: |
           make test
           go tool cover -func=coverage.txt | grep -v "0.0%" > coverage_summary.txt
+          go tool cover -html=coverage.txt -o coverage.html
         continue-on-error: true
+
+      - name: Upload coverage report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.html
+          retention-days: 7
+
 
       - name: Comment Test Results
         if: github.event_name == 'pull_request'
@@ -82,12 +92,8 @@ jobs:
               repo: context.repo.repo,
               body: commentBody
             });
-
-      - name: Archive coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.html
+            #### Download Full Report
+            - [Coverage HTML Report](https://github.com/<owner>/<repo>/actions/runs/<run-id>/artifacts)
 
       - name: Clean Docker Compose
         run: make clean-docker-compose

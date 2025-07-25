@@ -4,10 +4,10 @@ SUITE_TEST_FILES := $(shell find . -type f -name "*_suite_test.go")
 .PHONY: test
 test:
 	@echo "start test"
-	@set -e;\
-	docker compose down -v || true
-	docker compose up -d --build
-	sleep 10
+	@set -e
+#	docker compose down -v || true
+#	docker compose up -d --build
+#	sleep 10
 	go test -race -coverprofile=coverage.txt ./...
 
 .PHONY: clean-docker-compose
