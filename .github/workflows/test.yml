@@ -35,6 +35,7 @@ jobs:
         run: |
           make test
           go tool cover -func=coverage.txt | grep -v "0.0%" > coverage_summary.txt
+          go tool cover -func=coverage.txt | grep "total:" > total_coverage.txt
           go tool cover -html=coverage.txt -o coverage.html
         continue-on-error: true
 
@@ -102,23 +103,21 @@ jobs:
               console.log('Total coverage file not found, using N/A');
             }
 
-            const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts`;
+            const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
             const commentBody = `## 🧪 Test Coverage Report
 
-            ### 📊 Overall Coverage: \`${totalCoverage}\`
+### 📊 Overall Coverage: \`${totalCoverage}\`
 
-            <details>
-            <summary>📋 Detailed Coverage Report</summary>
+<details>
+<summary>📋 Detailed Coverage Report</summary>
 
-            ${markdownTable}
+${markdownTable}
 
-            </details>
+</details>
 
-            ### 📥 Download Reports
-            - [Coverage Summary (txt)](${artifactUrl})
-            - [Coverage HTML Report](${artifactUrl})
-
-            > 📝 *This report shows code coverage for the changes in this pull request.*`;
+### 📥 Download Reports
+- [Coverage HTML Report](${artifactUrl})
+> 📝 *This report shows code coverage for the changes in this pull request.*`;
 
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
