@@ -34,9 +34,15 @@ jobs:
       - name: Run tests
         run: |
           make test
-          go tool cover -func=coverage.txt | grep -v "0.0%" > coverage_summary.txt
-          go tool cover -func=coverage.txt | grep "total:" > total_coverage.txt
+          if [ ! -s coverage.txt ]; then
+            echo "Coverage file is empty or not generated."
+            exit 1
+          fi
+          go tool cover -func=coverage.txt > full_coverage.txt
+          grep "total:" full_coverage.txt > total_coverage.txt || echo "total: N/A" > total_coverage.txt
+          grep -v "0.0%" full_coverage.txt > coverage_summary.txt
           go tool cover -html=coverage.txt -o coverage.html
+
         continue-on-error: true
 
       - name: Upload coverage report as artifact
@@ -106,24 +112,27 @@ jobs:
             const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
             const commentBody = `## 🧪 Test Coverage Report
 
-### 📊 Overall Coverage: \`${totalCoverage}\`
-
-<details>
-<summary>📋 Detailed Coverage Report</summary>
-
-${markdownTable}
-
-</details>
-
-### 📥 Download Reports
-- [Coverage HTML Report](${artifactUrl})
-> 📝 *This report shows code coverage for the changes in this pull request.*`;
-
+            ### 📊 Overall Coverage: \`${totalCoverage}\`
+            
+            <details>
+            <summary>📋 Detailed Coverage Report</summary>
+            
+            ${markdownTable}
+            
+            </details>
+            
+            ### 📥 Download Reports
+            - [Coverage HTML Report](${artifactUrl})
+            
+            > 📝 *This report shows code coverage for the changes in this pull request.*
+            
+            `;
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: commentBody
             });
+
       - name: Clean Docker Compose
         run: make clean-docker-compose
