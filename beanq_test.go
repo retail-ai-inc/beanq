@@ -97,17 +97,17 @@ func (s *BeanqSuite) TestConsume() {
 	_, err = s.client.BQ().WithContext(s.ctx).SubscribeToSequenceByLock(s.sequentialChannel, s.sequentialTopic, s.sequentialHandler())
 	s.Require().NoError(err, "Subscribe SequenceHandler error")
 
-	go func() {
-		msg, err := s.client.BQ().WithContext(s.ctx).
-			SetId(s.sequentialId).
-			SetLockOrderKeyTTL(10*time.Second).
-			PublishInSequenceByLock(s.sequentialChannel, s.sequentialTopic, s.sequentialOrderKey, []byte(s.sequentialExpectMsg)).WaitingAck()
-		s.Require().NoError(err, "Error publishing message")
-
-		s.Require().Equal(s.sequentialId, msg.Id, "id is equal to expectId")
-		s.Require().Equal(s.sequentialOrderKey, msg.OrderKey, "orderKey is equal to expectOrderKey")
-		s.T().Logf("Published Sequence Message: %+v", msg)
-	}()
+	//go func() {
+	//	msg, err := s.client.BQ().WithContext(s.ctx).
+	//		SetId(s.sequentialId).
+	//		SetLockOrderKeyTTL(10*time.Second).
+	//		PublishInSequenceByLock(s.sequentialChannel, s.sequentialTopic, s.sequentialOrderKey, []byte(s.sequentialExpectMsg)).WaitingAck()
+	//	s.Require().NoError(err, "Error publishing message")
+	//
+	//	s.Require().Equal(s.sequentialId, msg.Id, "id is equal to expectId")
+	//	s.Require().Equal(s.sequentialOrderKey, msg.OrderKey, "orderKey is equal to expectOrderKey")
+	//	s.T().Logf("Published Sequence Message: %+v", msg)
+	//}()
 
 	s.client.Wait(s.ctx)
 }

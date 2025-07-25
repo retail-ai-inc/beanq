@@ -8,7 +8,7 @@ test:
 	docker compose down -v || true
 	docker compose up -d --build
 	sleep 10
-	go test -v -race -cover -coverprofile=coverage.txt ./...
+	go test -race -coverprofile=coverage.txt ./...
 
 .PHONY: clean-docker-compose
 clean-docker-compose:

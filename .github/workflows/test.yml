@@ -34,6 +34,7 @@ jobs:
       - name: Run tests
         run: |
           make test
+          go tool cover -func=coverage.txt | grep -v "0.0%" > coverage_summary.txt
         continue-on-error: true
 
       - name: Comment Test Results
@@ -43,16 +44,44 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const testResults = fs.readFileSync('coverage.txt', 'utf8');
-            const commentBody = `### Go Test Results\n\`\`\`\n${testResults}\n\`\`\``;
-            github.rest.issues.createComment({
+            const testResults = fs.readFileSync('coverage_summary.txt', 'utf8');
+            
+            // Parse the coverage data
+            const lines = testResults.trim().split('\n');
+            const tableRows = lines.map(line => {
+              const parts = line.split(/\s+/);
+              if (parts.length >= 3) {
+                const funcName = parts.slice(0, -2).join(' ');
+                const coverage = parts[parts.length - 2];
+                const hitRate = parts[parts.length - 1];
+                return `| \`${funcName}\` | ${coverage} | ${hitRate} |`;
+              }
+              return null;
+            }).filter(row => row !== null);
+            
+            // Create a markdown table
+            const tableHeader = '| Function | Coverage | Hit Rate |\n| --- | --- | --- |';
+            const tableContent = tableRows.join('\n');
+            const markdownTable = tableHeader + '\n' + tableContent;
+            
+            // Calculate total coverage
+            const totalLine = lines.find(line => line.includes('total:'));
+            const totalCoverage = totalLine ? totalLine.split(/\s+/).slice(-2).join(' ') : 'N/A';
+            
+            const commentBody = `## 🧪 Test Coverage Report
+            \n### 📊 Overall Coverage: \`${totalCoverage}\`
+            \n<details>
+            <summary>📋 Detailed Coverage Report</summary>
+            \n${markdownTable}
+            \n</details>
+            \n> 📝 *This report shows code coverage for the changes in this pull request.*`;
+
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: commentBody
             });
-      - name: Generate HTML coverage report
-        run: go tool cover -html=coverage.txt -o coverage.html
 
       - name: Archive coverage report
         uses: actions/upload-artifact@v4
