@@ -102,7 +102,7 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 		default:
 		}
 
-		if v := AddLogicLockScript.Run(ctx, t.client, []string{deadLetterKey}).Val(); v.(int64) == 1 {
+		if v := AddLogicLockScript.Run(ctx, t.client, []string{deadLetterKey}).Val(); cast.ToInt64(v) == 1 {
 			continue
 		}
 
