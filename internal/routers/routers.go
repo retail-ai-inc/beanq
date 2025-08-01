@@ -14,6 +14,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+type EventName struct {
+}
 type Handles struct {
 	schedule     *Schedule
 	queue        *Queue

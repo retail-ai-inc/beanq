@@ -23,10 +23,14 @@
 package beanq
 
 import (
+	"fmt"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
+	"github.com/spf13/viper"
 )
 
 type (
@@ -191,4 +195,55 @@ func (t *BeanqConfig) init() {
 	if t.Mongo.MaxConnectionLifeTime == 0 {
 		t.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
+}
+
+// Default configuration values
+const (
+	DefaultConfigName = "env"
+	DefaultConfigType = "json"
+)
+
+var (
+	once    sync.Once
+	config  BeanqConfig
+	initErr error
+)
+
+// NewConfig initializes a BeanqConfig from a configuration file using viper.
+// It ensures thread-safe initialization and validates inputs.
+// Parameters:
+//   - configType: Type of configuration file (e.g., "json", "yaml"). Defaults to "json".
+//   - configName: Name of the configuration file without extension (e.g., "env"). Defaults to "env".
+//   - vp: Optional viper instance for dependency injection (e.g., for testing). If nil, a new instance is created.
+//
+// Returns a pointer to BeanqConfig and an error if initialization fails.
+func NewConfig(configPath string, configType string, configName string) (*BeanqConfig, error) {
+
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("config path %s does not exist", configPath)
+	}
+	if configType == "" {
+		configType = DefaultConfigType
+	}
+	if configName == "" {
+		configName = DefaultConfigName
+	}
+
+	once.Do(func() {
+		vp := viper.New()
+		vp.AddConfigPath(configPath)
+		vp.SetConfigType(configType)
+		vp.SetConfigName(configName)
+
+		if err := vp.ReadInConfig(); err != nil {
+			initErr = fmt.Errorf("failed to read config file: %w", err)
+			return
+		}
+
+		if err := vp.Unmarshal(&config); err != nil {
+			initErr = fmt.Errorf("failed to unmarshal config: %w", err)
+			return
+		}
+	})
+	return &config, initErr
 }

@@ -1,4 +1,5 @@
 version: 2
+
 linters:
   default: standard
   enable:
@@ -7,6 +8,10 @@ linters:
     - ineffassign
     - staticcheck
     - unused
+    - misspell
+    - gosec
+    - gocyclo
+    - prealloc
   exclusions:
     warn-unused: true
     presets:

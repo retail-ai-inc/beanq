@@ -2,7 +2,6 @@ package routers
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
+	"github.com/spf13/cast"
 )
 
 type RedisInfo struct {
@@ -51,11 +51,12 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 
 	var (
 		//redis info
-		memory   map[string]any
-		command  []map[string]any
-		clients  map[string]any
-		stats    map[string]any
-		keyspace []map[string]any
+		memory    map[string]any
+		command   []map[string]any
+		clients   map[string]any
+		stats     map[string]any
+		keyspace  []map[string]any
+		eventName = cast.ToString(r.Context().Value(EventName{}))
 	)
 
 	for {
@@ -64,67 +65,56 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ticker.C:
 			d, err := client.Info(nctx)
-
-			func() {
-				ctx3, cancel3 := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel3()
-				memory, err = client.Memory(ctx3)
-				if err != nil {
-					result.Code = berror.InternalServerErrorCode
-					result.Msg = err.Error()
-					_ = result.EventMsg(w, "dashboard")
-					flusher.Flush()
-				}
-			}()
-			func() {
-				ctx4, cancel4 := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel4()
-				command, err = client.CommandStats(ctx4)
-				if err != nil {
-					result.Code = berror.InternalServerErrorCode
-					result.Msg = err.Error()
-					_ = result.EventMsg(w, "dashboard")
-					flusher.Flush()
-				}
-			}()
-
-			func() {
-				ctx5, cancel5 := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel5()
-				clients, err = client.Clients(ctx5)
-				if err != nil {
-					result.Code = berror.InternalServerErrorCode
-					result.Msg = err.Error()
-					_ = result.EventMsg(w, "dashboard")
-					flusher.Flush()
-				}
-			}()
-			func() {
-				ctx6, cancel6 := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel6()
-				stats, err = client.Stats(ctx6)
-				if err != nil {
-					result.Code = berror.InternalServerErrorCode
-					result.Msg = err.Error()
-					_ = result.EventMsg(w, "dashboard")
-					flusher.Flush()
-				}
-			}()
-			func() {
-				ctx7, cancel7 := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel7()
-				keyspace, err = client.KeySpace(ctx7)
-				if err != nil {
-					result.Code = berror.InternalServerErrorCode
-					result.Msg = err.Error()
-					_ = result.EventMsg(w, "dashboard")
-					flusher.Flush()
-				}
-			}()
-
 			if err != nil {
-				result.Code = "1001"
+				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
+			}
+			memory, err = client.Memory(nctx)
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
+			}
+
+			command, err = client.CommandStats(nctx)
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
+			}
+
+			clients, err = client.Clients(nctx)
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
+			}
+
+			stats, err = client.Stats(nctx)
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
+			}
+
+			keyspace, err = client.KeySpace(nctx)
+			if err != nil {
+				result.Code = berror.InternalServerErrorCode
+				result.Msg = err.Error()
+				_ = result.EventMsg(w, eventName)
+				flusher.Flush()
+				return
 			}
 
 			result.Data = map[string]any{
@@ -136,7 +126,7 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 				"memory":   memory,
 			}
 
-			_ = result.EventMsg(w, "redis_info")
+			_ = result.EventMsg(w, eventName)
 			flusher.Flush()
 			ticker.Reset(10 * time.Second)
 
@@ -148,6 +138,8 @@ func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
+
+	eventName := cast.ToString(r.Context().Value(EventName{}))
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -175,7 +167,7 @@ func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				res.Code = response.InternalServerErrorCode
 				res.Msg = err.Error()
-				_ = res.EventMsg(w, "redis_monitor")
+				_ = res.EventMsg(w, eventName)
 				return
 			}
 			str = strings.ReplaceAll(str, "MONITOR:", "")
@@ -183,7 +175,7 @@ func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			res.Data = fmt.Sprintf("Time:%s,Command:%s", time.Now(), str)
-			_ = res.EventMsg(w, "redis_monitor")
+			_ = res.EventMsg(w, eventName)
 			flusher.Flush()
 			ticker.Reset(time.Second)
 		}

@@ -41,6 +41,7 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 
 	result, cancel := response.Get()
 	defer cancel()
+	eventName := cast.ToString(r.Context().Value(EventName{}))
 
 	tm := 5 * time.Second
 	tim := r.URL.Query().Get("time")
@@ -106,13 +107,13 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		offset += count
 		page--
 		result.Data = newQueue
-		_ = result.EventMsg(w, "dashboard")
+		_ = result.EventMsg(w, eventName)
 		flusher.Flush()
 	}
 	result.Code = "1111"
 	result.Msg = "DONE"
 	result.Data = zcount
-	_ = result.EventMsg(w, "dashboard")
+	_ = result.EventMsg(w, eventName)
 	flusher.Flush()
 }
 
@@ -175,6 +176,8 @@ func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
 
+	eventName := cast.ToString(r.Context().Value(EventName{}))
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -201,11 +204,11 @@ func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
-				_ = result.EventMsg(w, "pods")
+				_ = result.EventMsg(w, eventName)
 				return
 			}
 			result.Data = pods
-			_ = result.EventMsg(w, "pods")
+			_ = result.EventMsg(w, eventName)
 			flusher.Flush()
 			ticker.Reset(10 * time.Second)
 		}

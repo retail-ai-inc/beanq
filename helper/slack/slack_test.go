@@ -11,8 +11,11 @@ import (
 )
 
 func TestWebHook(t *testing.T) {
-	
+
 	hookUrl := ""
+	if hookUrl == "" {
+		t.Skip("Suitable for local testing")
+	}
 	tm := cast.ToString(time.Now().Unix())
 	attachment := slack.Attachment{
 		Color:     Danger,
@@ -53,6 +56,9 @@ func TestSlack(t *testing.T) {
 
 	channelId := ""
 	token := "" // bot token
+	if channelId == "" || token == "" {
+		t.Skip("Suitable for local testing")
+	}
 	client := NewClient(token)
 
 	client.Channel(channelId)

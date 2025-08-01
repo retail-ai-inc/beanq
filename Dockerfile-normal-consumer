@@ -1,8 +1,17 @@
-FROM golang:1.20-alpine
+FROM golang:1.23-alpine
 
-# This is necessary for China devps
-#RUN go env -w GOPROXY=https://goproxy.cn,direct
-#RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
+ARG USE_CHINA_PROXY
+ENV USE_CHINA_PROXY=${USE_CHINA_PROXY}
+
+RUN set -eux; \
+  if [ "${USE_CHINA_PROXY}" = "true" ]; then \
+  echo "Using China Proxy"; \
+  go env -w GOPROXY=https://goproxy.cn,direct; \
+  sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories; \
+  else \
+  echo "Using default Golang Proxy"; \
+  go env -w GOPROXY=https://proxy.golang.org,direct; \
+  fi
 
 # The latest alpine images don't have some tools like (`git` and `bash`).
 # Adding git, bash and openssh to the image
@@ -25,5 +34,9 @@ RUN mkdir -p /var/www/example
 
 # Set the Current Working Directory inside the container
 WORKDIR /var/www/example
+
+COPY . .
+
+RUN go mod tidy
 
 ENTRYPOINT ["make","normal-consumer"]

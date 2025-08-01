@@ -10,7 +10,7 @@ require (
 	github.com/labstack/gommon v0.4.2
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/pkg/errors v0.9.1
-	github.com/rs/xid v1.5.0
+	github.com/rs/xid v1.6.0
 	github.com/sendgrid/sendgrid-go v3.16.0+incompatible
 	github.com/shirou/gopsutil/v4 v4.25.1
 	github.com/slack-go/slack v0.16.0
@@ -46,6 +46,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe // indirect
+	github.com/onsi/gomega v1.36.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect

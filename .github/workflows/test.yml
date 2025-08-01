@@ -1,0 +1,138 @@
+name: Test
+
+on:
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - '**.json'
+      - 'Dockerfile'
+      - 'Makefile'
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        go: [ '1.23.x']
+        os: [ ubuntu-latest ]
+
+    name: Run Build
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Run tests
+        run: |
+          make test
+          if [ ! -s coverage.txt ]; then
+            echo "Coverage file is empty or not generated."
+            exit 1
+          fi
+          go tool cover -func=coverage.txt > full_coverage.txt
+          grep "total:" full_coverage.txt > total_coverage.txt || echo "total: N/A" > total_coverage.txt
+          grep -v "0.0%" full_coverage.txt > coverage_summary.txt
+          go tool cover -html=coverage.txt -o coverage.html
+
+        continue-on-error: true
+
+      - name: Upload coverage report as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.html
+          retention-days: 7
+
+
+      - name: Comment Test Results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+
+            let testResults;
+            try {
+              testResults = fs.readFileSync('coverage_summary.txt', 'utf8');
+            } catch (error) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '❌ Unable to generate test coverage report: coverage_summary.txt file not found。'
+              });
+              process.exit(1);
+            }
+
+            const lines = testResults.trim().split('\n');
+            const tableRows = lines.map(line => {
+              const parts = line.trim().split(/\s+/);
+
+              if (parts.length >= 2) {
+                const coverage = parts[parts.length - 1];
+                const funcName = parts.slice(0, -1).join(' ');
+                return `| \`${funcName}\` | ${coverage} |`;
+              }
+              return null;
+            }).filter(row => row !== null);
+
+            if (tableRows.length === 0) {
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: '⚠️ No functions with more than 0.0% coverage can be reported。'
+              });
+              process.exit(0);
+            }
+
+            const tableHeader = '| Function | Coverage |\n| --- | --- |';
+            const tableContent = tableRows.join('\n');
+            const markdownTable = tableHeader + '\n' + tableContent;
+
+            let totalCoverage = 'N/A';
+            try {
+              const totalLine = fs.readFileSync('total_coverage.txt', 'utf8').trim();
+              totalCoverage = totalLine ? totalLine.split(/\s+/).slice(-2).join(' ') : 'N/A';
+            } catch (error) {
+              console.log('Total coverage file not found, using N/A');
+            }
+
+            const artifactUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const commentBody = `## 🧪 Test Coverage Report
+
+            ### 📊 Overall Coverage: \`${totalCoverage}\`
+            
+            <details>
+            <summary>📋 Detailed Coverage Report</summary>
+            
+            ${markdownTable}
+            
+            </details>
+            
+            ### 📥 Download Reports
+            - [Coverage HTML Report](${artifactUrl})
+            
+            > 📝 *This report shows code coverage for the changes in this pull request.*
+            
+            `;
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: commentBody
+            });
+
+      - name: Clean Docker Compose
+        run: make clean-docker-compose

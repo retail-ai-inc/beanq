@@ -419,6 +419,7 @@ func jitterBackoff(attempt time.Duration) time.Duration {
 	return result
 }
 
+//nolint:gosec
 func randDuration(center time.Duration) time.Duration {
 	ri := int64(center)
 	jitter := rand.Int63n(ri)

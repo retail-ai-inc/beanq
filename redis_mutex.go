@@ -9,12 +9,12 @@ package beanq
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
-	mRand "math/rand"
+	mRand "math/rand" //nolint:gosec
 	"strings"
 	"time"
 
@@ -60,6 +60,7 @@ func (p *MuxClient) SetExpireTime(expireTime time.Duration) *MuxClient {
 	return p
 }
 
+//nolint:gosec
 func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
 	pools := []redis.UniversalClient{
 		p.client,
@@ -379,6 +380,8 @@ type Script struct {
 // argument list. If keyCount is less than zero, then the application supplies
 // the count as the first value in the keysAndArgs argument to the Do, Send and
 // SendHash methods.
+//
+//nolint:gosec
 func NewScript(keyCount int, src string) *Script {
 	h := sha1.New()
 	_, _ = io.WriteString(h, src)

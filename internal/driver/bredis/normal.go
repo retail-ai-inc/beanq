@@ -42,7 +42,6 @@ func (t *Normal) ForceUnlock(_ context.Context, channel, topic, orderKey string)
 
 }
 func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
-
 	channel := ""
 	topic := ""
 
@@ -57,7 +56,6 @@ func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 	args := NewZAddArgs(stream, "", "*", t.maxLen, 0, data)
 
 	err := t.base.client.XAdd(ctx, args).Err()
-
 	if err != nil {
 		return fmt.Errorf("[RedisBroker.enqueue] normal xadd error:%w", err)
 	}
@@ -65,11 +63,9 @@ func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 	return nil
 }
 
-func (t *Normal) Dequeue(ctx context.Context, channel, topic string, do public.CallBack) {
-
+func (t *Normal) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	go func() {
 		t.base.DeadLetter(ctx, channel, topic)
 	}()
 	t.base.Dequeue(ctx, channel, topic, do)
-
 }
