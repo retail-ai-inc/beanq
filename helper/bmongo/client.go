@@ -691,3 +691,47 @@ func (t *BMongo) ConfigInfo(ctx context.Context) (*capture.Config, error) {
 	}
 	return &data.Config, nil
 }
+
+type Tenants struct {
+	CreateAt time.Time `bson:"createAt" json:"createAt"`
+	Name     string    `bson:"name" json:"name"`
+	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
+	Mongo    Mongo     `bson:"mongo" json:"mongo"`
+	Redis    Redis     `bson:"redis" json:"redis"`
+}
+type Mongo struct {
+	Host       string `bson:"host" json:"host"`
+	GCPHost    string `bson:"gcpHost" json:"gcpHost"`
+	Port       string `bson:"port" json:"port"`
+	DbName     string `bson:"dbName" json:"dbName"`
+	DbUsername string `bson:"dbUsername" json:"dbUsername"`
+	DbPassword string `bson:"dbPassword" json:"dbPassword"`
+}
+type Redis struct {
+	Host     string `bson:"host" json:"host"`
+	GCPHost  string `bson:"gcpHost" json:"gcpHost"`
+	Port     string `bson:"port" json:"port"`
+	Password string `bson:"password" json:"password"`
+}
+
+func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) error {
+
+	_, err := t.database.Collection("tenants").InsertOne(ctx, tenant)
+	return err
+}
+
+func (t *BMongo) TenantsDelete(ctx context.Context) {
+
+}
+
+func (t *BMongo) TenantsEdit(ctx context.Context) {
+
+}
+
+func (t *BMongo) TenantsList(ctx context.Context) {
+
+}
+
+func (t *BMongo) TenantsInfo(ctx context.Context) {
+
+}
