@@ -13,7 +13,7 @@ jobs:
   build:
     strategy:
       matrix:
-        go: [ '1.23.x']
+        go: [ '1.24.x']
         os: [ ubuntu-latest ]
 
     name: Run Build

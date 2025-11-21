@@ -1,6 +1,7 @@
 package bredis
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -10,7 +11,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/spf13/cast"
-	"golang.org/x/net/context"
 )
 
 type SequenceByLock struct {

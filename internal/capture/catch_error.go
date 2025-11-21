@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"context"
 	"slices"
 	"time"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	xslack "github.com/retail-ai-inc/beanq/v4/helper/slack"
 	"github.com/spf13/cast"
-	"golang.org/x/net/context"
 )
 
 type (
@@ -127,6 +127,9 @@ func (t *Catch) Then(err error) {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	
 	for _, then := range t.rule.Then {
 		if then.Key == "email" {
 			host := t.config.SMTP.Host
@@ -172,7 +175,7 @@ func (t *Catch) Then(err error) {
 			xclient := xslack.NewClient(t.config.Slack.BotAuthToken)
 			xclient.Channel(then.Parameters.Channel)
 			xclient.Color(xslack.Danger)
-			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+
 			if err := xclient.Send(ctx, xslack.Field{Title: "Beanq Error", Value: err.Error(), Short: true}); err != nil {
 				logger.New().Error(err)
 			}
