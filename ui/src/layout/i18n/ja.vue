@@ -35,7 +35,9 @@
     "config":"Config",
     "retryWarningHtml": "警告：プロジェクト再試行を元に戻すことはできません慎重に操作してください！",
     "retryInfoHtml": "この操作によりログデータが永久に再試行されます。予期しない操作を防ぐために、次のように入力して確認してください。",
-    "unlockInfoHtml": "この操作によりデータが完全に削除されます。誤操作を防ぐため、管理者パスワードを入力してください。"
+    "unlockInfoHtml": "この操作によりデータが完全に削除されます。誤操作を防ぐため、管理者パスワードを入力してください。",
+    "deleteRoleWarningHtml": "",
+    "deleteRoleInfoHtml": ""
   }
 }
 </i18n>

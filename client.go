@@ -298,28 +298,21 @@ func getRootPath() (string, error) {
 	return dir, nil
 }
 
-func StaticFileInfo() (map[string]time.Time, error) {
+func StaticFileInfo(fs2 fs.FS) (map[string]time.Time, error) {
 
 	files := make(map[string]time.Time, 0)
 
-	dir, err := getRootPath()
-	if err != nil {
-		return nil, err
-	}
-	dir = filepath.Join(dir, "./ui")
-	err = filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
-
+	err := fs.WalkDir(fs2, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		if !info.IsDir() {
+		if !d.IsDir() {
 			arr := strings.SplitAfter(path, "ui")
 			if len(arr) == 2 {
+				info, _ := d.Info()
 				files[arr[1]] = info.ModTime()
 			}
 		}
-
 		return nil
 	})
 
@@ -334,7 +327,7 @@ var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
 
-	files, err := StaticFileInfo()
+	files, err := StaticFileInfo(views)
 	if err != nil {
 		logger.New().Error(err)
 		capture.System.When(c.broker.captureConfig).Then(err)
