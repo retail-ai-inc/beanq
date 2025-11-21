@@ -33,8 +33,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -275,51 +273,21 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string, 
 	return MessageS(m).ToMessage(), nil
 }
 
-func getRootPath() (string, error) {
-
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("unable to get caller information")
-	}
-
-	dir := filepath.Dir(filename)
-	for {
-
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			break
-		}
-
-		nextDir := filepath.Dir(dir)
-		if nextDir == dir {
-			break
-		}
-		dir = nextDir
-	}
-	return dir, nil
-}
-
-func StaticFileInfo() (map[string]time.Time, error) {
+func StaticFileInfo(fs2 fs.FS) (map[string]time.Time, error) {
 
 	files := make(map[string]time.Time, 0)
 
-	dir, err := getRootPath()
-	if err != nil {
-		return nil, err
-	}
-	dir = filepath.Join(dir, "./ui")
-	err = filepath.Walk(dir, func(path string, info fs.FileInfo, err error) error {
-
+	err := fs.WalkDir(fs2, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-
-		if !info.IsDir() {
+		if !d.IsDir() {
 			arr := strings.SplitAfter(path, "ui")
 			if len(arr) == 2 {
+				info, _ := d.Info()
 				files[arr[1]] = info.ModTime()
 			}
 		}
-
 		return nil
 	})
 
@@ -334,7 +302,7 @@ var views embed.FS
 
 func (c *Client) ServeHttp(ctx context.Context) {
 
-	files, err := StaticFileInfo()
+	files, err := StaticFileInfo(views)
 	if err != nil {
 		logger.New().Error(err)
 		capture.System.When(c.broker.captureConfig).Then(err)

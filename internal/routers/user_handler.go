@@ -1,18 +1,14 @@
 package routers
 
 import (
-	"context"
-	"log"
 	"net/http"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v4/helper/email"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/spf13/cast"
-	"github.com/spf13/viper"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -89,19 +85,9 @@ func (t *User) Add(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
+	//todo send email will use another way
+	//
 
-	go func(ctx2 context.Context) {
-
-		client := email.NewSendGrid(viper.GetString("ui.sendGrid.key"))
-		client.From("BeanqUI Manager")
-		client.To(account)
-		client.Subject("BeanqUI Manager")
-		_ = client.InviteHtmlBody("Active Email", account, "")
-		if err := client.Send(); err != nil {
-			log.Printf("Send Email Error:%+v \n", err)
-		}
-
-	}(r.Context())
 	_ = res.Json(w, http.StatusOK)
 }
 
