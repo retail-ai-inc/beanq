@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"strconv"

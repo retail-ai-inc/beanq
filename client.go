@@ -33,8 +33,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -273,29 +271,6 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string, 
 	}
 
 	return MessageS(m).ToMessage(), nil
-}
-
-func getRootPath() (string, error) {
-
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("unable to get caller information")
-	}
-
-	dir := filepath.Dir(filename)
-	for {
-
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			break
-		}
-
-		nextDir := filepath.Dir(dir)
-		if nextDir == dir {
-			break
-		}
-		dir = nextDir
-	}
-	return dir, nil
 }
 
 func StaticFileInfo(fs2 fs.FS) (map[string]time.Time, error) {
