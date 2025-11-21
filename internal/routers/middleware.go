@@ -107,6 +107,11 @@ func AuthSSE(next func(w http.ResponseWriter, r *http.Request), client redis.Uni
 	}
 }
 
+type contextKey struct {
+}
+
+var UserName = &contextKey{}
+
 func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.UniversalClient, x *bmongo.BMongo, prefix string, ui ui.Ui) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 
@@ -167,7 +172,7 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "username", token.UserName)
+		ctx := context.WithValue(r.Context(), UserName, token.UserName)
 		r = r.WithContext(ctx)
 		next(w, r)
 	}

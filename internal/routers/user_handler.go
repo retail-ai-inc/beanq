@@ -151,7 +151,7 @@ func (t *User) Check(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	username := r.Context().Value("username")
+	username := r.Context().Value(UserName)
 	pwd := r.FormValue("password")
 
 	if username == t.ui.Root.UserName && pwd == t.ui.Root.Password {
