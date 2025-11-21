@@ -1,6 +1,7 @@
 package routers
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -14,7 +15,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 	"github.com/spf13/cast"
-	"golang.org/x/net/context"
 )
 
 func Recover() {
@@ -166,7 +166,9 @@ func Auth(next func(w http.ResponseWriter, r *http.Request), client redis.Univer
 			_ = result.Json(w, http.StatusInternalServerError)
 			return
 		}
-		r = r.WithContext(context.WithValue(r.Context(), "username", token.UserName))
+
+		ctx := context.WithValue(r.Context(), "username", token.UserName)
+		r = r.WithContext(ctx)
 		next(w, r)
 	}
 }
