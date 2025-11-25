@@ -20,7 +20,9 @@
     <Spinner v-if="loading"/>
     <div v-else>
       <NoMessage v-if="roles.length <= 0">
-        create some admin ,please click the <button type="button" class="btn btn-primary" @click="addRoleModal">{{$t('add')}}</button>
+        <template #content="{content}">
+        There is no role, please create one.
+        </template>
       </NoMessage>
       <div v-else>
         <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
@@ -28,23 +30,23 @@
           <thead>
           <tr>
             <th scope="col" class="w-table-number">#</th>
-            <th scope="col" class="text-nowrap">_ID</th>
-            <th scope="col" class="text-nowrap">Name</th>
-            <th scope="col" class="text-nowrap">Detail</th>
-            <th scope="col" class="text-center">Action</th>
+            <th scope="col" class="col-2 text-center">ID</th>
+            <th scope="col" class="text-center">Name</th>
+            <th scope="col" class="col-4 text-center">Detail</th>
+            <th scope="col" class="text-end">Action</th>
           </tr>
           </thead>
           <tbody>
           <tr v-for="(item, key) in roles" :key="key" style="height: 3rem;line-height:3rem">
             <td>{{key+1}}</td>
-            <td class="text-right">{{item._id}}</td>
-            <td>{{item.name}}</td>
-            <td>
+            <td class="text-center">{{item._id}}</td>
+            <td class="text-center">{{item.name}}</td>
+            <td class="text-center">
           <span class="d-inline-block text-truncate" style="max-width: 5rem;">
             {{item.detail}}
           </span>
             </td>
-            <td class="text-center text-nowrap">
+            <td class="text-end text-nowrap">
               <EditIcon @action="editUserModal(item)" />
               <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
             </td>
@@ -102,9 +104,9 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteRole">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="roleId" :warning="$t('deleteRoleWarningHtml')" :info="$t('deleteRoleInfoHtml')" @action="deleteRole">
       <template #title="{title}">
-
+        Are you sure you want to delete the role?
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
@@ -278,6 +280,7 @@ async function addRole(e){
     let res = await roleApi.Add(roleForm.value);
     next.style.display = "none";
     addRoleDetail.value.hide();
+    toastRef.value.show("success");
     await roleList();
   }catch (e) {
     if(e.status === 401){

@@ -205,8 +205,6 @@ const {nodes, activeNodeId} = toRefs(data);
 
 .dropdown-menu-color {
   color: #000000;
-  background-color: #ffffff;
-  border-color:#ffffff;
 }
 
 </style>

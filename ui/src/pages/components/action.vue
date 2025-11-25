@@ -19,7 +19,7 @@
               :id="`input-${id}`"
               class="form-control"
               v-model="dataIdValue"
-              placeholder="Please enter the prompt content to continue."
+              placeholder="Please enter the id from above to continue."
               @input="checkInput"
           />
           <div ref="notice" class="notice" style="color: #b02a37;margin-top: .35rem;">

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	_ "net/http/pprof"
 	"path/filepath"
 	"runtime"
 	"sync"

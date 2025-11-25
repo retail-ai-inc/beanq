@@ -29,7 +29,7 @@
     <div v-else>
       <NoMessage v-if="users.length <= 0">
         <template #content="{content}">
-          create some admin ,please click the <button type="button" class="btn btn-primary" @click="addUserModal">{{$t('add')}}</button>
+          There is no admin, please create one.
         </template>
       </NoMessage>
       <div v-else>
@@ -38,29 +38,29 @@
           <thead>
           <tr>
             <th scope="col" class="w-table-number">#</th>
-            <th scope="col" class="text-nowrap">_Id</th>
-            <th scope="col" class="text-nowrap">Account</th>
-            <th scope="col" class="text-nowrap">Active</th>
-            <th scope="col" class="text-nowrap">Type</th>
-            <th scope="col" class="text-nowrap">Detail</th>
-            <th scope="col" class="text-center">Action</th>
+            <th scope="col" class="text-center">Id</th>
+            <th scope="col" class="text-center">Account</th>
+            <th scope="col" class="text-center">Active</th>
+            <th scope="col" class="text-center">Type</th>
+            <th scope="col" class="col-4 text-center">Detail</th>
+            <th scope="col" class="col-2 text-center">Action</th>
           </tr>
           </thead>
           <tbody>
           <tr v-for="(item, key) in users" :key="key" style="height: 3rem;line-height:3rem">
             <td>{{key+1}}</td>
-            <td class="text-right">{{item._id}}</td>
-            <td>{{item.account}}</td>
-            <td>
+            <td class="text-center">{{item._id}}</td>
+            <td class="text-center">{{item.account}}</td>
+            <td class="text-center">
               <span :class="item.active == 1 ? 'green' : 'red'">{{item.active == "1" ? "active" :"locked"}}</span>
             </td>
-            <td>{{item.type}}</td>
-            <td>
+            <td class="text-center">{{item.type}}</td>
+            <td class="text-center">
           <span class="d-inline-block text-truncate" style="max-width: 5rem;">
             {{item.detail}}
           </span>
             </td>
-            <td class="text-center text-nowrap">
+            <td class="text-end text-nowrap">
               <EditIcon @action="editUserModal(item)" />
               <DeleteIcon @action="deleteUserModal(item)" style="margin:0 .25rem;" />
             </td>
@@ -112,7 +112,7 @@
                   @input="checkValid"
               />
               <div class="invalid-feedback">
-                Please enter a length char of 5-36.
+                password must be 5-36 characters. must requirea symbol  must required atleast one uppercase letter.
               </div>
             </div>
             <div class="mb-3">
@@ -125,9 +125,13 @@
             </div>
             <div class="mb-3">
               <label for="roleSelect" class="form-label">Role</label>
-              <select class="form-select" id="roleSelect" name="roleSelect" v-model="userForm.roleId">
+              <select class="form-select" id="roleSelect" name="roleSelect" v-model="userForm.roleId" v-if="roles.length > 0">
                 <option v-for="(item,key) in roles" :value="item._id" :key="key" :selected="userForm.roleId === item._id">{{item.name}}</option>
               </select>
+              <div v-else>
+                <div>Please add a role by clicking <router-link to="/admin/role" class="btn text-primary">here</router-link> first</div>
+              </div>
+
             </div>
             <div class="mb-3">
               <label class="form-label">
@@ -164,9 +168,9 @@
     </div>
     <!--add user modal end-->
 
-    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" :warning="$t('retryWarningHtml')" :info="$t('retryInfoHtml')" @action="deleteUser">
+    <Action :label="deleteLabel" :id="showDeleteModal" :data-id="userId" :warning="$t('deleteRoleWarningHtml')" :info="$t('deleteRoleInfoHtml')" @action="deleteUser">
       <template #title="{title}">
-        {{$t('user')}}
+        Are you sure you want to delete the user?
       </template>
     </Action>
     <Btoast :id="id" ref="toastRef">
@@ -215,7 +219,11 @@ const roles = ref([]);
 async function roleList(){
   try {
     let res = await roleApi.List(0,100);
-    roles.value = res.data;
+
+    if(res.data !== null){
+      roles.value = res.data;
+    }
+
   }catch (e) {
     console.log(e.status)
     toastRef.value.show(e);
@@ -250,16 +258,11 @@ onMounted( ()=>{
     accountReadOnly.value = false;
   });
 
-});
+})
 
 onUnmounted(()=>{
-    const ele = document.getElementById('addUserDetail');
-    if (ele) {
-      ele.removeEventListener('hidden.bs.modal', () => {
-
-      });
-    }
-});
+  document.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
+})
 
 function SearchByAccount(){
   userList();
@@ -292,12 +295,15 @@ function checkValid(e){
       next.style.display = "none";
       return;
     }
-    if(len < 5 || len > 36){
-      next.innerHTML = "The password length range is 5-36 chars";
+    const regex = /^(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]).{5,36}$/;
+    if(!regex.test(datas.userForm.password)){
       next.style.display = "block";
+      next.style.color = "#dc3545";
+      next.innerHTML = "password must be 5-36 characters. must require symbol . must required at least one uppercase letter.";
     }
   }
 }
+
 
 function addUserModal(){
   const ele = document.getElementById("addUserDetail");
@@ -309,16 +315,14 @@ function addUserModal(){
 async function addUser(e){
 
   try {
-    let next = e.currentTarget.nextElementSibling;
-    let res = await userApi.Add(datas.userForm);
-    if(res.code !== "0000"){
-      next.style.display = "block";
-      next.innerHTML = res.msg;
-      return
-    }
-    next.style.display = "none";
+    await userApi.Add(datas.userForm);
+
     addUserDetail.value.hide();
-    await userList();
+    toastRef.value.show("success");
+    setTimeout(async ()=>{
+      await userList();
+    },3000);
+
   }catch (e) {
     if(e.status === 401){
       loginModal.value.error(new Error(e));
@@ -333,10 +337,8 @@ async function editUser(){
   try {
     let res = await userApi.Edit(datas.userForm);
     addUserDetail.value.hide();
-    toastRef.value.show(res.msg);
-    if(res.code !== "0000"){
-      await userList();
-    }
+    toastRef.value.show("success");
+    await userList();
   }catch (e) {
     if(e.status === 401){
       loginModal.value.error(new Error(e));
@@ -361,7 +363,8 @@ async function deleteUser(){
 
   try {
     let res = await userApi.Delete(account.value);
-    toastRef.value.show(res.msg);
+    console.log(res);
+    toastRef.value.show("success");
     await userList();
   }catch (e) {
     if(e.status === 401){
