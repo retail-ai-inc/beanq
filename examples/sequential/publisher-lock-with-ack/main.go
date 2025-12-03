@@ -59,11 +59,11 @@ func main() {
 		defer cancel()
 		result, err := pub.BQ().WithContext(ctx).
 			SetId(id).SetLockOrderKeyTTL(10*time.Second).
-			PublishInSequenceByLock("delay-channel", "order-topic", "aa", b).WaitingAck()
+			PublishInSequenceByLock("delay-channel", "order-topic", id, b).WaitingAck()
 		if err != nil {
 			logger.New().Error(err, m)
 		} else {
-			log.Printf("ID:%+v \n", result.Id)
+			log.Printf("result::::%+v \n", result)
 		}
 	}
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -44,10 +45,10 @@ func initCnf() *beanq.BeanqConfig {
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
-	_, _ = csm.BQ().SubscribeToSequenceByLock("delay-channel", "order-topic", beanq.DefaultHandle{
+	_, _ = csm.BQ().SubscribeToSequence("delay-channel", "order-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			fmt.Printf("---%+v \n", message)
-			return nil
+			return errors.New("error" + message.Id)
 		},
 		DoCancel: nil,
 		DoError:  nil,

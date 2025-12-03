@@ -334,8 +334,6 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		capture.System.When(c.broker.captureConfig).Then(err)
 	}
 
-	mux := http.NewServeMux()
-
 	history := c.broker.config.History
 	var mog *bmongo.BMongo
 	if history.On {
@@ -382,18 +380,18 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		workflowMongoCollection = client.Database(workflowRecordCfg.Mongo.Database).Collection(workflowRecordCfg.Mongo.Collection)
 	}
 
-	routers.NewRouters(
-		mux,
+	rlist := routers.RouterList(
 		views,
 		files,
 		c.broker.client.(redis.UniversalClient),
-		mog, workflowMongoCollection,
-		c.broker.config.Redis.Prefix, c.broker.config.UI)
-
+		mog,
+		workflowMongoCollection,
+		c.broker.config.Redis.Prefix,
+		c.broker.config.UI)
 	log.Printf("server start on port %+v", httpport)
 	server := &http.Server{
 		Addr:         httpport,
-		Handler:      mux,
+		Handler:      rlist.Mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  30 * time.Second,
