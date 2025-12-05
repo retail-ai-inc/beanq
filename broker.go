@@ -30,15 +30,14 @@ var (
 )
 
 type Handler struct {
-	brokerImpl      public.IBroker
-	do              func(ctx context.Context, data map[string]any, retry ...int) (int, error)
-	channel         string
-	topic           string
-	moodType        btype.MoodType
-	retryConditions []RetryConditionFunc
-	broker          string
-	prefix          string
-	retryCond       map[string]struct{}
+	brokerImpl public.IBroker
+	do         func(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	channel    string
+	topic      string
+	moodType   btype.MoodType
+	broker     string
+	prefix     string
+	retryCond  map[string]struct{}
 }
 
 func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
