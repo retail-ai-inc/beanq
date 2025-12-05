@@ -6,7 +6,16 @@
       <Search :form="form" @search="search"/>
       <Spinner v-if="loading"/>
       <!--search end-->
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+      <div class="d-flex flex-row justify-content-end">
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        <select class="form-select form-select-sm" aria-label=".form-select-sm example" style="height:35px;width:8%;margin-left: 10px;" @change="changeItem">
+          <option selected value="10">10 / page</option>
+          <option value="20">20 / page</option>
+          <option value="50">50 / page</option>
+          <option value="100">100 / page</option>
+        </select>
+      </div>
+
       <hr>
       <div class="row">
         <div class="col-12">
@@ -57,7 +66,17 @@
           </div>
         </div>
       </div>
-      <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+
+      <div class="d-flex flex-row justify-content-end">
+        <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+        <select class="form-select form-select-sm" aria-label=".form-select-sm example"
+                style="height:35px;width:8%;margin-left: 10px;" @change="changeItem">
+          <option selected value="10">10 / page</option>
+          <option value="20">20 / page</option>
+          <option value="50">50 / page</option>
+          <option value="100">100 / page</option>
+        </select>
+      </div>
 
       <!--edit modal-->
       <EditAction :label="infoDetailLabel" :id="showInfoDetail" :data="detail" @action="editInfo"></EditAction>
@@ -277,19 +296,37 @@ async function changePage(page,cursor){
   initEventSource(apiUrl);
 }
 
+function changeItem(e){
+console.log(e.target.value)
+  Storage.SetItem("pageSize",e.target.value);
+  const query = {
+    page:data.page,
+    pageSize:e.target.value,
+    id: data.form.id,
+    status: data.form.status,
+    moodType: data.form.moodType,
+    topicName: data.form.topicName
+  };
+  const searchParams = new URLSearchParams(query);
+  console.log(searchParams.toString())
+  let apiUrl = `event_log/list?${searchParams.toString()}`;
+
+  initEventSource(apiUrl);
+
+}
+
 function detailEvent(item){
   uRouter.push("detail/"+item._id);
 }
 
 const loading = ref(false);
 
-function initEventSource(){
+function initEventSource(url){
 
-  let apiUrl = urlParams();
   if (data.sseEvent){
     data.sseEvent.close();
   }
-  data.sseEvent = sseApi.Init(apiUrl);
+  data.sseEvent = sseApi.Init(url);
   data.sseEvent.onopen = () =>{
     console.log("handshake success");
   }
@@ -334,11 +371,14 @@ onMounted(async()=>{
   };
   data.page = Storage.GetItem("page")??1;
   loading.value = true;
-  initEventSource();
+  let apiUrl = urlParams();
+  initEventSource(apiUrl);
 
 })
 
 onUnmounted(()=>{
+  Storage.SetItem("page",1);
+  Storage.SetItem("pageSize",10);
   data.sseEvent.close();
 })
 
