@@ -354,7 +354,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 
 		val["endTime"] = time.Now()
 		val["retry"] = retry
-		val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).String()
+		val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).Seconds()
 		hostname, _ := os.Hostname()
 		val["hostName"] = hostname
 		// `stream` confirmation message

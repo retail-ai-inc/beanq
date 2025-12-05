@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log"
 	"path/filepath"
 	"runtime"
@@ -49,11 +48,10 @@ func main() {
 
 	// register delay consumer
 	ctx := context.Background()
-	_, err := csm.BQ().IgnoreRetryConditions(errors.New("aa")).WithContext(ctx).Subscribe("default-channel", "default-topic", beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).Subscribe("default-channel", "default-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			//time.Sleep(20 * time.Second)
 			logger.New().With("default-channel", "default-topic").Info(message.Payload)
-			return errors.New("bb")
 			return nil
 		},
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
