@@ -38,9 +38,11 @@ type Handler struct {
 	retryConditions []RetryConditionFunc
 	broker          string
 	prefix          string
+	retryCond       map[string]struct{}
 }
 
 func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
+
 	broker.Dequeue(ctx, h.channel, h.topic, func(ctx context.Context, data map[string]any, retry ...int) (int, error) {
 		if len(retry) == 0 {
 			return h.do(ctx, data)
@@ -50,13 +52,11 @@ func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
 			_, err := h.do(ctx, data)
 			return err
 		}, retry[0], func(err error) bool {
-			for _, v := range h.retryConditions {
-				bl := v(data, err)
-				if !bl {
-					return bl
-				}
+			key := fmt.Sprintf("%T,%v", err, err.Error())
+			if _, ok := h.retryCond[key]; ok {
+				return true
 			}
-			return true
+			return false
 		})
 	})
 }

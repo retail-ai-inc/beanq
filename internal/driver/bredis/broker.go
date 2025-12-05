@@ -334,10 +334,10 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 				}(timeToRunLimit)
 			}
 
-			_, handlerErr = handler(sessionCtx, copiedVal)
+			_, handlerErr = handler(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
 
 			return
-		}, cast.ToInt(val["retry"]))
+		}, 0)
 
 		if err != nil {
 			if h, ok := interface{}(handler).(interface {
