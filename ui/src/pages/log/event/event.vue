@@ -297,7 +297,7 @@ async function changePage(page,cursor){
 }
 
 function changeItem(e){
-console.log(e.target.value)
+
   Storage.SetItem("pageSize",e.target.value);
   const query = {
     page:data.page,
