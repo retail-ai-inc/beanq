@@ -29,7 +29,6 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -234,17 +233,13 @@ func (t *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	return done
 }
 
-func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions ...RetryConditionFunc) error {
-	conditions := t.retryConditions
-	if len(retryConditions) > 0 {
-		conditions = append(conditions, retryConditions...)
-	}
+func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions map[string]struct{}) error {
 
 	handler := Handler{
-		channel:         channel,
-		topic:           topic,
-		moodType:        moodType,
-		retryConditions: conditions,
+		channel:   channel,
+		topic:     topic,
+		moodType:  moodType,
+		retryCond: retryConditions,
 		do: func(ctx context.Context, message map[string]any, retry ...int) (int, error) {
 			var gerr error
 			msg := messageToStruct(message)
@@ -390,7 +385,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		mog, workflowMongoCollection,
 		c.broker.config.Redis.Prefix, c.broker.config.UI)
 
-	log.Printf("server start on port %+v", httpport)
+	logger.New().Info("Beanq UI Start on port", httpport)
 	server := &http.Server{
 		Addr:         httpport,
 		Handler:      mux,
@@ -398,10 +393,27 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  30 * time.Second,
 	}
-	if err := server.ListenAndServe(); err != nil {
-		capture.System.When(c.broker.captureConfig).Then(err)
-		log.Fatalln(err)
+
+	nctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			capture.System.When(c.broker.captureConfig).Then(err)
+			logger.New().Fatal("Error starting server:", err)
+		}
+	}()
+
+	<-nctx.Done()
+	logger.New().Info("Prepare to shut down")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.New().Fatal("Error shutting down server:", err)
 	}
+	logger.New().Info("Server stopped")
 }
 
 // Ping this method can be called by user for checking the status of broker
@@ -417,6 +429,7 @@ type BQClient struct {
 	priority        float64
 	waitAck         bool
 	lockOrderKeyTTL time.Duration
+	retryConditions map[string]struct{}
 }
 
 func (b *BQClient) WithContext(ctx context.Context) *BQClient {
@@ -469,6 +482,17 @@ func (b *BQClient) SetTimeToRun(duration time.Duration, limits ...time.Duration)
 func (b *BQClient) SetLockOrderKeyTTL(duration time.Duration) *BQClient {
 
 	b.lockOrderKeyTTL = duration
+	return b
+}
+
+func (b *BQClient) IgnoreRetryConditions(err ...error) *BQClient {
+
+	retryConditions := make(map[string]struct{}, len(err))
+	for _, e := range err {
+		key := fmt.Sprintf("%T,%v", e, e.Error())
+		retryConditions[key] = struct{}{}
+	}
+	b.retryConditions = retryConditions
 	return b
 }
 
@@ -588,7 +612,7 @@ func (b *BQClient) process(cmd IBaseCmd) error {
 		if b.dynamicOption.on {
 			// TODO: maybe need this feature in the future.
 		} else {
-			if err := b.client.AddConsumer(cmd.moodType, channel, topic, cmd.handle); err != nil {
+			if err := b.client.AddConsumer(cmd.moodType, channel, topic, cmd.handle, b.retryConditions); err != nil {
 				return err
 			}
 		}
