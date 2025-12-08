@@ -29,7 +29,6 @@ import (
 	"flag"
 	"fmt"
 	"io/fs"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -386,7 +385,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		mog, workflowMongoCollection,
 		c.broker.config.Redis.Prefix, c.broker.config.UI)
 
-	log.Printf("server start on port %+v", httpport)
+	logger.New().Info("Beanq UI Start on port", httpport)
 	server := &http.Server{
 		Addr:         httpport,
 		Handler:      mux,
@@ -394,10 +393,27 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  30 * time.Second,
 	}
-	if err := server.ListenAndServe(); err != nil {
-		capture.System.When(c.broker.captureConfig).Then(err)
-		log.Fatalln(err)
+
+	nctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			capture.System.When(c.broker.captureConfig).Then(err)
+			logger.New().Fatal("Error starting server:", err)
+		}
+	}()
+
+	<-nctx.Done()
+	logger.New().Info("Prepare to shut down")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.New().Fatal("Error shutting down server:", err)
 	}
+	logger.New().Info("Server stopped")
 }
 
 // Ping this method can be called by user for checking the status of broker
