@@ -12,7 +12,15 @@
       <div v-else>
         <NoMessage v-if="workflowlogs.length <= 0" style="margin:1rem 0"/>
         <div v-else>
-          <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+          <div class="d-flex flex-row justify-content-end">
+            <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+            <select class="form-select form-select-sm" aria-label=".form-select-sm example" style="height:35px;width:8%;margin-left: 10px;" @change="changeItem">
+              <option :selected="pageSize===10" value="10">10 / page</option>
+              <option value="20"  :selected="pageSize === 20" >20 / page</option>
+              <option value="50" :selected="pageSize===50">50 / page</option>
+              <option value="100" :selected="pageSize===100">100 / page</option>
+            </select>
+          </div>
           <div class="row">
             <div class="col-12">
 
@@ -60,7 +68,15 @@
               </div>
             </div>
           </div>
-          <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+          <div class="d-flex flex-row justify-content-end">
+            <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
+            <select class="form-select form-select-sm" aria-label=".form-select-sm example" style="height:35px;width:8%;margin-left: 10px;" @change="changeItem">
+              <option :selected="pageSize===10" value="10">10 / page</option>
+              <option value="20"  :selected="pageSize === 20" >20 / page</option>
+              <option value="50" :selected="pageSize===50">50 / page</option>
+              <option value="100" :selected="pageSize===100">100 / page</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -131,6 +147,12 @@ const search = async ()=>{
   return await getWorkFLowLogs(page.value,pageSize.value,form.value.channelName,form.value.topicName,form.value.status);
 }
 
+function changeItem(e){
+  pageSize.value = parseInt(e.target.value);
+  Storage.SetItem("pageSize",pageSize.value);
+  getWorkFLowLogs(page.value,pageSize.value,form.value.channelName,form.value.topicName,form.value.status);
+}
+
 // paging
 function changePage(pageVal,cursorVal){
   page.value = pageVal;
@@ -173,12 +195,15 @@ async function deleteInfo(){
 
 onMounted(()=>{
   page.value = Storage.GetItem("page")??1;
+  pageSize.value = parseInt(Storage.GetItem("pageSize"))??10;
+
   getWorkFLowLogs(page.value,pageSize.value,form.value.channelName,form.value.topicName,form.value.status);
 
 })
 
 onUnmounted(()=>{
-
+  Storage.SetItem("page",1);
+  Storage.SetItem("pageSize",10);
 })
 
 </script>

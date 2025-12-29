@@ -111,7 +111,7 @@ func RetryInfo(ctx context.Context, f func() error, retry int, matcher ...func(e
 		}
 
 		for _, m := range matcher {
-			if !m(err) {
+			if m(err) {
 				return i, err
 			}
 		}

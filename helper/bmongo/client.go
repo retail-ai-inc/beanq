@@ -197,7 +197,7 @@ func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	opts := options.Find()
 	opts.SetSkip(skip)
 	opts.SetLimit(pageSize)
-	opts.SetSort(bson.D{{Key: "addTime", Value: -1}})
+	opts.SetSort(bson.D{{Key: "_id", Value: -1}})
 
 	cursor, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
 	defer func() {

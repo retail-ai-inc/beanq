@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	beanq "github.com/retail-ai-inc/beanq/v4"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
@@ -51,7 +50,7 @@ func main() {
 	ctx := context.Background()
 	_, err := csm.BQ().WithContext(ctx).Subscribe("default-channel", "default-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
-			time.Sleep(20 * time.Second)
+			//time.Sleep(20 * time.Second)
 			logger.New().With("default-channel", "default-topic").Info(message.Payload)
 			return nil
 		},
