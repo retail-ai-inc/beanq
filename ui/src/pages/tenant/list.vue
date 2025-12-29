@@ -1,7 +1,7 @@
 <template>
   <div class="tenant">
     <div class="row">
-      <div class="col-3">
+      <div class="col-3 mt-4">
         <h5 class="card-title d-flex flex-row justify-content-between">List of Tenants<button type="button" class="btn btn-primary btn-sm" @click="addTenant">Add Tenant</button></h5>
         <ul class="list-group list-group-flush">
           <li class="list-group-item" v-for="(item,key) in tenants" :key="key">
