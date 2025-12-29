@@ -55,35 +55,26 @@ type (
 		ExtendContext(ctx context.Context) (bool, error)
 	}
 
-	WfRecordConfig struct {
-		Record struct {
-			Mongo *struct {
-				Database              string
-				Collection            string
-				UserName              string
-				Password              string
-				Host                  string
-				Port                  string
-				ConnectTimeOut        time.Duration
-				MaxConnectionPoolSize uint64
-				MaxConnectionLifeTime time.Duration
-			}
-			Retry int
-			On    bool
-			Async bool
-		}
+	WorkFlow struct {
+		Collection string
+		Record     `json:"record"`
+	}
+	Record struct {
+		On    bool `json:"on"`
+		Retry int  `json:"retry"`
+		Async bool `json:"async"`
 	}
 )
 
 var (
-	workflowClient       redis.UniversalClient
-	workflowRedisConfig  *Redis
-	workflowRecordConfig *WfRecordConfig
-	workflowOnce         sync.Once
+	workflowClient      redis.UniversalClient
+	workflowRedisConfig *Redis
+	workflowOnce        sync.Once
+	history             *History
 )
 
 // make workflow as an independent module
-func InitWorkflow(redisConfig *Redis, recordConfig *WfRecordConfig) {
+func InitWorkflow(redisConfig *Redis, recordConfig *History) {
 	workflowOnce.Do(func() {
 		workflowClient = bredis.NewRdb(
 			redisConfig.Host,
@@ -99,7 +90,7 @@ func InitWorkflow(redisConfig *Redis, recordConfig *WfRecordConfig) {
 			redisConfig.MinIdleConnections)
 
 		workflowRedisConfig = redisConfig
-		workflowRecordConfig = recordConfig
+		history = recordConfig
 	})
 }
 
@@ -652,12 +643,12 @@ var (
 
 func NewWorkflowRecord() *WorkflowRecord {
 	workflowRecordOnce.Do(func() {
-		config := workflowRecordConfig.Record
 
+		record := history.Mongo.WorkFlow
 		workflowRecord = &WorkflowRecord{
-			on:    config.On,
-			retry: config.Retry,
-			async: config.Async,
+			on:    record.On,
+			retry: record.Retry,
+			async: record.Async,
 			errorHandler: func(err error) {
 				if err == nil {
 					return
@@ -667,21 +658,21 @@ func NewWorkflowRecord() *WorkflowRecord {
 			asyncPool: newAsyncPool(-1),
 		}
 
-		if config.On && config.Mongo != nil && config.Mongo.Database != "" {
+		if record.On && history.Mongo != nil && history.Mongo.Database != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			connURI := "mongodb://" + config.Mongo.Host + ":" + config.Mongo.Port
+			connURI := "mongodb://" + history.Mongo.Host + ":" + history.Mongo.Port
 			opts := options.Client().
 				ApplyURI(connURI).
-				SetConnectTimeout(config.Mongo.ConnectTimeOut).
-				SetMaxPoolSize(config.Mongo.MaxConnectionPoolSize).
-				SetMaxConnIdleTime(config.Mongo.MaxConnectionLifeTime)
+				SetConnectTimeout(history.Mongo.ConnectTimeOut).
+				SetMaxPoolSize(history.Mongo.MaxConnectionPoolSize).
+				SetMaxConnIdleTime(history.Mongo.MaxConnectionLifeTime)
 
-			if config.Mongo.UserName != "" && config.Mongo.Password != "" {
+			if history.Mongo.UserName != "" && history.Mongo.Password != "" {
 				opts.SetAuth(options.Credential{
-					AuthSource: config.Mongo.Database,
-					Username:   config.Mongo.UserName,
-					Password:   config.Mongo.Password,
+					AuthSource: history.Mongo.Database,
+					Username:   history.Mongo.UserName,
+					Password:   history.Mongo.Password,
 				})
 			}
 
@@ -695,7 +686,7 @@ func NewWorkflowRecord() *WorkflowRecord {
 			if err != nil {
 				panic(err)
 			}
-			workflowRecord.mongoCollection = mdb.Database(config.Mongo.Database).Collection(config.Mongo.Collection)
+			workflowRecord.mongoCollection = mdb.Database(history.Mongo.Database).Collection(history.Mongo.Collection)
 		}
 	})
 	return workflowRecord
