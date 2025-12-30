@@ -648,7 +648,7 @@ var (
 func NewWorkflowRecord() *WorkflowRecord {
 	workflowRecordOnce.Do(func() {
 
-		mongoCfg := workflowConfig.History.Mongo
+		mongoCfg := workflowConfig.Mongo
 		workflowCfg := workflowConfig.WorkFlow
 		collection := workflowConfig.Collection
 

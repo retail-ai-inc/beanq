@@ -355,7 +355,12 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	var workflowMongoCollection *mongo.Collection
 
 	his := c.broker.config.History
-	if his.Mongo.On && his.Mongo != nil && his.Mongo.Database != "" {
+	collection := "workflow_records"
+	if v, ok := his.Mongo.Collections["workflow"]; ok {
+		collection = v
+	}
+
+	if c.broker.config.WorkFlow.On && his.Mongo != nil && his.Mongo.Database != "" {
 		connURI := "mongodb://" + his.Mongo.Host + ":" + his.Mongo.Port
 		opts := options.Client().
 			ApplyURI(connURI).
@@ -375,7 +380,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		if err != nil {
 			panic(err)
 		}
-		workflowMongoCollection = client.Database(his.Mongo.Database).Collection(his.Mongo.Collection)
+		workflowMongoCollection = client.Database(his.Mongo.Database).Collection(collection)
 	}
 
 	routers.NewRouters(
