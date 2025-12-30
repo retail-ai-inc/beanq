@@ -77,7 +77,6 @@ type (
 			ConnectTimeOut        time.Duration
 			MaxConnectionPoolSize uint64
 			MaxConnectionLifeTime time.Duration
-			WorkFlow
 		}
 		On bool
 	}
@@ -118,6 +117,7 @@ type (
 		DebugLog `json:"debugLog"`
 		Queue
 		History                  `json:"history"`
+		WorkFlow                 `json:"workflow"`
 		Redis                    Redis         `json:"redis"`
 		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
 		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
