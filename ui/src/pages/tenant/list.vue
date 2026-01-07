@@ -78,16 +78,44 @@
           </div>
           </div>
       </div>
+
+      <!--add tenant Modal begin-->
+      <div class="modal fade"
+           id="staticBackdrop"
+           data-bs-backdrop="static"
+           data-bs-keyboard="false"
+           tabindex="-1"
+           aria-labelledby="staticBackdropLabel"
+           aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h1 class="modal-title fs-5" id="staticBackdropLabel">Tenant Name</h1>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <input class="form-control" id="tenant-modal-name" placeholder="Tenant Name" v-model="tenantModal.tenantName.value" />
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-primary" @click="doAddTenant">Submit</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!--add tenant Modal end-->
+
+
     </div>
   </div>
 </template>
 <script setup>
 import {ref,reactive,toRefs,onMounted,onUnmounted} from "vue";
 
-const tenant = reactive({
+let tenant = reactive({
   id:"1",
   name:"Trial",
-  "mongo":{
+  mongo:{
     host:"127.0.0.1",
     gcpHost:"sdfsfsfds",
     port:27017,
@@ -95,7 +123,7 @@ const tenant = reactive({
     userName:"aaa",
     userPwd:"bbb"
   },
-  "redis":{
+  redis:{
     host:"127.0.0.1",
     gcpHost: "sdfsfsfds",
     port:6379,
@@ -104,19 +132,22 @@ const tenant = reactive({
 });
 const currentUuid = ref("");
 const tenants = ref([]);
+const tenantModal = {add:ref(null),tenantName:ref(""),currentId:ref("")};
 
 
 onMounted(async ()=>{
-  let arr = [{id:"1",name:"Trial"},{id:"2",name:"SiYo"}];
-  tenants.value = arr;
-  // try {
-  //   let res = await request.get("tenant/config");
-  //   tenant.mongo = res.mongo;
-  //   tenant.redis = res.redis;
-  // }catch (e) {
-  //   console.log(e);
-  // }
+
+  await getTenants();
+
 })
+
+async function getTenants(){
+
+  let res = await tenantApi.List(0,10,"","")
+  const {rows,total} = res;
+  tenants.value = rows;
+
+}
 
 const chooseTenant = (id)=>{
   currentUuid.value = id;
@@ -136,6 +167,37 @@ const updateTenantConfig=async ()=>{
 }
 
 const addTenant = async ()=>{
+
+  tenantModal.add.value = new bootstrap.Modal(document.getElementById("staticBackdrop"));
+  tenantModal.add.value.show();
+
+}
+
+const doAddTenant = async ()=>{
+
+   let res = await tenantApi.Add({name:tenantModal.tenantName.value});
+   tenantModal.currentId.value = res.id;
+   await getTenants();
+   tenantModal.add.value.hide();
+   tenant = {id:res.id,name:tenantModal.tenantName.value,mongo:{},redis:{}};
+  Object.assign(tenant,{
+    id:"",
+    name:"",
+    mongo:{
+      host:"",
+      gcpHost:"",
+      port:"",
+      name:"",
+      userName:"",
+      userPwd:""
+    },
+    redis:{
+      host:"",
+      gcpHost: "",
+      port:"",
+      pwd:""
+    }
+  });
 }
 
 const {id,name,mongo,redis} = toRefs(tenant);

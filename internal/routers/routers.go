@@ -32,6 +32,7 @@ type Handles struct {
 	role         *Role
 	pod          *Pod
 	sequenceLock *SequenceLock
+	tenant       *Tenants
 }
 
 type Router struct {
@@ -72,6 +73,7 @@ func RouterList(fs2 fs.FS,
 		role:         NewRole(mgo),
 		pod:          NewPod(client, mgo, prefix),
 		sequenceLock: NewSequenceLock(client, prefix),
+		tenant:       NewTenants(mgo),
 	}
 
 	router := NewRouter()
@@ -183,6 +185,12 @@ func RouterList(fs2 fs.FS,
 	router.HandleFunc("POST /workflow/delete", hdls.workflow.Delete, HeaderRule(), Auth(mgo, ui))
 
 	router.HandleFunc("GET /pod/list", hdls.pod.List, HeaderRule(), Auth(mgo, ui))
+
+	router.HandleFunc("PUT /tenant", hdls.tenant.Add, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("DELETE /tenant/{id}", hdls.tenant.Delete, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("POST /tenant/{id}", hdls.tenant.Edit, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("GET /tenant", hdls.tenant.List, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("GET /tenant/{id}", hdls.tenant.Get, HeaderRule(), Auth(mgo, ui))
 
 	return router
 }
