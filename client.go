@@ -353,20 +353,26 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	}
 
 	var workflowMongoCollection *mongo.Collection
-	workflowRecordCfg := c.broker.config.Workflow.Record
-	if workflowRecordCfg.On && workflowRecordCfg.Mongo != nil && workflowRecordCfg.Mongo.Database != "" {
-		connURI := "mongodb://" + workflowRecordCfg.Mongo.Host + ":" + workflowRecordCfg.Mongo.Port
+
+	his := c.broker.config.History
+	collection := "workflow_records"
+	if v, ok := his.Mongo.Collections["workflow"]; ok {
+		collection = v
+	}
+
+	if c.broker.config.WorkFlow.On && his.Mongo != nil && his.Mongo.Database != "" {
+		connURI := "mongodb://" + his.Mongo.Host + ":" + his.Mongo.Port
 		opts := options.Client().
 			ApplyURI(connURI).
-			SetConnectTimeout(workflowRecordCfg.Mongo.ConnectTimeOut).
-			SetMaxPoolSize(workflowRecordCfg.Mongo.MaxConnectionPoolSize).
-			SetMaxConnIdleTime(workflowRecordCfg.Mongo.MaxConnectionLifeTime)
+			SetConnectTimeout(his.Mongo.ConnectTimeOut).
+			SetMaxPoolSize(his.Mongo.MaxConnectionPoolSize).
+			SetMaxConnIdleTime(his.Mongo.MaxConnectionLifeTime)
 
-		if workflowRecordCfg.Mongo.UserName != "" && workflowRecordCfg.Mongo.Password != "" {
+		if his.Mongo.UserName != "" && his.Mongo.Password != "" {
 			opts.SetAuth(options.Credential{
-				AuthSource: workflowRecordCfg.Mongo.Database,
-				Username:   workflowRecordCfg.Mongo.UserName,
-				Password:   workflowRecordCfg.Mongo.Password,
+				AuthSource: his.Mongo.Database,
+				Username:   his.Mongo.UserName,
+				Password:   his.Mongo.Password,
 			})
 		}
 
@@ -374,7 +380,7 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		if err != nil {
 			panic(err)
 		}
-		workflowMongoCollection = client.Database(workflowRecordCfg.Mongo.Database).Collection(workflowRecordCfg.Mongo.Collection)
+		workflowMongoCollection = client.Database(his.Mongo.Database).Collection(collection)
 	}
 
 	routers.NewRouters(
