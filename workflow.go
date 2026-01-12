@@ -98,6 +98,7 @@ func InitWorkflow(beanqConfig *BeanqConfig) {
 			Name  string
 			Shard bool
 		}{Name: "workflow_records", Shard: true}
+		//nolint:staticcheck,qf1008 //enhance readability
 		if v, ok := beanqConfig.Mongo.Collections["workflow"]; ok {
 			workflowConfig.Collection.Name = v.Name
 			workflowConfig.Collection.Shard = v.Shard

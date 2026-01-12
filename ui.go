@@ -1,6 +1,7 @@
 package beanq
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"net/http"
@@ -18,7 +19,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/internal/routers"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"golang.org/x/net/context"
 )
 
 //go:embed ui

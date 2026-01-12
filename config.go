@@ -185,7 +185,9 @@ func (t *BeanqConfig) init() {
 	if t.TimeToRun == 0 {
 		t.TimeToRun = boptions.DefaultOptions.TimeToRun
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.Collections == nil {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.Collections = map[string]Collection{
 			"event":    {Name: "event_logs", Shard: true},
 			"workflow": {Name: "workflow_logs", Shard: true},
@@ -195,13 +197,19 @@ func (t *BeanqConfig) init() {
 			"tenant":   {Name: "tenants", Shard: true},
 		}
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.ConnectTimeOut == 0 {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.ConnectTimeOut = 10 * time.Second
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.MaxConnectionPoolSize == 0 {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.MaxConnectionPoolSize = 200
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.MaxConnectionLifeTime == 0 {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
 }

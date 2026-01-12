@@ -61,7 +61,9 @@ func migration(cmd *cobra.Command, args []string) {
 	}
 
 	conf, err := parseConfig(cmd.Flags())
-
+	if err != nil {
+		logger.New().Panic(err)
+	}
 	action, err := cmd.Flags().GetString("action")
 	if err != nil {
 		logger.New().Panic(err)
@@ -111,6 +113,7 @@ func (t *MongoMigrater) Collections() map[string]map[string]Collection {
 
 	collections := make(map[string]Collection)
 	if t.Config.History.Storage == "mongo" {
+		//nolint:staticcheck,qf1008 //enhance readability
 		collections = t.Config.Mongo.Collections
 	}
 	if t.Config.WorkFlow.Storage != "mongo" {
