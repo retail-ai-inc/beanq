@@ -33,6 +33,7 @@ type BMongo struct {
 	optCollection      string
 	roleCollection     string
 	configCollection   string
+	tenantCollection   string
 }
 
 func createCollection(ctx context.Context) error {
@@ -125,6 +126,7 @@ func NewMongo(host, port string,
 			managerCollection:  "managers",
 			optCollection:      "opt_logs",
 			roleCollection:     "roles",
+			tenantCollection:   "tenants",
 		}
 		if v, ok := collections["event"]; ok {
 			mgo.eventCollection = v
@@ -140,6 +142,9 @@ func NewMongo(host, port string,
 		}
 		if v, ok := collections["roles"]; ok {
 			mgo.roleCollection = v
+		}
+		if v, ok := collections["tenant"]; ok {
+			mgo.tenantCollection = v
 		}
 		mgo.configCollection = "config"
 		if err := createCollection(ctx); err != nil {
@@ -690,4 +695,88 @@ func (t *BMongo) ConfigInfo(ctx context.Context) (*capture.Config, error) {
 		return nil, err
 	}
 	return &data.Config, nil
+}
+
+type Tenants struct {
+	Id       string    `bson:"_id" json:"id"`
+	CreateAt time.Time `bson:"createAt" json:"createAt"`
+	Name     string    `bson:"name" json:"name"`
+	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
+	Mongo    Mongo     `bson:"mongo" json:"mongo"`
+	Redis    Redis     `bson:"redis" json:"redis"`
+}
+type Mongo struct {
+	Host       string `bson:"host" json:"host"`
+	GCPHost    string `bson:"gcpHost" json:"gcpHost"`
+	Port       string `bson:"port" json:"port"`
+	DbName     string `bson:"dbName" json:"dbName"`
+	DbUsername string `bson:"dbUsername" json:"dbUsername"`
+	DbPassword string `bson:"dbPassword" json:"dbPassword"`
+}
+type Redis struct {
+	Host     string `bson:"host" json:"host"`
+	GCPHost  string `bson:"gcpHost" json:"gcpHost"`
+	Port     string `bson:"port" json:"port"`
+	Password string `bson:"password" json:"password"`
+}
+
+func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) (string, error) {
+
+	lastId := ""
+	if tenant.Id == "" {
+		lastId = primitive.NewObjectID().Hex()
+		tenant.Id = lastId
+	} else {
+		lastId = tenant.Id
+	}
+	_, err := t.database.Collection(t.tenantCollection).InsertOne(ctx, tenant)
+	if err != nil {
+		return "", err
+	}
+
+	return lastId, err
+}
+
+func (t *BMongo) TenantsDelete(ctx context.Context) {
+
+}
+
+func (t *BMongo) TenantsEdit(ctx context.Context) {
+
+}
+
+func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenants, float64, error) {
+
+	skip := (page - 1) * pageSize
+	if skip < 0 {
+		skip = 0
+	}
+	opts := options.Find()
+	opts.SetSkip(skip)
+	opts.SetLimit(pageSize)
+	opts.SetSort(bson.D{{Key: "createAt", Value: 1}})
+
+	filter := bson.M{}
+
+	cursor, err := t.database.Collection(t.tenantCollection).Find(ctx, filter, opts)
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+	if err != nil {
+		return nil, 0, err
+	}
+	var data []Tenants
+	if err := cursor.All(ctx, &data); err != nil {
+		return nil, 0, err
+	}
+	total, err := t.database.Collection(t.tenantCollection).CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+
+}
+
+func (t *BMongo) TenantsInfo(ctx context.Context) {
+
 }

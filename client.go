@@ -24,12 +24,9 @@ package beanq
 
 import (
 	"context"
-	"embed"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"os"
 	"os/signal"
 	"slices"
@@ -37,16 +34,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v8"
-	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
-	"github.com/retail-ai-inc/beanq/v4/internal/capture"
-	"github.com/retail-ai-inc/beanq/v4/internal/routers"
 	"github.com/rs/xid"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type (
@@ -86,37 +77,21 @@ type (
 	RetryConditionFunc func(map[string]any, error) bool
 )
 
-var (
-	on       = flag.Bool("on", false, "mongo log enable")
-	database = flag.String("database", "", "Mongo database name for saving logs")
-	username = flag.String("username", "", "Mongo username")
-	password = flag.String("password", "", "Mongo password")
-	host     = flag.String("host", "", "Mongo host")
-	port     = flag.String("port", "", "Mongo port")
-)
-
 func New(config *BeanqConfig, options ...ClientOption) *Client {
-	// init config,Will merge default options
+
+	// init config,will merge default options
 	config.init()
 
-	flag.Parse()
-	if *on {
-		config.History.On = true
-	}
-	if *database != "" {
-		config.Mongo.Database = *database
-	}
-	if *username != "" {
-		config.Mongo.UserName = *username
-	}
-	if *password != "" {
-		config.Mongo.Password = *password
-	}
-	if *host != "" {
-		config.Mongo.Host = *host
-	}
-	if *port != "" {
-		config.Mongo.Port = *port
+	jsonStr := config.ToJson()
+	// hide the ‘config’ parameter and prohibit manually passing in this parameter
+	migrationCmd.Flags().String(cmdConfigKeyName, jsonStr, "")
+	_ = migrationCmd.Flags().MarkHidden(cmdConfigKeyName)
+	// migration type: up | down
+	migrationCmd.Flags().String("action", "up", "performed action")
+	// If you want to perform a database migration, use the command [run migration --action=down].
+	//The default action is up.
+	if err := Execute(); err != nil {
+		logger.New().Fatal(err)
 	}
 
 	client := &Client{
@@ -290,136 +265,6 @@ func StaticFileInfo(fs2 fs.FS) (map[string]time.Time, error) {
 		return nil, err
 	}
 	return files, nil
-}
-
-//go:embed ui
-var views embed.FS
-
-func (c *Client) ServeHttp(ctx context.Context) {
-
-	files, err := StaticFileInfo(views)
-	if err != nil {
-		logger.New().Error(err)
-		capture.System.When(c.broker.captureConfig).Then(err)
-	}
-
-	go func() {
-		timer := timex.TimerPool.Get(10 * time.Second)
-		defer timer.Stop()
-
-		for range timer.C {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-
-			}
-			timer.Reset(10 * time.Second)
-			if err := c.broker.tool.QueueMessage(ctx); err != nil {
-				logger.New().Error(err)
-			}
-		}
-	}()
-	// compatible with unmodified env.json
-	httpport := strings.TrimLeft(c.broker.config.UI.Port, ":")
-	httpport = fmt.Sprintf(":%s", httpport)
-
-	if err := os.Setenv("GODEBUG", "httpmuxgo122=1"); err != nil {
-		logger.New().Error("Error setting environment variables")
-		capture.System.When(c.broker.captureConfig).Then(err)
-	}
-
-	mux := http.NewServeMux()
-
-	history := c.broker.config.History
-	var mog *bmongo.BMongo
-	if history.On {
-
-		// compatible with unmodified env.json
-		mongoPort := strings.TrimLeft(history.Mongo.Port, ":")
-		mongoPort = fmt.Sprintf(":%s", mongoPort)
-
-		mog = bmongo.NewMongo(
-			history.Mongo.Host,
-			mongoPort,
-			history.Mongo.UserName,
-			history.Mongo.Password,
-			history.Mongo.Database,
-			history.Mongo.Collections,
-			history.Mongo.ConnectTimeOut,
-			history.Mongo.MaxConnectionPoolSize,
-			history.Mongo.MaxConnectionLifeTime,
-		)
-	}
-
-	var workflowMongoCollection *mongo.Collection
-
-	his := c.broker.config.History
-	collection := "workflow_records"
-	if v, ok := his.Mongo.Collections["workflow"]; ok {
-		collection = v
-	}
-
-	if c.broker.config.WorkFlow.On && his.Mongo != nil && his.Mongo.Database != "" {
-		connURI := "mongodb://" + his.Mongo.Host + ":" + his.Mongo.Port
-		opts := options.Client().
-			ApplyURI(connURI).
-			SetConnectTimeout(his.Mongo.ConnectTimeOut).
-			SetMaxPoolSize(his.Mongo.MaxConnectionPoolSize).
-			SetMaxConnIdleTime(his.Mongo.MaxConnectionLifeTime)
-
-		if his.Mongo.UserName != "" && his.Mongo.Password != "" {
-			opts.SetAuth(options.Credential{
-				AuthSource: his.Mongo.Database,
-				Username:   his.Mongo.UserName,
-				Password:   his.Mongo.Password,
-			})
-		}
-
-		client, err := mongo.Connect(ctx, opts)
-		if err != nil {
-			panic(err)
-		}
-		workflowMongoCollection = client.Database(his.Mongo.Database).Collection(collection)
-	}
-
-	routers.NewRouters(
-		mux,
-		views,
-		files,
-		c.broker.client.(redis.UniversalClient),
-		mog, workflowMongoCollection,
-		c.broker.config.Redis.Prefix, c.broker.config.UI)
-
-	logger.New().Info("Beanq UI Start on port", httpport)
-	server := &http.Server{
-		Addr:         httpport,
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  30 * time.Second,
-	}
-
-	nctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			capture.System.When(c.broker.captureConfig).Then(err)
-			logger.New().Fatal("Error starting server:", err)
-		}
-	}()
-
-	<-nctx.Done()
-	logger.New().Info("Prepare to shut down")
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
-
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.New().Fatal("Error shutting down server:", err)
-	}
-	logger.New().Info("Server stopped")
 }
 
 // Ping this method can be called by user for checking the status of broker

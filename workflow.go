@@ -55,9 +55,10 @@ type (
 	}
 
 	WorkFlow struct {
-		On    bool `json:"on"`
-		Retry int  `json:"retry"`
-		Async bool `json:"async"`
+		On      bool   `json:"on"`
+		Retry   int    `json:"retry"`
+		Async   bool   `json:"async"`
+		Storage string `json:"storage"`
 	}
 )
 
@@ -66,9 +67,13 @@ var (
 	workflowRedisConfig *Redis
 	workflowOnce        sync.Once
 	workflowConfig      *struct {
+		*Mongo
 		*WorkFlow
 		*History
-		Collection string
+		Collection struct {
+			Name  string
+			Shard bool
+		}
 	}
 )
 
@@ -89,12 +94,17 @@ func InitWorkflow(beanqConfig *BeanqConfig) {
 			beanqConfig.Redis.MinIdleConnections)
 
 		workflowRedisConfig = &beanqConfig.Redis
-		workflowConfig.Collection = "workflow_records"
+		workflowConfig.Collection = struct {
+			Name  string
+			Shard bool
+		}{Name: "workflow_records", Shard: true}
 		if v, ok := beanqConfig.Mongo.Collections["workflow"]; ok {
-			workflowConfig.Collection = v
+			workflowConfig.Collection.Name = v.Name
+			workflowConfig.Collection.Shard = v.Shard
 		}
 		workflowConfig.WorkFlow = &beanqConfig.WorkFlow
 		workflowConfig.History = &beanqConfig.History
+		workflowConfig.Mongo = beanqConfig.Mongo
 	})
 }
 
@@ -693,7 +703,7 @@ func NewWorkflowRecord() *WorkflowRecord {
 			if err != nil {
 				panic(err)
 			}
-			workflowRecord.mongoCollection = mdb.Database(mongoCfg.Database).Collection(collection)
+			workflowRecord.mongoCollection = mdb.Database(mongoCfg.Database).Collection(collection.Name)
 		}
 	})
 	return workflowRecord

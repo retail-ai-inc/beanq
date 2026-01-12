@@ -1,0 +1,62 @@
+[
+  {
+    "create": "workflow_records",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "_id",
+          "Channel",
+          "CreatedAt",
+          "Error",
+          "Gid",
+          "Option",
+          "Skipper",
+          "Statement",
+          "Status",
+          "TaskId",
+          "Topic",
+          "UpdatedAt"
+        ],
+        "properties": {
+          "_id": {
+            "type": "objectId"
+          },
+          "Channel": {
+            "type": "string"
+          },
+          "CreatedAt": {
+            "type": "date"
+          },
+          "Error": {
+            "type": "string"
+          },
+          "Gid": {
+            "type": "string"
+          },
+          "Option": {
+            "type": "string"
+          },
+          "Skipper": {
+            "type": "boolean"
+          },
+          "Statement": {
+            "type": "string"
+          },
+          "Status": {
+            "type": "string"
+          },
+          "TaskId": {
+            "type": "string"
+          },
+          "Topic": {
+            "type": "string"
+          },
+          "UpdatedAt": {
+            "type": "date"
+          }
+        }
+      }
+    }
+  }
+]
