@@ -213,6 +213,7 @@ func (t *MigrateContext) Execute() {
 	if err != nil && err != migrate.ErrNilVersion {
 		log.Fatalf("failed to obtain the current version: %v", err)
 	}
+	fmt.Println("--------------------------------------------------------------------")
 	if dirty {
 		log.Fatalf("database version is [dirty], please repair manually")
 	}
@@ -231,6 +232,7 @@ func (t *MigrateContext) Execute() {
 		fmt.Println("it is already the latest version, no migration needed")
 		os.Exit(0)
 	}
+	fmt.Println("--------------------------------------------------------------------")
 	fmt.Printf("pending application version: %v\n", pending)
 
 	for _, target := range pending {
