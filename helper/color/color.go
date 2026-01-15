@@ -2,7 +2,6 @@ package color
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -69,32 +68,35 @@ func PrintNotice(format string, a ...interface{}) {
 
 // ConfirmPrompt
 func ConfirmPrompt(question string) bool {
+
 	PrintWarning("%s", question)
 	PrintNotice("Y: continue")
 	PrintNotice("N: stop")
 
-	_, err := color.New(color.FgHiYellow).Print("[y/n]:")
-	if err != nil {
-		PrintError("print error: %v", err)
-		os.Exit(1)
-	}
-	var input string
-	_, err = fmt.Scanln(&input)
-	if err != nil {
-		PrintError("input error: %v", err)
-		os.Exit(1)
-	}
+	for {
+		_, err := color.New(color.FgHiYellow).Print("[y/n]:")
+		if err != nil {
+			PrintError("print error: %v", err)
+			continue
+		}
+		var input string
+		_, err = fmt.Scanln(&input)
+		if err != nil {
+			PrintError("input error: %v", err)
+			continue
+		}
 
-	switch input {
-	case "Y", "y":
-		return true
-	case "N", "n":
-		PrintWarning("operation stopped")
-	default:
-		PrintWarning("invalid input. operation will be stopped by default")
+		switch input {
+		case "Y", "y":
+			return true
+		case "N", "n":
+			PrintError("operation stopped")
+			return false
+		default:
+			PrintError("invalid input")
+			continue
+		}
 	}
-
-	return false
 }
 
 // ProgressBar
