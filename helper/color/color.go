@@ -32,6 +32,7 @@ func PrintSuccess(format string, a ...interface{}) {
 
 // PrintError
 func PrintError(format string, a ...interface{}) {
+
 	if len(a) == 0 {
 		PrintColor(format, color.FgRed)
 	} else {

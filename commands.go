@@ -213,8 +213,8 @@ func (t *MigrateContext) Execute() {
 	}
 	color.PrintHeader("Migration Versions")
 	color.PrintInfo("📋 Available migration versions:")
-	for _, v := range availableVersions {
-		color.PrintNotice("  • %s", v)
+	for i, v := range availableVersions {
+		color.PrintNotice("    %d. %s", i+1, v)
 	}
 
 	m, err := t.migrater.MigrationInstance()
