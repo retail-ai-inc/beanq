@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,7 +16,7 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/mongodb"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/helper/color"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -57,17 +56,27 @@ func init() {
 func migration(cmd *cobra.Command, args []string) {
 
 	if changed := cmd.Flags().Changed(cmdConfigKeyName); changed {
-		logger.New().Panic("Prohibit modifying [config] parameter values")
+		color.PrintWarning("Prohibit modifying [config] parameter values")
+		os.Exit(0)
 	}
 
 	conf, err := parseConfig(cmd.Flags())
 	if err != nil {
-		logger.New().Panic(err)
+		color.PrintError(err.Error())
+		os.Exit(0)
 	}
 	action, err := cmd.Flags().GetString("action")
 	if err != nil {
-		logger.New().Panic(err)
+		color.PrintError(err.Error())
+		os.Exit(0)
 	}
+	color.PrintLogo()
+	if action == "down" {
+		if !color.ConfirmPrompt("⚠️ confirm to continue executing this operation?") {
+			os.Exit(0)
+		}
+	}
+
 	//
 	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, migrationsFS))
 	mCtx.Execute()
@@ -76,7 +85,7 @@ func migration(cmd *cobra.Command, args []string) {
 	//mCtx.Set(NewMySqlMigrater())
 	//mCtx.Execute()
 
-	logger.New().Info("migration successful")
+	color.PrintSuccess("🎉 database migration has been successfully completed！")
 	os.Exit(0)
 }
 
@@ -198,29 +207,37 @@ func (t *MigrateContext) Execute() {
 
 	availableVersions, err := t.migrater.SortedVersions(collections)
 	if err != nil {
-		log.Fatalf("failed to parse version: %v", err)
+		color.PrintError("failed to parse version: %v", err)
+		os.Exit(1)
+
 	}
-	fmt.Println("=== available migration versions ===")
+	color.PrintHeader("Migration Versions")
+	color.PrintInfo("📋 Available migration versions:")
 	for _, v := range availableVersions {
-		fmt.Println(v)
+		color.PrintNotice("  • %s", v)
 	}
 
 	m, err := t.migrater.MigrationInstance()
 	if err != nil {
-		log.Fatalf("failed to create migration instance: %v", err)
+		color.PrintError("failed to create migration instance: %v", err)
+		os.Exit(1)
 	}
 	currentVersion, dirty, err := m.Version()
 	if err != nil && err != migrate.ErrNilVersion {
-		log.Fatalf("failed to obtain the current version: %v", err)
+		color.PrintError("failed to obtain the current version: %v", err)
+		os.Exit(1)
 	}
-	fmt.Println("--------------------------------------------------------------------")
+
+	color.PrintSuccess("--------------------------------------------------------------------")
+
 	if dirty {
-		log.Fatalf("database version is [dirty], please repair manually")
+		color.PrintError("database version is [dirty], please repair manually")
+		os.Exit(1)
 	}
 	if err == migrate.ErrNilVersion {
 		currentVersion = 0
 	}
-	fmt.Printf("current database version: %d\n", currentVersion)
+	color.PrintInfo("📊 current database version: %d", currentVersion)
 
 	var pending []uint64
 	for _, v := range availableVersions {
@@ -229,22 +246,24 @@ func (t *MigrateContext) Execute() {
 		}
 	}
 	if len(pending) == 0 {
-		fmt.Println("it is already the latest version, no migration needed")
+		color.PrintSuccess("✅ It is already the latest version, no migration needed")
 		os.Exit(0)
 	}
-	fmt.Println("--------------------------------------------------------------------")
-	fmt.Printf("pending application version: %v\n", pending)
+	color.PrintInfo("⏳ pending version: %v", pending)
 
-	for _, target := range pending {
+	color.PrintInfo("🚀 start to migrate...")
+	total := len(pending)
+	for i, target := range pending {
 		start := time.Now()
 		if err := m.Migrate(uint(target)); err != nil {
 			if err == migrate.ErrNoChange {
 				continue
 			}
-			log.Fatalf("version %d failed: %v", target, err)
+			color.PrintError("version %d failed: %v", target, err)
 		}
 		duration := time.Since(start)
-		fmt.Printf("=== successfully used version %d，run times: %v ===\n", target, duration)
+		color.ProgressBar(i+1, total, "migrate progress")
+		color.PrintSuccess("✅ version %d migrate success, duration: %v", target, duration)
 	}
 }
 
