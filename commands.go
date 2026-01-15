@@ -62,12 +62,12 @@ func migration(cmd *cobra.Command, args []string) {
 
 	conf, err := parseConfig(cmd.Flags())
 	if err != nil {
-		color.PrintError(err.Error())
+		color.PrintError("parse config error:%+v", err.Error())
 		os.Exit(0)
 	}
 	action, err := cmd.Flags().GetString("action")
 	if err != nil {
-		color.PrintError(err.Error())
+		color.PrintError("get action error:%+v", err.Error())
 		os.Exit(0)
 	}
 	color.PrintLogo()

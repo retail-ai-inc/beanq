@@ -75,7 +75,8 @@ func ConfirmPrompt(question string) bool {
 
 	_, err := color.New(color.FgHiYellow).Print("[y/n]:")
 	if err != nil {
-
+		PrintError("print error: %v", err)
+		os.Exit(1)
 	}
 	var input string
 	_, err = fmt.Scanln(&input)
