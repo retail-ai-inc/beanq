@@ -23,11 +23,13 @@
 package beanq
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
+	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/spf13/viper"
@@ -67,18 +69,8 @@ type (
 		TimeToRun    time.Duration
 	}
 	History struct {
-		Mongo *struct {
-			Database              string
-			Collections           map[string]string
-			UserName              string
-			Password              string
-			Host                  string
-			Port                  string
-			ConnectTimeOut        time.Duration
-			MaxConnectionPoolSize uint64
-			MaxConnectionLifeTime time.Duration
-		}
-		On bool
+		Storage string `json:"storage"`
+		On      bool
 	}
 
 	UI struct {
@@ -109,11 +101,26 @@ type (
 		Port      string        `json:"port"`
 		ExpiresAt time.Duration `json:"expiresAt"`
 	}
-
+	Collection struct {
+		Name  string `json:"name"`
+		Shard bool   `json:"shard"`
+	}
+	Mongo struct {
+		Database              string
+		UserName              string
+		Password              string
+		Collections           map[string]Collection
+		Host                  string
+		Port                  string
+		ConnectTimeOut        time.Duration
+		MaxConnectionPoolSize uint64
+		MaxConnectionLifeTime time.Duration
+	}
 	BeanqConfig struct {
 		Health   Health `json:"health"`
 		Broker   string `json:"broker"`
 		UI       ui.Ui  `json:"ui"`
+		*Mongo   `json:"mongo"`
 		DebugLog `json:"debugLog"`
 		Queue
 		History                  `json:"history"`
@@ -178,23 +185,43 @@ func (t *BeanqConfig) init() {
 	if t.TimeToRun == 0 {
 		t.TimeToRun = boptions.DefaultOptions.TimeToRun
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.Collections == nil {
-		t.Mongo.Collections = map[string]string{
-			"event":    "event_logs",
-			"workflow": "workflow_logs",
-			"manager":  "managers",
-			"opt":      "opt_logs",
+		//nolint:staticcheck,qf1008 //enhance readability
+		t.Mongo.Collections = map[string]Collection{
+			"event":    {Name: "event_logs", Shard: true},
+			"workflow": {Name: "workflow_logs", Shard: true},
+			"manager":  {Name: "managers", Shard: true},
+			"opt":      {Name: "opt_logs", Shard: true},
+			"role":     {Name: "roles", Shard: true},
+			"tenant":   {Name: "tenants", Shard: true},
 		}
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.ConnectTimeOut == 0 {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.ConnectTimeOut = 10 * time.Second
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.MaxConnectionPoolSize == 0 {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.MaxConnectionPoolSize = 200
 	}
+	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.MaxConnectionLifeTime == 0 {
+		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
+}
+
+func (t *BeanqConfig) ToJson() string {
+
+	bt, err := json.Marshal(t)
+	if err != nil {
+		logger.New().Error(err)
+		return ""
+	}
+	return string(bt)
 }
 
 // Default configuration values

@@ -1,0 +1,100 @@
+[
+  {
+    "create": "event_logs",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "_id",
+          "addTime",
+          "channel",
+          "executeTime",
+          "id",
+          "lockOrderKeyTTL",
+          "logType",
+          "maxLen",
+          "moodType",
+          "orderKey",
+          "payload",
+          "priority",
+          "retry",
+          "status",
+          "timeToRun",
+          "timeToRunLimit",
+          "topic"
+        ],
+        "properties": {
+          "_id": {
+            "$ref": "objectId"
+          },
+          "addTime": {
+            "type": "string"
+          },
+          "beginTime": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "endTime": {
+            "type": "string"
+          },
+          "executeTime": {
+            "type": "string"
+          },
+          "hostName": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "info": {
+            "type": "string"
+          },
+          "level": {
+            "type": "string"
+          },
+          "lockOrderKeyTTL": {
+            "type": "string"
+          },
+          "logType": {
+            "type": "string"
+          },
+          "maxLen": {
+            "type": "string"
+          },
+          "moodType": {
+            "type": "string"
+          },
+          "orderKey": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "retry": {
+            "type": "string"
+          },
+          "runTime": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "timeToRun": {
+            "type": "string"
+          },
+          "timeToRunLimit": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+]

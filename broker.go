@@ -88,12 +88,19 @@ func NewBroker(config *BeanqConfig) *Broker {
 			// capture errors and send them to email or Slack
 
 			if config.History.On {
+
 				mcfg := config.Mongo
+
+				collections := map[string]string{}
+				for s, collection := range mcfg.Collections {
+					collections[s] = collection.Name
+				}
+
 				nmgo := bmongo2.NewMongo(mcfg.Host,
 					mcfg.Port, mcfg.UserName,
 					mcfg.Password,
 					mcfg.Database,
-					mcfg.Collections,
+					collections,
 					mcfg.ConnectTimeOut,
 					mcfg.MaxConnectionPoolSize,
 					mcfg.MaxConnectionLifeTime)
@@ -205,7 +212,7 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 				mongo.MaxConnectionLifeTime,
 				mongo.MaxConnectionPoolSize,
 				mongo.Database,
-				mongo.Collections["event"],
+				mongo.Collections["event"].Name,
 				mongo.UserName,
 				mongo.Password)
 		}

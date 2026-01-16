@@ -1,0 +1,135 @@
+[
+  {
+    "create": "config",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "_id",
+          "config"
+        ],
+        "properties": {
+          "_id": {
+            "type": "string"
+          },
+          "config": {
+            "type": "object",
+            "required": [
+              "google",
+              "rule",
+              "sendgrid",
+              "slack",
+              "smtp"
+            ],
+            "properties": {
+              "google": {
+                "type": "object",
+                "required": [
+                  "callbackurl",
+                  "clientid",
+                  "clientsecret",
+                  "scheme"
+                ],
+                "properties": {
+                  "callbackurl": {
+                    "type": "string"
+                  },
+                  "clientid": {
+                    "type": "string"
+                  },
+                  "clientsecret": {
+                    "type": "string"
+                  },
+                  "scheme": {
+                    "type": "string"
+                  }
+                }
+              },
+              "rule": {
+                "type": "object",
+                "required": [
+                  "if",
+                  "then",
+                  "when"
+                ],
+                "properties": {
+                  "if": {
+                    "type": "array",
+                    "items": {
+                      "type": []
+                    }
+                  },
+                  "then": {
+                    "type": "array",
+                    "items": {
+                      "type": []
+                    }
+                  },
+                  "when": {
+                    "type": "array",
+                    "items": {
+                      "type": []
+                    }
+                  }
+                }
+              },
+              "sendgrid": {
+                "type": "object",
+                "required": [
+                  "fromaddress",
+                  "fromname",
+                  "key"
+                ],
+                "properties": {
+                  "fromaddress": {
+                    "type": "string"
+                  },
+                  "fromname": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  }
+                }
+              },
+              "slack": {
+                "type": "object",
+                "required": [
+                  "botauthtoken"
+                ],
+                "properties": {
+                  "botauthtoken": {
+                    "type": "string"
+                  }
+                }
+              },
+              "smtp": {
+                "type": "object",
+                "required": [
+                  "host",
+                  "password",
+                  "port",
+                  "user"
+                ],
+                "properties": {
+                  "host": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "port": {
+                    "type": "string"
+                  },
+                  "user": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+]
