@@ -25,76 +25,105 @@
         ],
         "properties": {
           "_id": {
-            "$ref": "objectId"
+            "bsonType": "objectId"
           },
           "addTime": {
-            "type": "string"
+            "bsonType": "string"
           },
           "beginTime": {
-            "type": "string"
+            "bsonType": "string"
           },
           "channel": {
-            "type": "string"
+            "bsonType": "string"
           },
           "endTime": {
-            "type": "string"
+            "bsonType": "string"
           },
           "executeTime": {
-            "type": "string"
+            "bsonType": "string"
           },
           "hostName": {
-            "type": "string"
+            "bsonType": "string"
           },
           "id": {
-            "type": "string"
+            "bsonType": "string"
           },
           "info": {
-            "type": "string"
+            "bsonType": "string"
           },
           "level": {
-            "type": "string"
+            "bsonType": "string"
           },
           "lockOrderKeyTTL": {
-            "type": "string"
+            "bsonType": "string"
           },
           "logType": {
-            "type": "string"
+            "bsonType": "string"
           },
           "maxLen": {
-            "type": "string"
+            "bsonType": "string"
           },
           "moodType": {
-            "type": "string"
+            "bsonType": "string"
           },
           "orderKey": {
-            "type": "string"
+            "bsonType": "string"
           },
           "payload": {
-            "type": "string"
+            "bsonType": "string"
           },
           "priority": {
-            "type": "string"
+            "bsonType": "string"
           },
           "retry": {
-            "type": "string"
+            "bsonType": "string"
           },
           "runTime": {
-            "type": "string"
+            "bsonType": "string"
           },
           "status": {
-            "type": "string"
+            "bsonType": "string"
           },
           "timeToRun": {
-            "type": "string"
+            "bsonType": "string"
           },
           "timeToRunLimit": {
-            "type": "string"
+            "bsonType": "string"
           },
           "topic": {
-            "type": "string"
+            "bsonType": "string"
           }
         }
       }
     }
+  },
+  {
+    "createIndexes": "event_logs",
+    "indexes": [
+      {
+        "key": {
+          "moodType": 1
+        },
+        "name": "idx_moodType_1"
+      },
+      {
+        "key": {
+          "status": 1
+        },
+        "name": "idx_status_2"
+      },
+      {
+        "key": {
+          "topic": 1
+        },
+        "name": "idx_topic_3"
+      },
+      {
+        "key": {
+          "id": 1
+        },
+        "name": "idx_id_4"
+      }
+    ]
   }
 ]
