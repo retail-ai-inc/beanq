@@ -75,7 +75,7 @@ func ConfirmPrompt(question string) bool {
 	PrintNotice("N: stop")
 
 	for {
-		_, err := color.New(color.FgHiYellow).Print("[y/n]:")
+		_, err := color.New(color.FgHiYellow).Print("Do you want to continue?[y/n]:")
 		if err != nil {
 			PrintError("print error: %v", err)
 			continue

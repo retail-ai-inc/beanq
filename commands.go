@@ -177,7 +177,7 @@ func (t *MongoMigrater) MigrationInstance() (*migrate.Migrate, error) {
 		return nil, err
 	}
 
-	sourceDriver, err := iofs.New(t.fsys, "migrations/mongo")
+	sourceDriver, err := iofs.New(t.fsys, "")
 	if err != nil {
 		return nil, err
 	}

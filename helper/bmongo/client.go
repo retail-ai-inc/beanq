@@ -681,6 +681,47 @@ func (t *BMongo) AddConfig(ctx context.Context, config *capture.Config) error {
 	return err
 }
 
+type CollectionState struct {
+	Name           string `json:"name" bson:"ns"`
+	Count          int32  `json:"count" bson:"count"`
+	Size           int32  `json:"size" bson:"size"`
+	Indexes        int32  `json:"indexes" bson:"nindexes"`
+	IndexSizes     bson.D `json:"indexSizes" bson:"indexSizes"`
+	StorageSize    int32  `json:"storageSize" bson:"storageSize"`
+	TotalIndexSize int32  `json:"totalIndexSize" bson:"totalIndexSize"`
+	Sharded        bool   `json:"sharded" bson:"sharded"`
+}
+
+func (t *BMongo) MongoDetail(ctx context.Context) ([]CollectionState, error) {
+
+	var err error
+
+	collections, err := t.database.ListCollectionNames(ctx, bson.D{})
+	if err != nil {
+		return nil, err
+	}
+
+	collectionStates := make([]CollectionState, 0, len(collections))
+	for _, collection := range collections {
+
+		var colState CollectionState
+		cmd := bson.D{
+			{"collStats", collection},
+			//{"scale",1024*1024}, this value is not working
+		}
+		if err := t.database.RunCommand(ctx, cmd).Decode(&colState); err != nil {
+			err = errors.Join(err, errors.New(fmt.Sprintf("Error getting stats for %s: %+v", collection, err)))
+			continue
+		}
+		colState.Name = collection
+		collectionStates = append(collectionStates, colState)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return collectionStates, nil
+}
+
 func (t *BMongo) ConfigInfo(ctx context.Context) (*capture.Config, error) {
 
 	filter := bson.M{

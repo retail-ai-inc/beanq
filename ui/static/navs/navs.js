@@ -54,7 +54,8 @@ const Nav = [
                     {id:29,label:"Edit",mark:"edit",value:"",pid:26}
                 ]
             },
-            {id:31,label:"Config",mark:"config",to:"/admin/config",value:"/admin/config",pid:20}
+            {id:31,label:"Config",mark:"config",to:"/admin/config",value:"/admin/config",pid:20},
+            {id:34,label:"DataBase",mark:"database",to:"/admin/database",value:"/admin/database",pid:20}
         ]
     }
 ];
