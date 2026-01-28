@@ -706,11 +706,11 @@ func (t *BMongo) MongoDetail(ctx context.Context) ([]CollectionState, error) {
 
 		var colState CollectionState
 		cmd := bson.D{
-			{"collStats", collection},
+			{Key: "collStats", Value: collection},
 			//{"scale",1024*1024}, this value is not working
 		}
-		if err := t.database.RunCommand(ctx, cmd).Decode(&colState); err != nil {
-			err = errors.Join(err, errors.New(fmt.Sprintf("Error getting stats for %s: %+v", collection, err)))
+		if cmderr := t.database.RunCommand(ctx, cmd).Decode(&colState); err != nil {
+			err = errors.Join(err, errors.New(fmt.Sprintf("Error getting stats for %s: %+v", collection, cmderr)))
 			continue
 		}
 		colState.Name = collection

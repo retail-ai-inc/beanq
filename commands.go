@@ -268,9 +268,6 @@ func (t *MigrateContext) Execute() {
 	}
 }
 
-//go:embed migrations
-var migrationsFS embed.FS
-
 //go:embed migrations/mongo
 var mongoMigrationsFS embed.FS
 
