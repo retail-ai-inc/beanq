@@ -78,7 +78,7 @@ func migration(cmd *cobra.Command, args []string) {
 	}
 
 	//
-	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, migrationsFS))
+	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, mongoMigrationsFS))
 	mCtx.Execute()
 
 	// if have mysql migrater
@@ -176,7 +176,8 @@ func (t *MongoMigrater) MigrationInstance() (*migrate.Migrate, error) {
 	if err != nil {
 		return nil, err
 	}
-	sourceDriver, err := iofs.New(migrationsFS, "migrations/mongo")
+
+	sourceDriver, err := iofs.New(t.fsys, "")
 	if err != nil {
 		return nil, err
 	}
@@ -267,8 +268,8 @@ func (t *MigrateContext) Execute() {
 	}
 }
 
-//go:embed migrations
-var migrationsFS embed.FS
+//go:embed migrations/mongo
+var mongoMigrationsFS embed.FS
 
 func parseConfig(flags interface{ GetString(string) (string, error) }) (*BeanqConfig, error) {
 

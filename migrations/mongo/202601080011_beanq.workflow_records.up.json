@@ -20,40 +20,40 @@
         ],
         "properties": {
           "_id": {
-            "type": "objectId"
+            "bsonType": "objectId"
           },
           "Channel": {
-            "type": "string"
+            "bsonType": "string"
           },
           "CreatedAt": {
-            "type": "date"
+            "bsonType": "date"
           },
           "Error": {
-            "type": "string"
+            "bsonType": "string"
           },
           "Gid": {
-            "type": "string"
+            "bsonType": "string"
           },
           "Option": {
-            "type": "string"
+            "bsonType": "string"
           },
           "Skipper": {
-            "type": "boolean"
+            "bsonType": "boolean"
           },
           "Statement": {
-            "type": "string"
+            "bsonType": "string"
           },
           "Status": {
-            "type": "string"
+            "bsonType": "string"
           },
           "TaskId": {
-            "type": "string"
+            "bsonType": "string"
           },
           "Topic": {
-            "type": "string"
+            "bsonType": "string"
           },
           "UpdatedAt": {
-            "type": "date"
+            "bsonType": "date"
           }
         }
       }

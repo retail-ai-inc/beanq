@@ -22,6 +22,7 @@ type Handles struct {
 	logs         *Logs
 	log          *Log
 	redisInfo    *RedisInfo
+	mongoInfo    *MongoInfo
 	login        *Login
 	client       *Client
 	dashboard    *Dashboard
@@ -49,6 +50,7 @@ func NewRouters(
 		logs:         NewLogs(client, prefix),
 		log:          NewLog(client, mgo, prefix),
 		redisInfo:    NewRedisInfo(client, prefix, mgo),
+		mongoInfo:    NewMongoInfo(mgo),
 		login:        NewLogin(client, mgo, prefix, ui),
 		client:       NewClient(client, prefix),
 		dashboard:    NewDashboard(client, mgo, prefix),
@@ -170,4 +172,6 @@ func NewRouters(
 	mux.HandleFunc("POST /workflow/delete", MigrateMiddleWare(hdls.workflow.Delete, client, mgo, prefix, ui))
 
 	mux.HandleFunc("GET /pod/list", MigrateMiddleWare(hdls.pod.List, client, mgo, prefix, ui))
+
+	mux.HandleFunc("GET /mongo/detail", MigrateMiddleWare(hdls.mongoInfo.Detail, client, mgo, prefix, ui))
 }
