@@ -2,7 +2,6 @@ package beanq
 
 import (
 	"context"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -15,7 +14,7 @@ import (
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/mongodb"
-	"github.com/golang-migrate/migrate/v4/source/iofs"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/retail-ai-inc/beanq/v4/helper/color"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -76,9 +75,13 @@ func migration(cmd *cobra.Command, args []string) {
 			os.Exit(0)
 		}
 	}
-
+	f, err := cmd.Flags().GetString("file")
+	if err != nil {
+		color.PrintError("get file error:%+v", err.Error())
+		os.Exit(0)
+	}
 	//
-	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, mongoMigrationsFS))
+	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, f))
 	mCtx.Execute()
 
 	// if have mysql migrater
@@ -96,25 +99,29 @@ type Migrater interface {
 }
 
 type MongoMigrater struct {
-	client *mongo.Client
-	Config *BeanqConfig
-	action string
-	fsys   embed.FS
+	client   *mongo.Client
+	Config   *BeanqConfig
+	action   string
+	filePath string
 }
 
 var _ Migrater = (*MongoMigrater)(nil)
 
-func NewMongoMigrater(beanqConfig *BeanqConfig, action string, fsys embed.FS) *MongoMigrater {
+func NewMongoMigrater(beanqConfig *BeanqConfig, action string, filePath string) *MongoMigrater {
 
 	client, err := newMongoClient(context.Background(), beanqConfig.Mongo)
 	if err != nil {
 		panic(err)
 	}
+	if filePath == "" {
+		filePath = "./migrations/mongo/"
+	}
+	//filePath = strings.Join([]string{"file://", filePath}, "")
 	return &MongoMigrater{
-		client: client,
-		Config: beanqConfig,
-		action: action,
-		fsys:   fsys,
+		client:   client,
+		Config:   beanqConfig,
+		action:   action,
+		filePath: filePath,
 	}
 }
 
@@ -150,14 +157,14 @@ func (t *MongoMigrater) SortedVersions(collections map[string]map[string]Collect
 		}
 		return false
 	}
-
-	err := fs.WalkDir(t.fsys, ".", func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(t.filePath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !existInCollections(path) {
 			return err
 		}
 		files = append(files, path)
 		return nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -176,13 +183,9 @@ func (t *MongoMigrater) MigrationInstance() (*migrate.Migrate, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	sourceDriver, err := iofs.New(t.fsys, "")
-	if err != nil {
-		return nil, err
-	}
-
-	mig, err := migrate.NewWithInstance("iofs", sourceDriver, "mongo", driver)
+	absDir, _ := filepath.Abs(t.filePath)
+	absDir = strings.Join([]string{"file://", absDir}, "")
+	mig, err := migrate.NewWithDatabaseInstance(absDir, "beanq_mongo", driver)
 	if err != nil {
 		return nil, err
 	}
@@ -267,9 +270,6 @@ func (t *MigrateContext) Execute() {
 		color.PrintSuccess("✅ version %d migrate success, duration: %v", target, duration)
 	}
 }
-
-//go:embed migrations/mongo
-var mongoMigrationsFS embed.FS
 
 func parseConfig(flags interface{ GetString(string) (string, error) }) (*BeanqConfig, error) {
 

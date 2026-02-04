@@ -64,6 +64,7 @@ type (
 		Priority         float64         `json:"priority"`
 		TimeToRun        time.Duration   `json:"timeToRun"`
 		retryConditions  []RetryConditionFunc
+		config           *BeanqConfig
 	}
 
 	dynamicOption struct {
@@ -82,18 +83,6 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 	// init config,will merge default options
 	config.init()
 
-	jsonStr := config.ToJson()
-	// hide the ‘config’ parameter and prohibit manually passing in this parameter
-	migrationCmd.Flags().String(cmdConfigKeyName, jsonStr, "")
-	_ = migrationCmd.Flags().MarkHidden(cmdConfigKeyName)
-	// migration type: up | down
-	migrationCmd.Flags().String("action", "up", "performed action")
-	// If you want to perform a database migration, use the command [run migration --action=down].
-	//The default action is up.
-	if err := Execute(); err != nil {
-		logger.New().Fatal(err)
-	}
-
 	client := &Client{
 		Topic:     config.Topic,
 		Channel:   config.Channel,
@@ -108,6 +97,7 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 	}
 
 	client.broker = NewBroker(config)
+	client.config = config
 	return client
 }
 

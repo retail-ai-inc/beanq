@@ -1,0 +1,54 @@
+[
+  {
+    "create": "managers",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "_id",
+          "account",
+          "active",
+          "createAt",
+          "detail",
+          "password",
+          "roleId",
+          "roles",
+          "type",
+          "updateAt"
+        ],
+        "properties": {
+          "_id": {
+            "bsonType": "objectId"
+          },
+          "account": {
+            "bsonType": "string"
+          },
+          "active": {
+            "bsonType": "int"
+          },
+          "createAt": {
+            "bsonType": "date"
+          },
+          "detail": {
+            "bsonType": "string"
+          },
+          "password": {
+            "bsonType": "string"
+          },
+          "roleId": {
+            "bsonType": "string"
+          },
+          "roles": {
+            "bsonType": "null"
+          },
+          "type": {
+            "bsonType": "string"
+          },
+          "updateAt": {
+            "bsonType": "date"
+          }
+        }
+      }
+    }
+  }
+]
