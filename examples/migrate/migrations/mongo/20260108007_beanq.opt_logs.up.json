@@ -1,0 +1,42 @@
+[
+  {
+    "create": "opt_logs",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "_id",
+          "addTime",
+          "data",
+          "expireAt",
+          "logType",
+          "uri",
+          "user"
+        ],
+        "properties": {
+          "_id": {
+            "bsonType": "objectId"
+          },
+          "addTime": {
+            "bsonType": "date"
+          },
+          "data": {
+            "type": "null"
+          },
+          "expireAt": {
+            "bsonType": "date"
+          },
+          "logType": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+]

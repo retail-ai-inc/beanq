@@ -66,7 +66,7 @@ var (
 	workflowClient      redis.UniversalClient
 	workflowRedisConfig *Redis
 	workflowOnce        sync.Once
-	workflowConfig      *struct {
+	workflowConfig      = &struct {
 		*Mongo
 		*WorkFlow
 		*History
@@ -74,7 +74,7 @@ var (
 			Name  string
 			Shard bool
 		}
-	}
+	}{}
 )
 
 // InitWorkflow make workflow as an independent module
