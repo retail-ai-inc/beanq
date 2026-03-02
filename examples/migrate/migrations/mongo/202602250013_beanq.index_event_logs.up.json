@@ -1,0 +1,43 @@
+[
+  {
+    "createIndexes": "event_logs",
+    "indexes": [
+      {
+        "key": {
+          "logType": 1
+        },
+        "name": "idx_logType_0"
+      },
+      {
+        "key": {
+          "moodType": 1
+        },
+        "name": "idx_moodType_1"
+      },
+      {
+        "key": {
+          "status": 1
+        },
+        "name": "idx_status_2"
+      },
+      {
+        "key": {
+          "topic": 1
+        },
+        "name": "idx_topic_3"
+      },
+      {
+        "key": {
+          "id": 1
+        },
+        "name": "idx_id_4"
+      },
+      {
+        "key": {
+          "_id": "hashed"
+        },
+        "name": "hashed_id_idx"
+      }
+    ]
+  }
+]
