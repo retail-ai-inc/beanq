@@ -233,6 +233,8 @@ func (t Collection) checkIndexExists(ctx context.Context, database *mongo.Databa
 }
 
 // createIndex creates an index for the collection
+//
+//nolint:unused
 func (t Collection) createIndex(ctx context.Context, database *mongo.Database, key string, sort int) error {
 	if database == nil {
 		return fmt.Errorf("database is nil")

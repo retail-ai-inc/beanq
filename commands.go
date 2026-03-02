@@ -272,7 +272,7 @@ func (t *MigrateContext) Execute() {
 			}
 			// Check if the error is related to collection already existing
 			if strings.Contains(err.Error(), "NamespaceExists") || strings.Contains(err.Error(), "E11000") {
-
+				//nolint:gosec
 				if err := m.Force(int(target)); err != nil {
 					color.PrintInfo("Force Migration version %d error: %v", target, err)
 					os.Exit(0)
