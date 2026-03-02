@@ -83,7 +83,7 @@ func migration(cmd *cobra.Command, args []string) {
 	}
 	//
 	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, f))
-	mCtx.Execute(action)
+	mCtx.Execute()
 
 	// if have mysql migrater
 	//mCtx.Set(NewMySqlMigrater())
@@ -210,7 +210,7 @@ func (t *MigrateContext) Set(migrater Migrater) {
 
 var reCollection = regexp.MustCompile(`Collection\s+(\S+)\s+already exists`)
 
-func (t *MigrateContext) Execute(action string) {
+func (t *MigrateContext) Execute() {
 
 	collections := t.migrater.Collections()
 
