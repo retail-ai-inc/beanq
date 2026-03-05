@@ -12,6 +12,11 @@ linters:
     - gosec
     - gocyclo
     - prealloc
+  settings:
+    gosec:
+      excludes:
+        - G117 # Exported struct field "Secret","ApiKey","AccessKey","AccessToken","ClientSecret" (JSON key "Secret") matches secret pattern
+
   exclusions:
     warn-unused: true
     presets:

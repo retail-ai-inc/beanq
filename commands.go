@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,6 +132,8 @@ func (t *MongoMigrater) Collections() map[string]map[string]Collection {
 	if t.Config.History.Storage == "mongo" {
 		//nolint:staticcheck,qf1008 //enhance readability
 		collections = t.Config.Mongo.Collections
+		collections["index_event_logs"] = Collection{Name: "index_event_logs", Shard: false}
+		collections["index_workflow_records"] = Collection{Name: "index_workflow_records", Shard: false}
 	}
 	if t.Config.WorkFlow.Storage != "mongo" {
 		delete(collections, "workflow")
@@ -205,6 +208,8 @@ func (t *MigrateContext) Set(migrater Migrater) {
 	t.migrater = migrater
 }
 
+var reCollection = regexp.MustCompile(`Collection\s+(\S+)\s+already exists`)
+
 func (t *MigrateContext) Execute() {
 
 	collections := t.migrater.Collections()
@@ -249,6 +254,7 @@ func (t *MigrateContext) Execute() {
 			pending = append(pending, extractVersion(v))
 		}
 	}
+
 	if len(pending) == 0 {
 		color.PrintSuccess("✅ It is already the latest version, no migration needed")
 		os.Exit(0)
@@ -261,9 +267,27 @@ func (t *MigrateContext) Execute() {
 		start := time.Now()
 		if err := m.Migrate(uint(target)); err != nil {
 			if err == migrate.ErrNoChange {
+				color.PrintNotice("Migration version %d has no changes, skipping", target)
+				continue
+			}
+			// Check if the error is related to collection already existing
+			if strings.Contains(err.Error(), "NamespaceExists") || strings.Contains(err.Error(), "E11000") {
+				//nolint:gosec
+				if err := m.Force(int(target)); err != nil {
+					color.PrintInfo("Force Migration version %d error: %v", target, err)
+					os.Exit(0)
+				}
+				if strs := reCollection.FindStringSubmatch(err.Error()); len(strs) >= 2 {
+					color.PrintNotice("Migration version %d skipped,Collection (%s) already exists.", target, strs[1])
+				} else {
+					color.PrintNotice("Migration version %d skipped. Err: (%s)", target, err.Error())
+				}
+
 				continue
 			}
 			color.PrintError("version %d failed: %v", target, err)
+			// Continue with other migrations instead of exiting
+			continue
 		}
 		duration := time.Since(start)
 		color.ProgressBar(i+1, total, "migrate progress")

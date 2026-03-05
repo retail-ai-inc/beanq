@@ -1,0 +1,31 @@
+[
+  {
+    "createIndexes": "workflow_records",
+    "indexes": [
+      {
+        "key": {
+          "Topic": 1
+        },
+        "name": "idx_Topic_0"
+      },
+      {
+        "key": {
+          "Channel": 1
+        },
+        "name": "idx_Channel_1"
+      },
+      {
+        "key": {
+          "status": 1
+        },
+        "name": "idx_status_2"
+      },
+      {
+        "key": {
+          "_id": "hashed"
+        },
+        "name": "hashed_id_idx"
+      }
+    ]
+  }
+]
