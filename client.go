@@ -25,7 +25,6 @@ package beanq
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -63,6 +62,7 @@ type (
 		Priority         float64         `json:"priority"`
 		TimeToRun        time.Duration   `json:"timeToRun"`
 		retryConditions  []RetryConditionFunc
+		config           *BeanqConfig
 	}
 
 	dynamicOption struct {
@@ -76,38 +76,10 @@ type (
 	RetryConditionFunc func(map[string]any, error) bool
 )
 
-var (
-	on       = flag.Bool("on", false, "mongo log enable")
-	database = flag.String("database", "", "Mongo database name for saving logs")
-	username = flag.String("username", "", "Mongo username")
-	password = flag.String("password", "", "Mongo password")
-	host     = flag.String("host", "", "Mongo host")
-	port     = flag.String("port", "", "Mongo port")
-)
-
 func New(config *BeanqConfig, options ...ClientOption) *Client {
-	// init config,Will merge default options
-	config.init()
 
-	flag.Parse()
-	if *on {
-		config.History.On = true
-	}
-	if *database != "" {
-		config.Mongo.Database = *database
-	}
-	if *username != "" {
-		config.Mongo.UserName = *username
-	}
-	if *password != "" {
-		config.Mongo.Password = *password
-	}
-	if *host != "" {
-		config.Mongo.Host = *host
-	}
-	if *port != "" {
-		config.Mongo.Port = *port
-	}
+	// init config,will merge default options
+	config.init()
 
 	client := &Client{
 		Topic:     config.Topic,
@@ -123,6 +95,7 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 	}
 
 	client.broker = NewBroker(config)
+	client.config = config
 	return client
 }
 

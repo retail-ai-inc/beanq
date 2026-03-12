@@ -154,22 +154,9 @@ func (t Collection) Create(ctx context.Context, database *mongo.Database, tp Col
 }
 
 // CreateIndex creates a normal index for the collection
+// will remove this code,because use migration script to do it
 func (t Collection) CreateIndex(ctx context.Context, database *mongo.Database, key string, sort int) error {
-
-	if database == nil {
-		return fmt.Errorf("database is nil")
-	}
-
-	exists, err := t.checkIndexExists(ctx, database, key)
-	if err != nil {
-		return err
-	}
-	// If the index already exists, return
-	if exists {
-		return nil
-	}
-
-	return t.createIndex(ctx, database, key, sort)
+	return nil
 }
 
 // CreateTTLIndex creates a TTL index for the collection
@@ -246,6 +233,8 @@ func (t Collection) checkIndexExists(ctx context.Context, database *mongo.Databa
 }
 
 // createIndex creates an index for the collection
+//
+//nolint:unused
 func (t Collection) createIndex(ctx context.Context, database *mongo.Database, key string, sort int) error {
 	if database == nil {
 		return fmt.Errorf("database is nil")

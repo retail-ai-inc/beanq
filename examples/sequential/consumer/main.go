@@ -73,7 +73,7 @@ var ErrorSkip = errors.New("SKIP ERROR")
 func main() {
 	config := initCnf()
 	csm := beanq.New(config)
-	beanq.InitWorkflow(&config.Redis, &config.Workflow)
+	beanq.InitWorkflow(config)
 
 	ctx := context.Background()
 	_, berr := csm.BQ().WithContext(ctx).SubscribeToSequence("sequential-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {

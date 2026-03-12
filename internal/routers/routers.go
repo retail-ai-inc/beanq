@@ -22,6 +22,7 @@ type Handles struct {
 	logs         *Logs
 	log          *Log
 	redisInfo    *RedisInfo
+	mongoInfo    *MongoInfo
 	login        *Login
 	client       *Client
 	dashboard    *Dashboard
@@ -63,6 +64,7 @@ func RouterList(fs2 fs.FS,
 		logs:         NewLogs(client, prefix),
 		log:          NewLog(client, mgo, prefix),
 		redisInfo:    NewRedisInfo(client, prefix, mgo),
+		mongoInfo:    NewMongoInfo(mgo),
 		login:        NewLogin(client, mgo, prefix, ui),
 		client:       NewClient(client, prefix),
 		dashboard:    NewDashboard(client, mgo, prefix),
@@ -185,6 +187,7 @@ func RouterList(fs2 fs.FS,
 	router.HandleFunc("POST /workflow/delete", hdls.workflow.Delete, HeaderRule(), Auth(mgo, ui))
 
 	router.HandleFunc("GET /pod/list", hdls.pod.List, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("GET /mongo/detail", hdls.mongoInfo.Detail, HeaderRule(), Auth(mgo, ui))
 
 	router.HandleFunc("PUT /tenant", hdls.tenant.Add, HeaderRule(), Auth(mgo, ui))
 	router.HandleFunc("DELETE /tenant/{id}", hdls.tenant.Delete, HeaderRule(), Auth(mgo, ui))

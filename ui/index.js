@@ -93,7 +93,9 @@
           { path: 'db-size',component:()=>loadModule("./src/pages/redis/dbsize.vue",options)},
           { path: 'config',component:()=>loadModule("./src/pages/setting/config.vue",options)},
           { path: 'tenant',component:()=>loadModule("./src/pages/tenant/list.vue",options)},
-          { path: 'tenant/add',component:()=>loadModule("./src/pages/tenant/add.vue",options)}
+          { path: 'tenant/add',component:()=>loadModule("./src/pages/tenant/add.vue",options)},
+          { path: 'database',component:()=>loadModule("./src/pages/setting/database.vue",options)}
+
         ]
   };
 

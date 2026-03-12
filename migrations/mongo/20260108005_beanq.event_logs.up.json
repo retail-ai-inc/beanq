@@ -1,0 +1,129 @@
+[
+  {
+    "create": "event_logs",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "_id",
+          "addTime",
+          "channel",
+          "executeTime",
+          "id",
+          "lockOrderKeyTTL",
+          "logType",
+          "maxLen",
+          "moodType",
+          "orderKey",
+          "payload",
+          "priority",
+          "retry",
+          "status",
+          "timeToRun",
+          "timeToRunLimit",
+          "topic"
+        ],
+        "properties": {
+          "_id": {
+            "bsonType": "objectId"
+          },
+          "addTime": {
+            "bsonType": "string"
+          },
+          "beginTime": {
+            "bsonType": "string"
+          },
+          "channel": {
+            "bsonType": "string"
+          },
+          "endTime": {
+            "bsonType": "string"
+          },
+          "executeTime": {
+            "bsonType": "string"
+          },
+          "hostName": {
+            "bsonType": "string"
+          },
+          "id": {
+            "bsonType": "string"
+          },
+          "info": {
+            "bsonType": "string"
+          },
+          "level": {
+            "bsonType": "string"
+          },
+          "lockOrderKeyTTL": {
+            "bsonType": "string"
+          },
+          "logType": {
+            "bsonType": "string"
+          },
+          "maxLen": {
+            "bsonType": "string"
+          },
+          "moodType": {
+            "bsonType": "string"
+          },
+          "orderKey": {
+            "bsonType": "string"
+          },
+          "payload": {
+            "bsonType": "string"
+          },
+          "priority": {
+            "bsonType": "string"
+          },
+          "retry": {
+            "bsonType": "string"
+          },
+          "runTime": {
+            "bsonType": "string"
+          },
+          "status": {
+            "bsonType": "string"
+          },
+          "timeToRun": {
+            "bsonType": "string"
+          },
+          "timeToRunLimit": {
+            "bsonType": "string"
+          },
+          "topic": {
+            "bsonType": "string"
+          }
+        }
+      }
+    }
+  },
+  {
+    "createIndexes": "event_logs",
+    "indexes": [
+      {
+        "key": {
+          "moodType": 1
+        },
+        "name": "idx_moodType_1"
+      },
+      {
+        "key": {
+          "status": 1
+        },
+        "name": "idx_status_2"
+      },
+      {
+        "key": {
+          "topic": 1
+        },
+        "name": "idx_topic_3"
+      },
+      {
+        "key": {
+          "id": 1
+        },
+        "name": "idx_id_4"
+      }
+    ]
+  }
+]

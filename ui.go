@@ -59,42 +59,52 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		capture.System.When(c.broker.captureConfig).Then(err)
 	}
 
-	history := c.broker.config.History
+	mongoCfg := c.broker.config.Mongo
+	collections := make(map[string]string)
+
+	for s, collection := range mongoCfg.Collections {
+		collections[s] = collection.Name
+	}
+
 	var mog *bmongo.BMongo
-	if history.On {
+	if c.broker.config.History.On {
 
 		// compatible with unmodified env.json
-		mongoPort := strings.TrimLeft(history.Mongo.Port, ":")
+		mongoPort := strings.TrimLeft(mongoCfg.Port, ":")
 		mongoPort = fmt.Sprintf(":%s", mongoPort)
 
 		mog = bmongo.NewMongo(
-			history.Mongo.Host,
+			mongoCfg.Host,
 			mongoPort,
-			history.Mongo.UserName,
-			history.Mongo.Password,
-			history.Mongo.Database,
-			history.Mongo.Collections,
-			history.Mongo.ConnectTimeOut,
-			history.Mongo.MaxConnectionPoolSize,
-			history.Mongo.MaxConnectionLifeTime,
+			mongoCfg.UserName,
+			mongoCfg.Password,
+			mongoCfg.Database,
+			collections,
+			mongoCfg.ConnectTimeOut,
+			mongoCfg.MaxConnectionPoolSize,
+			mongoCfg.MaxConnectionLifeTime,
 		)
 	}
 
 	var workflowMongoCollection *mongo.Collection
-	workflowRecordCfg := c.broker.config.Workflow.Record
-	if workflowRecordCfg.On && workflowRecordCfg.Mongo != nil && workflowRecordCfg.Mongo.Database != "" {
-		connURI := "mongodb://" + workflowRecordCfg.Mongo.Host + ":" + workflowRecordCfg.Mongo.Port
+	collection := "workflow_records"
+	if v, ok := mongoCfg.Collections["workflow"]; ok {
+		collection = v.Name
+	}
+
+	if c.broker.config.WorkFlow.On && mongoCfg != nil && mongoCfg.Database != "" {
+		connURI := "mongodb://" + mongoCfg.Host + ":" + mongoCfg.Port
 		opts := options.Client().
 			ApplyURI(connURI).
-			SetConnectTimeout(workflowRecordCfg.Mongo.ConnectTimeOut).
-			SetMaxPoolSize(workflowRecordCfg.Mongo.MaxConnectionPoolSize).
-			SetMaxConnIdleTime(workflowRecordCfg.Mongo.MaxConnectionLifeTime)
+			SetConnectTimeout(mongoCfg.ConnectTimeOut).
+			SetMaxPoolSize(mongoCfg.MaxConnectionPoolSize).
+			SetMaxConnIdleTime(mongoCfg.MaxConnectionLifeTime)
 
-		if workflowRecordCfg.Mongo.UserName != "" && workflowRecordCfg.Mongo.Password != "" {
+		if mongoCfg.UserName != "" && mongoCfg.Password != "" {
 			opts.SetAuth(options.Credential{
-				AuthSource: workflowRecordCfg.Mongo.Database,
-				Username:   workflowRecordCfg.Mongo.UserName,
-				Password:   workflowRecordCfg.Mongo.Password,
+				AuthSource: mongoCfg.Database,
+				Username:   mongoCfg.UserName,
+				Password:   mongoCfg.Password,
 			})
 		}
 
@@ -102,16 +112,10 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		if err != nil {
 			panic(err)
 		}
-		workflowMongoCollection = client.Database(workflowRecordCfg.Mongo.Database).Collection(workflowRecordCfg.Mongo.Collection)
+		workflowMongoCollection = client.Database(mongoCfg.Database).Collection(collection)
 	}
 
-	rlist := routers.RouterList(
-		views,
-		files,
-		c.broker.client.(redis.UniversalClient),
-		mog, workflowMongoCollection,
-		c.broker.config.Redis.Prefix, c.broker.config.UI)
-
+	rlist := routers.RouterList(views, files, c.broker.client.(redis.UniversalClient), mog, workflowMongoCollection, c.broker.config.Redis.Prefix, c.broker.config.UI)
 	logger.New().Info("Beanq UI Start on port", httpport)
 
 	server := &http.Server{

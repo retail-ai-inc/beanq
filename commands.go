@@ -1,0 +1,362 @@
+package beanq
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/mongodb"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/retail-ai-inc/beanq/v4/helper/color"
+	"github.com/spf13/cobra"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+// pass configuration information through the flags parameter
+const cmdConfigKeyName = "config"
+
+var (
+	rootCmd = &cobra.Command{
+		Use:   "beanq",
+		Short: "",
+		Run: func(cmd *cobra.Command, args []string) {
+
+		},
+	}
+	runCmd = &cobra.Command{
+		Use:   "run",
+		Short: "",
+		Run: func(cmd *cobra.Command, args []string) {
+
+		},
+	}
+	migrationCmd = &cobra.Command{
+		Use:   "migration",
+		Short: "",
+		Run:   migration,
+	}
+)
+
+func init() {
+	runCmd.AddCommand(migrationCmd)
+	rootCmd.AddCommand(runCmd)
+}
+
+// migration database schema for logs and configs
+func migration(cmd *cobra.Command, args []string) {
+
+	if changed := cmd.Flags().Changed(cmdConfigKeyName); changed {
+		color.PrintWarning("Prohibit modifying [config] parameter values")
+		os.Exit(0)
+	}
+
+	conf, err := parseConfig(cmd.Flags())
+	if err != nil {
+		color.PrintError("parse config error:%+v", err.Error())
+		os.Exit(0)
+	}
+	action, err := cmd.Flags().GetString("action")
+	if err != nil {
+		color.PrintError("get action error:%+v", err.Error())
+		os.Exit(0)
+	}
+	color.PrintLogo()
+	if action == "down" {
+		if !color.ConfirmPrompt("⚠️ confirm to continue executing this operation?") {
+			os.Exit(0)
+		}
+	}
+	f, err := cmd.Flags().GetString("file")
+	if err != nil {
+		color.PrintError("get file error:%+v", err.Error())
+		os.Exit(0)
+	}
+	//
+	mCtx := NewMigrateContext(NewMongoMigrater(conf, action, f))
+	mCtx.Execute()
+
+	// if have mysql migrater
+	//mCtx.Set(NewMySqlMigrater())
+	//mCtx.Execute()
+
+	color.PrintSuccess("🎉 database migration has been successfully completed！")
+	os.Exit(0)
+}
+
+type Migrater interface {
+	Collections() map[string]map[string]Collection
+	SortedVersions(collections map[string]map[string]Collection) ([]string, error)
+	MigrationInstance() (*migrate.Migrate, error)
+}
+
+type MongoMigrater struct {
+	client   *mongo.Client
+	Config   *BeanqConfig
+	action   string
+	filePath string
+}
+
+var _ Migrater = (*MongoMigrater)(nil)
+
+func NewMongoMigrater(beanqConfig *BeanqConfig, action string, filePath string) *MongoMigrater {
+
+	client, err := newMongoClient(context.Background(), beanqConfig.Mongo)
+	if err != nil {
+		panic(err)
+	}
+	if filePath == "" {
+		filePath = "./migrations/mongo/"
+	}
+	//filePath = strings.Join([]string{"file://", filePath}, "")
+	return &MongoMigrater{
+		client:   client,
+		Config:   beanqConfig,
+		action:   action,
+		filePath: filePath,
+	}
+}
+
+func (t *MongoMigrater) Collections() map[string]map[string]Collection {
+
+	collections := make(map[string]Collection)
+	if t.Config.History.Storage == "mongo" {
+		//nolint:staticcheck,qf1008 //enhance readability
+		collections = t.Config.Mongo.Collections
+		collections["index_event_logs"] = Collection{Name: "index_event_logs", Shard: false}
+		collections["index_workflow_records"] = Collection{Name: "index_workflow_records", Shard: false}
+	}
+	if t.Config.WorkFlow.Storage != "mongo" {
+		delete(collections, "workflow")
+	}
+
+	data := map[string]map[string]Collection{
+		"mongo": collections,
+	}
+	return data
+}
+
+func (t *MongoMigrater) SortedVersions(collections map[string]map[string]Collection) ([]string, error) {
+
+	var files []string
+
+	existInCollections := func(collectionPath string) bool {
+		for _, vals := range collections {
+			for _, collection := range vals {
+				name := strings.Join([]string{"beanq.", collection.Name, ".", t.action}, "")
+				if strings.Contains(collectionPath, name) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	err := filepath.WalkDir(t.filePath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !existInCollections(path) {
+			return err
+		}
+		files = append(files, path)
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		return extractVersion(files[i]) < extractVersion(files[j])
+	})
+	return files, nil
+}
+
+func (t *MongoMigrater) MigrationInstance() (*migrate.Migrate, error) {
+
+	mongoCfg := t.Config.Mongo
+
+	driver, err := mongodb.WithInstance(t.client, &mongodb.Config{DatabaseName: mongoCfg.Database})
+	if err != nil {
+		return nil, err
+	}
+	absDir, _ := filepath.Abs(t.filePath)
+	absDir = strings.Join([]string{"file://", absDir}, "")
+	mig, err := migrate.NewWithDatabaseInstance(absDir, "beanq_mongo", driver)
+	if err != nil {
+		return nil, err
+	}
+
+	return mig, nil
+}
+
+type MigrateContext struct {
+	migrater Migrater
+}
+
+func NewMigrateContext(migrater Migrater) *MigrateContext {
+	return &MigrateContext{migrater: migrater}
+}
+
+func (t *MigrateContext) Set(migrater Migrater) {
+	t.migrater = migrater
+}
+
+var reCollection = regexp.MustCompile(`Collection\s+(\S+)\s+already exists`)
+
+func (t *MigrateContext) Execute() {
+
+	collections := t.migrater.Collections()
+
+	availableVersions, err := t.migrater.SortedVersions(collections)
+	if err != nil {
+		color.PrintError("failed to parse version: %v", err)
+		os.Exit(1)
+
+	}
+	color.PrintHeader("Migration Versions")
+	color.PrintInfo("📋 Available migration versions:")
+	for i, v := range availableVersions {
+		color.PrintNotice("    %d. %s", i+1, v)
+	}
+
+	m, err := t.migrater.MigrationInstance()
+	if err != nil {
+		color.PrintError("failed to create migration instance: %v", err)
+		os.Exit(1)
+	}
+	currentVersion, dirty, err := m.Version()
+	if err != nil && err != migrate.ErrNilVersion {
+		color.PrintError("failed to obtain the current version: %v", err)
+		os.Exit(1)
+	}
+
+	color.PrintSuccess("--------------------------------------------------------------------")
+
+	if dirty {
+		color.PrintError("database version is [dirty], please repair manually")
+		os.Exit(1)
+	}
+	if err == migrate.ErrNilVersion {
+		currentVersion = 0
+	}
+	color.PrintInfo("📊 current database version: %d", currentVersion)
+
+	var pending []uint64
+	for _, v := range availableVersions {
+		if extractVersion(v) > uint64(currentVersion) {
+			pending = append(pending, extractVersion(v))
+		}
+	}
+
+	if len(pending) == 0 {
+		color.PrintSuccess("✅ It is already the latest version, no migration needed")
+		os.Exit(0)
+	}
+	color.PrintInfo("⏳ pending version: %v", pending)
+
+	color.PrintInfo("🚀 start to migrate...")
+	total := len(pending)
+	for i, target := range pending {
+		start := time.Now()
+		if err := m.Migrate(uint(target)); err != nil {
+			if err == migrate.ErrNoChange {
+				color.PrintNotice("Migration version %d has no changes, skipping", target)
+				continue
+			}
+			// Check if the error is related to collection already existing
+			if strings.Contains(err.Error(), "NamespaceExists") || strings.Contains(err.Error(), "E11000") {
+				//nolint:gosec
+				if err := m.Force(int(target)); err != nil {
+					color.PrintInfo("Force Migration version %d error: %v", target, err)
+					os.Exit(0)
+				}
+				if strs := reCollection.FindStringSubmatch(err.Error()); len(strs) >= 2 {
+					color.PrintNotice("Migration version %d skipped,Collection (%s) already exists.", target, strs[1])
+				} else {
+					color.PrintNotice("Migration version %d skipped. Err: (%s)", target, err.Error())
+				}
+
+				continue
+			}
+			color.PrintError("version %d failed: %v", target, err)
+			// Continue with other migrations instead of exiting
+			continue
+		}
+		duration := time.Since(start)
+		color.ProgressBar(i+1, total, "migrate progress")
+		color.PrintSuccess("✅ version %d migrate success, duration: %v", target, duration)
+	}
+}
+
+func parseConfig(flags interface{ GetString(string) (string, error) }) (*BeanqConfig, error) {
+
+	jsonStr, err := flags.GetString(cmdConfigKeyName)
+	if err != nil {
+		return nil, err
+	}
+	var cfg BeanqConfig
+	if err := json.Unmarshal([]byte(jsonStr), &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func newMongoClient(ctx context.Context, config *Mongo) (*mongo.Client, error) {
+
+	mport := strings.TrimLeft(config.Port, ":")
+	mport = fmt.Sprintf(":%s", mport)
+	uri := strings.Join([]string{"mongodb://", config.Host, mport}, "")
+
+	opts := options.Client().ApplyURI(uri).
+		SetConnectTimeout(config.ConnectTimeOut).
+		SetMaxPoolSize(config.MaxConnectionPoolSize).
+		SetMaxConnIdleTime(config.MaxConnectionLifeTime)
+
+	if config.UserName != "" && config.Password != "" {
+		auth := options.Credential{
+			AuthSource: config.Database,
+			Username:   config.UserName,
+			Password:   config.Password,
+		}
+		opts.SetAuth(auth)
+	}
+
+	client, err := mongo.Connect(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, err
+	}
+	return client, nil
+}
+
+func extractVersion(filename string) uint64 {
+
+	base := filepath.Base(filename)
+	parts := strings.SplitN(base, "_", 2)
+	if len(parts) == 0 {
+		return 0
+	}
+	v, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// Execute commands
+func Execute() error {
+
+	if err := rootCmd.Execute(); err != nil {
+		return err
+	}
+	return nil
+}
