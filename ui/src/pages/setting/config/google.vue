@@ -37,12 +37,7 @@
         <div class="col-6">
 
           <div class="input-group mb-3">
-            <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">{{google.scheme || "Https"}}</button>
-            <ul class="dropdown-menu">
-              <li><a class="dropdown-item" :class="google.scheme === 'Https' ? 'active':'' " href="javascript:;" @click="scheme('Https')">Https</a></li>
-              <li><a class="dropdown-item" :class="google.scheme === 'Http' ? 'active':'' " href="javascript:;" @click="scheme('Http')">Http</a></li>
-            </ul>
-            <input type="url" id="callBackUrl" class="form-control" v-model="google.callBackUrl" aria-label="Text input with dropdown button">
+            <input type="url" id="callBackUrl" disabled readonly class="form-control" v-model="google.callBackUrl" aria-label="Text input with dropdown button">
           </div>
 
         </div>
@@ -71,9 +66,5 @@ const google = computed({
 });
 
 const credentials = ref("https://console.cloud.google.com/apis/credentials?pli=1&inv=1&invt=Abs9TA");
-
-const scheme = (val)=>{
-  google.value.scheme = val;
-}
 
 </script>

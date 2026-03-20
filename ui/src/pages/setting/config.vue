@@ -10,7 +10,7 @@
 
           <nav>
             <div class="nav nav-tabs" id="nav-tab" role="tablist">
-              <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Credential</button>
+              <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Login</button>
               <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">SMTP</button>
               <button class="nav-link" id="send-grid-tab" data-bs-toggle="tab" data-bs-target="#send-grid-pane" type="button" role="tab" aria-controls="send-grid-pane" aria-selected="false">SendGrid</button>
               <button class="nav-link" id="slack-tab" data-bs-toggle="tab" data-bs-target="#slack-pane" type="button" role="tab" aria-controls="slack-pane" aria-selected="false">Slack</button>
@@ -60,7 +60,10 @@
                       v-model="form.rule"
                       @onTestNotify="onTestNotify"
             />
-            <button type="button" class="btn btn-primary" @click="edit" style="margin-top: 2rem;">{{$t('edit')}}</button>
+
+          </div>
+          <div class="d-grid gap-2 col-1 mx-auto">
+            <button class="btn btn-primary" type="button" @click="edit">{{$t('save')}}</button>
           </div>
         </div>
       </div>
@@ -82,13 +85,13 @@ import Slack from "./config/slack.vue";
 
 const [noticeId,loginModal] = [ref("configBackdrop"),ref("loginModal")];
 const [toastId,toastRef] = [ref("toast-" + Math.random().toString(36)),ref("toastRef")]
+const googleCallback = `${window.location.origin}/callback`;
 
 const form = ref({
   google:{
     clientId: "",
     clientSecret: "",
-    callBackUrl: "",
-    scheme:""
+    callBackUrl: googleCallback,
   },
   smtp:{
     host: "",
@@ -123,33 +126,6 @@ const [triggers,filters,actions] = [
 onMounted(()=>{
   list();
 })
-//
-// watch(() => form.value.google.clientId, (n, o) => {
-//   let ele = document.getElementById("clientId");
-//   if(n !== ""){
-//     ele.style.cssText = "border-color: #ced4da;";
-//   }else {
-//     ele.style.cssText = "border-color: red;";
-//   }
-// })
-//
-// watch(()=> form.value.google.clientSecret, (n, o) => {
-//   let ele = document.getElementById("clientSecret");
-//   if(n !== ""){
-//     ele.style.cssText = "border-color: #ced4da;";
-//   }else {
-//     ele.style.cssText = "border-color: red;";
-//   }
-// })
-//
-// watch(()=> form.value.google.callBackUrl, (n, o) => {
-//   let ele = document.getElementById("callBackUrl");
-//   if(n !== ""){
-//     ele.style.cssText = "border-color: #ced4da;";
-//   }else {
-//     ele.style.cssText = "border-color: red;";
-//   }
-// })
 
 const onTestNotify = async (param) => {
   console.log(param)
@@ -185,7 +161,11 @@ const onTestNotify = async (param) => {
 const list = async () => {
   try {
     let res = await configApi.getConfig();
+
     if(res?.google){
+      if(res.google.callBackUrl === ""){
+        res.google.callBackUrl = googleCallback;
+      }
       form.value.google = res.google;
     }
     if(res?.smtp){
@@ -216,25 +196,12 @@ const list = async () => {
 const edit = async () => {
 
   let value = form.value || {};
-  // if (value.google.clientId === "") {
-  //   document.getElementById("clientId").style.cssText = "border-color: red;";
-  //   return;
-  // }
-  // if(value.google.clientSecret === ""){
-  //   document.getElementById("clientSecret").style.cssText = "border-color: red;";
-  //   return;
-  // }
-  // if(value.google.callBackUrl === ""){
-  //   document.getElementById("callBackUrl").style.cssText = "border-color: red;";
-  //   return;
-  // }
 
   let result = {
     google:{
       clientId: value.google.clientId,
       clientSecret: value.google.clientSecret,
-      callBackUrl: value.google.callBackUrl,
-      scheme: value.google.scheme
+      callBackUrl: form.value.google.callBackUrl,
     },
     smtp:{
       host: value.smtp.host,

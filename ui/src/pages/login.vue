@@ -63,8 +63,8 @@ function handleKeyDown(event){
 const showGoogleLogin = ref(false);
 const allowGoogle = async ()=>{
   try {
-    let res = await loginApi.AllowGoogle();
-    showGoogleLogin.value = res;
+    let data = await loginApi.AllowGoogle();
+    showGoogleLogin.value = data.clientId !== "" && data.clientSecret !== "";
   }catch (e) {
     console.log(e);
   }
@@ -73,13 +73,11 @@ const allowGoogle = async ()=>{
 const debouncedHandleKeydown = Base.Debounce(handleKeyDown, 400);
 
 onMounted(async ()=>{
-  let token = useRe.currentRoute.value.query;
-  if(JSON.stringify(token) !== "{}"){
-    if (token.token != ""){
-      await Storage.SetItem("token",token.token);
-      //useRe.push("/admin/home");
-      return;
-    }
+  let {token=""} = useRe.currentRoute.value.query;
+  if (token !== ""){
+    await Storage.SetItem("token",token);
+    useRe.push("/admin/home");
+    return;
   }
   await allowGoogle();
   window.addEventListener("keydown",debouncedHandleKeydown)
