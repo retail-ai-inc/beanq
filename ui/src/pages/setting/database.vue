@@ -34,7 +34,7 @@ const getDetails = async () => {
   try{
     let res = await mongoApi.List();
     list.value = res;
-    toastRef.value.show("success");
+    //toastRef.value.show("success");
   }catch (err) {
     if (err?.response?.status === 401){
       loginModal.value.error(err);
