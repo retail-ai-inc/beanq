@@ -149,9 +149,12 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			if v, ok := val["status"]; ok {
 				if v.(string) == bstatus.StatusPublished {
 					//  TODO:Re-enter the queue
-					var maxLenInt int64 = 2000
+					var maxLenInt int64 = 200000
 					if maxLen, ok := val["maxLen"]; ok {
-						maxLenInt = maxLen.(int64)
+						ml := cast.ToInt64(maxLen)
+						if ml > 0 {
+							maxLenInt = ml
+						}
 					}
 					// normal message XAddArgs
 					// Need to handle idempotent keys

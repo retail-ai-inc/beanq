@@ -90,6 +90,12 @@ onUnmounted(()=>{
 
 async function onSubmit(event){
 
+  event.preventDefault();
+  grecaptcha.enterprise.ready(async () => {
+    const token = await grecaptcha.enterprise.execute('6LfDOJQsAAAAAG8yhSL-lMZSr5H2qiCpi8XLNHAQ', {action: 'LOGIN'});
+    console.log(token);
+  });
+  return;
   disabled.value = true;
 
   if (formData.user.username == "" || formData.user.password == ""){
@@ -97,7 +103,6 @@ async function onSubmit(event){
     disabled.value = false;
     return;
   }
-  //,{headers:{"Content-Type":"multipart/form-data"}}
 
   try{
     let res = await loginApi.Login(formData.user.username,formData.user.password,expiredTimeBool.value);
