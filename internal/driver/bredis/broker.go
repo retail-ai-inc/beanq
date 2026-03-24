@@ -275,94 +275,97 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 func worker(ctx context.Context, jobs, result chan public.Stream, handler public.CallbackWithRetry, wg *sync.WaitGroup, config *capture.Config) {
 	defer wg.Done()
 
-	select {
-	case <-ctx.Done():
-		return
-	case job, ok := <-jobs:
-		if !ok {
+	for {
+
+		select {
+		case <-ctx.Done():
 			return
-		}
-
-		val := job.Data
-		//deep copy for handler: prevent data race.
-		//In the future, maybe only `payload`,`channel`,`topic` will be needed
-		copiedVal := make(map[string]any, len(val))
-		for k, v := range val {
-			copiedVal[k] = v
-		}
-
-		now := time.Now()
-		val["status"] = bstatus.StatusReceived
-		val["beginTime"] = now
-
-		var timeToRunLimit []time.Duration
-		if v, ok := val["timeToRunLimit"]; ok {
-			if err := json.Unmarshal([]byte(v.(string)), &timeToRunLimit); err != nil {
-				capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
+		case job, ok := <-jobs:
+			if !ok {
+				return
 			}
-		}
 
-		timeToRunLimitLen := len(timeToRunLimit)
+			val := job.Data
+			//deep copy for handler: prevent data race.
+			//In the future, maybe only `payload`,`channel`,`topic` will be needed
+			copiedVal := make(map[string]any, len(val))
+			for k, v := range val {
+				copiedVal[k] = v
+			}
 
-		timeToRun := cast.ToDuration(val["timeToRun"])
-		sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
+			now := time.Now()
+			val["status"] = bstatus.StatusReceived
+			val["beginTime"] = now
 
-		retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
-			defer func() {
-				if p := recover(); p != nil {
-					handlerErr = fmt.Errorf("[panic recover]: %+v\n%s", p, debug.Stack())
+			var timeToRunLimit []time.Duration
+			if v, ok := val["timeToRunLimit"]; ok {
+				if err := json.Unmarshal([]byte(v.(string)), &timeToRunLimit); err != nil {
+					capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
 				}
-			}()
-			if timeToRunLimitLen > 0 {
-				go func(limit []time.Duration) {
-					ticker := time.NewTicker(time.Second)
-					defer ticker.Stop()
-					i := 0
+			}
 
-					for {
-						select {
-						case <-sessionCtx.Done():
-							return
-						case <-ticker.C:
-							if i >= timeToRunLimitLen {
+			timeToRunLimitLen := len(timeToRunLimit)
+
+			timeToRun := cast.ToDuration(val["timeToRun"])
+			sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
+
+			retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
+				defer func() {
+					if p := recover(); p != nil {
+						handlerErr = fmt.Errorf("[panic recover]: %+v\n%s", p, debug.Stack())
+					}
+				}()
+				if timeToRunLimitLen > 0 {
+					go func(limit []time.Duration) {
+						ticker := time.NewTicker(time.Second)
+						defer ticker.Stop()
+						i := 0
+
+						for {
+							select {
+							case <-sessionCtx.Done():
 								return
-							}
-							if time.Since(now) >= limit[i] {
-								i++
-								capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v", copiedVal)
-								capture.System.When(config).If(nil).Then(capErr)
+							case <-ticker.C:
+								if i >= timeToRunLimitLen {
+									return
+								}
+								if time.Since(now) >= limit[i] {
+									i++
+									capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v", copiedVal)
+									capture.System.When(config).If(nil).Then(capErr)
+								}
 							}
 						}
-					}
-				}(timeToRunLimit)
+					}(timeToRunLimit)
+				}
+
+				_, handlerErr = handler(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
+
+				return
+			}, 0)
+
+			if err != nil {
+				if h, ok := interface{}(handler).(interface {
+					Error(ctx context.Context, err error)
+				}); ok {
+					h.Error(sessionCtx, err)
+				}
+				val["level"] = bstatus.ErrLevel
+				val["info"] = err.Error()
+				val["status"] = bstatus.StatusFailed
+			} else {
+				val["status"] = bstatus.StatusSuccess
 			}
 
-			_, handlerErr = handler(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
-
-			return
-		}, 0)
-
-		if err != nil {
-			if h, ok := interface{}(handler).(interface {
-				Error(ctx context.Context, err error)
-			}); ok {
-				h.Error(sessionCtx, err)
-			}
-			val["level"] = bstatus.ErrLevel
-			val["info"] = err.Error()
-			val["status"] = bstatus.StatusFailed
-		} else {
-			val["status"] = bstatus.StatusSuccess
+			val["endTime"] = time.Now()
+			val["retry"] = retry
+			val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).Seconds()
+			hostname, _ := os.Hostname()
+			val["hostName"] = hostname
+			// `stream` confirmation message
+			cancel()
+			job.Data = val
+			result <- job
 		}
-
-		val["endTime"] = time.Now()
-		val["retry"] = retry
-		val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).Seconds()
-		hostname, _ := os.Hostname()
-		val["hostName"] = hostname
-		// `stream` confirmation message
-		cancel()
-		job.Data = val
-		result <- job
 	}
 }
