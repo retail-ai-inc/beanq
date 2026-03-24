@@ -14,7 +14,6 @@ type GoogleCredential struct {
 	ClientId     string `json:"clientId" redis:"clientId"`
 	ClientSecret string `json:"clientSecret" redis:"clientSecret"`
 	CallBackUrl  string `json:"callBackUrl" redis:"callBackUrl"`
-	Scheme       string `json:"scheme" redis:"scheme"`
 }
 
 func (t GoogleCredential) MarshalBinary() ([]byte, error) {
