@@ -4,10 +4,10 @@
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
           <div class="modal-header">
-            <h1 class="modal-title fs-5" id="staticBackdropLabel">Login has expired</h1>
+            <h1 class="modal-title fs-5" id="staticBackdropLabel">Your login session has expired.</h1>
           </div>
           <div class="modal-body" style="padding: 2.5rem 0;text-align: center">
-            <button class="btn btn-primary" @click="reLogin">ReLogin</button>
+            <button class="btn btn-primary" @click="reLogin">{{$t('reLogin')}}</button>
           </div>
         </div>
       </div>
@@ -31,6 +31,7 @@ const showNoticeModal = (()=>{
 
 const [uRouter] = [useRouter()];
 const reLogin=(()=>{
+  Storage.SetItem("token","");
   Storage.Clear();
   uRouter.replace("/login");
 })

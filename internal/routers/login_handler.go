@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -109,21 +108,13 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 
 func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 
-	config, err := t.client.HGetAll(r.Context(), strings.Join([]string{t.prefix, "config"}, ":")).Result()
+	config, err := t.mgo.ConfigInfo(r.Context())
 	if err != nil {
 		ReturnHtml(w, err.Error())
 		return
 	}
 
-	var google capture.GoogleCredential
-	if v, ok := config["google"]; ok {
-		if err := json.NewDecoder(strings.NewReader(v)).Decode(&google); err != nil {
-			ReturnHtml(w, err.Error())
-			return
-		}
-	}
-
-	gAuth, err := googleAuth.New(google.ClientId, google.ClientSecret, google.CallBackUrl)
+	gAuth, err := googleAuth.New(config.Google.ClientId, config.Google.ClientSecret, config.Google.CallBackUrl)
 	if err != nil {
 		ReturnHtml(w, err.Error())
 		return
@@ -142,10 +133,16 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	code := r.FormValue("code")
-	clientId := t.ui.GoogleAuth.ClientId
-	clientSecret := t.ui.GoogleAuth.ClientSecret
-	callbackUrl := t.ui.GoogleAuth.CallbackUrl
-	auth, err := googleAuth.New(clientId, clientSecret, callbackUrl)
+
+	config, err := t.mgo.ConfigInfo(r.Context())
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+
+	auth, err := googleAuth.New(config.Google.ClientId, config.Google.ClientSecret, config.Google.CallBackUrl)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -215,7 +212,8 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	result, err := t.client.HGet(r.Context(), strings.Join([]string{t.prefix, "config"}, ":"), "google").Result()
+	config, err := t.mgo.ConfigInfo(r.Context())
+
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -223,19 +221,10 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data capture.GoogleCredential
-	if err := json.NewDecoder(strings.NewReader(result)).Decode(&data); err != nil {
-		res.Code = berror.InternalServerErrorCode
-		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusInternalServerError)
-		return
-	}
-
-	b := data.ClientId != "" && data.ClientSecret != "" && data.CallBackUrl != "" && data.Scheme != ""
-
-	res.Data = b
+	res.Data = config.Google
 	_ = res.Json(w, http.StatusOK)
 }
+
 func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
