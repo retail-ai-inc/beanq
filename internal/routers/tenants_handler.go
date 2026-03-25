@@ -72,4 +72,25 @@ func (t *Tenants) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (t *Tenants) Edit(w http.ResponseWriter, r *http.Request) {}
 
-func (t *Tenants) Get(w http.ResponseWriter, r *http.Request) {}
+func (t *Tenants) Get(w http.ResponseWriter, r *http.Request) {
+
+	res, cancel := response.Get()
+	defer cancel()
+	id := r.PathValue("id")
+	if id == "" {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "id required"
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	tenant, err := t.mgo.TenantsInfo(r.Context(), id)
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	res.Data = tenant
+	_ = res.Json(w, http.StatusOK)
+	return
+}

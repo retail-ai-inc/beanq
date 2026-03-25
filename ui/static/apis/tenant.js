@@ -15,5 +15,8 @@ const tenantApi = {
     },
     Delete(id){
         return request.post(`/tenant/delete`,{id:id});
+    },
+    Get(id){
+        return request.get(`/tenant/${id}`);
     }
 }

@@ -149,9 +149,13 @@ async function getTenants(){
 
 }
 
-const chooseTenant = (id)=>{
+const chooseTenant = async (id)=>{
+
   currentUuid.value = id;
-  console.log(currentUuid);
+  let res = await tenantApi.Get(id);
+  Object.assign(tenant,res);
+  console.log(res);
+
 }
 
 const updateTenantConfig=async ()=>{
@@ -180,24 +184,24 @@ const doAddTenant = async ()=>{
    await getTenants();
    tenantModal.add.value.hide();
    tenant = {id:res.id,name:tenantModal.tenantName.value,mongo:{},redis:{}};
-  Object.assign(tenant,{
-    id:"",
-    name:"",
-    mongo:{
-      host:"",
-      gcpHost:"",
-      port:"",
-      name:"",
-      userName:"",
-      userPwd:""
-    },
-    redis:{
-      host:"",
-      gcpHost: "",
-      port:"",
-      pwd:""
-    }
-  });
+  // Object.assign(tenant,{
+  //   id:"",
+  //   name:"",
+  //   mongo:{
+  //     host:"",
+  //     gcpHost:"",
+  //     port:"",
+  //     name:"",
+  //     userName:"",
+  //     userPwd:""
+  //   },
+  //   redis:{
+  //     host:"",
+  //     gcpHost: "",
+  //     port:"",
+  //     pwd:""
+  //   }
+  // });
 }
 
 const {id,name,mongo,redis} = toRefs(tenant);

@@ -818,6 +818,11 @@ func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenan
 
 }
 
-func (t *BMongo) TenantsInfo(ctx context.Context) {
+func (t *BMongo) TenantsInfo(ctx context.Context, id string) (*Tenants, error) {
 
+	var tenant Tenants
+	if err := t.database.Collection(t.tenantCollection).FindOne(ctx, bson.M{"_id": id}).Decode(&tenant); err != nil {
+		return nil, err
+	}
+	return &tenant, nil
 }
