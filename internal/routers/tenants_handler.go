@@ -68,9 +68,55 @@ func (t *Tenants) Add(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *Tenants) Delete(w http.ResponseWriter, r *http.Request) {
+
+	res, cancel := response.Get()
+	defer cancel()
+
+	id := r.PathValue("id")
+	if id == "" {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "id is required"
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if err := t.mgo.TenantsDelete(r.Context(), id); err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	_ = res.Json(w, http.StatusOK)
+	return
 }
 
-func (t *Tenants) Edit(w http.ResponseWriter, r *http.Request) {}
+func (t *Tenants) Edit(w http.ResponseWriter, r *http.Request) {
+
+	res, cancel := response.Get()
+	defer cancel()
+	id := r.PathValue("id")
+	if id == "" {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "id is required"
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+
+	tenant := bmongo.Tenants{}
+	if err := json.NewDecoder(r.Body).Decode(&tenant); err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if err := t.mgo.TenantsEdit(r.Context(), id, &tenant); err != nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	_ = res.Json(w, http.StatusOK)
+	return
+}
 
 func (t *Tenants) Get(w http.ResponseWriter, r *http.Request) {
 

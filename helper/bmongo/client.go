@@ -778,12 +778,24 @@ func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) (string, error
 	return lastId, err
 }
 
-func (t *BMongo) TenantsDelete(ctx context.Context) {
+func (t *BMongo) TenantsDelete(ctx context.Context, id string) error {
 
+	_, err := t.database.Collection(t.tenantCollection).DeleteOne(ctx, bson.M{"_id": id})
+	return err
 }
 
-func (t *BMongo) TenantsEdit(ctx context.Context) {
+func (t *BMongo) TenantsEdit(ctx context.Context, id string, tenants *Tenants) error {
 
+	data := bson.M{
+		"$set": bson.M{
+			"mongo":    tenants.Mongo,
+			"redis":    tenants.Redis,
+			"name":     tenants.Name,
+			"updateAt": time.Now(),
+		},
+	}
+	_, err := t.database.Collection(t.tenantCollection).UpdateOne(ctx, bson.M{"_id": id}, data)
+	return err
 }
 
 func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenants, float64, error) {

@@ -4,8 +4,11 @@
       <div class="col-3 mt-4">
         <h5 class="card-title d-flex flex-row justify-content-between">List of Tenants<button type="button" class="btn btn-primary btn-sm" @click="addTenant">Add Tenant</button></h5>
         <ul class="list-group list-group-flush">
-          <li class="list-group-item" v-for="(item,key) in tenants" :key="key">
-            <a @click="chooseTenant(item.id)" class="link-primary" style="cursor: pointer">{{item.name}}</a>
+          <li class="list-group-item d-flex flex-row justify-content-between align-items-center"
+              :class="{active: currentUuid === item.id}" v-for="(item,key) in tenants" :key="key" >
+            <p @click="chooseTenant(item.id)"
+               :class="currentUuid === item.id ? 'text-white' : 'text-primary'" style="cursor: pointer;margin:0">{{item.name}}</p>
+            <p class="text-danger" style="margin: 0;cursor:pointer" @click="deleteTenant(item.id)">{{$t("delete")}}</p>
           </li>
         </ul>
       </div>
@@ -107,33 +110,39 @@
 
 
     </div>
+    <Btoast :id="toastId" ref="toastRef"></Btoast>
+    <LoginModal :id="noticeId" ref="loginModal"/>
   </div>
 </template>
 <script setup>
-import {ref,reactive,toRefs,onMounted,onUnmounted} from "vue";
+import {ref,reactive,toRefs,onMounted} from "vue";
+import i18n from "i18n";
+import Btoast from "../components/btoast.vue";
+import LoginModal from "../components/loginModal.vue";
 
 let tenant = reactive({
-  id:"1",
-  name:"Trial",
+  id:"",
+  name:"",
   mongo:{
-    host:"127.0.0.1",
-    gcpHost:"sdfsfsfds",
+    host:"",
+    gcpHost:"",
     port:27017,
-    name:"tenant-xxxxx-trial",
-    userName:"aaa",
-    userPwd:"bbb"
+    name:"",
+    userName:"",
+    userPwd:""
   },
   redis:{
-    host:"127.0.0.1",
-    gcpHost: "sdfsfsfds",
+    host:"",
+    gcpHost:"",
     port:6379,
-    pwd:"aaaa"
+    pwd:""
   }
 });
 const currentUuid = ref("");
 const tenants = ref([]);
 const tenantModal = {add:ref(null),tenantName:ref(""),currentId:ref("")};
-
+const [noticeId,loginModal] = [ref("configBackdrop"),ref("loginModal")];
+const [toastId,toastRef] = [ref("toast-" + Math.random().toString(36)),ref("toastRef")]
 
 onMounted(async ()=>{
 
@@ -143,31 +152,57 @@ onMounted(async ()=>{
 
 async function getTenants(){
 
-  let res = await tenantApi.List(0,10,"","")
-  const {rows,total} = res;
-  tenants.value = rows;
-
+  try{
+    let res = await tenantApi.List(0,10,"","")
+    const {rows,total} = res;
+    if(rows.length > 0){
+      tenants.value = rows;
+      Object.assign(tenant,rows[0]);
+      currentUuid.value = rows[0].id;
+    }
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
+    }
+    //normal error
+    toastRef.value.show(err);
+  }
 }
 
 const chooseTenant = async (id)=>{
 
   currentUuid.value = id;
-  let res = await tenantApi.Get(id);
-  Object.assign(tenant,res);
-  console.log(res);
+  try{
+    let res = await tenantApi.Get(id);
+    Object.assign(tenant,res);
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
+    }
+    //normal error
+    toastRef.value.show(err);
+  }
 
 }
 
 const updateTenantConfig=async ()=>{
 
-  console.log(tenant);
-
-  // try {
-  //   let res = await request.put("",tenant);
-  //   console.log(res);
-  // }catch (e) {
-  //   console.log(e);
-  // }
+  try {
+    await tenantApi.Update(currentUuid.value,tenant);
+    toastRef.value.show(i18n.global.getLocaleMessage(Storage.GetItem("i18n") || "en")?.success);
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
+    }
+    //normal error
+    toastRef.value.show(err);
+  }
 }
 
 const addTenant = async ()=>{
@@ -184,26 +219,24 @@ const doAddTenant = async ()=>{
    await getTenants();
    tenantModal.add.value.hide();
    tenant = {id:res.id,name:tenantModal.tenantName.value,mongo:{},redis:{}};
-  // Object.assign(tenant,{
-  //   id:"",
-  //   name:"",
-  //   mongo:{
-  //     host:"",
-  //     gcpHost:"",
-  //     port:"",
-  //     name:"",
-  //     userName:"",
-  //     userPwd:""
-  //   },
-  //   redis:{
-  //     host:"",
-  //     gcpHost: "",
-  //     port:"",
-  //     pwd:""
-  //   }
-  // });
+
 }
 
+const deleteTenant= async (id)=>{
+  try {
+    await tenantApi.Delete(id);
+    await getTenants();
+    toastRef.value.show(i18n.global.getLocaleMessage(Storage.GetItem("i18n") || "en")?.success);
+  }catch (err) {
+    //401 error
+    if (err?.response?.status === 401){
+      loginModal.value.error(err);
+      return;
+    }
+    //normal error
+    toastRef.value.show(err);
+  }
+}
 const {id,name,mongo,redis} = toRefs(tenant);
 
 </script>

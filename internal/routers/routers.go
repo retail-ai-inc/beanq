@@ -189,9 +189,9 @@ func RouterList(fs2 fs.FS,
 	router.HandleFunc("GET /pod/list", hdls.pod.List, HeaderRule(), Auth(mgo, ui))
 	router.HandleFunc("GET /mongo/detail", hdls.mongoInfo.Detail, HeaderRule(), Auth(mgo, ui))
 
-	router.HandleFunc("PUT /tenant", hdls.tenant.Add, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("POST /tenant", hdls.tenant.Add, HeaderRule(), Auth(mgo, ui))
 	router.HandleFunc("DELETE /tenant/{id}", hdls.tenant.Delete, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /tenant/{id}", hdls.tenant.Edit, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("PUT /tenant/{id}", hdls.tenant.Edit, HeaderRule(), Auth(mgo, ui))
 	router.HandleFunc("GET /tenant", hdls.tenant.List, HeaderRule(), Auth(mgo, ui))
 	router.HandleFunc("GET /tenant/{id}", hdls.tenant.Get, HeaderRule(), Auth(mgo, ui))
 

@@ -3,18 +3,23 @@ const tenantApi = {
         return request.get(`/tenant?page=${page}&pageSize=${pageSize}&name=${name}&status=${status}`);
     },
     Add(data){
-        return request.put(`/tenant`,data,{
+        return request.post(`/tenant`,data,{
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             }
         });
     },
-    Update(data){
-        return request.post(`/tenant/update`,data);
+    Update(id,data){
+        return request.put(`/tenant/${id}`,data,{
+            headers:{
+                'Content-Type':'application/json',
+                'Accept':'application/json'
+            }
+        });
     },
     Delete(id){
-        return request.post(`/tenant/delete`,{id:id});
+        return request.delete(`/tenant/${id}`);
     },
     Get(id){
         return request.get(`/tenant/${id}`);
