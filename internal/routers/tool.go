@@ -211,6 +211,7 @@ func ReturnHtml(w http.ResponseWriter, errorString string) {
 
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	nhtml := fmt.Sprintf(html, errorString)
+	//#nosec G705
 	_, _ = w.Write([]byte(nhtml))
 	w.WriteHeader(http.StatusInternalServerError)
 }

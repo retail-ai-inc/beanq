@@ -35,7 +35,6 @@ func (t *Tenants) List(w http.ResponseWriter, r *http.Request) {
 		"total": total,
 	}
 	_ = res.Json(w, http.StatusOK)
-	return
 
 }
 
@@ -63,7 +62,6 @@ func (t *Tenants) Add(w http.ResponseWriter, r *http.Request) {
 	}
 	res.Data = map[string]string{"id": id}
 	_ = res.Json(w, http.StatusOK)
-	return
 
 }
 
@@ -86,7 +84,6 @@ func (t *Tenants) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = res.Json(w, http.StatusOK)
-	return
 }
 
 func (t *Tenants) Edit(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +112,6 @@ func (t *Tenants) Edit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = res.Json(w, http.StatusOK)
-	return
 }
 
 func (t *Tenants) Get(w http.ResponseWriter, r *http.Request) {
@@ -138,5 +134,4 @@ func (t *Tenants) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	res.Data = tenant
 	_ = res.Json(w, http.StatusOK)
-	return
 }
