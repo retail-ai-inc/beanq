@@ -293,22 +293,71 @@ result, err := pub.BQ().WithContext(ctx).
     "port": "27017",
     "username": "beanq",
     "password": "secret",
-    "database": "beanq_logs"
+    "database": "beanq_logs",
+    "connectTimeout": "10s",
+    "maxConnectionPoolSize": 200,
+    "maxConnectionLifeTime": "600s",
+    "collections": {
+      "config": {
+        "name": "config",
+        "shard": false
+      },
+      "event":{
+        "name": "event_logs",
+        "shard": true
+      },
+      "opt":{
+        "name": "opt_logs",
+        "shard": true
+      },
+      "workflow": {
+        "name": "workflow_records",
+        "shard": true
+      },
+      "tenant": {
+        "name": "tenants",
+        "shard": true
+      },
+      "manager": {
+        "name": "managers",
+        "shard": true
+      },
+      "role": {
+        "name": "roles",
+        "shard": true
+      }
+    }
   },
   "broker": "redis",
-  "consumerPoolSize": 10,
-  "jobMaxRetries": 3,
+  "consumerPoolSize": 100,
   "deadLetterIdle": "60s",
-  "keepSuccessJobsInHistory": "3600s",
+  "jobMaxRetries": 1,
   "keepFailedJobsInHistory": "3600s",
+  "keepSuccessJobsInHistory": "3600s",
+  "minConsumers": 10,
+  "publishTimeOut": "10s",
+  "consumeTimeOut": "10s",
   "ui": {
     "on": true,
+    "issuer": "rai",
+    "subject": "beanq monitor ui",
     "port": "9090",
     "jwtKey": "your-secret-key",
+    "expiresAt": "3600s",
     "root": {
       "username": "admin",
       "password": "your-password"
     }
+  },
+  "history": {
+    "on": true,
+    "storage": "mongo"
+  },
+  "workflow": {
+    "on": true,
+    "retry": 3,
+    "async": true,
+    "storage": "mongo"
   }
 }
 ```
