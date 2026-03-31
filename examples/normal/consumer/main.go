@@ -48,7 +48,7 @@ func main() {
 
 	// register delay consumer
 	ctx := context.Background()
-	_, err := csm.BQ().WithContext(ctx).Subscribe("default-channel", "default-topic", beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).IgnoreRetryConditions().Subscribe("default-channel", "default-topic", beanq.DefaultHandle{
 		DoHandle: func(ctx context.Context, message *beanq.Message) error {
 			//time.Sleep(20 * time.Second)
 			logger.New().With("default-channel", "default-topic").Info(message.Payload)

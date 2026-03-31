@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -58,8 +59,6 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		capture.System.When(c.broker.captureConfig).Then(err)
 	}
 
-	mux := http.NewServeMux()
-
 	mongoCfg := c.broker.config.Mongo
 	collections := make(map[string]string)
 
@@ -88,7 +87,6 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	}
 
 	var workflowMongoCollection *mongo.Collection
-
 	collection := "workflow_records"
 	if v, ok := mongoCfg.Collections["workflow"]; ok {
 		collection = v.Name
@@ -117,18 +115,12 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		workflowMongoCollection = client.Database(mongoCfg.Database).Collection(collection)
 	}
 
-	routers.NewRouters(
-		mux,
-		views,
-		files,
-		c.broker.client.(redis.UniversalClient),
-		mog, workflowMongoCollection,
-		c.broker.config.Redis.Prefix, c.broker.config.UI)
-
+	rlist := routers.RouterList(views, files, c.broker.client.(redis.UniversalClient), mog, workflowMongoCollection, c.broker.config.Redis.Prefix, c.broker.config.UI)
 	logger.New().Info("Beanq UI Start on port", httpport)
+
 	server := &http.Server{
 		Addr:         httpport,
-		Handler:      mux,
+		Handler:      rlist.Mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  30 * time.Second,
@@ -154,4 +146,28 @@ func (c *Client) ServeHttp(ctx context.Context) {
 		logger.New().Fatal("Error shutting down server:", err)
 	}
 	logger.New().Info("Server stopped")
+}
+
+func StaticFileInfo(fs2 fs.FS) (map[string]time.Time, error) {
+
+	files := make(map[string]time.Time, 0)
+
+	err := fs.WalkDir(fs2, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			arr := strings.SplitAfter(path, "ui")
+			if len(arr) == 2 {
+				info, _ := d.Info()
+				files[arr[1]] = info.ModTime()
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
 }

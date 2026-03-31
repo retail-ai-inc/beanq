@@ -92,7 +92,7 @@ func (t *Client) Send(ctx context.Context, field ...Field) error {
 		return errors.New("Channel Err:[channel is required]")
 	}
 
-	fields := make([]slack.AttachmentField, len(field))
+	fields := make([]slack.AttachmentField, 0, len(field))
 	fields = append(fields, field...)
 
 	now := cast.ToString(time.Now().Unix())

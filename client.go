@@ -26,11 +26,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/signal"
 	"slices"
-	"strings"
 	"syscall"
 	"time"
 
@@ -182,7 +180,7 @@ func (c *Client) Wait(ctx context.Context) {
 	<-c.WaitSignal(cancel)
 }
 
-func (t *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
+func (c *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	sigs := make(chan os.Signal, 1)
 	done := make(chan bool, 1)
 
@@ -198,7 +196,7 @@ func (t *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	return done
 }
 
-func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions map[string]struct{}) error {
+func (c *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions map[string]struct{}) error {
 
 	handler := Handler{
 		channel:   channel,
@@ -218,7 +216,7 @@ func (t *Client) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 		},
 	}
 
-	t.broker.handlers = append(t.broker.handlers, &handler)
+	c.broker.handlers = append(c.broker.handlers, &handler)
 	return nil
 }
 
@@ -231,30 +229,6 @@ func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string, 
 	}
 
 	return MessageS(m).ToMessage(), nil
-}
-
-func StaticFileInfo(fs2 fs.FS) (map[string]time.Time, error) {
-
-	files := make(map[string]time.Time, 0)
-
-	err := fs.WalkDir(fs2, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() {
-			arr := strings.SplitAfter(path, "ui")
-			if len(arr) == 2 {
-				info, _ := d.Info()
-				files[arr[1]] = info.ModTime()
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
 // Ping this method can be called by user for checking the status of broker

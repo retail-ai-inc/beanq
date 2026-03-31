@@ -49,7 +49,7 @@ func main() {
 	pub := beanq.New(config)
 	wait := sync.WaitGroup{}
 
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 3; i++ {
 		wait.Add(1)
 		go func(i1 int) {
 			defer wait.Done()
@@ -65,7 +65,7 @@ func main() {
 			if err != nil {
 				logger.New().Error(err, m)
 			} else {
-				log.Printf("ID:%+v \n", result.Id)
+				log.Printf("Result----:%+v \n", result)
 			}
 		}(i)
 
