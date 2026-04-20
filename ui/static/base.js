@@ -86,3 +86,17 @@ function ByteConvert(bytes, decimals = 2) {
 
     return `${((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
+
+
+function LoadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.async = true;
+
+        script.onload = resolve;
+        script.onerror = reject;
+
+        document.head.appendChild(script);
+    })
+}

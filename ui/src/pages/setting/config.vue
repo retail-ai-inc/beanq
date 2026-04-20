@@ -11,6 +11,7 @@
           <nav>
             <div class="nav nav-tabs" id="nav-tab" role="tablist">
               <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Login</button>
+              <button class="nav-link" id="google-recaptcha-tab" data-bs-toggle="tab" data-bs-target="#google-recaptcha-pan" type="button" role="tab" aria-controls="google-recaptcha-pan" aria-selected="false">Google Recaptcha</button>
               <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">SMTP</button>
               <button class="nav-link" id="send-grid-tab" data-bs-toggle="tab" data-bs-target="#send-grid-pane" type="button" role="tab" aria-controls="send-grid-pane" aria-selected="false">SendGrid</button>
               <button class="nav-link" id="slack-tab" data-bs-toggle="tab" data-bs-target="#slack-pane" type="button" role="tab" aria-controls="slack-pane" aria-selected="false">Slack</button>
@@ -26,7 +27,13 @@
                      role="tabpanel" aria-labelledby="google-tab" tabindex="0"
                      v-model="form.google"
             />
-
+            <GoogleRecaptcha class="tab-pane fade"
+                     id="google-recaptcha-pan"
+                     role="tabpanel"
+                     aria-labelledby="google-recaptcha-tab"
+                     tabindex="0"
+                     v-model="form.googleRecaptcha"
+            />
             <!--smtp-->
             <Smtp class="tab-pane fade"
                   id="smtp-pan"
@@ -78,6 +85,7 @@ import LoginModal from "../components/loginModal.vue";
 import i18n from "i18n";
 import Delete_icon from "./delete_icon.vue";
 import Google from "./config/google.vue";
+import GoogleRecaptcha from "./config/googleRecaptcha.vue";
 import Smtp from "./config/smtp.vue";
 import SendGrid from "./config/sendGrid.vue";
 import AlertRule from "./config/alertRule.vue";
@@ -92,6 +100,12 @@ const form = ref({
     clientId: "",
     clientSecret: "",
     callBackUrl: googleCallback,
+  },
+  googleRecaptcha:{
+    projectId:"",
+    siteKeyV2:"",
+    siteKeyV3:"",
+    apiKey:""
   },
   smtp:{
     host: "",
@@ -168,6 +182,9 @@ const list = async () => {
       }
       form.value.google = res.google;
     }
+    if(res?.googleReCAPTCHA){
+      form.value.googleRecaptcha = res.googleReCAPTCHA;
+    }
     if(res?.smtp){
       form.value.smtp = res.smtp;
     }
@@ -202,6 +219,12 @@ const edit = async () => {
       clientId: value.google.clientId,
       clientSecret: value.google.clientSecret,
       callBackUrl: form.value.google.callBackUrl,
+    },
+    googleRecaptcha:{
+      projectId:value.googleRecaptcha.projectId,
+      siteKeyV2:value.googleRecaptcha.siteKeyV2,
+      siteKeyV3:value.googleRecaptcha.siteKeyV3,
+      apiKey:value.googleRecaptcha.apiKey
     },
     smtp:{
       host: value.smtp.host,

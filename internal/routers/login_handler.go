@@ -220,8 +220,11 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-
-	res.Data = config.Google
+	data := map[string]any{
+		"google":          config.Google,
+		"googleReCAPTCHA": config.GoogleReCAPTCHA,
+	}
+	res.Data = data
 	_ = res.Json(w, http.StatusOK)
 }
 

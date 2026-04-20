@@ -2,7 +2,7 @@
   <div class="tab-pane fade show active" >
     <div class="container">
       <div class="row g-3 align-items-center m-2">
-        <p class="lead">
+        <p class="lead fs-6">
           If you use Google Workspace, you can integrate your Google account in BeanQ to access the BeanQ Dashboard. To generate a <strong>Client ID</strong> and <strong>Client Secret</strong> for Google Login (OAuth 2.0), you must use the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>. These credentials identify your application to Google's authentication servers.
         </p>
         <div class="col-1 text-end">
