@@ -3,11 +3,12 @@ package capture
 import "github.com/retail-ai-inc/beanq/v4/helper/json"
 
 type Config struct {
-	Google   GoogleCredential `json:"google" redis:"google"`
-	SMTP     SMTP             `json:"smtp" redis:"smtp"`
-	SendGrid SendGrid         `json:"sendGrid" redis:"sendGrid"`
-	Rule     Rule             `json:"rule" redis:"rule"`
-	Slack    Slack            `json:"slack" redis:"slack"`
+	Google          GoogleCredential `json:"google" redis:"google"`
+	GoogleReCAPTCHA GoogleReCAPTCHA  `json:"googleReCAPTCHA" redis:"googleReCAPTCHA"`
+	SMTP            SMTP             `json:"smtp" redis:"smtp"`
+	SendGrid        SendGrid         `json:"sendGrid" redis:"sendGrid"`
+	Rule            Rule             `json:"rule" redis:"rule"`
+	Slack           Slack            `json:"slack" redis:"slack"`
 }
 
 type GoogleCredential struct {
@@ -20,6 +21,21 @@ func (t GoogleCredential) MarshalBinary() ([]byte, error) {
 	return json.Marshal(t)
 }
 func (t GoogleCredential) UnmarshalBinary(data []byte) error {
+	return json.Unmarshal(data, &t)
+}
+
+type GoogleReCAPTCHA struct {
+	ProjectID string `json:"projectId"`
+	SiteKeyV2 string `json:"siteKeyV2"`
+	SiteKeyV3 string `json:"siteKeyV3"`
+	ApiKey    string `json:"apiKey"`
+}
+
+func (t GoogleReCAPTCHA) MarshalBinary() ([]byte, error) {
+	return json.Marshal(t)
+}
+
+func (t GoogleReCAPTCHA) UnmarshalBinary(data []byte) error {
 	return json.Unmarshal(data, &t)
 }
 

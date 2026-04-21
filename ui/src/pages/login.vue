@@ -17,6 +17,8 @@
             </label>
           </div>
 
+          <div id="recaptcha-v2" style="margin: 1rem 0;"></div>
+
           <button class="btn btn-primary" type="button" :disabled="disabled" @click="onSubmit">
 
             <span v-if="disabled" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -60,48 +62,156 @@ function handleKeyDown(event){
     onSubmit(event)
   }
 }
-const showGoogleLogin = ref(false);
-const allowGoogle = async ()=>{
-  try {
-    let data = await loginApi.AllowGoogle();
-    showGoogleLogin.value = data.clientId !== "" && data.clientSecret !== "";
-  }catch (e) {
-    console.log(e);
-  }
+
+const getConfig = async ()=>{
+  return await loginApi.AllowGoogle();
 }
+
+const showGoogleLogin = ref(false);
+const allowGoogle = async (data)=>{
+    showGoogleLogin.value = (!!data?.clientId) && (!!data?.clientSecret);
+}
+
+const googleReCaptcha = ref({
+  projectId:"",
+  siteKeyV3:"",
+  siteKeyV2:"",
+  apiKey:"",
+});
+const googlereCAPTCHA = async(data)=>{
+
+  Object.assign(googleReCaptcha.value, data);
+
+  let siteKeyV3 = data?.siteKeyV3;
+  if(siteKeyV3 === undefined){
+    return;
+  }
+  await LoadScript(`https://www.google.com/recaptcha/enterprise.js?render=${siteKeyV3}`);
+
+};
 
 const debouncedHandleKeydown = Base.Debounce(handleKeyDown, 400);
 
 onMounted(async ()=>{
   let {token=""} = useRe.currentRoute.value.query;
+
   if (token !== ""){
     await Storage.SetItem("token",token);
     useRe.push("/admin/home");
     return;
   }
-  await allowGoogle();
-  window.addEventListener("keydown",debouncedHandleKeydown)
+
+  let {google,googleReCAPTCHA} = await getConfig();
+
+  await allowGoogle(google);
+  await googlereCAPTCHA(googleReCAPTCHA);
+
+  window.addEventListener("keydown",debouncedHandleKeydown);
+
 })
 
 onUnmounted(()=>{
   window.removeEventListener("keydown",debouncedHandleKeydown)
 })
 
+// google assessments
+async function getGoogleRecaptchaAssessments(token,siteKey,projectId,apiKey){
+
+  const body = {
+    "event": {
+      "token": token,
+      "expectedAction": "USER_ACTION",
+      "siteKey": `${siteKey}`,
+    }
+  };
+
+  const url = `https://recaptchaenterprise.googleapis.com/v1/projects/${projectId}/assessments?key=${apiKey}`;
+  return await axios.post(url, body,{headers:{"Content-Type":"application/json"}});
+
+}
+
+ async function showV2Captcha(v2SiteKey,projectId,apiKey){
+
+    // clear container
+    document.getElementById('recaptcha-v2').innerHTML = '';
+
+    // render v2 reCAPTCHA
+   grecaptcha.enterprise.ready(async()=>{
+     grecaptcha.enterprise.render('recaptcha-v2', {
+       'sitekey': v2SiteKey,
+       'callback': async function(token) {
+         console.log('v2 token:', token);
+
+         const {status,data} = await getGoogleRecaptchaAssessments(token,v2SiteKey,projectId,apiKey);
+         console.log("v2 status:", status, "v2 data:", data);
+         if(status !== 200){
+           return false;
+         }
+         await login(formData.user.username,formData.user.password,expiredTimeBool.value);
+         return true;
+       }
+     });
+   })
+
+}
 
 async function onSubmit(event){
 
   event.preventDefault();
 
   disabled.value = true;
+  let {username,password} = formData.user;
 
-  if (formData.user.username == "" || formData.user.password == ""){
+  if (username === "" || password === ""){
     msg.value = "Username or Password are required";
     disabled.value = false;
     return;
   }
 
+  let {projectId,siteKeyV3,siteKeyV2,apiKey} = googleReCaptcha.value;
+
+  if(projectId === "" || siteKeyV3 === "" || siteKeyV2 === "" || apiKey === ""){
+    await login(username,password,expiredTimeBool.value);
+    return;
+  }
+
+  grecaptcha.enterprise.ready(async () => {
+    try{
+      const token = await grecaptcha.enterprise.execute(`${siteKeyV3}`, {action: 'LOGIN'});
+
+      if(token === ""){
+        return;
+      }
+
+      const {status,data} = await getGoogleRecaptchaAssessments(token,siteKeyV3,projectId,apiKey);
+      console.log("v3 status:", status, "v3 data:", data);
+      if(status !== 200){
+        console.log("v3 status:", status, "v3 data:", data)
+        return;
+      }
+
+      // check v3 verification result
+      if(data.tokenProperties?.valid && (data.riskAnalysis?.score || 0) >= 0.5){
+        // v3 verification passed, show v2 captcha
+         await showV2Captcha(siteKeyV2,projectId,apiKey);
+      } else {
+        console.log("v3 validation failed");
+        msg.value = "Verification failed, please try again";
+        disabled.value = false;
+      }
+    }catch (e) {
+      console.error("reCAPTCHA error:", e);
+      msg.value = "Verification error, please try again";
+      disabled.value = false;
+    }
+  });
+
+}
+
+async function login(username,password,expiredTimeBool){
+
   try{
-    let res = await loginApi.Login(formData.user.username,formData.user.password,expiredTimeBool.value);
+    let res = await loginApi.Login(username,password,expiredTimeBool);
     Storage.SetItem("token",res.token);
     Storage.SetItem("roles",res.roles);
     Storage.SetItem("nodeId",res.nodeId);
@@ -117,7 +227,6 @@ async function onSubmit(event){
     disabled.value = false;
   }
 }
-
 
 function googleLogin(){
   window.location.href="/googleLogin"
