@@ -271,7 +271,7 @@ const deleteTenantConfirm= async (item)=>{
 }
 const deleteTenantInfo = async ()=>{
   try {
-    
+
     await tenantApi.Delete(config.id);
     await getTenants();
     toastRef.value.show(i18n.global.getLocaleMessage(Storage.GetItem("i18n") || "en")?.success);

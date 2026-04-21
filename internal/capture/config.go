@@ -25,6 +25,7 @@ func (t GoogleCredential) UnmarshalBinary(data []byte) error {
 }
 
 type GoogleReCAPTCHA struct {
+	Active    bool   `json:"active"`
 	ProjectID string `json:"projectId"`
 	SiteKeyV2 string `json:"siteKeyV2"`
 	SiteKeyV3 string `json:"siteKeyV3"`

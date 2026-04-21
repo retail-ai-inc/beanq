@@ -102,6 +102,7 @@ const form = ref({
     callBackUrl: googleCallback,
   },
   googleRecaptcha:{
+    active:false,
     projectId:"",
     siteKeyV2:"",
     siteKeyV3:"",
@@ -221,6 +222,7 @@ const edit = async () => {
       callBackUrl: form.value.google.callBackUrl,
     },
     googleRecaptcha:{
+      active:value.googleRecaptcha.active,
       projectId:value.googleRecaptcha.projectId,
       siteKeyV2:value.googleRecaptcha.siteKeyV2,
       siteKeyV3:value.googleRecaptcha.siteKeyV3,
