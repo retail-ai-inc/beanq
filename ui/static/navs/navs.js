@@ -55,7 +55,11 @@ const Nav = [
                 ]
             },
             {id:31,label:"Config",mark:"config",to:"/admin/config",value:"/admin/config",pid:20},
-            {id:34,label:"Tenant",mark:"tenant",to:"/admin/tenant",value:"/admin/tenant",pid:20},
+            {id:34,label:"Tenant",mark:"tenant",to:"/admin/tenant",value:"/admin/tenant",pid:20,children:[
+                {id:36,label:"Add",mark:"add",value:"",pid:34},
+                {id:37,label:"Edit",mark:"edit",value:"",pid:34},
+                {id:38,label:"Delete",mark:"delete",value:"",pid:34}
+            ]},
             {id:35,label:"DataBase",mark:"database",to:"/admin/database",value:"/admin/database",pid:20}
         ]
     }
