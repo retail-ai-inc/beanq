@@ -73,6 +73,7 @@ const allowGoogle = async (data)=>{
 }
 
 const googleReCaptcha = ref({
+  active:false,
   projectId:"",
   siteKeyV3:"",
   siteKeyV2:"",
@@ -81,7 +82,10 @@ const googleReCaptcha = ref({
 const googlereCAPTCHA = async(data)=>{
 
   Object.assign(googleReCaptcha.value, data);
-
+  let active = data?.active;
+  if(!active){
+    return;
+  }
   let siteKeyV3 = data?.siteKeyV3;
   if(siteKeyV3 === undefined){
     return;
@@ -140,10 +144,9 @@ async function getGoogleRecaptchaAssessments(token,siteKey,projectId,apiKey){
      grecaptcha.enterprise.render('recaptcha-v2', {
        'sitekey': v2SiteKey,
        'callback': async function(token) {
-         console.log('v2 token:', token);
 
          const {status,data} = await getGoogleRecaptchaAssessments(token,v2SiteKey,projectId,apiKey);
-         console.log("v2 status:", status, "v2 data:", data);
+
          if(status !== 200){
            return false;
          }
@@ -168,9 +171,9 @@ async function onSubmit(event){
     return;
   }
 
-  let {projectId,siteKeyV3,siteKeyV2,apiKey} = googleReCaptcha.value;
+  let {projectId,siteKeyV3,siteKeyV2,apiKey,active} = googleReCaptcha.value;
 
-  if(projectId === "" || siteKeyV3 === "" || siteKeyV2 === "" || apiKey === ""){
+  if( !active || projectId === "" || siteKeyV3 === "" || siteKeyV2 === "" || apiKey === ""){
     await login(username,password,expiredTimeBool.value);
     return;
   }
@@ -184,9 +187,7 @@ async function onSubmit(event){
       }
 
       const {status,data} = await getGoogleRecaptchaAssessments(token,siteKeyV3,projectId,apiKey);
-      console.log("v3 status:", status, "v3 data:", data);
       if(status !== 200){
-        console.log("v3 status:", status, "v3 data:", data)
         return;
       }
 
@@ -195,12 +196,10 @@ async function onSubmit(event){
         // v3 verification passed, show v2 captcha
          await showV2Captcha(siteKeyV2,projectId,apiKey);
       } else {
-        console.log("v3 validation failed");
         msg.value = "Verification failed, please try again";
         disabled.value = false;
       }
     }catch (e) {
-      console.error("reCAPTCHA error:", e);
       msg.value = "Verification error, please try again";
       disabled.value = false;
     }

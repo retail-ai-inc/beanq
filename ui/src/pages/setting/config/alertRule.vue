@@ -210,8 +210,8 @@ const channels = (async()=>{
   }
 })
 
-onMounted(()=>{
-  channels();
+onMounted(async()=>{
+  await channels();
 })
 
 const onTestNotify = async()=>{

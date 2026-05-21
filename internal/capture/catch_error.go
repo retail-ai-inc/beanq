@@ -129,13 +129,13 @@ func (t *Catch) Then(err error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	for _, then := range t.rule.Then {
 		if then.Key == "email" {
-			host := t.config.SMTP.Host
-			port := t.config.SMTP.Port
-			user := t.config.SMTP.User
-			password := t.config.SMTP.Password
+			host := t.config.Email.SMTP.Host
+			port := t.config.Email.SMTP.Port
+			user := t.config.Email.SMTP.User
+			password := t.config.Email.SMTP.Password
 			if host == "" || port == "" || user == "" || password == "" {
 				continue
 			}
@@ -150,12 +150,12 @@ func (t *Catch) Then(err error) {
 			} else {
 				logger.New().Error(err)
 			}
-			if t.config.SendGrid.Key == "" {
+			if t.config.Email.SendGrid.Key == "" {
 				continue
 			}
 
-			client = email.NewSendGrid(t.config.SendGrid.Key)
-			client.From(t.config.SendGrid.FromAddress)
+			client = email.NewSendGrid(t.config.Email.SendGrid.Key)
+			client.From(t.config.Email.SendGrid.FromAddress)
 			client.Subject("Notify")
 			client.TextBody(err.Error())
 			client.To(then.Value)

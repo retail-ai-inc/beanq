@@ -8,6 +8,19 @@
           To generate v2 and v3 ID codes for Google reCAPTCHA, you must first register the <a href="https://www.google.com/recaptcha/admin/create" target="_blank">ID code</a> and <a href="https://console.cloud.google.com/security/recaptcha/create?project=testlogin-354701" target="_blank">apiKey</a>.
         </p>
         <div class="col-1 text-end">
+          <label for="isActive" class="col-form-label">Active:</label>
+        </div>
+        <div class="col-6">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="isActive" checked v-model="googleRecaptcha.active" style="width: 65px;height:15px;cursor: pointer;">
+            <label class="form-check-label" for="isActive">Open to use</label>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="row g-3 align-items-center m-2">
+        <div class="col-1 text-end">
           <label for="projectId" class="col-form-label">ProjectID:</label>
         </div>
         <div class="col-6">

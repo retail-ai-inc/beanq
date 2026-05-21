@@ -247,10 +247,13 @@ func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
 		_ = result.Json(w, http.StatusBadRequest)
 		return
 	}
+
 	capture.System.When(&capture.Config{
-		SMTP:     data.SMTP,
-		Slack:    data.Slack,
-		SendGrid: data.SendGrid,
+		Email: capture.Email{
+			SMTP:     data.SMTP,
+			SendGrid: data.SendGrid,
+		},
+		Slack: data.Slack,
 		Rule: capture.Rule{
 			When: []capture.When{{Key: string(capture.System), Value: string(capture.System)}},
 			If:   nil,

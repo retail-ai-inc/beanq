@@ -12,8 +12,7 @@
             <div class="nav nav-tabs" id="nav-tab" role="tablist">
               <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Login</button>
               <button class="nav-link" id="google-recaptcha-tab" data-bs-toggle="tab" data-bs-target="#google-recaptcha-pan" type="button" role="tab" aria-controls="google-recaptcha-pan" aria-selected="false">Google Recaptcha</button>
-              <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">SMTP</button>
-              <button class="nav-link" id="send-grid-tab" data-bs-toggle="tab" data-bs-target="#send-grid-pane" type="button" role="tab" aria-controls="send-grid-pane" aria-selected="false">SendGrid</button>
+              <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">Email</button>
               <button class="nav-link" id="slack-tab" data-bs-toggle="tab" data-bs-target="#slack-pane" type="button" role="tab" aria-controls="slack-pane" aria-selected="false">Slack</button>
               <button class="nav-link" id="alert-rule-tab" data-bs-toggle="tab" data-bs-target="#alert-rule-pane" type="button" role="tab" aria-controls="alert-rule-pane" aria-selected="false">Alert Rule</button>
             </div>
@@ -40,17 +39,9 @@
                   role="tabpanel"
                   aria-labelledby="smtp-tab"
                   tabindex="0"
-                  v-model="form.smtp"
+                  v-model="form.email"
             />
 
-            <!--send grid-->
-            <SendGrid class="tab-pane fade"
-                      id="send-grid-pane"
-                      role="tabpanel"
-                      aria-labelledby="send-grid-tab"
-                      tabindex="0"
-                      v-model="form.grid"
-            />
             <Slack class="tab-pane fade"
                       id="slack-pane"
                       role="tabpanel"
@@ -102,21 +93,25 @@ const form = ref({
     callBackUrl: googleCallback,
   },
   googleRecaptcha:{
+    active:false,
     projectId:"",
     siteKeyV2:"",
     siteKeyV3:"",
     apiKey:""
   },
-  smtp:{
-    host: "",
-    port: "",
-    user: "",
-    password: "",
-  },
-  grid:{
-    key:"",
-    fromName:"",
-    fromAddress:""
+  email:{
+    used:"smtp",
+    smtp:{
+      host: "",
+      port: "",
+      user: "",
+      password: "",
+    },
+    sendGrid:{
+      key:"",
+      fromName:"",
+      fromAddress:""
+    }
   },
   slack:{
     botAuthToken:""
@@ -142,25 +137,29 @@ onMounted(()=>{
 })
 
 const onTestNotify = async (param) => {
-  console.log(param)
+
   try {
+    let {used,smtp,sendGrid:grid} = form.value.email;
+
     let data = {
+      used:used,
       smtp:{
-        host: form.value.smtp.host,
-        port: form.value.smtp.port,
-        user: form.value.smtp.user,
-        password: form.value.smtp.password,
+        host: smtp.host,
+        port: smtp.port,
+        user: smtp.user,
+        password: smtp.password,
       },
       sendGrid:{
-        key: form.value.grid.key,
-        fromName: form.value.grid.fromName,
-        fromAddress: form.value.grid.fromAddress
+        key: grid.key,
+        fromName: grid.fromName,
+        fromAddress: grid.fromAddress
       },
       tools:param,
       slack:{
         botAuthToken: form.value.slack.botAuthToken
       }
     }
+
     let res = await request.post("/test/notify",data, {
       headers: {
         'Content-Type': 'application/json',
@@ -185,11 +184,12 @@ const list = async () => {
     if(res?.googleReCAPTCHA){
       form.value.googleRecaptcha = res.googleReCAPTCHA;
     }
-    if(res?.smtp){
-      form.value.smtp = res.smtp;
+    form.value.email.used = res?.email?.used || "smtp";
+    if(res?.email.smtp){
+      form.value.email.smtp = res.email.smtp;
     }
-    if(res?.sendGrid){
-      form.value.sendGrid = res.sendGrid;
+    if(res?.email.sendGrid){
+      form.value.email.sendGrid = res.email.sendGrid;
     }
     if(res?.rule){
       let rule = res.rule;
@@ -198,7 +198,7 @@ const list = async () => {
     if(res?.slack){
       form.value.slack = res.slack;
     }
-
+console.log(form.value)
   }catch (err) {
     //401 error
     if (err?.response?.status === 401){
@@ -221,21 +221,25 @@ const edit = async () => {
       callBackUrl: form.value.google.callBackUrl,
     },
     googleRecaptcha:{
+      active:value.googleRecaptcha.active,
       projectId:value.googleRecaptcha.projectId,
       siteKeyV2:value.googleRecaptcha.siteKeyV2,
       siteKeyV3:value.googleRecaptcha.siteKeyV3,
       apiKey:value.googleRecaptcha.apiKey
     },
-    smtp:{
-      host: value.smtp.host,
-      port: value.smtp.port,
-      user: value.smtp.user,
-      password: value.smtp.password,
-    },
-    sendGrid:{
-      key: value.grid.key,
-      fromName: value.grid.fromName,
-      fromAddress: value.grid.fromAddress
+    email:{
+      used:value.email.used,
+      smtp:{
+        host: value.email.smtp.host,
+        port: value.email.smtp.port,
+        user: value.email.smtp.user,
+        password: value.email.smtp.password,
+      },
+      sendGrid:{
+        key: value.email.sendGrid.key,
+        fromName: value.email.sendGrid.fromName,
+        fromAddress: value.email.sendGrid.fromAddress
+      }
     },
     slack:{
       botAuthToken: value.slack.botAuthToken
