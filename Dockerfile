@@ -1,4 +1,4 @@
-FROM golang:1.23-alpine
+FROM golang:1.25-alpine
 
 ARG USE_CHINA_PROXY
 ENV USE_CHINA_PROXY=${USE_CHINA_PROXY}

@@ -122,7 +122,7 @@ clean:
 
 	@echo "done!"
 
-GOLANGCI_LINT_VERSION=v2.2.1
+GOLANGCI_LINT_VERSION=v2.12.2
 GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
 
 lint: ## run all the lint tools, install golangci-lint if not exist,will use .golangci.yml config

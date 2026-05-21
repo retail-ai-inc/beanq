@@ -307,7 +307,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 			timeToRunLimitLen := len(timeToRunLimit)
 
 			timeToRun := cast.ToDuration(val["timeToRun"])
-			sessionCtx, cancel := context.WithTimeout(context.Background(), timeToRun)
+			sessionCtx, cancel := context.WithTimeout(ctx, timeToRun)
 
 			retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
 				defer func() {
