@@ -13,7 +13,6 @@
               <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Login</button>
               <button class="nav-link" id="google-recaptcha-tab" data-bs-toggle="tab" data-bs-target="#google-recaptcha-pan" type="button" role="tab" aria-controls="google-recaptcha-pan" aria-selected="false">Google Recaptcha</button>
               <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">Email</button>
-<!--              <button class="nav-link" id="send-grid-tab" data-bs-toggle="tab" data-bs-target="#send-grid-pane" type="button" role="tab" aria-controls="send-grid-pane" aria-selected="false">SendGrid</button>-->
               <button class="nav-link" id="slack-tab" data-bs-toggle="tab" data-bs-target="#slack-pane" type="button" role="tab" aria-controls="slack-pane" aria-selected="false">Slack</button>
               <button class="nav-link" id="alert-rule-tab" data-bs-toggle="tab" data-bs-target="#alert-rule-pane" type="button" role="tab" aria-controls="alert-rule-pane" aria-selected="false">Alert Rule</button>
             </div>
@@ -43,14 +42,6 @@
                   v-model="form.email"
             />
 
-            <!--send grid-->
-<!--            <SendGrid class="tab-pane fade"-->
-<!--                      id="send-grid-pane"-->
-<!--                      role="tabpanel"-->
-<!--                      aria-labelledby="send-grid-tab"-->
-<!--                      tabindex="0"-->
-<!--                      v-model="form.grid"-->
-<!--            />-->
             <Slack class="tab-pane fade"
                       id="slack-pane"
                       role="tabpanel"
