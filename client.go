@@ -293,6 +293,15 @@ func (b *BQClient) SetTimeToRun(duration time.Duration, limits ...time.Duration)
 	return b
 }
 
+func (b *BQClient) Retry(retry int) *BQClient {
+	if retry <= 0 {
+		retry = 0
+	}
+
+	b.client.Retry = retry
+	return b
+}
+
 // If duration <= 0, it will never expire unless ForceUnlock is used to force deletion.
 func (b *BQClient) SetLockOrderKeyTTL(duration time.Duration) *BQClient {
 
