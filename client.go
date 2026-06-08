@@ -293,6 +293,7 @@ func (b *BQClient) SetTimeToRun(duration time.Duration, limits ...time.Duration)
 	return b
 }
 
+// Dynamic setting of consumption retry count
 func (b *BQClient) Retry(retry int) *BQClient {
 	if retry <= 0 {
 		retry = 0
