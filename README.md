@@ -271,33 +271,69 @@ result, err := pub.BQ().WithContext(ctx).
     WaitingAck()
 ```
 ---
-## Public functions
-#### 1.Retry(int)
+## 🧩 Public functions
 
-  will instead of env.json `jobMaxRetries`
+The following chainable functions can be used on `BQClient` to tune publish and retry behavior per message.
+
+| Function | Scope | Description |
+| --- | --- | --- |
+| `Retry(int)` | Publisher | Overrides the default retry count configured by `jobMaxRetries` in `env.json`. |
+| `Priority(float64)` | Delay queue | Sets message priority for delayed messages. Values greater than or equal to `1000` are capped at `999`. |
+| `SetLockOrderKeyTTL(time.Duration)` | Sequence queue | Sets the TTL for the sequence lock `orderKey`. If the duration is `<= 0`, the lock does not expire automatically. |
+| `IgnoreRetryConditions(err ...error)` | Consumer retry | Skips retries for matching errors and treats them as ignored retry conditions. |
+
+### `Retry(int)`
+
+Use `Retry` when a message needs a retry policy different from the global `jobMaxRetries` value.
+
 ```go
-// Publisher
 pub := beanq.New(config)
-err := pub.BQ().WithContext(ctx).Retry(5).Publish("channel", "topic", messageBytes)
 
-// Consumer
-consumer.Subscribe("channel", "topic", beanq.DefaultHandle{
-    DoHandle: func(ctx context.Context, message *beanq.Message) error {
-        // Process message
-        return nil
-    },
-})
+err := pub.BQ().
+    WithContext(ctx).
+    Retry(5).
+    Publish("channel", "topic", messageBytes)
 ```
-#### 2.Priority(float64)
 
-  Setting the priority of messages during consumption is mainly used in delayed queues.
+### `Priority(float64)`
 
-#### 3.SetLockOrderKeyTTL(time)
+Use `Priority` with delayed queues to process higher-priority messages first when multiple delayed messages are ready.
 
-  Set the TTL time of the `orderKey`
-#### 4.IgnoreRetryConditions(err ...error)
+```go
+err := pub.BQ().
+    WithContext(ctx).
+    Priority(999).
+    PublishAtTime("channel", "topic", messageBytes, time.Now().Add(time.Minute))
+```
 
-  Errors will be skipped during retry.
+### `SetLockOrderKeyTTL(time.Duration)`
+
+Use `SetLockOrderKeyTTL` with sequence queues that use locks. The TTL controls how long an `orderKey` lock can live before it expires.
+
+```go
+result, err := pub.BQ().
+    WithContext(ctx).
+    SetLockOrderKeyTTL(10 * time.Second).
+    PublishInSequenceByLock("channel", "topic", "orderKey", messageBytes).
+    WaitingAck()
+```
+
+### `IgnoreRetryConditions(err ...error)`
+
+Use `IgnoreRetryConditions` to skip retry handling for known, expected errors.
+
+```go
+var ErrInvalidPayload = errors.New("invalid payload")
+
+_, err := consumer.BQ().
+    WithContext(ctx).
+    IgnoreRetryConditions(ErrInvalidPayload).
+    Subscribe("channel", "topic", beanq.DefaultHandle{
+        DoHandle: func(ctx context.Context, message *beanq.Message) error {
+            return ErrInvalidPayload
+        },
+    })
+```
 
 ---
 
@@ -613,6 +649,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 [Star this repo](https://github.com/retail-ai-inc/beanq/stargazers) if you find it helpful!
 
 </div>
-
-
-
