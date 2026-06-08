@@ -270,6 +270,34 @@ result, err := pub.BQ().WithContext(ctx).
     PublishInSequenceByLock("channel", "topic", "orderKey", messageBytes).
     WaitingAck()
 ```
+---
+## Public functions
+#### 1.Retry(int)
+
+  will instead of env.json `jobMaxRetries`
+```go
+// Publisher
+pub := beanq.New(config)
+err := pub.BQ().WithContext(ctx).Retry(5).Publish("channel", "topic", messageBytes)
+
+// Consumer
+consumer.Subscribe("channel", "topic", beanq.DefaultHandle{
+    DoHandle: func(ctx context.Context, message *beanq.Message) error {
+        // Process message
+        return nil
+    },
+})
+```
+#### 2.Priority(float64)
+
+  Setting the priority of messages during consumption is mainly used in delayed queues.
+
+#### 3.SetLockOrderKeyTTL(time)
+
+  Set the TTL time of the `orderKey`
+#### 4.IgnoreRetryConditions(err ...error)
+
+  Errors will be skipped during retry.
 
 ---
 
