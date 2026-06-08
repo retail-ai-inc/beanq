@@ -292,7 +292,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 			for k, v := range val {
 				copiedVal[k] = v
 			}
-			var retrys int = 0
+			var retrys = 0
 			if val, ok := val["retry"]; ok {
 				retrys = cast.ToInt(val)
 			}
