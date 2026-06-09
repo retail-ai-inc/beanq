@@ -292,7 +292,10 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 			for k, v := range val {
 				copiedVal[k] = v
 			}
-
+			var retrys = 0
+			if val, ok := val["retry"]; ok {
+				retrys = cast.ToInt(val)
+			}
 			now := time.Now()
 			val["status"] = bstatus.StatusReceived
 			val["beginTime"] = now
@@ -342,7 +345,7 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 				_, handlerErr = handler(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
 
 				return
-			}, 0)
+			}, retrys)
 
 			if err != nil {
 				if h, ok := interface{}(handler).(interface {
