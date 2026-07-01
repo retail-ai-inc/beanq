@@ -38,7 +38,6 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 		// check state
 		select {
 		case <-ctx.Done():
-			_ = t.client.Close()
 			return nil
 		case <-timer.C:
 		}

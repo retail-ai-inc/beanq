@@ -64,6 +64,7 @@ type (
 
 var (
 	workflowClient      redis.UniversalClient
+	workflowErr         error
 	workflowRedisConfig *Redis
 	workflowOnce        sync.Once
 	workflowConfig      = &struct {
@@ -80,9 +81,10 @@ var (
 // InitWorkflow make workflow as an independent module
 func InitWorkflow(beanqConfig *BeanqConfig) {
 	workflowOnce.Do(func() {
-		workflowClient = bredis.NewRdb(
+		workflowClient, workflowErr = bredis.NewRdb(
 			beanqConfig.Redis.Host,
 			beanqConfig.Redis.Port,
+			beanqConfig.Redis.Username,
 			beanqConfig.Redis.Password,
 			beanqConfig.Redis.Database,
 			beanqConfig.Redis.MaxRetries,
@@ -91,8 +93,15 @@ func InitWorkflow(beanqConfig *BeanqConfig) {
 			beanqConfig.Redis.WriteTimeout,
 			beanqConfig.Redis.PoolTimeout,
 			beanqConfig.Redis.PoolSize,
-			beanqConfig.Redis.MinIdleConnections)
+			beanqConfig.Redis.MinIdleConnections,
+			beanqConfig.Redis.SSL.On,
+			beanqConfig.Redis.SSL.CAFile,
+			beanqConfig.Redis.SSL.Verify,
+			beanqConfig.Redis.SSL.HotReload)
 
+		if workflowErr != nil {
+			logger.New().Panic("new redis workflow client err:", workflowErr)
+		}
 		workflowRedisConfig = &beanqConfig.Redis
 		workflowConfig.Collection = struct {
 			Name  string

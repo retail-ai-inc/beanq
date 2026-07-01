@@ -158,7 +158,6 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 	for {
 		select {
 		case <-ctx.Done():
-			_ = t.base.client.Close()
 			return
 		case <-timer.C:
 

@@ -76,10 +76,13 @@ func NewBroker(config *BeanqConfig) *Broker {
 		switch config.Broker {
 		case "redis":
 			cfg := config.Redis
-			client := bredis.NewRdb(cfg.Host, cfg.Port,
+			client, err := bredis.NewRdb(cfg.Host, cfg.Port, cfg.Username,
 				cfg.Password, cfg.Database,
-				cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections)
-
+				cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections,
+				cfg.SSL.On, cfg.SSL.CAFile, cfg.SSL.Verify, cfg.SSL.HotReload)
+			if err != nil {
+				logger.New().Panic("new redis client err:", err)
+			}
 			broker.status = bredis.NewStatus(client, cfg.Prefix)
 			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 			broker.client = client
