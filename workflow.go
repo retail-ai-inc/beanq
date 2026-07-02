@@ -82,6 +82,7 @@ var (
 func InitWorkflow(beanqConfig *BeanqConfig) {
 	workflowOnce.Do(func() {
 		workflowClient, workflowErr = bredis.NewRdb(
+			beanqConfig.Redis.IsCluster,
 			beanqConfig.Redis.Host,
 			beanqConfig.Redis.Port,
 			beanqConfig.Redis.Username,

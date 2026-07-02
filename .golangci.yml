@@ -16,7 +16,8 @@ linters:
     gosec:
       excludes:
         - G117 # Exported struct field "Secret","ApiKey","AccessKey","AccessToken","ClientSecret" (JSON key "Secret") matches secret pattern
-
+        - G304 # Potential file inclusion via variable redisHolder.go:159
+        - G402 # TLS InsecureSkipVerify may be set to true. redisHolder.go:172
   exclusions:
     warn-unused: true
     presets:

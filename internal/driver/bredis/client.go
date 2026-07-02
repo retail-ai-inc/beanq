@@ -15,7 +15,7 @@ var (
 	redisErr    error
 )
 
-func NewRdb(host, port string, username, password string,
+func NewRdb(isCluster bool, host, port string, username, password string,
 	database, maxRetries int, dialTimeout,
 	readTimeout, writeTimeout, poolTimeout time.Duration, poolSize,
 	minIdleConns int,
@@ -27,7 +27,7 @@ func NewRdb(host, port string, username, password string,
 		defer cancel()
 
 		redisHolder, redisErr = NewRedisHolder(
-			initCtx, host, port, username, password, database,
+			initCtx, isCluster, host, port, username, password, database,
 			maxRetries, dialTimeout, readTimeout, writeTimeout, poolTimeout, poolSize, minIdleConns,
 			sslOn, caFile, verifyCertificate)
 		if redisErr != nil {

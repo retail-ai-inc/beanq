@@ -19,6 +19,7 @@ import (
 type RedisHolder struct {
 	redis.UniversalClient
 	mu                sync.RWMutex
+	isCluster         bool
 	host              string
 	port              string
 	username          string
@@ -27,7 +28,6 @@ type RedisHolder struct {
 	sslOn             bool
 	caFile            string
 	verifyCertificate bool
-	hotReload         bool
 	maxRetries        int
 	dialTimeout       time.Duration
 	readTimeout       time.Duration
@@ -37,13 +37,14 @@ type RedisHolder struct {
 	minIdleConns      int
 }
 
-func NewRedisHolder(ctx context.Context, host, port, username, password string, db int,
+func NewRedisHolder(ctx context.Context, isCluster bool, host, port, username, password string, db int,
 	maxRetries int, dialTimeout,
 	readTimeout, writeTimeout, poolTimeout time.Duration, poolSize,
 	minIdleConns int,
 	sslOn bool, caFile string, verifyCertificate bool) (*RedisHolder, error) {
 
 	h := &RedisHolder{
+		isCluster:         isCluster,
 		host:              host,
 		port:              port,
 		username:          username,
@@ -126,26 +127,42 @@ func (h *RedisHolder) newClient(ctx context.Context) (redis.UniversalClient, err
 			hosts[i] = strings.Join([]string{host, h.port}, ":")
 		}
 	}
-	if len(hosts) > 1 {
-		// Redis cluster mode, only db: 0 can be selected
-		h.db = 0
-	}
-	client := redis.NewUniversalClient(&redis.UniversalOptions{
-		Addrs:          hosts,
-		Username:       h.username,
-		Password:       h.password,
-		DB:             h.db,
-		MaxRetries:     h.maxRetries,
-		DialTimeout:    h.dialTimeout,
-		ReadTimeout:    h.readTimeout,
-		WriteTimeout:   h.writeTimeout,
-		PoolSize:       h.poolSize,
-		MinIdleConns:   h.minIdleConns,
-		PoolTimeout:    h.poolTimeout,
-		RouteByLatency: true,
 
-		TLSConfig: tlsConfig,
-	})
+	var client redis.UniversalClient
+	if h.isCluster {
+		client = redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:          hosts,
+			Username:       h.username,
+			Password:       h.password,
+			MaxRetries:     h.maxRetries,
+			DialTimeout:    h.dialTimeout,
+			ReadTimeout:    h.readTimeout,
+			WriteTimeout:   h.writeTimeout,
+			PoolSize:       h.poolSize,
+			MinIdleConns:   h.minIdleConns,
+			PoolTimeout:    h.poolTimeout,
+			RouteByLatency: true,
+
+			TLSConfig: tlsConfig,
+		})
+	} else {
+		client = redis.NewUniversalClient(&redis.UniversalOptions{
+			Addrs:          hosts,
+			Username:       h.username,
+			Password:       h.password,
+			DB:             h.db,
+			MaxRetries:     h.maxRetries,
+			DialTimeout:    h.dialTimeout,
+			ReadTimeout:    h.readTimeout,
+			WriteTimeout:   h.writeTimeout,
+			PoolSize:       h.poolSize,
+			MinIdleConns:   h.minIdleConns,
+			PoolTimeout:    h.poolTimeout,
+			RouteByLatency: true,
+
+			TLSConfig: tlsConfig,
+		})
+	}
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
