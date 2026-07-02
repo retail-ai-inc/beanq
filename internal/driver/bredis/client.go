@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/btls"
 )
 
 var (
@@ -34,7 +35,7 @@ func NewRdb(isCluster bool, host, port string, username, password string,
 			logger.New().Fatal(redisErr.Error())
 		}
 		if hotReload && sslOn && caFile != "" {
-			redisErr = WatchCAFile(ctx, caFile, redisHolder.Reload)
+			redisErr = btls.WatchCAFile(ctx, "redis", caFile, redisHolder.Reload)
 			if redisErr != nil {
 				_ = redisHolder.Close()
 				redisHolder = nil

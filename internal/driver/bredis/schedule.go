@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
@@ -129,7 +129,7 @@ func (t *Schedule) Enqueue(ctx context.Context, data map[string]any) error {
 
 	zSetKey := tool.MakeZSetKey(t.base.prefix, channel, topic)
 
-	if err := t.base.client.ZAdd(ctx, zSetKey, &redis.Z{Score: priorityScore, Member: bt}).Err(); err != nil {
+	if err := t.base.client.ZAdd(ctx, zSetKey, redis.Z{Score: priorityScore, Member: bt}).Err(); err != nil {
 		return err
 	}
 

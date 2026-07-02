@@ -124,6 +124,7 @@ type (
 		ConnectTimeOut        time.Duration
 		MaxConnectionPoolSize uint64
 		MaxConnectionLifeTime time.Duration
+		SSL                   SSL `json:"ssl"`
 	}
 	BeanqConfig struct {
 		Health   Health `json:"health"`

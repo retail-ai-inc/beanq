@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	bmongo2 "github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
@@ -217,7 +217,11 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 				mongo.Database,
 				mongo.Collections["event"].Name,
 				mongo.UserName,
-				mongo.Password)
+				mongo.Password,
+				mongo.SSL.On,
+				mongo.SSL.CAFile,
+				mongo.SSL.Verify,
+				mongo.SSL.HotReload)
 		}
 		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
 	}
