@@ -343,21 +343,83 @@ _, err := consumer.BQ().
 
 ```json
 {
+  "ui": {
+    "on": true,
+    "issuer": "rai",
+    "subject": "beanq monitor ui",
+    "expiresAt": "7200s",
+    "jwtKey": "your-secret-key",
+    "port": "9090",
+    "root": {
+      "username": "admin",
+      "password": "your-password"
+    },
+    "smtp": {
+      "host": "",
+      "port": "",
+      "user": "",
+      "password": ""
+    },
+    "googleAuth": {
+      "clientId": "xxxx",
+      "clientSecret": "xxxx-xxxx",
+      "callbackUrl": "http://localhost:9090/callback",
+      "state": "beanqui"
+    },
+    "sendGrid": {
+      "key": "",
+      "fromName": "Retail-AI",
+      "fromAddress": "noreply@retail-ai.jp"
+    }
+  },
+  "health": {
+    "port": "7777",
+    "host": "0.0.0.0"
+  },
+  "debugLog": {
+    "on": true,
+    "path": ""
+  },
   "redis": {
-    "host": "localhost",
+    "ssl": {
+      "on": false,
+      "certFile": "",
+      "verifyCertificate": false,
+      "hotReload": false
+    },
+    "isCluster": false,
+    "host": "127.0.0.1",
     "port": "6379",
+    "username": "",
     "password": "secret",
     "database": 0,
     "prefix": "beanq_",
+    "maxLen": 2000,
+    "maxRetries": 2,
     "poolSize": 30,
-    "minIdleConnections": 10
+    "minIdleConnections": 10,
+    "dialTimeout": "5s",
+    "readTimeout": "3s",
+    "writeTimeout": "3s",
+    "poolTimeout": "4s"
   },
+  "broker": "redis",
+  "consumerPoolSize": 10,
+  "deadLetterIdle": "60s",
+  "deadLetterTicker": "5s",
+  "jobMaxRetries": 3,
+  "keepFailedJobsInHistory": "168h",
+  "keepSuccessJobsInHistory": "168h",
+  "minConsumers": 100,
+  "timeToRun": "3600s",
+  "publishTimeOut": "10s",
+  "consumeTimeOut": "20s",
   "mongo": {
-    "host": "localhost",
-    "port": "27017",
+    "database": "beanq_logs",
     "username": "beanq",
     "password": "secret",
-    "database": "beanq_logs",
+    "host": "127.0.0.1",
+    "port": "27017",
     "connectTimeout": "10s",
     "maxConnectionPoolSize": 200,
     "maxConnectionLifeTime": "600s",
@@ -366,11 +428,11 @@ _, err := consumer.BQ().
         "name": "config",
         "shard": false
       },
-      "event":{
+      "event": {
         "name": "event_logs",
         "shard": true
       },
-      "opt":{
+      "opt": {
         "name": "opt_logs",
         "shard": true
       },
@@ -380,37 +442,16 @@ _, err := consumer.BQ().
       },
       "tenant": {
         "name": "tenants",
-        "shard": true
+        "shard": false
       },
       "manager": {
         "name": "managers",
-        "shard": true
+        "shard": false
       },
       "role": {
         "name": "roles",
-        "shard": true
+        "shard": false
       }
-    }
-  },
-  "broker": "redis",
-  "consumerPoolSize": 100,
-  "deadLetterIdle": "60s",
-  "jobMaxRetries": 1,
-  "keepFailedJobsInHistory": "3600s",
-  "keepSuccessJobsInHistory": "3600s",
-  "minConsumers": 10,
-  "publishTimeOut": "10s",
-  "consumeTimeOut": "10s",
-  "ui": {
-    "on": true,
-    "issuer": "rai",
-    "subject": "beanq monitor ui",
-    "port": "9090",
-    "jwtKey": "your-secret-key",
-    "expiresAt": "3600s",
-    "root": {
-      "username": "admin",
-      "password": "your-password"
     }
   },
   "history": {
@@ -430,12 +471,52 @@ _, err := consumer.BQ().
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `broker` | redis | Message broker implementation |
 | `consumerPoolSize` | 10 | Number of concurrent consumers |
 | `jobMaxRetries` | 3 | Maximum retry attempts for failed jobs |
 | `deadLetterIdle` | 60s | Idle time before moving to DLQ |
+| `deadLetterTicker` | 5s | Interval for scanning dead-letter candidates |
 | `publishTimeOut` | 10s | Publishing timeout |
-| `consumeTimeOut` | 10s | Consumption timeout |
+| `consumeTimeOut` | 20s | Consumption timeout |
 | `minConsumers` | 100 | Minimum consumer count |
+| `timeToRun` | 3600s | Maximum execution window for a job/workflow task |
+| `keepFailedJobsInHistory` | 168h | Retention period for failed job history |
+| `keepSuccessJobsInHistory` | 168h | Retention period for successful job history |
+| `history.on` | false | Enable history storage |
+| `history.storage` | mongo | History storage backend |
+| `workflow.on` | false | Enable workflow support |
+| `workflow.retry` | 0 | Workflow retry count |
+| `workflow.async` | false | Run workflow tasks asynchronously |
+| `workflow.storage` | mongo | Workflow record storage backend |
+
+### Redis Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `redis.isCluster` | false | Connect to Redis Cluster when enabled |
+| `redis.host` | 127.0.0.1 | Redis host or cluster seed host |
+| `redis.port` | 6379 | Redis port or cluster seed port |
+| `redis.username` | empty | Redis ACL username |
+| `redis.password` | empty | Redis password |
+| `redis.database` | 0 | Redis database index; ignored by Redis Cluster |
+| `redis.prefix` | beanq_ | Key prefix for Beanq data |
+| `redis.maxLen` | 2000 | Maximum stream length used by Beanq queues |
+| `redis.maxRetries` | 0 | Redis client retry attempts |
+| `redis.poolSize` | 0 | Redis client connection pool size |
+| `redis.minIdleConnections` | 0 | Minimum idle Redis connections |
+| `redis.dialTimeout` | 0 | Redis connection dial timeout |
+| `redis.readTimeout` | 0 | Redis read timeout |
+| `redis.writeTimeout` | 0 | Redis write timeout |
+| `redis.poolTimeout` | 0 | Timeout for waiting on a pooled Redis connection |
+
+### Redis SSL Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `redis.ssl.on` | false | Enable TLS/SSL for Redis connections |
+| `redis.ssl.certFile` | empty | CA certificate file used to verify Redis TLS |
+| `redis.ssl.verifyCertificate` | false | Verify the Redis server certificate |
+| `redis.ssl.hotReload` | false | Reload the certificate file without restarting |
 
 ---
 
