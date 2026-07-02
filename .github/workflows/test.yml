@@ -33,18 +33,27 @@ jobs:
           cache-dependency-path: go.sum
       - name: Run tests
         run: |
+          : > coverage_summary.txt
+          echo "total: N/A" > total_coverage.txt
+          : > full_coverage.txt
+
+          set +e
           make test
-          if [ ! -s coverage.txt ]; then
+          test_exit=$?
+          set -e
+
+          if [ -s coverage.txt ]; then
+            go tool cover -func=coverage.txt > full_coverage.txt
+            grep "total:" full_coverage.txt > total_coverage.txt || echo "total: N/A" > total_coverage.txt
+            grep -v "0.0%" full_coverage.txt > coverage_summary.txt || : > coverage_summary.txt
+            go tool cover -html=coverage.txt -o coverage.html
+          else
             echo "Coverage file is empty or not generated."
-            exit 1
           fi
-          go tool cover -func=coverage.txt > full_coverage.txt
-          grep "total:" full_coverage.txt > total_coverage.txt || echo "total: N/A" > total_coverage.txt
-          grep -v "0.0%" full_coverage.txt > coverage_summary.txt || echo "" > coverage_summary.txt
-          go tool cover -html=coverage.txt -o coverage.html
+
+          exit "$test_exit"
 
         continue-on-error: true
-
       - name: Upload coverage report as artifact
         uses: actions/upload-artifact@v4
         with:
