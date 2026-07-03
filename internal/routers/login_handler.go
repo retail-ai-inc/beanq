@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bjwt"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"

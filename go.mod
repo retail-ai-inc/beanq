@@ -1,10 +1,10 @@
 module github.com/retail-ai-inc/beanq/v4
 
-go 1.25
+go 1.26
 
 require (
 	github.com/fatih/color v1.18.0
-	github.com/go-redis/redis/v8 v8.11.5
+	github.com/fsnotify/fsnotify v1.7.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/hashicorp/go-multierror v1.1.1
@@ -12,6 +12,7 @@ require (
 	github.com/labstack/gommon v0.4.2
 	github.com/panjf2000/ants/v2 v2.9.0
 	github.com/pkg/errors v0.9.1
+	github.com/redis/go-redis/v9 v9.21.0
 	github.com/rs/xid v1.6.0
 	github.com/sendgrid/sendgrid-go v3.16.0+incompatible
 	github.com/shirou/gopsutil/v4 v4.25.1
@@ -34,7 +35,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/ebitengine/purego v0.8.2 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
@@ -70,6 +70,7 @@ require (
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect

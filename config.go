@@ -45,8 +45,10 @@ type (
 		Host string `json:"host"`
 	}
 	Redis struct {
+		IsCluster          bool          `json:"isCluster"`
 		Host               string        `json:"host"`
 		Port               string        `json:"port"`
+		Username           string        `json:"username"`
 		Password           string        `json:"password"`
 		Prefix             string        `json:"prefix"`
 		Database           int           `json:"database"`
@@ -58,6 +60,13 @@ type (
 		PoolTimeout        time.Duration `json:"poolTimeout"`
 		MaxRetries         int           `json:"maxRetries"`
 		PoolSize           int           `json:"poolSize"`
+		SSL                SSL           `json:"ssl"`
+	}
+	SSL struct {
+		On        bool   `json:"on" mapstructure:"on"`
+		CAFile    string `json:"certFile" mapstructure:"certFile"`
+		Verify    bool   `json:"verifyCertificate" mapstructure:"verifyCertificate"`
+		HotReload bool   `json:"hotReload" mapstructure:"hotReload"`
 	}
 	Queue struct {
 		Topic        string
@@ -115,6 +124,7 @@ type (
 		ConnectTimeOut        time.Duration
 		MaxConnectionPoolSize uint64
 		MaxConnectionLifeTime time.Duration
+		SSL                   SSL `json:"ssl"`
 	}
 	BeanqConfig struct {
 		Health   Health `json:"health"`

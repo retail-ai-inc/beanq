@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
@@ -56,10 +56,13 @@ func (t *Schedule) ForceUnlock(_ context.Context, channel, topic, orderKey strin
 
 func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error {
 	return func(tx *redis.Tx) error {
-		vals, err := tx.ZRevRangeByScore(ctx, zsetKey, &redis.ZRangeBy{
-			Min:   "0",
-			Max:   zsetMax,
-			Count: 100,
+		vals, err := tx.ZRangeArgs(ctx, redis.ZRangeArgs{
+			Key:     zsetKey,
+			Start:   zsetMax,
+			Stop:    "0",
+			ByScore: true,
+			Rev:     true,
+			Count:   100,
 		}).Result()
 		if err != nil {
 			return err
@@ -129,7 +132,7 @@ func (t *Schedule) Enqueue(ctx context.Context, data map[string]any) error {
 
 	zSetKey := tool.MakeZSetKey(t.base.prefix, channel, topic)
 
-	if err := t.base.client.ZAdd(ctx, zSetKey, &redis.Z{Score: priorityScore, Member: bt}).Err(); err != nil {
+	if err := t.base.client.ZAdd(ctx, zSetKey, redis.Z{Score: priorityScore, Member: bt}).Err(); err != nil {
 		return err
 	}
 
@@ -158,7 +161,6 @@ func (t *Schedule) PreWork(ctx context.Context, prefix string, channel, topic st
 	for {
 		select {
 		case <-ctx.Done():
-			_ = t.base.client.Close()
 			return
 		case <-timer.C:
 

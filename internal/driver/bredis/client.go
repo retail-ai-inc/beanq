@@ -2,52 +2,45 @@ package bredis
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/btls"
 )
 
 var (
-	rdb     redis.UniversalClient
-	rdbOnce sync.Once
+	redisOnce   sync.Once
+	redisHolder *RedisHolder
+	redisErr    error
 )
 
-func NewRdb(host, port string, password string,
+func NewRdb(isCluster bool, host, port string, username, password string,
 	database, maxRetries int, dialTimeout,
-	readTimeout, writeTimeout, poolTimeout time.Duration, poolSize, minIdleConns int) redis.UniversalClient {
+	readTimeout, writeTimeout, poolTimeout time.Duration, poolSize,
+	minIdleConns int,
+	sslOn bool, caFile string, verifyCertificate bool, hotReload bool) (redis.UniversalClient, error) {
 
-	rdbOnce.Do(func() {
+	redisOnce.Do(func() {
 		ctx := context.Background()
+		initCtx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
 
-		hosts := strings.Split(host, ",")
-		for i, h := range hosts {
-			hs := strings.Split(h, ":")
-			if len(hs) == 1 {
-				hosts[i] = strings.Join([]string{h, port}, ":")
+		redisHolder, redisErr = NewRedisHolder(
+			initCtx, isCluster, host, port, username, password, database,
+			maxRetries, dialTimeout, readTimeout, writeTimeout, poolTimeout, poolSize, minIdleConns,
+			sslOn, caFile, verifyCertificate)
+		if redisErr != nil {
+			logger.New().Fatal(redisErr.Error())
+		}
+		if hotReload && sslOn && caFile != "" {
+			redisErr = btls.WatchCAFile(ctx, "redis", caFile, redisHolder.Reload)
+			if redisErr != nil {
+				_ = redisHolder.Close()
+				redisHolder = nil
 			}
 		}
-
-		rdb = redis.NewUniversalClient(&redis.UniversalOptions{
-			Addrs:          hosts,
-			Password:       password,
-			DB:             database,
-			MaxRetries:     maxRetries,
-			DialTimeout:    dialTimeout,
-			ReadTimeout:    readTimeout,
-			WriteTimeout:   writeTimeout,
-			PoolSize:       poolSize,
-			MinIdleConns:   minIdleConns,
-			PoolTimeout:    poolTimeout,
-			RouteByLatency: true,
-		})
-
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			logger.New().Fatal(err.Error())
-		}
 	})
-
-	return rdb
+	return redisHolder, redisErr
 }

@@ -3,7 +3,7 @@ package routers
 import (
 	"net/http"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"

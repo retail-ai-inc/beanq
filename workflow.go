@@ -8,14 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	errorstack "github.com/pkg/errors"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
@@ -64,6 +63,7 @@ type (
 
 var (
 	workflowClient      redis.UniversalClient
+	workflowErr         error
 	workflowRedisConfig *Redis
 	workflowOnce        sync.Once
 	workflowConfig      = &struct {
@@ -80,9 +80,11 @@ var (
 // InitWorkflow make workflow as an independent module
 func InitWorkflow(beanqConfig *BeanqConfig) {
 	workflowOnce.Do(func() {
-		workflowClient = bredis.NewRdb(
+		workflowClient, workflowErr = bredis.NewRdb(
+			beanqConfig.Redis.IsCluster,
 			beanqConfig.Redis.Host,
 			beanqConfig.Redis.Port,
+			beanqConfig.Redis.Username,
 			beanqConfig.Redis.Password,
 			beanqConfig.Redis.Database,
 			beanqConfig.Redis.MaxRetries,
@@ -91,8 +93,15 @@ func InitWorkflow(beanqConfig *BeanqConfig) {
 			beanqConfig.Redis.WriteTimeout,
 			beanqConfig.Redis.PoolTimeout,
 			beanqConfig.Redis.PoolSize,
-			beanqConfig.Redis.MinIdleConnections)
+			beanqConfig.Redis.MinIdleConnections,
+			beanqConfig.Redis.SSL.On,
+			beanqConfig.Redis.SSL.CAFile,
+			beanqConfig.Redis.SSL.Verify,
+			beanqConfig.Redis.SSL.HotReload)
 
+		if workflowErr != nil {
+			logger.New().Panic("new redis workflow client err:", workflowErr)
+		}
 		workflowRedisConfig = &beanqConfig.Redis
 		workflowConfig.Collection = struct {
 			Name  string
@@ -679,19 +688,10 @@ func NewWorkflowRecord() *WorkflowRecord {
 		if workflowCfg.On && mongoCfg != nil && mongoCfg.Database != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			connURI := "mongodb://" + mongoCfg.Host + ":" + mongoCfg.Port
-			opts := options.Client().
-				ApplyURI(connURI).
-				SetConnectTimeout(mongoCfg.ConnectTimeOut).
-				SetMaxPoolSize(mongoCfg.MaxConnectionPoolSize).
-				SetMaxConnIdleTime(mongoCfg.MaxConnectionLifeTime)
 
-			if mongoCfg.UserName != "" && mongoCfg.Password != "" {
-				opts.SetAuth(options.Credential{
-					AuthSource: mongoCfg.Database,
-					Username:   mongoCfg.UserName,
-					Password:   mongoCfg.Password,
-				})
+			opts, err := mongoClientOptions(mongoCfg)
+			if err != nil {
+				panic(err)
 			}
 
 			mdb, err := mongo.Connect(ctx, opts)

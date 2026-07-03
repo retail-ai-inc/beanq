@@ -3,7 +3,7 @@ package bredis
 import (
 	_ "embed"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 var (

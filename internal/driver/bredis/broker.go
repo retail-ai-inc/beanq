@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
@@ -97,7 +97,6 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 
 		select {
 		case <-ctx.Done():
-			_ = t.client.Close()
 			return
 		default:
 		}
@@ -206,10 +205,18 @@ func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.Cal
 				continue
 			}
 
-			if errors.Is(err, context.Canceled) || errors.Is(err, redis.ErrClosed) {
-				_ = t.client.Close()
+			if errors.Is(err, context.Canceled) {
 				logger.New().Info("Channel:[", channel, "]Topic:[", topic, "] Task Stop")
 				return
+			}
+
+			if errors.Is(err, redis.ErrClosed) {
+				if ctx.Err() != nil {
+					logger.New().Info("Channel:[", channel, "]Topic:[", topic, "] Task Stop")
+					return
+				}
+				logger.New().Info("Channel:[", channel, "]Topic:[", topic, "] Redis client reloaded")
+				continue
 			}
 		}
 

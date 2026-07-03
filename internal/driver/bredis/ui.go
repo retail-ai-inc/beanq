@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
@@ -83,7 +83,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 
 		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
 
-		if err := t.client.ZAdd(ctx, totalkey, &redis.Z{
+		if err := t.client.ZAdd(ctx, totalkey, redis.Z{
 			Score:  cast.ToFloat64(now.Unix()),
 			Member: bt,
 		}).Err(); err != nil {
@@ -159,7 +159,7 @@ func (t *UITool) HostName(ctx context.Context) error {
 		return err
 	}
 
-	if err := t.client.ZAdd(ctx, hostNameKey, &redis.Z{
+	if err := t.client.ZAdd(ctx, hostNameKey, redis.Z{
 		Score:  cast.ToFloat64(now.Unix()),
 		Member: bt,
 	}).Err(); err != nil {

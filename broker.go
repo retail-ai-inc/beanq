@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	bmongo2 "github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
@@ -76,10 +76,13 @@ func NewBroker(config *BeanqConfig) *Broker {
 		switch config.Broker {
 		case "redis":
 			cfg := config.Redis
-			client := bredis.NewRdb(cfg.Host, cfg.Port,
+			client, err := bredis.NewRdb(cfg.IsCluster, cfg.Host, cfg.Port, cfg.Username,
 				cfg.Password, cfg.Database,
-				cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections)
-
+				cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections,
+				cfg.SSL.On, cfg.SSL.CAFile, cfg.SSL.Verify, cfg.SSL.HotReload)
+			if err != nil {
+				logger.New().Panic("new redis client err:", err)
+			}
 			broker.status = bredis.NewStatus(client, cfg.Prefix)
 			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
 			broker.client = client
@@ -103,7 +106,12 @@ func NewBroker(config *BeanqConfig) *Broker {
 					collections,
 					mcfg.ConnectTimeOut,
 					mcfg.MaxConnectionPoolSize,
-					mcfg.MaxConnectionLifeTime)
+					mcfg.MaxConnectionLifeTime,
+					bmongo2.MongoSSLConfig{
+						On:     mcfg.SSL.On,
+						CAFile: mcfg.SSL.CAFile,
+						Verify: mcfg.SSL.Verify,
+					})
 
 				broker.captureConfig = getConfig(nmgo)
 			}
@@ -214,7 +222,11 @@ func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
 				mongo.Database,
 				mongo.Collections["event"].Name,
 				mongo.UserName,
-				mongo.Password)
+				mongo.Password,
+				mongo.SSL.On,
+				mongo.SSL.CAFile,
+				mongo.SSL.Verify,
+				mongo.SSL.HotReload)
 		}
 		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
 	}
