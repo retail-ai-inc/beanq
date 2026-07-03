@@ -15,7 +15,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const (
@@ -689,19 +688,10 @@ func NewWorkflowRecord() *WorkflowRecord {
 		if workflowCfg.On && mongoCfg != nil && mongoCfg.Database != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
-			connURI := "mongodb://" + mongoCfg.Host + ":" + mongoCfg.Port
-			opts := options.Client().
-				ApplyURI(connURI).
-				SetConnectTimeout(mongoCfg.ConnectTimeOut).
-				SetMaxPoolSize(mongoCfg.MaxConnectionPoolSize).
-				SetMaxConnIdleTime(mongoCfg.MaxConnectionLifeTime)
 
-			if mongoCfg.UserName != "" && mongoCfg.Password != "" {
-				opts.SetAuth(options.Credential{
-					AuthSource: mongoCfg.Database,
-					Username:   mongoCfg.UserName,
-					Password:   mongoCfg.Password,
-				})
+			opts, err := mongoClientOptions(mongoCfg)
+			if err != nil {
+				panic(err)
 			}
 
 			mdb, err := mongo.Connect(ctx, opts)

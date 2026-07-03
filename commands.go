@@ -3,7 +3,6 @@ package beanq
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -19,7 +18,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/color"
 	"github.com/spf13/cobra"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // pass configuration information through the flags parameter
@@ -310,22 +308,9 @@ func parseConfig(flags interface{ GetString(string) (string, error) }) (*BeanqCo
 
 func newMongoClient(ctx context.Context, config *Mongo) (*mongo.Client, error) {
 
-	mport := strings.TrimLeft(config.Port, ":")
-	mport = fmt.Sprintf(":%s", mport)
-	uri := strings.Join([]string{"mongodb://", config.Host, mport}, "")
-
-	opts := options.Client().ApplyURI(uri).
-		SetConnectTimeout(config.ConnectTimeOut).
-		SetMaxPoolSize(config.MaxConnectionPoolSize).
-		SetMaxConnIdleTime(config.MaxConnectionLifeTime)
-
-	if config.UserName != "" && config.Password != "" {
-		auth := options.Credential{
-			AuthSource: config.Database,
-			Username:   config.UserName,
-			Password:   config.Password,
-		}
-		opts.SetAuth(auth)
+	opts, err := mongoClientOptions(config)
+	if err != nil {
+		return nil, err
 	}
 
 	client, err := mongo.Connect(ctx, opts)

@@ -19,7 +19,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/retail-ai-inc/beanq/v4/internal/routers"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 //go:embed ui
@@ -83,6 +82,11 @@ func (c *Client) ServeHttp(ctx context.Context) {
 			mongoCfg.ConnectTimeOut,
 			mongoCfg.MaxConnectionPoolSize,
 			mongoCfg.MaxConnectionLifeTime,
+			bmongo.MongoSSLConfig{
+				On:     mongoCfg.SSL.On,
+				CAFile: mongoCfg.SSL.CAFile,
+				Verify: mongoCfg.SSL.Verify,
+			},
 		)
 	}
 
@@ -93,19 +97,9 @@ func (c *Client) ServeHttp(ctx context.Context) {
 	}
 
 	if c.broker.config.WorkFlow.On && mongoCfg != nil && mongoCfg.Database != "" {
-		connURI := "mongodb://" + mongoCfg.Host + ":" + mongoCfg.Port
-		opts := options.Client().
-			ApplyURI(connURI).
-			SetConnectTimeout(mongoCfg.ConnectTimeOut).
-			SetMaxPoolSize(mongoCfg.MaxConnectionPoolSize).
-			SetMaxConnIdleTime(mongoCfg.MaxConnectionLifeTime)
-
-		if mongoCfg.UserName != "" && mongoCfg.Password != "" {
-			opts.SetAuth(options.Credential{
-				AuthSource: mongoCfg.Database,
-				Username:   mongoCfg.UserName,
-				Password:   mongoCfg.Password,
-			})
+		opts, err := mongoClientOptions(mongoCfg)
+		if err != nil {
+			panic(err)
 		}
 
 		client, err := mongo.Connect(ctx, opts)

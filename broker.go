@@ -106,7 +106,12 @@ func NewBroker(config *BeanqConfig) *Broker {
 					collections,
 					mcfg.ConnectTimeOut,
 					mcfg.MaxConnectionPoolSize,
-					mcfg.MaxConnectionLifeTime)
+					mcfg.MaxConnectionLifeTime,
+					bmongo2.MongoSSLConfig{
+						On:     mcfg.SSL.On,
+						CAFile: mcfg.SSL.CAFile,
+						Verify: mcfg.SSL.Verify,
+					})
 
 				broker.captureConfig = getConfig(nmgo)
 			}
