@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/spf13/cast"
 )
 
@@ -296,12 +296,17 @@ func (t *BaseClient) Monitor(ctx context.Context) (string, error) {
 }
 
 func (t *BaseClient) ZRangeByScore(ctx context.Context, key string, min, max string, offset, count int64) ([]string, error) {
-	return t.client.ZRangeByScore(ctx, key, &redis.ZRangeBy{
-		Min:    min,
-		Max:    max,
-		Offset: offset,
-		Count:  count,
+
+	return t.client.ZRangeArgs(ctx, redis.ZRangeArgs{
+		Key:     key,
+		Start:   min,
+		Stop:    max,
+		ByScore: true,
+		Rev:     false,
+		Offset:  offset,
+		Count:   count,
 	}).Result()
+
 }
 
 func (t *BaseClient) ZCount(ctx context.Context, key string, min, max string) int64 {

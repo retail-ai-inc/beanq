@@ -3,6 +3,8 @@ package beanq
 import (
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestNewConfig(t *testing.T) {
@@ -71,4 +73,21 @@ func TestNewConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestViperUnmarshalRedisSSLCertFile(t *testing.T) {
+	vp := viper.New()
+	vp.AddConfigPath("./examples/normal/consumer")
+	vp.SetConfigType("json")
+	vp.SetConfigName("env")
+
+	if err := vp.ReadInConfig(); err != nil {
+		t.Fatalf("ReadInConfig error: %v", err)
+	}
+
+	var cfg BeanqConfig
+	if err := vp.Unmarshal(&cfg); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
 }

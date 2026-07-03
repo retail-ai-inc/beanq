@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
@@ -38,7 +38,6 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 		// check state
 		select {
 		case <-ctx.Done():
-			_ = t.client.Close()
 			return nil
 		case <-timer.C:
 		}

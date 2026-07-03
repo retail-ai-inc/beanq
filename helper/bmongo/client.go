@@ -13,6 +13,7 @@ import (
 
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/btls"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -24,6 +25,12 @@ var (
 	mongoOnce sync.Once
 	mgo       *BMongo
 )
+
+type MongoSSLConfig struct {
+	On     bool
+	CAFile string
+	Verify bool
+}
 
 type BMongo struct {
 	database           *mongo.Database
@@ -87,7 +94,8 @@ func NewMongo(host, port string,
 	database string,
 	collections map[string]string,
 	connectTimeOut time.Duration, maxConnectionPoolSize uint64,
-	maxConnectionLifeTime time.Duration) *BMongo {
+	maxConnectionLifeTime time.Duration,
+	sslConfig ...MongoSSLConfig) *BMongo {
 	mongoOnce.Do(func() {
 
 		port = strings.TrimLeft(port, ":")
@@ -106,6 +114,19 @@ func NewMongo(host, port string,
 				Password:   password,
 			}
 			opts.SetAuth(auth)
+		}
+
+		var ssl MongoSSLConfig
+		if len(sslConfig) > 0 {
+			ssl = sslConfig[0]
+		}
+
+		if ssl.On {
+			tlsConfig, err := btls.LoadTLSConfigFromCA(ssl.CAFile, ssl.Verify)
+			if err != nil {
+				log.Fatal(err)
+			}
+			opts.SetTLSConfig(tlsConfig)
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

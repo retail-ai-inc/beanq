@@ -3,7 +3,7 @@ package bredis
 import (
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 func NewZAddArgs(stream, minId, Id string, maxLen, Limit int64, vals any) *redis.XAddArgs {
