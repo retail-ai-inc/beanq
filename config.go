@@ -327,20 +327,9 @@ func (t *BeanqConfig) SafeJSON() ([]byte, error) {
 	clone := *t
 	if t.Mongo != nil {
 		mongoClone := *t.Mongo
-		mongoClone.Password = maskSecret(mongoClone.Password)
 		clone.Mongo = &mongoClone
 	}
-	clone.Redis.Password = maskSecret(clone.Redis.Password)
-	clone.UI.JwtKey = maskSecret(clone.UI.JwtKey)
-	clone.UI.Root.Password = maskSecret(clone.UI.Root.Password)
 	return json.Marshal(clone)
-}
-
-func maskSecret(value string) string {
-	if value == "" {
-		return ""
-	}
-	return "******"
 }
 
 // Default configuration values
