@@ -213,20 +213,20 @@ func (t *BeanqConfig) applyQueueDefaults() {
 }
 
 func (t *BeanqConfig) applyMongoDefaults() {
-	if t.Mongo.Collections == nil {
-		t.Mongo.Collections = defaultMongoCollections()
+	if t.Collections == nil {
+		t.Collections = defaultMongoCollections()
 	}
-	if t.Mongo.Port == "" {
-		t.Mongo.Port = "27017"
+	if t.Port == "" {
+		t.Port = "27017"
 	}
-	if t.Mongo.ConnectTimeOut == 0 {
-		t.Mongo.ConnectTimeOut = 10 * time.Second
+	if t.ConnectTimeOut == 0 {
+		t.ConnectTimeOut = 10 * time.Second
 	}
-	if t.Mongo.MaxConnectionPoolSize == 0 {
-		t.Mongo.MaxConnectionPoolSize = 200
+	if t.MaxConnectionPoolSize == 0 {
+		t.MaxConnectionPoolSize = 200
 	}
-	if t.Mongo.MaxConnectionLifeTime == 0 {
-		t.Mongo.MaxConnectionLifeTime = 600 * time.Second
+	if t.MaxConnectionLifeTime == 0 {
+		t.MaxConnectionLifeTime = 600 * time.Second
 	}
 }
 
@@ -299,13 +299,13 @@ func (t *BeanqConfig) validateMongo() error {
 	if t.Mongo == nil {
 		return ErrInvalidConfig.WithMessage("mongo config is required")
 	}
-	if strings.TrimSpace(t.Mongo.Host) == "" {
+	if strings.TrimSpace(t.Host) == "" {
 		return ErrInvalidConfig.WithMessage("mongo.host is required")
 	}
-	if strings.TrimSpace(t.Mongo.Database) == "" {
+	if strings.TrimSpace(t.Database) == "" {
 		return ErrInvalidConfig.WithMessage("mongo.database is required")
 	}
-	if t.Mongo.SSL.On && strings.TrimSpace(t.Mongo.SSL.CAFile) == "" {
+	if t.SSL.On && strings.TrimSpace(t.SSL.CAFile) == "" {
 		return ErrInvalidConfig.WithMessage("mongo.ssl.certFile is required when mongo ssl is enabled")
 	}
 	return nil
