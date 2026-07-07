@@ -65,6 +65,12 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if username != t.ui.Root.UserName || password != t.ui.Root.Password {
+		if t.mgo == nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = "mongo is not configured"
+			_ = result.Json(w, http.StatusServiceUnavailable)
+			return
+		}
 		user, err = t.mgo.CheckUser(r.Context(), username, password)
 		if err != nil || user == nil {
 			result.Code = berror.AuthExpireCode
@@ -107,6 +113,10 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	if t.mgo == nil {
+		ReturnHtml(w, "mongo is not configured")
+		return
+	}
 
 	config, err := t.mgo.ConfigInfo(r.Context())
 	if err != nil {
@@ -131,6 +141,12 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 
 	res, cancel := response.Get()
 	defer cancel()
+	if t.mgo == nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "mongo is not configured"
+		_ = res.Json(w, http.StatusServiceUnavailable)
+		return
+	}
 
 	code := r.FormValue("code")
 
@@ -211,6 +227,12 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
+	if t.mgo == nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "mongo is not configured"
+		_ = res.Json(w, http.StatusServiceUnavailable)
+		return
+	}
 
 	config, err := t.mgo.ConfigInfo(r.Context())
 

@@ -26,7 +26,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
@@ -37,30 +37,30 @@ import (
 
 type (
 	DebugLog struct {
-		Path string `json:"path"`
-		On   bool   `json:"on"`
+		Path string `json:"path" mapstructure:"path"`
+		On   bool   `json:"on" mapstructure:"on"`
 	}
 	Health struct {
-		Port string `json:"port"`
-		Host string `json:"host"`
+		Port string `json:"port" mapstructure:"port"`
+		Host string `json:"host" mapstructure:"host"`
 	}
 	Redis struct {
-		IsCluster          bool          `json:"isCluster"`
-		Host               string        `json:"host"`
-		Port               string        `json:"port"`
-		Username           string        `json:"username"`
-		Password           string        `json:"password"`
-		Prefix             string        `json:"prefix"`
-		Database           int           `json:"database"`
-		MaxLen             int64         `json:"maxLen"`
-		MinIdleConnections int           `json:"minIdleConnections"`
-		DialTimeout        time.Duration `json:"dialTimeout"`
-		ReadTimeout        time.Duration `json:"readTimeout"`
-		WriteTimeout       time.Duration `json:"writeTimeout"`
-		PoolTimeout        time.Duration `json:"poolTimeout"`
-		MaxRetries         int           `json:"maxRetries"`
-		PoolSize           int           `json:"poolSize"`
-		SSL                SSL           `json:"ssl"`
+		IsCluster          bool          `json:"isCluster" mapstructure:"isCluster"`
+		Host               string        `json:"host" mapstructure:"host"`
+		Port               string        `json:"port" mapstructure:"port"`
+		Username           string        `json:"username" mapstructure:"username"`
+		Password           string        `json:"password" mapstructure:"password"`
+		Prefix             string        `json:"prefix" mapstructure:"prefix"`
+		Database           int           `json:"database" mapstructure:"database"`
+		MaxLen             int64         `json:"maxLen" mapstructure:"maxLen"`
+		MinIdleConnections int           `json:"minIdleConnections" mapstructure:"minIdleConnections"`
+		DialTimeout        time.Duration `json:"dialTimeout" mapstructure:"dialTimeout"`
+		ReadTimeout        time.Duration `json:"readTimeout" mapstructure:"readTimeout"`
+		WriteTimeout       time.Duration `json:"writeTimeout" mapstructure:"writeTimeout"`
+		PoolTimeout        time.Duration `json:"poolTimeout" mapstructure:"poolTimeout"`
+		MaxRetries         int           `json:"maxRetries" mapstructure:"maxRetries"`
+		PoolSize           int           `json:"poolSize" mapstructure:"poolSize"`
+		SSL                SSL           `json:"ssl" mapstructure:"ssl"`
 	}
 	SSL struct {
 		On        bool   `json:"on" mapstructure:"on"`
@@ -69,86 +69,99 @@ type (
 		HotReload bool   `json:"hotReload" mapstructure:"hotReload"`
 	}
 	Queue struct {
-		Topic        string
-		DelayChannel string
-		DelayTopic   string
-		Channel      string
-		MaxLen       int64
-		Priority     float64
-		TimeToRun    time.Duration
+		Topic        string        `json:"topic" mapstructure:"topic"`
+		DelayChannel string        `json:"delayChannel" mapstructure:"delayChannel"`
+		DelayTopic   string        `json:"delayTopic" mapstructure:"delayTopic"`
+		Channel      string        `json:"channel" mapstructure:"channel"`
+		MaxLen       int64         `json:"maxLen" mapstructure:"maxLen"`
+		Priority     float64       `json:"priority" mapstructure:"priority"`
+		TimeToRun    time.Duration `json:"timeToRun" mapstructure:"timeToRun"`
 	}
 	History struct {
-		Storage string `json:"storage"`
-		On      bool
+		Storage string `json:"storage" mapstructure:"storage"`
+		On      bool   `json:"on" mapstructure:"on"`
 	}
 
 	UI struct {
 		Stmt struct {
-			Host     string `json:"host"`
-			Port     string `json:"port"`
-			User     string `json:"user"`
-			Password string `json:"password"`
-		}
+			Host     string `json:"host" mapstructure:"host"`
+			Port     string `json:"port" mapstructure:"port"`
+			User     string `json:"user" mapstructure:"user"`
+			Password string `json:"password" mapstructure:"password"`
+		} `json:"smtp" mapstructure:"smtp"`
 		GoogleAuth struct {
-			ClientId     string
-			ClientSecret string
-			CallbackUrl  string
-		}
+			ClientId     string `json:"clientId" mapstructure:"clientId"`
+			ClientSecret string `json:"clientSecret" mapstructure:"clientSecret"`
+			CallbackUrl  string `json:"callbackUrl" mapstructure:"callbackUrl"`
+		} `json:"googleAuth" mapstructure:"googleAuth"`
 		SendGrid struct {
-			Key         string
-			FromName    string
-			FromAddress string
-		}
+			Key         string `json:"key" mapstructure:"key"`
+			FromName    string `json:"fromName" mapstructure:"fromName"`
+			FromAddress string `json:"fromAddress" mapstructure:"fromAddress"`
+		} `json:"sendGrid" mapstructure:"sendGrid"`
 		Root struct {
-			UserName string `json:"username"`
-			Password string `json:"password"`
-		} `json:"root"`
-		On        bool          `json:"on"`
-		Issuer    string        `json:"issuer"`
-		Subject   string        `json:"subject"`
-		JwtKey    string        `json:"jwtKey"`
-		Port      string        `json:"port"`
-		ExpiresAt time.Duration `json:"expiresAt"`
+			UserName string `json:"username" mapstructure:"username"`
+			Password string `json:"password" mapstructure:"password"`
+		} `json:"root" mapstructure:"root"`
+		On        bool          `json:"on" mapstructure:"on"`
+		Issuer    string        `json:"issuer" mapstructure:"issuer"`
+		Subject   string        `json:"subject" mapstructure:"subject"`
+		JwtKey    string        `json:"jwtKey" mapstructure:"jwtKey"`
+		Port      string        `json:"port" mapstructure:"port"`
+		ExpiresAt time.Duration `json:"expiresAt" mapstructure:"expiresAt"`
 	}
 	Collection struct {
-		Name  string `json:"name"`
-		Shard bool   `json:"shard"`
+		Name  string `json:"name" mapstructure:"name"`
+		Shard bool   `json:"shard" mapstructure:"shard"`
 	}
 	Mongo struct {
-		Database              string
-		UserName              string
-		Password              string
-		Collections           map[string]Collection
-		Host                  string
-		Port                  string
-		ConnectTimeOut        time.Duration
-		MaxConnectionPoolSize uint64
-		MaxConnectionLifeTime time.Duration
-		SSL                   SSL `json:"ssl"`
+		Database              string                `json:"database" mapstructure:"database"`
+		UserName              string                `json:"username" mapstructure:"username"`
+		Password              string                `json:"password" mapstructure:"password"`
+		Collections           map[string]Collection `json:"collections" mapstructure:"collections"`
+		Host                  string                `json:"host" mapstructure:"host"`
+		Port                  string                `json:"port" mapstructure:"port"`
+		ConnectTimeOut        time.Duration         `json:"connectTimeout" mapstructure:"connectTimeout"`
+		MaxConnectionPoolSize uint64                `json:"maxConnectionPoolSize" mapstructure:"maxConnectionPoolSize"`
+		MaxConnectionLifeTime time.Duration         `json:"maxConnectionLifeTime" mapstructure:"maxConnectionLifeTime"`
+		SSL                   SSL                   `json:"ssl" mapstructure:"ssl"`
 	}
 	BeanqConfig struct {
-		Health   Health `json:"health"`
-		Broker   string `json:"broker"`
-		UI       ui.Ui  `json:"ui"`
-		*Mongo   `json:"mongo"`
-		DebugLog `json:"debugLog"`
-		Queue
-		History                  `json:"history"`
-		WorkFlow                 `json:"workflow"`
-		Redis                    Redis         `json:"redis"`
-		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle"`
-		DeadLetterTicker         time.Duration `json:"deadLetterTicker"`
-		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory"`
-		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory"`
-		PublishTimeOut           time.Duration `json:"publishTimeOut"`
-		ConsumeTimeOut           time.Duration `json:"consumeTimeOut"`
-		MinConsumers             int64         `json:"minConsumers"`
-		JobMaxRetries            int           `json:"jobMaxRetries"`
-		ConsumerPoolSize         int           `json:"consumerPoolSize"`
+		Health                   Health `json:"health" mapstructure:"health"`
+		Broker                   string `json:"broker" mapstructure:"broker"`
+		UI                       ui.Ui  `json:"ui" mapstructure:"ui"`
+		*Mongo                   `json:"mongo" mapstructure:"mongo"`
+		DebugLog                 `json:"debugLog" mapstructure:"debugLog"`
+		Queue                    `mapstructure:",squash"`
+		History                  `json:"history" mapstructure:"history"`
+		WorkFlow                 `json:"workflow" mapstructure:"workflow"`
+		Redis                    Redis         `json:"redis" mapstructure:"redis"`
+		DeadLetterIdleTime       time.Duration `json:"deadLetterIdle" mapstructure:"deadLetterIdle"`
+		DeadLetterTicker         time.Duration `json:"deadLetterTicker" mapstructure:"deadLetterTicker"`
+		KeepFailedJobsInHistory  time.Duration `json:"keepFailedJobsInHistory" mapstructure:"keepFailedJobsInHistory"`
+		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory" mapstructure:"keepSuccessJobsInHistory"`
+		PublishTimeOut           time.Duration `json:"publishTimeOut" mapstructure:"publishTimeOut"`
+		ConsumeTimeOut           time.Duration `json:"consumeTimeOut" mapstructure:"consumeTimeOut"`
+		MinConsumers             int64         `json:"minConsumers" mapstructure:"minConsumers"`
+		JobMaxRetries            int           `json:"jobMaxRetries" mapstructure:"jobMaxRetries"`
+		ConsumerPoolSize         int           `json:"consumerPoolSize" mapstructure:"consumerPoolSize"`
 	}
 )
 
 func (t *BeanqConfig) init() {
+	t.ApplyDefaults()
+}
+
+func (t *BeanqConfig) ApplyDefaults() {
+	if t.Mongo == nil {
+		t.Mongo = &Mongo{}
+	}
+	t.applyRuntimeDefaults()
+	t.applyQueueDefaults()
+	t.applyMongoDefaults()
+}
+
+func (t *BeanqConfig) applyRuntimeDefaults() {
 	if t.ConsumerPoolSize == 0 {
 		t.ConsumerPoolSize = boptions.DefaultOptions.ConsumerPoolSize
 	}
@@ -161,7 +174,6 @@ func (t *BeanqConfig) init() {
 	if t.DeadLetterTicker == 0 {
 		t.DeadLetterTicker = boptions.DefaultOptions.DeadLetterTicker
 	}
-
 	if t.KeepSuccessJobsInHistory == 0 {
 		t.KeepSuccessJobsInHistory = boptions.DefaultOptions.KeepSuccessJobsInHistory
 	}
@@ -177,6 +189,9 @@ func (t *BeanqConfig) init() {
 	if t.MinConsumers == 0 {
 		t.MinConsumers = boptions.DefaultOptions.MinConsumers
 	}
+}
+
+func (t *BeanqConfig) applyQueueDefaults() {
 	if t.Channel == "" {
 		t.Channel = boptions.DefaultOptions.DefaultChannel
 	}
@@ -195,43 +210,137 @@ func (t *BeanqConfig) init() {
 	if t.TimeToRun == 0 {
 		t.TimeToRun = boptions.DefaultOptions.TimeToRun
 	}
-	//nolint:staticcheck,qf1008 //enhance readability
+}
+
+func (t *BeanqConfig) applyMongoDefaults() {
 	if t.Mongo.Collections == nil {
-		//nolint:staticcheck,qf1008 //enhance readability
-		t.Mongo.Collections = map[string]Collection{
-			"event":    {Name: "event_logs", Shard: true},
-			"workflow": {Name: "workflow_logs", Shard: true},
-			"manager":  {Name: "managers", Shard: true},
-			"opt":      {Name: "opt_logs", Shard: true},
-			"role":     {Name: "roles", Shard: true},
-			"tenant":   {Name: "tenants", Shard: true},
-		}
+		t.Mongo.Collections = defaultMongoCollections()
 	}
-	//nolint:staticcheck,qf1008 //enhance readability
+	if t.Mongo.Port == "" {
+		t.Mongo.Port = "27017"
+	}
 	if t.Mongo.ConnectTimeOut == 0 {
-		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.ConnectTimeOut = 10 * time.Second
 	}
-	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.MaxConnectionPoolSize == 0 {
-		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.MaxConnectionPoolSize = 200
 	}
-	//nolint:staticcheck,qf1008 //enhance readability
 	if t.Mongo.MaxConnectionLifeTime == 0 {
-		//nolint:staticcheck,qf1008 //enhance readability
 		t.Mongo.MaxConnectionLifeTime = 600 * time.Second
 	}
 }
 
-func (t *BeanqConfig) ToJson() string {
+func defaultMongoCollections() map[string]Collection {
+	return map[string]Collection{
+		"config":   {Name: "config", Shard: false},
+		"event":    {Name: "event_logs", Shard: true},
+		"workflow": {Name: "workflow_records", Shard: true},
+		"manager":  {Name: "managers", Shard: false},
+		"opt":      {Name: "opt_logs", Shard: true},
+		"role":     {Name: "roles", Shard: false},
+		"tenant":   {Name: "tenants", Shard: false},
+	}
+}
 
-	bt, err := json.Marshal(t)
+func (t *BeanqConfig) Validate() error {
+	if t == nil {
+		return ErrInvalidConfig.WithMessage("config is nil")
+	}
+	if strings.TrimSpace(t.Broker) == "" {
+		return ErrInvalidConfig.WithMessage("broker is required")
+	}
+	if t.Broker != "redis" {
+		return ErrUnsupportedBroker.WithMessage(t.Broker)
+	}
+	if err := t.validateRedis(); err != nil {
+		return err
+	}
+	if t.requiresMongo() {
+		return t.validateMongo()
+	}
+	return nil
+}
+
+func (t *BeanqConfig) validateRedis() error {
+	if strings.TrimSpace(t.Redis.Host) == "" {
+		return ErrInvalidConfig.WithMessage("redis.host is required")
+	}
+	if strings.TrimSpace(t.Redis.Port) == "" && !redisHostsIncludePorts(t.Redis.Host) {
+		return ErrInvalidConfig.WithMessage("redis.port is required")
+	}
+	if t.Redis.SSL.On && strings.TrimSpace(t.Redis.SSL.CAFile) == "" {
+		return ErrInvalidConfig.WithMessage("redis.ssl.certFile is required when redis ssl is enabled")
+	}
+	return nil
+}
+
+func redisHostsIncludePorts(hosts string) bool {
+	for _, host := range strings.Split(hosts, ",") {
+		if !strings.Contains(strings.TrimSpace(host), ":") {
+			return false
+		}
+	}
+	return true
+}
+
+func (t *BeanqConfig) requiresMongo() bool {
+	return storageRequiresMongo(t.History.On, t.History.Storage) || storageRequiresMongo(t.WorkFlow.On, t.WorkFlow.Storage)
+}
+
+func storageRequiresMongo(on bool, storage string) bool {
+	if !on {
+		return false
+	}
+	storage = strings.TrimSpace(strings.ToLower(storage))
+	return storage == "" || storage == "mongo"
+}
+
+func (t *BeanqConfig) validateMongo() error {
+	if t.Mongo == nil {
+		return ErrInvalidConfig.WithMessage("mongo config is required")
+	}
+	if strings.TrimSpace(t.Mongo.Host) == "" {
+		return ErrInvalidConfig.WithMessage("mongo.host is required")
+	}
+	if strings.TrimSpace(t.Mongo.Database) == "" {
+		return ErrInvalidConfig.WithMessage("mongo.database is required")
+	}
+	if t.Mongo.SSL.On && strings.TrimSpace(t.Mongo.SSL.CAFile) == "" {
+		return ErrInvalidConfig.WithMessage("mongo.ssl.certFile is required when mongo ssl is enabled")
+	}
+	return nil
+}
+
+func (t *BeanqConfig) ToJson() string {
+	bt, err := t.SafeJSON()
 	if err != nil {
 		logger.New().Error(err)
 		return ""
 	}
 	return string(bt)
+}
+
+func (t *BeanqConfig) SafeJSON() ([]byte, error) {
+	if t == nil {
+		return json.Marshal((*BeanqConfig)(nil))
+	}
+	clone := *t
+	if t.Mongo != nil {
+		mongoClone := *t.Mongo
+		mongoClone.Password = maskSecret(mongoClone.Password)
+		clone.Mongo = &mongoClone
+	}
+	clone.Redis.Password = maskSecret(clone.Redis.Password)
+	clone.UI.JwtKey = maskSecret(clone.UI.JwtKey)
+	clone.UI.Root.Password = maskSecret(clone.UI.Root.Password)
+	return json.Marshal(clone)
+}
+
+func maskSecret(value string) string {
+	if value == "" {
+		return ""
+	}
+	return "******"
 }
 
 // Default configuration values
@@ -240,24 +349,15 @@ const (
 	DefaultConfigType = "json"
 )
 
-var (
-	once    sync.Once
-	config  BeanqConfig
-	initErr error
-)
-
 // NewConfig initializes a BeanqConfig from a configuration file using viper.
-// It ensures thread-safe initialization and validates inputs.
-// Parameters:
-//   - configType: Type of configuration file (e.g., "json", "yaml"). Defaults to "json".
-//   - configName: Name of the configuration file without extension (e.g., "env"). Defaults to "env".
-//   - vp: Optional viper instance for dependency injection (e.g., for testing). If nil, a new instance is created.
-//
-// Returns a pointer to BeanqConfig and an error if initialization fails.
+// It preserves the historical API while loading a fresh config on every call.
 func NewConfig(configPath string, configType string, configName string) (*BeanqConfig, error) {
+	return LoadConfig(configPath, configType, configName)
+}
 
+func LoadConfig(configPath string, configType string, configName string) (*BeanqConfig, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("config path %s does not exist", configPath)
+		return nil, ErrInvalidConfig.WithMessage(fmt.Sprintf("config path %s does not exist", configPath)).WithCause(err)
 	}
 	if configType == "" {
 		configType = DefaultConfigType
@@ -266,21 +366,22 @@ func NewConfig(configPath string, configType string, configName string) (*BeanqC
 		configName = DefaultConfigName
 	}
 
-	once.Do(func() {
-		vp := viper.New()
-		vp.AddConfigPath(configPath)
-		vp.SetConfigType(configType)
-		vp.SetConfigName(configName)
+	vp := viper.New()
+	vp.AddConfigPath(configPath)
+	vp.SetConfigType(configType)
+	vp.SetConfigName(configName)
 
-		if err := vp.ReadInConfig(); err != nil {
-			initErr = fmt.Errorf("failed to read config file: %w", err)
-			return
-		}
+	if err := vp.ReadInConfig(); err != nil {
+		return nil, ErrInvalidConfig.WithMessage("failed to read config file").WithCause(err)
+	}
 
-		if err := vp.Unmarshal(&config); err != nil {
-			initErr = fmt.Errorf("failed to unmarshal config: %w", err)
-			return
-		}
-	})
-	return &config, initErr
+	var cfg BeanqConfig
+	if err := vp.Unmarshal(&cfg); err != nil {
+		return nil, ErrInvalidConfig.WithMessage("failed to unmarshal config").WithCause(err)
+	}
+	cfg.ApplyDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
 }

@@ -32,7 +32,7 @@ func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int6
 	work := &Schedule{
 		base: Base{
 			client:           client,
-			IProcessLog:      NewProcessLog(client, prefix),
+			processLogger:    NewProcessLog(client, prefix),
 			subType:          btype.DelaySubscribe,
 			prefix:           prefix,
 			deadLetterIdle:   deadLetterIdle,
@@ -46,12 +46,6 @@ func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int6
 	work.preWork = work.PreWork
 
 	return work
-}
-
-func (t *Schedule) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
-
-	return nil
-
 }
 
 func (t *Schedule) Watcher(ctx context.Context, zsetMax string, zsetKey, streamKey string) func(tx *redis.Tx) error {

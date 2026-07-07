@@ -1,6 +1,8 @@
 package bjwt
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"testing"
 	"time"
 
@@ -84,6 +86,26 @@ func TestParseHsToken(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseHsTokenRejectsUnexpectedSigningMethod(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	assert.NoError(t, err)
+
+	claims := Claim{
+		UserName: "testuser",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	tokenStr, err := token.SignedString(privateKey)
+	assert.NoError(t, err)
+
+	claim, err := ParseHsToken(tokenStr, []byte(signkey))
+	assert.Nil(t, claim)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected signing method")
 }
 
 func generateToken(key []byte, username string, expireAt time.Time) string {

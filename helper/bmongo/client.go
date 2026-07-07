@@ -198,12 +198,12 @@ func (t *BMongo) WorkFlowLogs(ctx context.Context, filter bson.M, page, pageSize
 	opts.SetSort(bson.D{{Key: "CreatedAt", Value: 1}})
 
 	cursor, err := t.database.Collection(t.workflowCollection).Find(ctx, filter, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		return nil, 0, err
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	var data []bson.M
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
@@ -226,12 +226,12 @@ func (t *BMongo) EventLogs(ctx context.Context, filter bson.M, page, pageSize in
 	opts.SetSort(bson.D{{Key: "_id", Value: -1}})
 
 	cursor, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		return nil, 0, err
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	var data []bson.M
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
@@ -552,12 +552,12 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 	opts.SetSort(bson.D{{Key: "addTime", Value: 1}})
 
 	cursor, err := t.database.Collection(t.managerCollection).Find(ctx, filter, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		return nil, 0, err
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	var data []bson.M
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
@@ -587,12 +587,12 @@ func (t *BMongo) Roles(ctx context.Context, m bson.M, page, pageSize int64) ([]b
 	opts.SetSort(bson.D{{Key: "createAt", Value: 1}})
 
 	cursor, err := t.database.Collection(t.roleCollection).Find(ctx, m, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		return nil, 0, err
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	var data []bson.M
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err
@@ -673,12 +673,12 @@ func (t *BMongo) LogsByPod(ctx context.Context, hostname string) ([]bson.M, erro
 	opts.SetSort(bson.D{{Key: "addTime", Value: -1}})
 
 	cursor, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	var data []bson.M
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, err
@@ -833,12 +833,12 @@ func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenan
 	filter := bson.M{}
 
 	cursor, err := t.database.Collection(t.tenantCollection).Find(ctx, filter, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		return nil, 0, err
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
 	var data []Tenants
 	if err := cursor.All(ctx, &data); err != nil {
 		return nil, 0, err

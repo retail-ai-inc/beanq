@@ -34,23 +34,26 @@ import (
 
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
+	public "github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/rs/xid"
 )
 
 type (
-	// IBaseCmd BaseCmd public method
+	// IBaseCmd is the base command contract used by publish and subscribe commands.
 	IBaseCmd interface {
 		filter(message *Message) error
 	}
-	// IBaseSubscribeCmd BaseSubscribeCmd subscribe method
+
+	// IBaseSubscribeCmd is returned by subscribe calls.
 	IBaseSubscribeCmd interface {
 		IBaseCmd
 		Run(ctx context.Context)
 	}
-	// define available command
+
 	cmdAble func(cmd IBaseCmd) error
-	// Client beanq's client
+
+	// Client is BeanQ's root client.
 	Client struct {
 		captureException func(ctx context.Context, err any)
 		broker           *Broker
@@ -59,6 +62,7 @@ type (
 		Channel          string          `json:"channel"`
 		MaxLen           int64           `json:"maxLen"`
 		Retry            int             `json:"retry"`
+		DeadLetterRetry  int             `json:"deadletterRetry"`
 		Priority         float64         `json:"priority"`
 		TimeToRun        time.Duration   `json:"timeToRun"`
 		retryConditions  []RetryConditionFunc
@@ -72,36 +76,46 @@ type (
 
 	DynamicOption func(option *dynamicOption)
 	ClientOption  func(client *Client)
-	// Include payload details in the method retry condition, as it may be complex.
+
+	// RetryConditionFunc decides whether a handler error should be retried.
 	RetryConditionFunc func(map[string]any, error) bool
 )
 
 func New(config *BeanqConfig, options ...ClientOption) *Client {
-
-	// init config,will merge default options
 	config.init()
 
-	client := &Client{
-		Topic:     config.Topic,
-		Channel:   config.Channel,
-		MaxLen:    config.MaxLen,
-		Retry:     config.JobMaxRetries,
-		Priority:  config.Priority,
-		TimeToRun: config.TimeToRun,
-	}
-
+	client := newClientFromConfig(config)
 	for _, option := range options {
 		option(client)
 	}
-
-	client.broker = NewBroker(config)
+	if client.broker == nil {
+		client.broker = NewBroker(config)
+	}
 	client.config = config
 	return client
 }
 
-// ForceUnlock force delete a order key
+func newClientFromConfig(config *BeanqConfig) *Client {
+	return &Client{
+		Topic:           config.Topic,
+		Channel:         config.Channel,
+		MaxLen:          config.MaxLen,
+		Retry:           config.JobMaxRetries,
+		DeadLetterRetry: 0,
+		Priority:        config.Priority,
+		TimeToRun:       config.TimeToRun,
+	}
+}
+
+// ForceUnlock force deletes an order key.
 func (c *Client) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
 	return c.broker.ForceUnlock(ctx, channel, topic, orderKey)
+}
+
+func WithBroker(broker *Broker) ClientOption {
+	return func(client *Client) {
+		client.broker = broker
+	}
 }
 
 func WithCaptureExceptionOption(handler func(ctx context.Context, err any)) ClientOption {
@@ -118,51 +132,76 @@ func WithRetryConditions(condition ...RetryConditionFunc) ClientOption {
 
 func (c *Client) BQ() *BQClient {
 	bqc := &BQClient{
-		client: &Client{
-			broker:           c.broker,
-			Topic:            c.Topic,
-			Channel:          c.Channel,
-			MaxLen:           c.MaxLen,
-			Retry:            c.Retry,
-			Priority:         c.Priority,
-			TimeToRun:        c.TimeToRun,
-			captureException: c.captureException,
-			retryConditions:  slices.Clone(c.retryConditions),
-		},
-
+		client:        c.cloneForCommand(),
 		dynamicOption: &dynamicOption{},
 		ctx:           context.Background(),
-		id:            "",
 		priority:      c.Priority,
 	}
 	bqc.cmdAble = bqc.process
 	return bqc
 }
 
+func (c *Client) cloneForCommand() *Client {
+	return &Client{
+		broker:           c.broker,
+		Topic:            c.Topic,
+		Channel:          c.Channel,
+		MaxLen:           c.MaxLen,
+		Retry:            c.Retry,
+		DeadLetterRetry:  c.DeadLetterRetry,
+		Priority:         c.Priority,
+		TimeToRun:        c.TimeToRun,
+		TimeToRunLimit:   slices.Clone(c.TimeToRunLimit),
+		captureException: c.captureException,
+		retryConditions:  slices.Clone(c.retryConditions),
+		config:           c.config,
+	}
+}
+
 func (c *Client) Wait(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
+
+	c.startHandlers(ctx)
+	c.startMigration(ctx)
+	c.startHostReporter(ctx)
+
+	logger.New().Info("Beanq Start")
+	<-c.WaitSignal(cancel)
+}
+
+func (c *Client) startHandlers(ctx context.Context) {
 	for key, handler := range c.broker.handlers {
-		go func(hdl Handler) {
+		if handler == nil {
+			continue
+		}
+		hdl := *handler
+		go func() {
 			brokerImpl := c.broker.Mood(hdl.moodType)
 			hdl.Invoke(ctx, brokerImpl)
-		}(*handler)
+		}()
 		c.broker.handlers[key] = nil
 	}
+}
 
+func (c *Client) startMigration(ctx context.Context) {
 	go func() {
-
 		if ctx.Err() != nil {
 			return
 		}
-		err := c.broker.Migrate(ctx, nil)
-		if err != nil {
+		if err := c.broker.Migrate(ctx, nil); err != nil {
 			panic(err)
 		}
 	}()
+}
 
+func (c *Client) startHostReporter(ctx context.Context) {
+	if c.broker == nil || c.broker.tool == nil {
+		return
+	}
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -174,10 +213,6 @@ func (c *Client) Wait(ctx context.Context) {
 			}
 		}
 	}()
-
-	logger.New().Info("Beanq Start")
-	// monitor signal
-	<-c.WaitSignal(cancel)
 }
 
 func (c *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
@@ -189,7 +224,6 @@ func (c *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	go func() {
 		<-sigs
 		cancel()
-		// t.asyncPool.Release()
 		_ = logger.New().Sync()
 		done <- true
 	}()
@@ -197,43 +231,54 @@ func (c *Client) WaitSignal(cancel context.CancelFunc) <-chan bool {
 }
 
 func (c *Client) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle, retryConditions map[string]struct{}) error {
+	if subscribe == nil {
+		return ErrNilHandle
+	}
 
 	handler := Handler{
 		channel:   channel,
 		topic:     topic,
 		moodType:  moodType,
 		retryCond: retryConditions,
-		do: func(ctx context.Context, message map[string]any, retry ...int) (int, error) {
-			var gerr error
-			msg := messageToStruct(message)
-			if err := subscribe.Handle(ctx, msg); err != nil {
-				gerr = errors.Join(gerr, err)
-				if h, ok := subscribe.(IConsumeCancel); ok {
-					gerr = errors.Join(gerr, h.Cancel(ctx, msg))
-				}
-			}
-			return 0, gerr
-		},
+		do:        consumerCallback(subscribe),
 	}
-
 	c.broker.handlers = append(c.broker.handlers, &handler)
 	return nil
 }
 
+func consumerCallback(subscribe IConsumeHandle) public.CallbackWithRetry {
+	return public.NewCallbackWithRetry(func(ctx context.Context, message map[string]any, retry ...int) (int, error) {
+		msg := messageToStruct(message)
+		if err := subscribe.Handle(ctx, msg); err != nil {
+			return 0, consumeCancel(ctx, subscribe, msg, err)
+		}
+		return 0, nil
+	}, func(ctx context.Context, err error) {
+		if h, ok := subscribe.(IConsumeError); ok {
+			h.Error(ctx, err)
+		}
+	})
+}
+
+func consumeCancel(ctx context.Context, subscribe IConsumeHandle, msg *Message, err error) error {
+	var joined error
+	joined = errors.Join(joined, err)
+	if h, ok := subscribe.(IConsumeCancel); ok {
+		joined = errors.Join(joined, h.Cancel(ctx, msg))
+	}
+	return joined
+}
+
 func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string, isOrder bool) (*Message, error) {
-
 	m, err := c.broker.Status(ctx, channel, topic, id, isOrder)
-
 	if err != nil {
 		return nil, err
 	}
-
 	return MessageS(m).ToMessage(), nil
 }
 
-// Ping this method can be called by user for checking the status of broker
-func (c *Client) Ping() {
-}
+// Ping can be called by users to check the broker status.
+func (c *Client) Ping() {}
 
 type BQClient struct {
 	ctx context.Context
@@ -248,20 +293,19 @@ type BQClient struct {
 }
 
 func (b *BQClient) WithContext(ctx context.Context) *BQClient {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	b.ctx = ctx
 	return b
 }
 
-// Dynamic only support Sequential type for now.
+// Dynamic only supports Sequential type for now.
 func (b *BQClient) Dynamic(options ...DynamicOption) *BQClient {
-	opt := &dynamicOption{
-		on:  true,
-		key: "",
-	}
+	opt := &dynamicOption{on: true}
 	for _, option := range options {
 		option(opt)
 	}
-
 	b.dynamicOption = opt
 	return b
 }
@@ -283,8 +327,7 @@ func (b *BQClient) Priority(priority float64) *BQClient {
 	return b
 }
 
-// SetTimeToRun
-// When the consumer execution time exceeds the limit, an alert will be sent
+// SetTimeToRun sets the consumer execution timeout and optional alert thresholds.
 func (b *BQClient) SetTimeToRun(duration time.Duration, limits ...time.Duration) *BQClient {
 	if duration > 0 {
 		b.client.TimeToRun = duration
@@ -293,60 +336,49 @@ func (b *BQClient) SetTimeToRun(duration time.Duration, limits ...time.Duration)
 	return b
 }
 
-// Dynamic setting of consumption retry count
+// Retry dynamically sets the consumption retry count.
 func (b *BQClient) Retry(retry int) *BQClient {
 	if retry <= 0 {
 		retry = 0
 	}
-
 	b.client.Retry = retry
 	return b
 }
 
-// If duration <= 0, it will never expire unless ForceUnlock is used to force deletion.
+// SetLockOrderKeyTTL sets the sequence-by-lock key TTL. Values <= 0 never expire unless force-unlocked.
 func (b *BQClient) SetLockOrderKeyTTL(duration time.Duration) *BQClient {
-
 	b.lockOrderKeyTTL = duration
 	return b
 }
 
-func (b *BQClient) IgnoreRetryConditions(err ...error) *BQClient {
-
-	retryConditions := make(map[string]struct{}, len(err))
-	for _, e := range err {
-		key := fmt.Sprintf("%T,%v", e, e.Error())
-		retryConditions[key] = struct{}{}
+func (b *BQClient) IgnoreRetryConditions(errs ...error) *BQClient {
+	retryConditions := make(map[string]struct{}, len(errs))
+	for _, err := range errs {
+		if err == nil {
+			continue
+		}
+		retryConditions[retryConditionKey(err)] = struct{}{}
 	}
 	b.retryConditions = retryConditions
 	return b
 }
 
+func retryConditionKey(err error) string {
+	return fmt.Sprintf("%T,%v", err, err.Error())
+}
+
 func (b *BQClient) PublishInSequence(channel, topic string, payload []byte) *SequenceCmd {
-	cmd := &Publish{
+	return b.publishSequence(Publish{
 		channel:     channel,
 		topic:       topic,
 		payload:     payload,
 		moodType:    btype.SEQUENCE,
 		executeTime: time.Now(),
-	}
-	sequentialCmd := &SequenceCmd{
-		err:     nil,
-		channel: channel,
-		topic:   topic,
-		ctx:     b.ctx,
-		client:  b.client,
-	}
-	if err := b.process(cmd); err != nil {
-		sequentialCmd.err = err
-	} else {
-		sequentialCmd.id = b.id
-	}
-
-	return sequentialCmd
+	}, false)
 }
 
 func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payload []byte) *SequenceCmd {
-	cmd := &Publish{
+	return b.publishSequence(Publish{
 		channel:         channel,
 		topic:           topic,
 		payload:         payload,
@@ -354,179 +386,142 @@ func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payl
 		lockOrderKeyTTL: b.lockOrderKeyTTL,
 		moodType:        btype.SEQUENCE_BY_LOCK,
 		executeTime:     time.Now(),
-	}
+	}, true)
+}
+
+func (b *BQClient) publishSequence(cmd Publish, isOrder bool) *SequenceCmd {
+	channel, topic := b.client.resolveChannelTopic(cmd.channel, cmd.topic)
 	sequenceCmd := &SequenceCmd{
-		err:     nil,
 		channel: channel,
 		topic:   topic,
 		ctx:     b.ctx,
 		client:  b.client,
-		isOrder: true,
+		isOrder: isOrder,
 	}
-	if err := b.process(cmd); err != nil {
+	if err := b.process(&cmd); err != nil {
 		sequenceCmd.err = err
 	} else {
 		sequenceCmd.id = b.id
 	}
-
 	return sequenceCmd
 }
 
 func (b *BQClient) process(cmd IBaseCmd) error {
 	switch cmd := cmd.(type) {
 	case *Publish:
-		channel, topic := cmd.channel, cmd.topic
-
-		if channel == "" {
-			channel = b.client.Channel
-		}
-		if topic == "" {
-			topic = b.client.Topic
-		}
-
-		b.waitAck = cmd.moodType == btype.SEQUENCE
-		if cmd.moodType == btype.SEQUENCE {
-			if b.id == "" {
-				return errors.New("please configure a unique ID")
-			}
-		}
-		// make message
-		message := &Message{
-			Topic:           topic,
-			Channel:         channel,
-			OrderKey:        cmd.orderKey,
-			LockOrderKeyTTL: cmd.lockOrderKeyTTL,
-
-			Payload:     string(cmd.payload),
-			MoodType:    cmd.moodType,
-			AddTime:     cmd.executeTime.Format(timex.DateTime),
-			ExecuteTime: cmd.executeTime,
-
-			Id:       b.id,
-			Priority: b.priority,
-
-			MaxLen:         b.client.MaxLen,
-			Retry:          b.client.Retry,
-			PendingRetry:   0,
-			TimeToRun:      b.client.TimeToRun,
-			TimeToRunLimit: b.client.TimeToRunLimit,
-		}
-
-		if err := cmd.filter(message); err != nil {
-			return err
-		}
-
-		if b.id != message.Id {
-			b.id = message.Id
-		}
-
-		// store message
-		return b.client.broker.Enqueue(b.ctx, message.ToMap())
-		// return b.client.broker.enqueue(b.ctx, message, b.dynamicOption.on)
-
+		return b.processPublish(cmd)
 	case *Subscribe:
-		channel, topic := cmd.channel, cmd.topic
-
-		if channel == "" {
-			channel = b.client.Channel
-		}
-		if topic == "" {
-			topic = b.client.Topic
-		}
-
-		if b.dynamicOption.on {
-			// TODO: maybe need this feature in the future.
-		} else {
-			if err := b.client.AddConsumer(cmd.moodType, channel, topic, cmd.handle, b.retryConditions); err != nil {
-				return err
-			}
-		}
+		return b.processSubscribe(cmd)
 	default:
 		return fmt.Errorf("unknown structure type: %T", cmd)
 	}
+}
 
+func (b *BQClient) processPublish(cmd *Publish) error {
+	if err := b.validatePublish(cmd); err != nil {
+		return err
+	}
+
+	message := b.buildMessage(cmd)
+	if err := cmd.filter(message); err != nil {
+		return err
+	}
+	b.id = message.Id
+	return b.client.broker.Enqueue(b.ctx, message.ToMap())
+}
+
+func (b *BQClient) validatePublish(cmd *Publish) error {
+	b.waitAck = cmd.moodType == btype.SEQUENCE
+	if cmd.moodType == btype.SEQUENCE && b.id == "" {
+		return errors.New("please configure a unique ID")
+	}
 	return nil
 }
 
+func (b *BQClient) buildMessage(cmd *Publish) *Message {
+	channel, topic := b.client.resolveChannelTopic(cmd.channel, cmd.topic)
+	return &Message{
+		Topic:           topic,
+		Channel:         channel,
+		OrderKey:        cmd.orderKey,
+		LockOrderKeyTTL: cmd.lockOrderKeyTTL,
+		Payload:         string(cmd.payload),
+		MoodType:        cmd.moodType,
+		AddTime:         cmd.executeTime.Format(timex.DateTime),
+		ExecuteTime:     cmd.executeTime,
+		Id:              b.id,
+		Priority:        b.priority,
+		MaxLen:          b.client.MaxLen,
+		Retry:           b.client.Retry,
+		DeadLetterRetry: b.client.DeadLetterRetry,
+		PendingRetry:    0,
+		TimeToRun:       b.client.TimeToRun,
+		TimeToRunLimit:  b.client.TimeToRunLimit,
+	}
+}
+
+func (b *BQClient) processSubscribe(cmd *Subscribe) error {
+	if b.dynamicOption.on {
+		// Reserved for future dynamic subscription support.
+		return nil
+	}
+	channel, topic := b.client.resolveChannelTopic(cmd.channel, cmd.topic)
+	return b.client.AddConsumer(cmd.moodType, channel, topic, cmd.handle, b.retryConditions)
+}
+
+func (c *Client) resolveChannelTopic(channel, topic string) (string, string) {
+	if channel == "" {
+		channel = c.Channel
+	}
+	if topic == "" {
+		topic = c.Topic
+	}
+	return channel, topic
+}
+
 func (t cmdAble) Publish(channel, topic string, payload []byte) error {
-	cmd := &Publish{
+	return t(&Publish{
 		channel:     channel,
 		topic:       topic,
 		payload:     payload,
 		executeTime: time.Now(),
 		moodType:    btype.NORMAL,
-	}
-
-	if err := t(cmd); err != nil {
-		return err
-	}
-	return nil
+	})
 }
 
 func (t cmdAble) PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error {
-	cmd := &Publish{
+	return t(&Publish{
 		channel:     channel,
 		topic:       topic,
 		payload:     payload,
 		executeTime: atTime,
 		moodType:    btype.DELAY,
-	}
-
-	if err := t(cmd); err != nil {
-		return err
-	}
-	return nil
+	})
 }
 
 func (t cmdAble) Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	cmd := &Subscribe{
-		channel:       channel,
-		topic:         topic,
-		moodType:      btype.NORMAL,
-		handle:        handle,
-		subscribeType: btype.NormalSubscribe,
-	}
-	if err := t(cmd); err != nil {
-		return nil, err
-	}
-	return cmd, nil
+	return t.subscribe(channel, topic, btype.NORMAL, btype.NormalSubscribe, handle)
 }
 
 func (t cmdAble) SubscribeToDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	cmd := &Subscribe{
-		channel:       channel,
-		topic:         topic,
-		moodType:      btype.DELAY,
-		handle:        handle,
-		subscribeType: btype.NormalSubscribe,
-	}
-	if err := t(cmd); err != nil {
-		return nil, err
-	}
-	return cmd, nil
+	return t.subscribe(channel, topic, btype.DELAY, btype.NormalSubscribe, handle)
 }
 
 func (t cmdAble) SubscribeToSequence(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
-	cmd := &Subscribe{
-		channel:       channel,
-		topic:         topic,
-		moodType:      btype.SEQUENCE,
-		handle:        handle,
-		subscribeType: btype.SequentialSubscribe,
-	}
-	if err := t(cmd); err != nil {
-		return nil, err
-	}
-	return cmd, nil
+	return t.subscribe(channel, topic, btype.SEQUENCE, btype.SequentialSubscribe, handle)
 }
 
 func (t cmdAble) SubscribeToSequenceByLock(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	return t.subscribe(channel, topic, btype.SEQUENCE_BY_LOCK, btype.SequentialByLockSubscribe, handle)
+}
+
+func (t cmdAble) subscribe(channel, topic string, moodType btype.MoodType, subscribeType btype.SubscribeType, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	cmd := &Subscribe{
 		channel:       channel,
 		topic:         topic,
-		moodType:      btype.SEQUENCE_BY_LOCK,
+		moodType:      moodType,
 		handle:        handle,
-		subscribeType: btype.SequentialByLockSubscribe,
+		subscribeType: subscribeType,
 	}
 	if err := t(cmd); err != nil {
 		return nil, err
@@ -535,7 +530,7 @@ func (t cmdAble) SubscribeToSequenceByLock(channel, topic string, handle IConsum
 }
 
 type (
-	// Publish command:publish
+	// Publish command.
 	Publish struct {
 		executeTime     time.Time
 		channel         string
@@ -546,7 +541,7 @@ type (
 		payload         []byte
 	}
 
-	// Subscribe command:subscribe
+	// Subscribe command.
 	Subscribe struct {
 		handle        IConsumeHandle
 		channel       string
@@ -558,10 +553,8 @@ type (
 
 func (t *Publish) filter(message *Message) error {
 	if message.Id == "" {
-		guid := xid.NewWithTime(time.Now())
-		message.Id = guid.String()
+		message.Id = xid.NewWithTime(time.Now()).String()
 	}
-
 	if message.Payload == "" {
 		return errors.New("missing Payload")
 	}
@@ -572,7 +565,7 @@ func (t *Subscribe) filter(message *Message) error {
 	return nil
 }
 
-// Run will to be implemented
+// Run will be implemented in a future release.
 func (t *Subscribe) Run(ctx context.Context) {
 	fmt.Println("will implement")
 }
@@ -591,7 +584,7 @@ func (s *SequenceCmd) Error() error {
 	return s.err
 }
 
-// WaitingAck ...
+// WaitingAck waits for and returns the acknowledgement status.
 func (s *SequenceCmd) WaitingAck() (*Message, error) {
 	if s.err != nil {
 		return nil, s.err

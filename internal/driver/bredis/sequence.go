@@ -23,7 +23,7 @@ func NewSequence(client redis.UniversalClient, prefix string, consumerCount int6
 	return &Sequence{
 		base: Base{
 			client:           client,
-			IProcessLog:      NewProcessLog(client, prefix),
+			processLogger:    NewProcessLog(client, prefix),
 			subType:          btype.SequentialSubscribe,
 			prefix:           prefix,
 			deadLetterIdle:   deadLetterIdle,
@@ -33,11 +33,6 @@ func NewSequence(client redis.UniversalClient, prefix string, consumerCount int6
 			captureConfig:    config,
 		},
 	}
-}
-func (t *Sequence) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
-
-	return nil
-
 }
 
 func (t *Sequence) Enqueue(ctx context.Context, data map[string]any) error {

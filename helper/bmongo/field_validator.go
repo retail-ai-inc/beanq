@@ -3,7 +3,6 @@ package bmongo
 import (
 	"context"
 	"fmt"
-	"log"
 	"slices"
 	"sync"
 	"time"
@@ -121,6 +120,7 @@ const (
 
 var (
 	Collections     []string
+	CollectionsErr  error
 	CollectionsOnce sync.Once
 )
 
@@ -190,13 +190,17 @@ func (t Collection) listCollectionNames(ctx context.Context, database *mongo.Dat
 	if database == nil {
 		return nil, fmt.Errorf("database is nil")
 	}
+
 	CollectionsOnce.Do(func() {
-		if collections, err := database.ListCollectionNames(ctx, bson.M{}); err != nil {
-			log.Fatalf("list collection error:%+v \n", err)
-		} else {
+		var collections []string
+		collections, CollectionsErr = database.ListCollectionNames(ctx, bson.M{})
+		if CollectionsErr == nil {
 			Collections = collections
 		}
 	})
+	if CollectionsErr != nil {
+		return nil, fmt.Errorf("list collection names failed: %w", CollectionsErr)
+	}
 	return Collections, nil
 }
 

@@ -2,6 +2,7 @@ package bjwt
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -24,6 +25,9 @@ func MakeHsToken(claims Claim, key []byte) (string, error) {
 func ParseHsToken(tokenStr string, key []byte) (*Claim, error) {
 
 	token, err := jwt.ParseWithClaims(tokenStr, &Claim{}, func(token *jwt.Token) (i interface{}, err error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
 		return key, nil
 	})
 

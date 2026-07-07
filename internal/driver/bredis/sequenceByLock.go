@@ -20,7 +20,7 @@ type SequenceByLock struct {
 func NewSequenceByLock(client redis.UniversalClient, prefix string, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceByLock {
 	base := Base{
 		client:           client,
-		IProcessLog:      NewProcessLog(client, prefix),
+		processLogger:    NewProcessLog(client, prefix),
 		subType:          btype.SequentialByLockSubscribe,
 		prefix:           prefix,
 		deadLetterIdle:   deadLetterIdle,

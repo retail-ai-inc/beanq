@@ -24,64 +24,64 @@ delay: delay-publisher delay-consumer
 
 delay-consumer:
 	@echo "start delay consumer"
-	@cd examples/delay/consumer && \
+	@cd examples/delay && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./consumer/main.go
 
 delay-publisher:
 	@echo "start delay publisher"
-	@cd examples/delay/publisher && \
+	@cd examples/delay && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./publisher/main.go
 
 normal: normal-publisher normal-consumer
 
 normal-consumer:
 	@echo "start normal consumer"
-	@cd examples/normal/consumer && \
-	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	@cd examples/normal && \
+	jq '.redis.host = "redis-beanq" | .mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./consumer/main.go
 
 normal-publisher:
 	@echo "start normal publisher"
-	@cd examples/normal/publisher && \
-	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
+	@cd examples/normal && \
+	jq '.redis.host = "redis-beanq" | .mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./publisher/main.go
 
 sequential: sequential-publisher sequential-consumer
 
 sequential-consumer:
 	@echo "start sequential consumer"
-	@cd examples/sequential/consumer && \
+	@cd examples/sequential && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./consumer/main.go
 
 sequential-consumer-dlv:
 	@echo "start sequential consumer"
-	@cd examples/sequential/consumer && \
+	@cd examples/sequential && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go build -race -o server ./main.go && \
+	go build -race -o server ./consumer/main.go && \
 	dlv --headless --listen=:8888 --api-version=2 exec ./server
 
 sequential-publisher:
 	@echo "start sequential publisher"
-	@cd examples/sequential/publisher && \
+	@cd examples/sequential && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./publisher/main.go
 
 sequential-publisher-ack:
 	@echo "start sequential publisher with ack"
-	@cd examples/sequential/publisher-with-ack && \
+	@cd examples/sequential && \
 	jq '.redis.host = "redis-beanq" | .history.mongo.host = "mongo-beanq"' ./env.json > temp.json && \
 	mv temp.json env.json && \
-	go run -race ./main.go
+	go run -race ./publisher-with-ack/main.go
 
 ui:
 	@echo "start ui on port:9090"
@@ -94,30 +94,18 @@ clean:
 	@echo "start.."
 
 	@echo "delay clean"
-	@cd examples/delay/consumer && \
-	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
-	mv temp.json env.json
-	@cd examples/delay/publisher && \
+	@cd examples/delay && \
 	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
 	mv temp.json env.json
 
 	@echo "normal clean"
-	@cd examples/normal/consumer && \
-	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
-	mv temp.json env.json
-	@cd examples/normal/publisher && \
-	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	@cd examples/normal && \
+	jq '.redis.host = "localhost" | .mongo.host = "127.0.0.1"' ./env.json > temp.json && \
 	mv temp.json env.json
 
 	@echo "sequential clean"
-	@cd examples/sequential/consumer && \
-	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
-	mv temp.json env.json
-	@cd examples/sequential/publisher && \
-	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
-	mv temp.json env.json
-	@cd examples/sequential/publisher-with-ack && \
-	jq '.redis.host = "localhost" | .history.mongo.host = "localhost"' ./env.json > temp.json && \
+	@cd examples/sequential && \
+	jq '.redis.host = "localhost" | .history.mongo.host = "127.0.0.1"' ./env.json > temp.json && \
 	mv temp.json env.json
 
 	@echo "done!"

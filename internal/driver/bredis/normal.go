@@ -24,7 +24,7 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 		maxLen: maxLen,
 		base: Base{
 			client:           client,
-			IProcessLog:      NewProcessLog(client, prefix),
+			processLogger:    NewProcessLog(client, prefix),
 			subType:          btype.NormalSubscribe,
 			prefix:           prefix,
 			deadLetterIdle:   deadLetterIdle,
@@ -36,11 +36,6 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 	}
 }
 
-func (t *Normal) ForceUnlock(_ context.Context, channel, topic, orderKey string) error {
-
-	return nil
-
-}
 func (t *Normal) Enqueue(ctx context.Context, data map[string]any) error {
 	channel := ""
 	topic := ""

@@ -208,6 +208,17 @@ func (t *MigrateContext) Set(migrater Migrater) {
 
 var reCollection = regexp.MustCompile(`Collection\s+(\S+)\s+already exists`)
 
+func (t *MigrateContext) PendingVersions(currentVersion uint64, availableVersions []string) []uint64 {
+	pending := make([]uint64, 0, len(availableVersions))
+	for _, v := range availableVersions {
+		version := extractVersion(v)
+		if version > currentVersion {
+			pending = append(pending, version)
+		}
+	}
+	return pending
+}
+
 func (t *MigrateContext) Execute() {
 
 	collections := t.migrater.Collections()
@@ -246,12 +257,7 @@ func (t *MigrateContext) Execute() {
 	}
 	color.PrintInfo("📊 current database version: %d", currentVersion)
 
-	var pending []uint64
-	for _, v := range availableVersions {
-		if extractVersion(v) > uint64(currentVersion) {
-			pending = append(pending, extractVersion(v))
-		}
-	}
+	pending := t.PendingVersions(uint64(currentVersion), availableVersions)
 
 	if len(pending) == 0 {
 		color.PrintSuccess("✅ It is already the latest version, no migration needed")

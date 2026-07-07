@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -10,7 +11,17 @@ import (
 	"github.com/spf13/cast"
 )
 
+var ErrUnsupportedRedisClient = errors.New("unsupported redis client")
+
 func ClientFac(client redis.UniversalClient, prefix, nodeId string) IClient {
+	return ClientFacWithContext(context.Background(), client, prefix, nodeId)
+}
+
+func ClientFacWithContext(ctx context.Context, client redis.UniversalClient, prefix, nodeId string) IClient {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	client = unwrapRedisClient(client)
 
 	if clt, ok := client.(*redis.ClusterClient); ok {
 
@@ -22,7 +33,7 @@ func ClientFac(client redis.UniversalClient, prefix, nodeId string) IClient {
 			prefix: prefix,
 		}
 		if nodeId == "" {
-			nodes := clusterClient.Nodes(context.Background())
+			nodes := clusterClient.Nodes(ctx)
 
 			for _, node := range nodes {
 				if strings.Contains(node.Master, "master") {
@@ -31,7 +42,7 @@ func ClientFac(client redis.UniversalClient, prefix, nodeId string) IClient {
 			}
 		}
 
-		_ = clt.ForEachShard(context.Background(), func(ctx2 context.Context, client *redis.Client) error {
+		_ = clt.ForEachShard(ctx, func(ctx2 context.Context, client *redis.Client) error {
 			mux.Lock()
 			id := client.Do(ctx2, "CLUSTER", "MYID").Val()
 
@@ -53,7 +64,99 @@ func ClientFac(client redis.UniversalClient, prefix, nodeId string) IClient {
 			clt,
 		}, prefix: prefix, nodeId: nodeId}
 	}
+	return &Client{IClient: unsupportedClient{}, prefix: prefix, nodeId: nodeId}
+}
+
+type redisClientProvider interface {
+	Client() redis.UniversalClient
+}
+
+func unwrapRedisClient(client redis.UniversalClient) redis.UniversalClient {
+	for {
+		provider, ok := client.(redisClientProvider)
+		if !ok {
+			return client
+		}
+		next := provider.Client()
+		if next == nil || next == client {
+			return next
+		}
+		client = next
+	}
+}
+
+type unsupportedClient struct{}
+
+func (unsupportedClient) KeySpace(context.Context) ([]map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Memory(context.Context) (map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) CommandStats(context.Context) ([]map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Persistence(context.Context) (map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Server(context.Context) (map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Clients(context.Context) (map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Stats(context.Context) (map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Monitor(context.Context) (string, error) {
+	return "", ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) DbSize(context.Context) (int64, error) {
+	return 0, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Info(context.Context) (map[string]string, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Keys(context.Context, string) ([]string, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) Object(context.Context, string) (*ObjectStruct, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) ClientList(context.Context) ([]map[string]any, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) ZCard(context.Context, string) (int64, error) {
+	return 0, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) ZRangeByScore(context.Context, string, string, string, int64, int64) ([]string, error) {
+	return nil, ErrUnsupportedRedisClient
+}
+
+func (unsupportedClient) ZCount(context.Context, string, string, string) int64 {
+	return 0
+}
+
+func (unsupportedClient) Nodes(context.Context) []Node {
 	return nil
+}
+
+func (unsupportedClient) NodeId(context.Context) string {
+	return ""
 }
 
 type BaseClient struct {

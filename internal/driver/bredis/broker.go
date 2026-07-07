@@ -22,6 +22,12 @@ import (
 	"github.com/spf13/cast"
 )
 
+const (
+	deadLetterRetryField          = "deadletterRetry"
+	maxDeadLetterRetry            = 3
+	defaultDeadLetterMaxLen int64 = 200000
+)
+
 type RdbBroker struct {
 	client           redis.UniversalClient
 	prefix           string
@@ -42,12 +48,7 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 	}
 }
 
-//func (t *RdbBroker) Migrate(ctx context.Context, log public.IMigrateLog) error {
-//	migrate := NewLog(t.client, t.prefix)
-//	return migrate.Migrate(ctx, log)
-//}
-
-func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public.IBroker {
+func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) queueStrategy {
 	if moodType == btype.NORMAL {
 		return NewNormal(t.client, t.prefix, t.maxLen, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
 	}
@@ -63,11 +64,50 @@ func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) public
 	return nil
 }
 
+func (t *RdbBroker) Enqueue(ctx context.Context, data map[string]any) error {
+	moodType := btype.NORMAL
+	if v, ok := data["moodType"]; ok {
+		moodType = btype.MoodType(cast.ToString(v))
+	}
+
+	queue := t.Mood(moodType, nil)
+	if queue == nil {
+		return bstatus.BrokerDriverError
+	}
+	if err := queue.Enqueue(ctx, data); err != nil {
+		return err
+	}
+
+	data["status"] = bstatus.StatusPublished
+	return NewProcessLog(t.client, t.prefix).AddLog(ctx, data)
+}
+
+func (t *RdbBroker) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
+	queue := t.Mood(btype.NORMAL, nil)
+	if queue == nil {
+		return
+	}
+	queue.Dequeue(ctx, channel, topic, do)
+}
+
+func (t *RdbBroker) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
+	return NewSequenceByLock(t.client, t.prefix, t.consumers, t.consumerPoolSize, t.deadLetterIdle, nil).ForceUnlock(ctx, channel, topic, orderKey)
+}
+
 type (
+	queueStrategy interface {
+		Enqueue(ctx context.Context, data map[string]any) error
+		Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry)
+	}
+
+	processLogger interface {
+		AddLog(ctx context.Context, data map[string]any) error
+	}
+
 	BlockDuration func() time.Duration
 	Base          struct {
 		client redis.UniversalClient
-		public.IProcessLog
+		processLogger
 		blockDuration    BlockDuration
 		prefix           string
 		subType          btype.SubscribeType
@@ -94,7 +134,6 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 	deadLetterIdleTime := t.deadLetterIdle
 
 	for range ticker.C {
-
 		select {
 		case <-ctx.Done():
 			return
@@ -113,57 +152,29 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			End:      "+",
 			Count:    1,
 		}).Val()
-		length := len(pendings)
-		if length <= 0 {
-			//Replace `Del` with `Unlink` and hand it over to the Redis server for processing.
-			if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
-				capture.Dlq.When(t.captureConfig).If(&capture.Channel{
-					Channel: channel,
-					Topic:   []string{},
-				}).Then(err)
-				logger.New().Error(err)
-			}
+		if len(pendings) <= 0 {
+			t.releaseDeadLetterLock(ctx, deadLetterKey, channel, topic)
 			continue
 		}
 
 		pending := pendings[0]
+		if pending.Idle <= deadLetterIdleTime {
+			t.releaseDeadLetterLock(ctx, deadLetterKey, channel, topic)
+			continue
+		}
 
-		if pending.Idle > deadLetterIdleTime {
+		rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
+		if len(rangeV) <= 0 {
+			t.releaseDeadLetterLock(ctx, deadLetterKey, channel, topic)
+			continue
+		}
 
-			rangeV := t.client.XRange(ctx, streamKey, pending.ID, pending.ID).Val()
-
-			if len(rangeV) <= 0 {
-				t.client.Unlink(ctx, deadLetterKey)
-				continue
-			}
-			val := rangeV[0].Values
-			val["logType"] = bstatus.Dlq
-
-			// logic XAddArgs
-			args := &redis.XAddArgs{
-				Stream: logicKey,
-				Values: val,
-			}
-
-			if v, ok := val["status"]; ok {
-				if v.(string) == bstatus.StatusPublished {
-					//  TODO:Re-enter the queue
-					var maxLenInt int64 = 200000
-					if maxLen, ok := val["maxLen"]; ok {
-						ml := cast.ToInt64(maxLen)
-						if ml > 0 {
-							maxLenInt = ml
-						}
-					}
-					// normal message XAddArgs
-					// Need to handle idempotent keys
-					args = NewZAddArgs(streamKey, "", "*", maxLenInt, 0, val)
-				}
-			}
-			if err := t.client.XAdd(ctx, args).Err(); err != nil {
-				capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
-				logger.New().Error(err)
-			}
+		args := deadLetterXAddArgs(streamKey, logicKey, rangeV[0].Values)
+		if err := t.client.XAdd(ctx, args).Err(); err != nil {
+			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+			logger.New().Error(err)
+			t.releaseDeadLetterLock(ctx, deadLetterKey, channel, topic)
+			continue
 		}
 
 		if _, err := t.client.Pipelined(ctx, func(pipeliner redis.Pipeliner) error {
@@ -171,18 +182,47 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 			pipeliner.XDel(ctx, streamKey, pending.ID)
 			return nil
 		}); err != nil {
-			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
+			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
 			logger.New().Error(err)
 		}
-		if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
-			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{}}).Then(err)
-			logger.New().Error(err)
-		}
+		t.releaseDeadLetterLock(ctx, deadLetterKey, channel, topic)
 	}
 }
 
-func (t *Base) Enqueue(_ context.Context, _ map[string]any) error {
-	return nil
+func (t *Base) releaseDeadLetterLock(ctx context.Context, deadLetterKey, channel, topic string) {
+	if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
+		capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+		logger.New().Error(err)
+	}
+}
+
+func deadLetterXAddArgs(streamKey, logicKey string, val map[string]any) *redis.XAddArgs {
+	if deadLetterRetryCount(val) >= maxDeadLetterRetry {
+		val["logType"] = bstatus.Dlq
+		return &redis.XAddArgs{Stream: logicKey, Values: val}
+	}
+
+	incrementDeadLetterRetry(val)
+	delete(val, "logType")
+	return NewZAddArgs(streamKey, "", "*", deadLetterMaxLen(val), 0, val)
+}
+
+func deadLetterRetryCount(val map[string]any) int {
+	return cast.ToInt(val[deadLetterRetryField])
+}
+
+func incrementDeadLetterRetry(val map[string]any) int {
+	retry := deadLetterRetryCount(val) + 1
+	val[deadLetterRetryField] = retry
+	return retry
+}
+
+func deadLetterMaxLen(val map[string]any) int64 {
+	maxLen := cast.ToInt64(val["maxLen"])
+	if maxLen <= 0 {
+		return defaultDeadLetterMaxLen
+	}
+	return maxLen
 }
 
 func (t *Base) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
@@ -349,17 +389,13 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 					}(timeToRunLimit)
 				}
 
-				_, handlerErr = handler(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
+				_, handlerErr = handler.Handle(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
 
 				return
 			}, retrys)
 
 			if err != nil {
-				if h, ok := interface{}(handler).(interface {
-					Error(ctx context.Context, err error)
-				}); ok {
-					h.Error(sessionCtx, err)
-				}
+				handler.Error(sessionCtx, err)
 				val["level"] = bstatus.ErrLevel
 				val["info"] = err.Error()
 				val["status"] = bstatus.StatusFailed

@@ -2,7 +2,6 @@ package routers
 
 import (
 	"io/fs"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -82,7 +81,8 @@ func RouterList(fs2 fs.FS,
 	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		fd, err := fs.Sub(fs2, "ui")
 		if err != nil {
-			log.Fatalf("static files error:%+v \n", err)
+			http.Error(w, "static files error", http.StatusInternalServerError)
+			return
 		}
 
 		path := r.URL.Path

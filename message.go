@@ -55,6 +55,7 @@ type (
 		Status          bstatus.Status   `json:"status"`
 		Id              string           `json:"id"`
 		Retry           int              `json:"retry"`
+		DeadLetterRetry int              `json:"deadletterRetry"`
 		TimeToRun       time.Duration    `json:"timeToRun"`
 		TimeToRunLimit  TimeToRunLimit   `json:"timeToRunLimit"`
 		MaxLen          int64            `json:"maxLen"`
@@ -76,6 +77,7 @@ func (m Message) ToMap() map[string]any {
 	data["lockOrderKeyTTL"] = m.LockOrderKeyTTL
 	data["maxLen"] = m.MaxLen
 	data["retry"] = m.Retry
+	data["deadletterRetry"] = m.DeadLetterRetry
 	data["priority"] = m.Priority
 	data["payload"] = m.Payload
 	data["addTime"] = m.AddTime
@@ -128,6 +130,8 @@ func (data MessageM) ToMessage() *Message {
 				retry, _ := strconv.Atoi(v)
 				msg.Retry = retry
 			}
+		case "deadletterRetry":
+			msg.DeadLetterRetry = cast.ToInt(val)
 		case "priority":
 			msg.Priority = cast.ToFloat64(val)
 		case "payload":
@@ -191,6 +195,9 @@ func (data MessageS) ToMessage() *Message {
 		}
 		if k == "pendingRetry" {
 			msg.PendingRetry = cast.ToInt64(v)
+		}
+		if k == "deadletterRetry" {
+			msg.DeadLetterRetry = cast.ToInt(v)
 		}
 		if k == "priority" {
 			msg.Priority = cast.ToFloat64(v)

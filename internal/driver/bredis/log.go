@@ -10,16 +10,19 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
-	public "github.com/retail-ai-inc/beanq/v4/internal"
 )
+
+type migrateStore interface {
+	Migrate(ctx context.Context, data []map[string]any) error
+}
 
 type Log struct {
 	client redis.UniversalClient
-	log    public.IMigrateLog
+	log    migrateStore
 	prefix string
 }
 
-func NewLog(client redis.UniversalClient, prefix string, log public.IMigrateLog) *Log {
+func NewLog(client redis.UniversalClient, prefix string, log migrateStore) *Log {
 	return &Log{
 		client: client,
 		prefix: prefix,

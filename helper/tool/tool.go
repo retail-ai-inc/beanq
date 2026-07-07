@@ -124,6 +124,9 @@ func RetryInfo(ctx context.Context, f func() error, retry int, matcher ...func(e
 		select {
 		case <-time.After(waitTime):
 		case <-ctx.Done():
+			if err != nil {
+				return i, err
+			}
 			return i, ctx.Err()
 		}
 	}
