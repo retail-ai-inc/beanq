@@ -191,8 +191,10 @@ func (t *Base) DeadLetter(ctx context.Context, channel, topic string) {
 
 func (t *Base) releaseDeadLetterLock(ctx context.Context, deadLetterKey, channel, topic string) {
 	if err := t.client.Unlink(ctx, deadLetterKey).Err(); err != nil {
-		capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
-		logger.New().Error(err)
+		if !errors.Is(err, context.Canceled) {
+			capture.Dlq.When(t.captureConfig).If(&capture.Channel{Channel: channel, Topic: []string{topic}}).Then(err)
+			logger.New().Error(err)
+		}
 	}
 }
 
