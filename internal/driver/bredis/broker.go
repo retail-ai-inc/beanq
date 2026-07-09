@@ -199,7 +199,7 @@ func (t *Base) releaseDeadLetterLock(ctx context.Context, deadLetterKey, channel
 }
 
 func deadLetterXAddArgs(streamKey, logicKey string, val map[string]any) *redis.XAddArgs {
-	if deadLetterRetryCount(val) >= maxDeadLetterRetry {
+	if deadLetterRetryCount(val) > maxDeadLetterRetry {
 		val["logType"] = bstatus.Dlq
 		return &redis.XAddArgs{Stream: logicKey, Values: val}
 	}
