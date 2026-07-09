@@ -1,28 +1,22 @@
-//go:build ci
-// +build ci
+//go:build integration || ci
+// +build integration ci
 
-// WARN: Please use `go test -tags ci ./...` instead of running `go test ./...` if you want to test this file.
+// WARN: Please use `go test -tags integration ./...` instead of running `go test ./...` if you want to test this file.
 package beanq
 
 import (
 	"context"
-	"log"
 	"testing"
 	"time"
 
-	"github.com/spf13/viper"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLockContest(t *testing.T) {
-	viper.SetConfigFile("env.testing.json")
-	if err := viper.ReadInConfig(); err != nil {
-		log.Fatal(err)
-	}
-	var config BeanqConfig
-	err := viper.Unmarshal(&config)
+	config, err := NewConfig("./", "json", "env.testing")
 	assert.NoError(t, err)
-	client := New(&config)
+	client := New(config)
 	muxClient := NewMuxClient(client.broker.client.(redis.UniversalClient))
 	mux := muxClient.NewMutex("test", WithExpiry(time.Second*10))
 	err = mux.LockContext(context.Background())
