@@ -4,7 +4,7 @@
 
 [![Go Version](https://img.shields.io/badge/go-1.26.x-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Redis](https://img.shields.io/badge/redis-5.0.12+-red.svg)](https://redis.io/)
+[![Redis](https://img.shields.io/badge/redis-6.2+-red.svg)](https://redis.io/)
 [![MongoDB](https://img.shields.io/badge/mongodb-8.0+-green.svg)](https://www.mongodb.com/)
 
 **A powerful message queue system built on Redis Stream**
@@ -74,7 +74,7 @@ graph TB
 
 - Docker & Docker Compose
 - Go 1.26.x or higher
-- Redis 5.0.12+
+- Redis 6.2+
 - MongoDB 8.0+
 
 ### 1. Clone and Setup
