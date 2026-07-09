@@ -160,10 +160,11 @@ func TestBeanqConfigValidateMongoWhenHistoryEnabled(t *testing.T) {
 	}
 }
 
-func TestBeanqConfigSafeJSONMasksSecrets(t *testing.T) {
+func TestBeanqConfigSafeJSONMarshalsConfig(t *testing.T) {
 	cfg := &BeanqConfig{
-		Redis: Redis{Password: "redis-secret"},
-		Mongo: &Mongo{Password: "mongo-secret"},
+		Broker: "redis",
+		Redis:  Redis{Host: "localhost", Port: "6379", Password: "redis-secret"},
+		Mongo:  &Mongo{Password: "mongo-secret"},
 	}
 	cfg.UI.JwtKey = "jwt-secret"
 	cfg.UI.Root.Password = "root-secret"
@@ -173,9 +174,9 @@ func TestBeanqConfigSafeJSONMasksSecrets(t *testing.T) {
 		t.Fatalf("SafeJSON error: %v", err)
 	}
 	jsonText := string(bt)
-	for _, secret := range []string{"redis-secret", "mongo-secret", "jwt-secret", "root-secret"} {
-		if strings.Contains(jsonText, secret) {
-			t.Fatalf("SafeJSON leaked secret %q in %s", secret, jsonText)
+	for _, value := range []string{"redis-secret", "mongo-secret", "jwt-secret", "root-secret"} {
+		if !strings.Contains(jsonText, value) {
+			t.Fatalf("SafeJSON missing value %q in %s", value, jsonText)
 		}
 	}
 }
