@@ -143,6 +143,7 @@ type (
 		PublishTimeOut           time.Duration `json:"publishTimeOut" mapstructure:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut" mapstructure:"consumeTimeOut"`
 		MinConsumers             int64         `json:"minConsumers" mapstructure:"minConsumers"`
+		SequenceQueuePartitions  int64         `json:"sequenceQueuePartitions" mapstructure:"sequenceQueuePartitions"`
 		JobMaxRetries            int           `json:"jobMaxRetries" mapstructure:"jobMaxRetries"`
 		ConsumerPoolSize         int           `json:"consumerPoolSize" mapstructure:"consumerPoolSize"`
 	}
@@ -251,6 +252,9 @@ func (t *BeanqConfig) Validate() error {
 	}
 	if t.Broker != "redis" {
 		return ErrUnsupportedBroker.WithMessage(t.Broker)
+	}
+	if t.SequenceQueuePartitions < 0 {
+		return ErrInvalidConfig.WithMessage("sequenceQueuePartitions must not be negative")
 	}
 	if err := t.validateRedis(); err != nil {
 		return err

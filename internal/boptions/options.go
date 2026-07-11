@@ -54,6 +54,15 @@ type Options struct {
 	ConsumeTimeOut           time.Duration
 }
 
+// ResolveSequenceQueuePartitions keeps the legacy MinConsumers-based topology when
+// no dedicated partition count is configured.
+func ResolveSequenceQueuePartitions(partitions, minConsumers int64) int64 {
+	if partitions == 0 {
+		return minConsumers
+	}
+	return partitions
+}
+
 var DefaultOptions = &Options{
 	DeadLetterIdle:           time.Second * 60,
 	DeadLetterTicker:         time.Second * 5,

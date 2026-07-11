@@ -9,13 +9,18 @@ import (
 )
 
 const (
-	ScriptHashDuplicate      = "hashDuplicate"
-	ScriptSequenceByLock     = "sequenceByLock"
-	ScriptAddLogicLock       = "addLogicLock"
-	ScriptSaveHSet           = "saveHSet"
-	ScriptSaveNewTrans       = "saveNewTrans"
-	ScriptSaveBranches       = "saveBranches"
-	ScriptChangeGlobalStatus = "changeGlobalStatus"
+	ScriptHashDuplicate          = "hashDuplicate"
+	ScriptSequenceByLock         = "sequenceByLock"
+	ScriptSequenceQueueMeta      = "sequenceQueueMeta"
+	ScriptSequenceQueueEnqueue   = "sequenceQueueEnqueue"
+	ScriptSequenceQueueAcquire   = "sequenceQueueAcquire"
+	ScriptSequenceQueueHeartbeat = "sequenceQueueHeartbeat"
+	ScriptSequenceQueueFinalize  = "sequenceQueueFinalize"
+	ScriptAddLogicLock           = "addLogicLock"
+	ScriptSaveHSet               = "saveHSet"
+	ScriptSaveNewTrans           = "saveNewTrans"
+	ScriptSaveBranches           = "saveBranches"
+	ScriptChangeGlobalStatus     = "changeGlobalStatus"
 )
 
 var (
@@ -26,6 +31,26 @@ var (
 	//go:embed scripts/sequenceByLock.lua
 	sequenceByLockLua    string
 	SequenceByLockScript = redis.NewScript(sequenceByLockLua)
+
+	//go:embed scripts/sequenceQueueMeta.lua
+	sequenceQueueMetaLua    string
+	SequenceQueueMetaScript = redis.NewScript(sequenceQueueMetaLua)
+
+	//go:embed scripts/sequenceQueueEnqueue.lua
+	sequenceQueueEnqueueLua    string
+	SequenceQueueEnqueueScript = redis.NewScript(sequenceQueueEnqueueLua)
+
+	//go:embed scripts/sequenceQueueAcquire.lua
+	sequenceQueueAcquireLua    string
+	SequenceQueueAcquireScript = redis.NewScript(sequenceQueueAcquireLua)
+
+	//go:embed scripts/sequenceQueueHeartbeat.lua
+	sequenceQueueHeartbeatLua    string
+	SequenceQueueHeartbeatScript = redis.NewScript(sequenceQueueHeartbeatLua)
+
+	//go:embed scripts/sequenceQueueFinalize.lua
+	sequenceQueueFinalizeLua    string
+	SequenceQueueFinalizeScript = redis.NewScript(sequenceQueueFinalizeLua)
 
 	//go:embed scripts/addLogicLock.lua
 	addLogicLockLua    string
@@ -63,13 +88,18 @@ func NewScriptCatalog(scripts map[string]*redis.Script) *ScriptCatalog {
 
 func DefaultScriptCatalog() *ScriptCatalog {
 	return NewScriptCatalog(map[string]*redis.Script{
-		ScriptHashDuplicate:      HashDuplicateIdScript,
-		ScriptSequenceByLock:     SequenceByLockScript,
-		ScriptAddLogicLock:       AddLogicLockScript,
-		ScriptSaveHSet:           SaveHSetScript,
-		ScriptSaveNewTrans:       SaveNewTransScript,
-		ScriptSaveBranches:       SaveBranchesScript,
-		ScriptChangeGlobalStatus: ChangeGlobalStatusScript,
+		ScriptHashDuplicate:          HashDuplicateIdScript,
+		ScriptSequenceByLock:         SequenceByLockScript,
+		ScriptSequenceQueueMeta:      SequenceQueueMetaScript,
+		ScriptSequenceQueueEnqueue:   SequenceQueueEnqueueScript,
+		ScriptSequenceQueueAcquire:   SequenceQueueAcquireScript,
+		ScriptSequenceQueueHeartbeat: SequenceQueueHeartbeatScript,
+		ScriptSequenceQueueFinalize:  SequenceQueueFinalizeScript,
+		ScriptAddLogicLock:           AddLogicLockScript,
+		ScriptSaveHSet:               SaveHSetScript,
+		ScriptSaveNewTrans:           SaveNewTransScript,
+		ScriptSaveBranches:           SaveBranchesScript,
+		ScriptChangeGlobalStatus:     ChangeGlobalStatusScript,
 	})
 }
 

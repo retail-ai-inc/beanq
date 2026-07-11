@@ -377,6 +377,17 @@ func (b *BQClient) PublishInSequence(channel, topic string, payload []byte) *Seq
 	}, false)
 }
 
+func (b *BQClient) PublishNewSequence(channel, topic, customerId string, payload []byte) *SequenceCmd {
+	return b.publishSequence(Publish{
+		channel:     channel,
+		topic:       topic,
+		payload:     payload,
+		customerId:  customerId,
+		moodType:    btype.SEQUENCE_QUEUE,
+		executeTime: time.Now(),
+	}, false)
+}
+
 func (b *BQClient) PublishInSequenceByLock(channel, topic, orderKey string, payload []byte) *SequenceCmd {
 	return b.publishSequence(Publish{
 		channel:         channel,
@@ -435,6 +446,9 @@ func (b *BQClient) validatePublish(cmd *Publish) error {
 	if cmd.moodType == btype.SEQUENCE && b.id == "" {
 		return errors.New("please configure a unique ID")
 	}
+	if cmd.moodType == btype.SEQUENCE_QUEUE && cmd.customerId == "" {
+		return errors.New("please configure customerId")
+	}
 	return nil
 }
 
@@ -444,6 +458,7 @@ func (b *BQClient) buildMessage(cmd *Publish) *Message {
 		Topic:           topic,
 		Channel:         channel,
 		OrderKey:        cmd.orderKey,
+		CustomerId:      cmd.customerId,
 		LockOrderKeyTTL: cmd.lockOrderKeyTTL,
 		Payload:         string(cmd.payload),
 		MoodType:        cmd.moodType,
@@ -511,6 +526,10 @@ func (t cmdAble) SubscribeToSequence(channel, topic string, handle IConsumeHandl
 	return t.subscribe(channel, topic, btype.SEQUENCE, btype.SequentialSubscribe, handle)
 }
 
+func (t cmdAble) ConsumerSequence(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
+	return t.subscribe(channel, topic, btype.SEQUENCE_QUEUE, btype.SequentialSubscribe, handle)
+}
+
 func (t cmdAble) SubscribeToSequenceByLock(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error) {
 	return t.subscribe(channel, topic, btype.SEQUENCE_BY_LOCK, btype.SequentialByLockSubscribe, handle)
 }
@@ -536,6 +555,7 @@ type (
 		channel         string
 		topic           string
 		orderKey        string
+		customerId      string
 		lockOrderKeyTTL time.Duration
 		moodType        btype.MoodType
 		payload         []byte

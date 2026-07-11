@@ -25,5 +25,6 @@ const (
 	NORMAL           MoodType = "normal"
 	DELAY            MoodType = "delay"
 	SEQUENCE         MoodType = "sequential"
+	SEQUENCE_QUEUE   MoodType = "sequence_queue"
 	SEQUENCE_BY_LOCK MoodType = "sequential_by_lock"
 )

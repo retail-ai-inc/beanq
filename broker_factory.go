@@ -7,6 +7,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	bmongo2 "github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
@@ -45,7 +46,8 @@ func buildRedisBrokerComponents(config *BeanqConfig) (*brokerComponents, error) 
 		return nil, err
 	}
 
-	rdbBroker := bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, config.MinConsumers, config.ConsumerPoolSize, config.DeadLetterIdleTime)
+	sequenceQueuePartitions := boptions.ResolveSequenceQueuePartitions(config.SequenceQueuePartitions, config.MinConsumers)
+	rdbBroker := bredis.NewBrokerWithSequenceQueuePartitions(client, cfg.Prefix, cfg.MaxLen, config.MinConsumers, sequenceQueuePartitions, config.ConsumerPoolSize, config.DeadLetterIdleTime)
 	components := &brokerComponents{
 		queue:  rdbBroker,
 		locker: rdbBroker,

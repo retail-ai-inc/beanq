@@ -45,6 +45,7 @@ type (
 		Level           bstatus.LevelMsg `json:"level"`
 		Topic           string           `json:"topic"`
 		Channel         string           `json:"channel"`
+		CustomerId      string           `json:"customerId"`
 		OrderKey        string           `json:"orderKey"`
 		LockOrderKeyTTL time.Duration    `json:"lockOrderKeyTTL"`
 		Payload         string           `json:"payload"`
@@ -73,6 +74,7 @@ func (m Message) ToMap() map[string]any {
 	data["id"] = m.Id
 	data["topic"] = m.Topic
 	data["channel"] = m.Channel
+	data["customerId"] = m.CustomerId
 	data["orderKey"] = m.OrderKey
 	data["lockOrderKeyTTL"] = m.LockOrderKeyTTL
 	data["maxLen"] = m.MaxLen
@@ -114,6 +116,10 @@ func (data MessageM) ToMessage() *Message {
 		case "channel":
 			if v, ok := val.(string); ok {
 				msg.Channel = v
+			}
+		case "customerId":
+			if v, ok := val.(string); ok {
+				msg.CustomerId = v
 			}
 		case "orderKey":
 			if v, ok := val.(string); ok {
@@ -180,6 +186,9 @@ func (data MessageS) ToMessage() *Message {
 		}
 		if k == "channel" {
 			msg.Channel = v
+		}
+		if k == "customerId" {
+			msg.CustomerId = v
 		}
 		if k == "orderKey" {
 			msg.OrderKey = v

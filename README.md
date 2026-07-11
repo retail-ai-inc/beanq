@@ -241,9 +241,9 @@ err := pub.BQ().WithContext(ctx).
     PublishAtTime("delay-channel", "topic", messageBytes, delayTime)
 ```
 
-#### 3. Sequence Queue
+#### 3. Sequence By Lock
 
-Ensures ordered processing for messages with the same key.
+Ensures ordered processing for messages with the same order key by using a Redis-backed lock.
 
 ```mermaid
 graph LR
@@ -289,6 +289,25 @@ result, err := pub.BQ().WithContext(ctx).
     PublishInSequenceByLock("channel", "topic", "orderKey", messageBytes).
     WaitingAck()
 ```
+
+#### 4. Customer Sequence Queue
+
+`PublishNewSequence` routes each `customerId` to one of the fixed `sequenceQueuePartitions`. Each partition has one scheduler Stream, while each active customer has an internal FIFO List and a single scheduler token.
+
+- Messages for the same `customerId` are finalized one at a time by a single valid owner.
+- Different customers can be processed concurrently, including customers in the same partition.
+- Delivery is at-least-once; handlers should be idempotent by message ID.
+- A crashed worker's token is reclaimed after the sequence queue lease expires, and a stale owner cannot finalize the Redis queue state.
+
+```go
+cmd := pub.BQ().WithContext(ctx).
+    SetId(messageId).
+    PublishNewSequence("channel", "topic", "customer-01", messageBytes)
+
+_, err := consumer.BQ().WithContext(ctx).
+    ConsumerSequence("channel", "topic", handler)
+```
+
 ---
 ## 🧩 Public functions
 
@@ -298,7 +317,7 @@ The following chainable functions can be used on `BQClient` to tune publish and 
 | --- | --- | --- |
 | `Retry(int)` | Publisher | Overrides the default retry count configured by `jobMaxRetries` in `env.json`. |
 | `Priority(float64)` | Delay queue | Sets message priority for delayed messages. Values greater than or equal to `1000` are capped at `999`. |
-| `SetLockOrderKeyTTL(time.Duration)` | Sequence queue | Sets the TTL for the sequence lock `orderKey`. If the duration is `<= 0`, the lock does not expire automatically. |
+| `SetLockOrderKeyTTL(time.Duration)` | Sequence By Lock | Sets the TTL for the sequence lock `orderKey`. If the duration is `<= 0`, the lock does not expire automatically. |
 | `IgnoreRetryConditions(err ...error)` | Consumer retry | Skips retries for matching errors and treats them as ignored retry conditions. |
 
 ### `Retry(int)`
@@ -327,7 +346,7 @@ err := pub.BQ().
 
 ### `SetLockOrderKeyTTL(time.Duration)`
 
-Use `SetLockOrderKeyTTL` with sequence queues that use locks. The TTL controls how long an `orderKey` lock can live before it expires.
+Use `SetLockOrderKeyTTL` with Sequence By Lock queues. The TTL controls how long an `orderKey` lock can live before it expires.
 
 ```go
 result, err := pub.BQ().
@@ -491,13 +510,14 @@ _, err := consumer.BQ().
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `broker` | redis | Message broker implementation |
-| `consumerPoolSize` | 10 | Number of concurrent consumers |
+| `consumerPoolSize` | 10 | Number of concurrent consumers; for Customer Sequence Queue, worker goroutines per instance |
 | `jobMaxRetries` | 3 | Maximum retry attempts for failed jobs |
-| `deadLetterIdle` | 60s | Idle time before moving to DLQ |
+| `deadLetterIdle` | 60s | Pending idle before DLQ for regular queues; token lease and `XAUTOCLAIM` threshold for Customer Sequence Queue |
 | `deadLetterTicker` | 5s | Interval for scanning dead-letter candidates |
 | `publishTimeOut` | 10s | Publishing timeout |
 | `consumeTimeOut` | 20s | Consumption timeout |
-| `minConsumers` | 100 | Minimum consumer count |
+| `minConsumers` | 100 | Minimum consumer count; also the compatibility fallback for sequence queue partitions |
+| `sequenceQueuePartitions` | 0 | Fixed sequence queue scheduler partitions (`0` falls back to `minConsumers`); cannot change after queue metadata is created |
 | `timeToRun` | 3600s | Maximum execution window for a job/workflow task |
 | `keepFailedJobsInHistory` | 168h | Retention period for failed job history |
 | `keepSuccessJobsInHistory` | 168h | Retention period for successful job history |
@@ -519,7 +539,7 @@ _, err := consumer.BQ().
 | `redis.password` | empty | Redis password |
 | `redis.database` | 0 | Redis database index; ignored by Redis Cluster |
 | `redis.prefix` | beanq_ | Key prefix for Beanq data |
-| `redis.maxLen` | 2000 | Maximum stream length used by Beanq queues |
+| `redis.maxLen` | 2000 | Maximum Stream length for regular queues; per-partition pending-message capacity for Customer Sequence Queue |
 | `redis.maxRetries` | 0 | Redis client retry attempts |
 | `redis.poolSize` | 0 | Redis client connection pool size |
 | `redis.minIdleConnections` | 0 | Minimum idle Redis connections |

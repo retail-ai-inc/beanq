@@ -32,7 +32,7 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	if moodType == btype.SEQUENCE || moodType == btype.SEQUENCE_BY_LOCK {
+	if moodType == btype.SEQUENCE || moodType == btype.SEQUENCE_QUEUE || moodType == btype.SEQUENCE_BY_LOCK {
 
 		channel, id, topic := "", "", ""
 		if v, ok := data["channel"]; ok {

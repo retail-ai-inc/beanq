@@ -181,9 +181,9 @@ Publish delayed messages, taking execution time and priority as examples
 		}
 	}
 
-# Sequence Queue
+# Sequence By Lock
 
-It is equivalent to the key of the event, which allows only one event to be consumed at the same time.
+An order key is protected by a Redis-backed lock so only one message for that key is consumed at a time.
 
 	package main
 
@@ -229,6 +229,12 @@ It is equivalent to the key of the event, which allows only one event to be cons
 		}
 
 	}
+
+# Customer Sequence Queue
+
+Customer Sequence Queue hashes each customerId into a fixed scheduler partition. Messages for one customer are finalized in FIFO order by one valid owner, while different customers may be consumed concurrently. Delivery is at-least-once, so handlers should be idempotent by message ID.
+
+Publish with PublishNewSequence and subscribe with ConsumerSequence. Configure sequenceQueuePartitions consistently across publishers and consumers; once queue metadata exists, the partition count cannot change in place.
 
 # Work Flow
 

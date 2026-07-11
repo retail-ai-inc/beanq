@@ -10,6 +10,7 @@ type Publisher interface {
 	Publish(channel, topic string, payload []byte) error
 	PublishAtTime(channel, topic string, payload []byte, atTime time.Time) error
 	PublishInSequence(channel, topic string, payload []byte) *SequenceCmd
+	PublishNewSequence(channel, topic, customerId string, payload []byte) *SequenceCmd
 	PublishInSequenceByLock(channel, topic, orderKey string, payload []byte) *SequenceCmd
 }
 
@@ -18,6 +19,7 @@ type Consumer interface {
 	Subscribe(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error)
 	SubscribeToDelay(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error)
 	SubscribeToSequence(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error)
+	ConsumerSequence(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error)
 	SubscribeToSequenceByLock(channel, topic string, handle IConsumeHandle) (IBaseSubscribeCmd, error)
 }
 

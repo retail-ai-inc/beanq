@@ -2,12 +2,8 @@ package bredis
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"math/rand"
-	"os"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -29,22 +25,30 @@ const (
 )
 
 type RdbBroker struct {
-	client           redis.UniversalClient
-	prefix           string
-	maxLen           int64
-	consumers        int64
-	consumerPoolSize int
-	deadLetterIdle   time.Duration
+	client                  redis.UniversalClient
+	prefix                  string
+	maxLen                  int64
+	consumers               int64
+	sequenceQueuePartitions int64
+	consumerPoolSize        int
+	deadLetterIdle          time.Duration
 }
 
 func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, consumerPoolSize int, duration time.Duration) *RdbBroker {
+	return NewBrokerWithSequenceQueuePartitions(client, prefix, maxLen, consumers, consumers, consumerPoolSize, duration)
+}
+
+// NewBrokerWithSequenceQueuePartitions constructs a broker with a fixed
+// sequence-queue partition count. The topology is immutable after construction.
+func NewBrokerWithSequenceQueuePartitions(client redis.UniversalClient, prefix string, maxLen, consumers, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration) *RdbBroker {
 	return &RdbBroker{
-		client:           client,
-		prefix:           prefix,
-		maxLen:           maxLen,
-		consumers:        consumers,
-		consumerPoolSize: consumerPoolSize,
-		deadLetterIdle:   duration,
+		client:                  client,
+		prefix:                  prefix,
+		maxLen:                  maxLen,
+		consumers:               consumers,
+		sequenceQueuePartitions: sequenceQueuePartitions,
+		consumerPoolSize:        consumerPoolSize,
+		deadLetterIdle:          duration,
 	}
 }
 
@@ -54,6 +58,9 @@ func (t *RdbBroker) Mood(moodType btype.MoodType, config *capture.Config) queueS
 	}
 	if moodType == btype.SEQUENCE {
 		return NewSequence(t.client, t.prefix, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
+	}
+	if moodType == btype.SEQUENCE_QUEUE {
+		return newSequenceQueueWithPartitions(t.client, t.prefix, t.maxLen, t.sequenceQueuePartitions, t.consumerPoolSize, t.deadLetterIdle, config)
 	}
 	if moodType == btype.DELAY {
 		return NewSchedule(t.client, t.prefix, t.consumers, t.consumerPoolSize, t.deadLetterIdle, config)
@@ -334,86 +341,16 @@ func worker(ctx context.Context, jobs, result chan public.Stream, handler public
 				return
 			}
 
-			val := job.Data
-			//deep copy for handler: prevent data race.
-			//In the future, maybe only `payload`,`channel`,`topic` will be needed
-			copiedVal := make(map[string]any, len(val))
-			for k, v := range val {
-				copiedVal[k] = v
-			}
-			var retrys = 0
-			if val, ok := val["retry"]; ok {
-				retrys = cast.ToInt(val)
-			}
-			now := time.Now()
-			val["status"] = bstatus.StatusReceived
-			val["beginTime"] = now
-
-			var timeToRunLimit []time.Duration
-			if v, ok := val["timeToRunLimit"]; ok {
-				if err := json.Unmarshal([]byte(v.(string)), &timeToRunLimit); err != nil {
-					capture.Fail.When(config).If(&capture.Channel{Channel: job.Channel, Topic: []string{job.Stream}}).Then(err)
-				}
-			}
-
-			timeToRunLimitLen := len(timeToRunLimit)
-
-			timeToRun := cast.ToDuration(val["timeToRun"])
-			sessionCtx, cancel := context.WithTimeout(ctx, timeToRun)
-
-			retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
-				defer func() {
-					if p := recover(); p != nil {
-						handlerErr = fmt.Errorf("[panic recover]: %+v\n%s", p, debug.Stack())
-					}
-				}()
-				if timeToRunLimitLen > 0 {
-					go func(limit []time.Duration) {
-						ticker := time.NewTicker(time.Second)
-						defer ticker.Stop()
-						i := 0
-
-						for {
-							select {
-							case <-sessionCtx.Done():
-								return
-							case <-ticker.C:
-								if i >= timeToRunLimitLen {
-									return
-								}
-								if time.Since(now) >= limit[i] {
-									i++
-									capErr := fmt.Errorf("Info:Task execution timeout,Body:%+v", copiedVal)
-									capture.System.When(config).If(nil).Then(capErr)
-								}
-							}
-						}
-					}(timeToRunLimit)
-				}
-
-				_, handlerErr = handler.Handle(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
-
+			executed, ok := executeMessage(ctx, job, handler, config)
+			if !ok {
 				return
-			}, retrys)
-
-			if err != nil {
-				handler.Error(sessionCtx, err)
-				val["level"] = bstatus.ErrLevel
-				val["info"] = err.Error()
-				val["status"] = bstatus.StatusFailed
-			} else {
-				val["status"] = bstatus.StatusSuccess
 			}
 
-			val["endTime"] = time.Now()
-			val["retry"] = retry
-			val["runTime"] = cast.ToTime(val["endTime"]).Sub(cast.ToTime(val["beginTime"])).Seconds()
-			hostname, _ := os.Hostname()
-			val["hostName"] = hostname
-			// `stream` confirmation message
-			cancel()
-			job.Data = val
-			result <- job
+			select {
+			case <-ctx.Done():
+				return
+			case result <- executed:
+			}
 		}
 	}
 }
