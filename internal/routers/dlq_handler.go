@@ -10,7 +10,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	public "github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"go.mongodb.org/mongo-driver/bson"
@@ -115,7 +114,7 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 		moodType = v.(string)
 	}
 
-	var bk public.IBroker
+	var bk enqueueQueue
 	if moodType == string(btype.SEQUENCE) {
 		_ = res.Json(w, http.StatusOK)
 		return

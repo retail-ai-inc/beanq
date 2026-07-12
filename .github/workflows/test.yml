@@ -4,9 +4,6 @@ on:
   pull_request:
     paths-ignore:
       - '**.md'
-      - '**.json'
-      - 'Dockerfile'
-      - 'Makefile'
   workflow_dispatch:
 
 jobs:
@@ -37,10 +34,7 @@ jobs:
           echo "total: N/A" > total_coverage.txt
           : > full_coverage.txt
 
-          set +e
           make test
-          test_exit=$?
-          set -e
 
           if [ -s coverage.txt ]; then
             go tool cover -func=coverage.txt > full_coverage.txt
@@ -51,10 +45,8 @@ jobs:
             echo "Coverage file is empty or not generated."
           fi
 
-          exit "$test_exit"
-
-        continue-on-error: true
       - name: Upload coverage report as artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -62,9 +54,8 @@ jobs:
             coverage.html
           retention-days: 7
 
-
       - name: Comment Test Results
-        if: github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -122,19 +113,19 @@ jobs:
             const commentBody = `## 🧪 Test Coverage Report
 
             ### 📊 Overall Coverage: \`${totalCoverage}\`
-            
+
             <details>
             <summary>📋 Detailed Coverage Report</summary>
-            
+
             ${markdownTable}
-            
+
             </details>
-            
+
             ### 📥 Download Reports
             - [Coverage HTML Report](${artifactUrl})
-            
+
             > 📝 *This report shows code coverage for the changes in this pull request.*
-            
+
             `;
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -144,4 +135,5 @@ jobs:
             });
 
       - name: Clean Docker Compose
+        if: always()
         run: make clean-docker-compose

@@ -2,6 +2,7 @@ package routers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -35,76 +36,40 @@ func HeaderRule() Middleware {
 func AuthSSE(x *bmongo.BMongo, ui ui.Ui, name string) Middleware {
 	return func(next HandleFunc) HandleFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-
-			result, cancelr := response.Get()
-			defer cancelr()
-
-			var (
-				err   error
-				token *bjwt.Claim
-			)
-
-			auth := r.FormValue("token")
-
 			flusher, ok := w.(http.Flusher)
 			if !ok {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				flusher.Flush()
+				http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 				return
 			}
+
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.Header().Set("Cache-Control", "no-cache")
 			w.Header().Set("Connection", "keep-alive")
 
-			token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
+			result, cancelr := response.Get()
+			defer cancelr()
+
+			token, err := authenticate(r, ui)
 			if err != nil {
-				result.Code = berror.AuthExpireCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, name)
-				flusher.Flush()
+				writeSSEAuthError(w, flusher, result, name, berror.AuthExpireCode, err)
 				return
 			}
-			// Check that the username must be an email address
-			if token.UserName != ui.Root.UserName {
-				if _, err := mail.ParseEmail(token.UserName); err != nil {
-					result.Code = berror.MissParameterCode
-					result.Msg = err.Error()
-					_ = result.EventMsg(w, name)
-					flusher.Flush()
-					return
-				}
-			}
-
-			if token.UserName != ui.Root.UserName {
-				roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
-				if roleId > 0 {
-					if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
-						result.Code = berror.AuthExpireCode
-						result.Msg = err.Error()
-						_ = result.EventMsg(w, name)
-						flusher.Flush()
-						return
-					}
-				}
-			}
-
-			if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "expireAt": time.Now(), "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, name)
-				flusher.Flush()
+			if err := authorizeRole(r, x, ui, token.UserName); err != nil {
+				writeSSEAuthError(w, flusher, result, name, berror.AuthExpireCode, err)
 				return
 			}
+			if err := auditOperation(r, x, token.UserName); err != nil {
+				writeSSEAuthError(w, flusher, result, name, berror.InternalServerErrorCode, err)
+				return
+			}
+
 			r = r.WithContext(context.WithValue(r.Context(), EventName{}, name))
-
 			next(w, r)
-
 		}
 	}
 }
 
-type contextKey struct {
-}
+type contextKey struct{}
 
 var UserName = &contextKey{}
 
@@ -114,54 +79,20 @@ func Auth(x *bmongo.BMongo, ui ui.Ui) Middleware {
 			result, cancelr := response.Get()
 			defer cancelr()
 
-			var (
-				err   error
-				token *bjwt.Claim
-			)
-
-			auth := r.Header.Get("Beanq-Authorization")
-			if auth != "" {
-				strs := strings.Split(auth, " ")
-				if len(strs) < 2 {
-					result.Code = berror.AuthExpireCode
-					result.Msg = "missing parameter"
-					_ = result.Json(w, http.StatusInternalServerError)
-					return
-				}
-				auth = strs[1]
-			} else {
-				auth = r.FormValue("token")
-			}
-			token, err = bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
+			token, err := authenticate(r, ui)
 			if err != nil {
 				result.Code = berror.AuthExpireCode
 				result.Msg = err.Error()
 				_ = result.Json(w, http.StatusUnauthorized)
 				return
 			}
-			// Check that the username must be an email address
-			if token.UserName != ui.Root.UserName {
-				if _, err := mail.ParseEmail(token.UserName); err != nil {
-					result.Code = berror.MissParameterCode
-					result.Msg = err.Error()
-					_ = result.Json(w, http.StatusInternalServerError)
-					return
-				}
+			if err := authorizeRole(r, x, ui, token.UserName); err != nil {
+				result.Code = berror.AuthExpireCode
+				result.Msg = err.Error()
+				_ = result.Json(w, http.StatusUnauthorized)
+				return
 			}
-
-			if token.UserName != ui.Root.UserName {
-				roleId := cast.ToInt(r.Header.Get("X-Role-Id"))
-				if roleId > 0 {
-					if err := x.CheckRole(r.Context(), token.UserName, roleId); err != nil {
-						result.Code = berror.AuthExpireCode
-						result.Msg = err.Error()
-						_ = result.Json(w, http.StatusUnauthorized)
-						return
-					}
-				}
-			}
-
-			if err := x.AddOptLog(r.Context(), map[string]any{"logType": bstatus.Operation, "expireAt": time.Now(), "user": token.UserName, "uri": r.RequestURI, "addTime": time.Now(), "data": nil}); err != nil {
+			if err := auditOperation(r, x, token.UserName); err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
 				_ = result.Json(w, http.StatusInternalServerError)
@@ -169,8 +100,80 @@ func Auth(x *bmongo.BMongo, ui ui.Ui) Middleware {
 			}
 
 			ctx := context.WithValue(r.Context(), UserName, token.UserName)
-			r = r.WithContext(ctx)
-			next(w, r)
+			next(w, r.WithContext(ctx))
 		}
 	}
+}
+
+func authenticate(r *http.Request, ui ui.Ui) (*bjwt.Claim, error) {
+	auth, err := authToken(r)
+	if err != nil {
+		return nil, err
+	}
+	token, err := bjwt.ParseHsToken(auth, []byte(ui.JwtKey))
+	if err != nil {
+		return nil, err
+	}
+	if token.UserName != ui.Root.UserName {
+		if _, err := mail.ParseEmail(token.UserName); err != nil {
+			return nil, err
+		}
+	}
+	return token, nil
+}
+
+func authToken(r *http.Request) (string, error) {
+	for _, header := range []string{"Authorization", "Beanq-Authorization"} {
+		auth := strings.TrimSpace(r.Header.Get(header))
+		if auth == "" {
+			continue
+		}
+		fields := strings.Fields(auth)
+		if len(fields) == 1 {
+			return fields[0], nil
+		}
+		if len(fields) == 2 && strings.EqualFold(fields[0], "Bearer") {
+			return fields[1], nil
+		}
+		return "", errors.New("invalid authorization header")
+	}
+	if token := strings.TrimSpace(r.FormValue("token")); token != "" {
+		return token, nil
+	}
+	return "", errors.New("missing authorization token")
+}
+
+func authorizeRole(r *http.Request, mgo *bmongo.BMongo, ui ui.Ui, username string) error {
+	if username == ui.Root.UserName {
+		return nil
+	}
+	roleID := cast.ToInt(r.Header.Get("X-Role-Id"))
+	if roleID <= 0 {
+		return nil
+	}
+	if mgo == nil {
+		return errors.New("mongo is not configured")
+	}
+	return mgo.CheckRole(r.Context(), username, roleID)
+}
+
+func auditOperation(r *http.Request, mgo *bmongo.BMongo, username string) error {
+	if mgo == nil {
+		return nil
+	}
+	return mgo.AddOptLog(r.Context(), map[string]any{
+		"logType":  bstatus.Operation,
+		"expireAt": time.Now(),
+		"user":     username,
+		"uri":      r.RequestURI,
+		"addTime":  time.Now(),
+		"data":     nil,
+	})
+}
+
+func writeSSEAuthError(w http.ResponseWriter, flusher http.Flusher, result *response.Result, name, code string, err error) {
+	result.Code = code
+	result.Msg = err.Error()
+	_ = result.EventMsg(w, name)
+	flusher.Flush()
 }

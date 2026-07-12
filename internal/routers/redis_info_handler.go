@@ -34,8 +34,7 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		flusher.Flush()
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -145,11 +144,11 @@ func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 	defer ticker.Stop()
 
 	flusher, ok := w.(http.Flusher)
-	defer flusher.Flush()
 	if !ok {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
 	}
+	defer flusher.Flush()
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -202,6 +201,12 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 	key := r.PathValue("key")
+	if t.prefix != "" && !strings.HasPrefix(key, t.prefix) {
+		res.Code = berror.MissParameterCode
+		res.Msg = "key is outside the configured prefix"
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
 
 	result, err := t.client.Del(r.Context(), key).Result()
 	if err != nil {
@@ -217,6 +222,12 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
+	if t.mgo == nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = "mongo is not configured"
+		_ = res.Json(w, http.StatusServiceUnavailable)
+		return
+	}
 
 	var buf bytes.Buffer
 	defer r.Body.Close()
@@ -248,6 +259,12 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
+	if t.mgo == nil {
+		res.Code = response.InternalServerErrorCode
+		res.Msg = "mongo is not configured"
+		_ = res.Json(w, http.StatusServiceUnavailable)
+		return
+	}
 
 	result, err := t.mgo.ConfigInfo(r.Context())
 	if err != nil {

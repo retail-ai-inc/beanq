@@ -1,7 +1,7 @@
 services:
   ## Redis service
   redis:
-    image: redis:5.0.12
+    image: redis:6.2
     platform: linux/amd64
     ports:
       - "6379:6379"
@@ -9,7 +9,7 @@ services:
     restart: always
     command: redis-server --requirepass secret
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "secret", "ping"]
       retries: 3
       interval: 5s
       timeout: 5s
@@ -29,7 +29,20 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: root
       MONGO_INITDB_DATABASE: beanq_logs
     healthcheck:
-      test: ["CMD", "mongo", "--eval", "db.runCommand('ping')"]
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--username",
+          "root",
+          "--password",
+          "root",
+          "--authenticationDatabase",
+          "admin",
+          "--eval",
+          "db.adminCommand({ ping: 1 })"
+        ]
       interval: 10s
       timeout: 10s
       retries: 3

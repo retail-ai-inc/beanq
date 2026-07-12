@@ -22,9 +22,15 @@ func NewWorkFlow(collection *mongo.Collection) *WorkFlow {
 }
 
 func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
-
 	result, cancel := response.Get()
 	defer cancel()
+
+	if t.workflowCollection == nil {
+		result.Code = berror.InternalServerErrorCode
+		result.Msg = "workflow storage is not configured"
+		_ = result.Json(w, http.StatusServiceUnavailable)
+		return
+	}
 
 	query := r.URL.Query()
 	page := cast.ToInt64(query.Get("page"))
@@ -58,15 +64,16 @@ func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 		filter["Status"] = status
 	}
 	cursor, err := t.workflowCollection.Find(ctx, filter, opts)
-	defer func() {
-		_ = cursor.Close(ctx)
-	}()
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
 		_ = result.Json(w, http.StatusInternalServerError)
 		return
 	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+
 	var data []bson.M
 	if err := cursor.All(ctx, &data); err != nil {
 		result.Code = berror.InternalServerErrorCode
@@ -90,26 +97,34 @@ func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *WorkFlow) Delete(w http.ResponseWriter, r *http.Request) {
-
 	res, cancel := response.Get()
 	defer cancel()
 
-	ctx := r.Context()
-	id := r.PostFormValue("id")
-
-	filter := bson.M{}
-	if id != "" {
-		nid, err := primitive.ObjectIDFromHex(id)
-		if err != nil {
-			res.Code = berror.InternalServerErrorCode
-			res.Msg = err.Error()
-			_ = res.Json(w, http.StatusInternalServerError)
-			return
-		}
-		filter["_id"] = nid
+	if t.workflowCollection == nil {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "workflow storage is not configured"
+		_ = res.Json(w, http.StatusServiceUnavailable)
+		return
 	}
 
-	result, err := t.workflowCollection.DeleteOne(ctx, filter)
+	ctx := r.Context()
+	id := r.PostFormValue("id")
+	if id == "" {
+		res.Code = berror.MissParameterCode
+		res.Msg = "missing id"
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+
+	nid, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		res.Code = berror.MissParameterCode
+		res.Msg = err.Error()
+		_ = res.Json(w, http.StatusBadRequest)
+		return
+	}
+
+	result, err := t.workflowCollection.DeleteOne(ctx, bson.M{"_id": nid})
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()

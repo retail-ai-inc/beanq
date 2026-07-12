@@ -15,7 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type MongoLog struct {
+type MongoStore struct {
 	mu                    sync.RWMutex
 	client                *mongo.Client
 	database              string
@@ -32,15 +32,15 @@ type MongoLog struct {
 	maxConnectionPoolSize uint64
 }
 
-func NewMongoLog(ctx context.Context,
+func NewMongoStore(ctx context.Context,
 	host, port string,
 	connectTimeOut, maxConnectionLifeTime time.Duration,
 	maxConnectionPoolSize uint64,
 	database, collection, userName, password string,
 	sslOn bool, caFile string, verifyCertificate bool, hotReload bool,
-) *MongoLog {
+) *MongoStore {
 
-	mgoLog := &MongoLog{
+	store := &MongoStore{
 		host:                  host,
 		port:                  port,
 		userName:              userName,
@@ -55,19 +55,19 @@ func NewMongoLog(ctx context.Context,
 		verifyCertificate:     verifyCertificate,
 	}
 
-	if err := mgoLog.Reload(ctx); err != nil {
+	if err := store.Reload(ctx); err != nil {
 		logger.New().Fatal(err)
 	}
 	if hotReload && sslOn && caFile != "" {
-		if err := btls.WatchCAFile(ctx, "mongo", caFile, mgoLog.Reload); err != nil {
-			_ = mgoLog.Close(ctx)
+		if err := btls.WatchCAFile(ctx, "mongo", caFile, store.Reload); err != nil {
+			_ = store.Close(ctx)
 			logger.New().Fatal(err)
 		}
 	}
-	return mgoLog
+	return store
 }
 
-func (t *MongoLog) Migrate(ctx context.Context, data []map[string]any) error {
+func (t *MongoStore) InsertMany(ctx context.Context, data []map[string]any) error {
 	datas := make(bson.A, 0, len(data))
 	for _, v := range data {
 		delete(v, "_id")
@@ -83,7 +83,11 @@ func (t *MongoLog) Migrate(ctx context.Context, data []map[string]any) error {
 	return nil
 }
 
-func (t *MongoLog) Reload(ctx context.Context) error {
+func (t *MongoStore) Migrate(ctx context.Context, data []map[string]any) error {
+	return t.InsertMany(ctx, data)
+}
+
+func (t *MongoStore) Reload(ctx context.Context) error {
 
 	client, err := t.newClient(ctx)
 	if err != nil {
@@ -101,7 +105,7 @@ func (t *MongoLog) Reload(ctx context.Context) error {
 	return nil
 }
 
-func (t *MongoLog) Close(ctx context.Context) error {
+func (t *MongoStore) Close(ctx context.Context) error {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -115,7 +119,7 @@ func (t *MongoLog) Close(ctx context.Context) error {
 	return err
 }
 
-func (t *MongoLog) newClient(ctx context.Context) (*mongo.Client, error) {
+func (t *MongoStore) newClient(ctx context.Context) (*mongo.Client, error) {
 
 	opts, err := t.clientOptions()
 	if err != nil {
@@ -133,7 +137,7 @@ func (t *MongoLog) newClient(ctx context.Context) (*mongo.Client, error) {
 	return mgo, nil
 }
 
-func (t *MongoLog) clientOptions() (*options.ClientOptions, error) {
+func (t *MongoStore) clientOptions() (*options.ClientOptions, error) {
 
 	port := strings.TrimLeft(t.port, ":")
 	port = fmt.Sprintf(":%s", port)

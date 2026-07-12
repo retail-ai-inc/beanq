@@ -2,9 +2,9 @@
 
 <div align="center">
 
-[![Go Version](https://img.shields.io/badge/go-1.24.0-blue.svg)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/go-1.26.x-blue.svg)](https://golang.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Redis](https://img.shields.io/badge/redis-5.0.12+-red.svg)](https://redis.io/)
+[![Redis](https://img.shields.io/badge/redis-6.2+-red.svg)](https://redis.io/)
 [![MongoDB](https://img.shields.io/badge/mongodb-8.0+-green.svg)](https://www.mongodb.com/)
 
 **A powerful message queue system built on Redis Stream**
@@ -73,8 +73,8 @@ graph TB
 ### Prerequisites
 
 - Docker & Docker Compose
-- Go 1.24.0 or higher
-- Redis 5.0.12+
+- Go 1.26.x or higher
+- Redis 6.2+
 - MongoDB 8.0+
 
 ### 1. Clone and Setup
@@ -88,29 +88,18 @@ cd beanq
 
 ```bash
 # Start Redis and MongoDB
-docker-compose up -d --build
+make deps-up
 
 # Verify containers are running
-docker-compose ps
+make deps-ps
 ```
 
-### 3. Run Examples
+Local dependency defaults:
+- Redis: `localhost:6379`, password `secret`
+- MongoDB root user: `root` / `root`
+- MongoDB app user: `beanq` / `secret`, database `beanq_logs`
 
-```bash
-# Enter the example container
-docker exec -it beanq-example bash
-
-# Run normal queue example
-make normal
-
-# Run delay queue example
-make delay
-
-# Run sequence queue example
-make sequential
-```
-
-### 4. Launch UI Dashboard
+### 3. Launch UI Dashboard
 
 ```bash
 # Start the monitoring UI
@@ -120,6 +109,36 @@ make ui
 Access at: `http://localhost:9090`
 - Default username: `rai`
 - Default password: `mysecretpass`
+
+### 4. Run Examples
+
+Run consumers and publishers in separate terminals because consumers are long-running processes.
+
+```bash
+# Terminal 1: start normal queue consumer
+make normal-consumer
+
+# Terminal 2: publish normal queue messages
+make normal-publisher
+
+# Terminal 1: start delay queue consumer
+make delay-consumer
+
+# Terminal 2: publish delay queue messages
+make delay-publisher
+
+# Terminal 1: start sequence queue consumer
+make sequential-consumer
+
+# Terminal 2: publish sequence queue messages
+make sequential-publisher
+```
+
+When finished, stop local dependencies:
+
+```bash
+make clean-docker-compose
+```
 
 ---
 
@@ -526,12 +545,10 @@ _, err := consumer.BQ().
 
 ```bash
 # Terminal 1: Start consumer
-cd examples/normal/consumer
-go run main.go
+make normal-consumer
 
 # Terminal 2: Publish messages
-cd examples/normal/publisher
-go run main.go
+make normal-publisher
 ```
 
 ### Workflow Example
@@ -643,13 +660,20 @@ Reference: [Redis Persistence](https://redis.io/docs/latest/operate/oss_and_stac
 ## 🧪 Testing
 
 ```bash
-# Run all tests with coverage
+# Fast unit tests, no Docker required
+make test-unit
+
+# Integration tests, starts Redis and MongoDB through Docker Compose
+make test-integration
+
+# Default full local test path
 make test
 
-# Run specific test suite
+# Run a specific test suite
 go test -v ./... -run TestNormalQueue
 
 # View coverage report
+go tool cover -func=coverage.txt
 go tool cover -html=coverage.txt
 ```
 
@@ -661,11 +685,14 @@ go tool cover -html=coverage.txt
 # Run linters
 make lint
 
+# Start local Redis and MongoDB
+make deps-up
+
+# Stop local Redis and MongoDB
+make clean-docker-compose
+
 # Fix field alignment issues
 make vet-fix
-
-# Clean Docker resources
-make clean-docker-compose
 ```
 
 ---
@@ -678,9 +705,8 @@ make clean-docker-compose
 - [Go](https://golang.org/) - Programming language
 
 ### Libraries
-- `go-redis/redis/v8` - Redis client
+- `go-redis/redis/v9` - Redis client
 - `mongodb/mongo-driver` - MongoDB driver
-- `labstack/gommon` - HTTP framework
 - `spf13/viper` - Configuration management
 - `sendgrid/sendgrid-go` - Email service
 - `slack-go/slack` - Slack notifications

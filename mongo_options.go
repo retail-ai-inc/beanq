@@ -10,24 +10,16 @@ import (
 
 func mongoClientOptions(config *Mongo) (*options.ClientOptions, error) {
 	if config == nil {
-		return nil, fmt.Errorf("mongo config is nil")
+		return nil, ErrInvalidConfig.WithMessage("mongo config is nil")
 	}
 
-	port := strings.TrimLeft(config.Port, ":")
-	port = fmt.Sprintf(":%s", port)
-	uri := strings.Join([]string{"mongodb://", config.Host, port}, "")
-
-	opts := options.Client().ApplyURI(uri).
+	opts := options.Client().ApplyURI(mongoURI(config.Host, config.Port)).
 		SetConnectTimeout(config.ConnectTimeOut).
 		SetMaxPoolSize(config.MaxConnectionPoolSize).
 		SetMaxConnIdleTime(config.MaxConnectionLifeTime)
 
-	if config.UserName != "" && config.Password != "" {
-		opts.SetAuth(options.Credential{
-			AuthSource: config.Database,
-			Username:   config.UserName,
-			Password:   config.Password,
-		})
+	if credential, ok := mongoCredential(config); ok {
+		opts.SetAuth(credential)
 	}
 
 	if config.SSL.On {
@@ -39,4 +31,23 @@ func mongoClientOptions(config *Mongo) (*options.ClientOptions, error) {
 	}
 
 	return opts, nil
+}
+
+func mongoURI(host, port string) string {
+	return fmt.Sprintf("mongodb://%s:%s", host, normalizePort(port))
+}
+
+func normalizePort(port string) string {
+	return strings.TrimLeft(port, ":")
+}
+
+func mongoCredential(config *Mongo) (options.Credential, bool) {
+	if config.UserName == "" || config.Password == "" {
+		return options.Credential{}, false
+	}
+	return options.Credential{
+		AuthSource: config.Database,
+		Username:   config.UserName,
+		Password:   config.Password,
+	}, true
 }

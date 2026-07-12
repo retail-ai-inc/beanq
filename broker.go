@@ -11,15 +11,11 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	bmongo2 "github.com/retail-ai-inc/beanq/v4/helper/bmongo"
-	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
-	"github.com/retail-ai-inc/beanq/v4/internal/driver/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
-	"github.com/spf13/cast"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 )
@@ -30,8 +26,8 @@ var (
 )
 
 type Handler struct {
-	brokerImpl public.IBroker
-	do         func(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	brokerImpl queueGateway
+	do         public.CallbackWithRetry
 	channel    string
 	topic      string
 	moodType   btype.MoodType
@@ -40,15 +36,14 @@ type Handler struct {
 	retryCond  map[string]struct{}
 }
 
-func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
-
-	broker.Dequeue(ctx, h.channel, h.topic, func(ctx context.Context, data map[string]any, retry ...int) (int, error) {
+func (h *Handler) Invoke(ctx context.Context, broker queueGateway) {
+	broker.Dequeue(ctx, h.channel, h.topic, public.NewCallbackWithRetry(func(ctx context.Context, data map[string]any, retry ...int) (int, error) {
 		if len(retry) == 0 {
-			return h.do(ctx, data)
+			return h.do.Handle(ctx, data)
 		}
 
 		return tool.RetryInfo(ctx, func() error {
-			_, err := h.do(ctx, data)
+			_, err := h.do.Handle(ctx, data)
 			return err
 		}, retry[0], func(err error) bool {
 			key := fmt.Sprintf("%T,%v", err, err.Error())
@@ -57,14 +52,15 @@ func (h *Handler) Invoke(ctx context.Context, broker public.IBroker) {
 			}
 			return false
 		})
-	})
+	}, h.do.Error))
 }
 
 type Broker struct {
-	status        public.IStatus
-	log           public.IProcessLog
+	queue         queueGateway
+	locker        locker
+	status        statusReader
 	client        any
-	fac           public.IBrokerFactory
+	strategy      brokerStrategy
 	config        *BeanqConfig
 	tool          *bredis.UITool
 	handlers      []*Handler
@@ -73,60 +69,27 @@ type Broker struct {
 
 func NewBroker(config *BeanqConfig) *Broker {
 	brokerOnce.Do(func() {
-		switch config.Broker {
-		case "redis":
-			cfg := config.Redis
-			client, err := bredis.NewRdb(cfg.IsCluster, cfg.Host, cfg.Port, cfg.Username,
-				cfg.Password, cfg.Database,
-				cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections,
-				cfg.SSL.On, cfg.SSL.CAFile, cfg.SSL.Verify, cfg.SSL.HotReload)
-			if err != nil {
-				logger.New().Panic("new redis client err:", err)
-			}
-			broker.status = bredis.NewStatus(client, cfg.Prefix)
-			broker.log = bredis.NewProcessLog(client, cfg.Prefix)
-			broker.client = client
-			broker.fac = bredis.NewBroker(client, cfg.Prefix, cfg.MaxLen, config.MinConsumers, config.ConsumerPoolSize, config.DeadLetterIdleTime)
-			broker.tool = bredis.NewUITool(client, cfg.Prefix)
-			// capture errors and send them to email or Slack
-
-			if config.History.On {
-
-				mcfg := config.Mongo
-
-				collections := map[string]string{}
-				for s, collection := range mcfg.Collections {
-					collections[s] = collection.Name
-				}
-
-				nmgo := bmongo2.NewMongo(mcfg.Host,
-					mcfg.Port, mcfg.UserName,
-					mcfg.Password,
-					mcfg.Database,
-					collections,
-					mcfg.ConnectTimeOut,
-					mcfg.MaxConnectionPoolSize,
-					mcfg.MaxConnectionLifeTime,
-					bmongo2.MongoSSLConfig{
-						On:     mcfg.SSL.On,
-						CAFile: mcfg.SSL.CAFile,
-						Verify: mcfg.SSL.Verify,
-					})
-
-				broker.captureConfig = getConfig(nmgo)
-			}
-
-		default:
-			logger.New().Panic("not support broker type:", config.Broker)
-		}
+		components, err := defaultBrokerBuilder(config)
+		logBrokerBuildFailure(err, config.Broker)
+		broker.queue = components.queue
+		broker.locker = components.locker
+		broker.status = components.status
+		broker.client = components.client
+		broker.strategy = components.strategy
+		broker.tool = components.tool
+		broker.captureConfig = components.captureConfig
 	})
 	broker.config = config
 	return &broker
 }
 
-func getConfig(client *bmongo2.BMongo) *capture.Config {
+type captureConfigReader interface {
+	ConfigInfo(ctx context.Context) (*capture.Config, error)
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func getConfig(client captureConfigReader) *capture.Config {
+
+	ctx, cancel := context.WithTimeout(context.Background(), configLookupTimeout())
 	defer cancel()
 	if client == nil {
 		return nil
@@ -139,44 +102,27 @@ func getConfig(client *bmongo2.BMongo) *capture.Config {
 }
 
 func (t *Broker) ForceUnlock(ctx context.Context, channel, topic, orderKey string) error {
-
-	return t.fac.Mood(btype.SEQUENCE_BY_LOCK, t.captureConfig).ForceUnlock(ctx, channel, topic, orderKey)
-
+	if t.locker == nil {
+		return ErrUnsupportedBroker.WithMessage("force unlock")
+	}
+	return t.locker.ForceUnlock(ctx, channel, topic, orderKey)
 }
 
 func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
-	moodType := btype.NORMAL
-
-	if v, ok := data["moodType"]; ok {
-		moodType = btype.MoodType(cast.ToString(v))
+	if t.queue == nil {
+		return ErrUnsupportedBroker.WithMessage("enqueue")
 	}
-
-	bk := t.fac.Mood(moodType, t.captureConfig)
-	if bk == nil {
-		return bstatus.BrokerDriverError
-	}
-	if err := bk.Enqueue(ctx, data); err != nil {
-		return err
-	}
-	data["status"] = bstatus.StatusPublished
-
-	if err := t.log.AddLog(ctx, data); err != nil {
-		return err
-	}
-
-	return nil
+	return t.queue.Enqueue(ctx, data)
 }
 
 func (t *Broker) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 }
 
 func (t *Broker) Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error) {
-	data, err := t.status.Status(ctx, channel, topic, id, isOrder)
-	if err != nil {
-		// todo
-		return nil, err
+	if t.status == nil {
+		return nil, ErrUnsupportedBroker.WithMessage("status")
 	}
-	return data, nil
+	return t.status.Status(ctx, channel, topic, id, isOrder)
 }
 
 func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, subscribe IConsumeHandle) error {
@@ -187,8 +133,7 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 		channel:  channel,
 		topic:    topic,
 		moodType: moodType,
-		do: func(ctx context.Context, message map[string]any, retry ...int) (int, error) {
-
+		do: public.NewCallbackWithRetry(func(ctx context.Context, message map[string]any, retry ...int) (int, error) {
 			var gerr error
 			msg := messageToStruct(message)
 			if err := subscribe.Handle(ctx, msg); err != nil {
@@ -198,40 +143,29 @@ func (t *Broker) AddConsumer(moodType btype.MoodType, channel, topic string, sub
 				}
 			}
 			return 0, gerr
-		},
+		}, func(ctx context.Context, err error) {
+			if h, ok := subscribe.(IConsumeError); ok {
+				h.Error(ctx, err)
+			}
+		}),
 	}
-	handler.brokerImpl = t.fac.Mood(moodType, t.captureConfig)
+	handler.brokerImpl = t.strategy(moodType, t.captureConfig)
 	t.handlers = append(t.handlers, &handler)
 
 	return nil
 }
 
 func (t *Broker) Migrate(ctx context.Context, data []map[string]any) error {
-
-	var migrate public.IMigrateLog
+	var migrate MigrationRunner
 
 	if t.config.Broker == "redis" {
-		if t.config.History.On {
-			mongo := t.config.Mongo
-			migrate = bmongo.NewMongoLog(ctx,
-				mongo.Host,
-				mongo.Port,
-				mongo.ConnectTimeOut,
-				mongo.MaxConnectionLifeTime,
-				mongo.MaxConnectionPoolSize,
-				mongo.Database,
-				mongo.Collections["event"].Name,
-				mongo.UserName,
-				mongo.Password,
-				mongo.SSL.On,
-				mongo.SSL.CAFile,
-				mongo.SSL.Verify,
-				mongo.SSL.HotReload)
-		}
-		migrate = bredis.NewLog(t.client.(redis.UniversalClient), t.config.Redis.Prefix, migrate)
+		migrate = newRedisMigrateLog(ctx, t.config, t.client.(redis.UniversalClient))
+	}
+	if migrate == nil {
+		return ErrUnsupportedBroker.WithMessage(t.config.Broker)
 	}
 
-	return migrate.Migrate(ctx, nil)
+	return migrate.Migrate(ctx, data)
 }
 
 func (t *Broker) Start(ctx context.Context) {
@@ -287,8 +221,8 @@ func (t *Broker) WaitSignal(cancel context.CancelFunc) <-chan bool {
 	return done
 }
 
-func (t *Broker) Mood(m btype.MoodType) public.IBroker {
-	return t.fac.Mood(m, t.captureConfig)
+func (t *Broker) Mood(m btype.MoodType) queueGateway {
+	return t.strategy(m, t.captureConfig)
 }
 
 func GetBrokerDriver[T any]() T {
@@ -360,7 +294,7 @@ func (c DefaultHandle) Error(ctx context.Context, err error) {
 	}
 }
 
-var MigrateLogDiscard public.IMigrateLog = discard{}
+var MigrateLogDiscard MigrationRunner = discard{}
 
 type discard struct{}
 

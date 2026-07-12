@@ -1,9 +1,21 @@
 package bredis
 
 import (
+	"context"
 	_ "embed"
+	"fmt"
 
 	"github.com/redis/go-redis/v9"
+)
+
+const (
+	ScriptHashDuplicate      = "hashDuplicate"
+	ScriptSequenceByLock     = "sequenceByLock"
+	ScriptAddLogicLock       = "addLogicLock"
+	ScriptSaveHSet           = "saveHSet"
+	ScriptSaveNewTrans       = "saveNewTrans"
+	ScriptSaveBranches       = "saveBranches"
+	ScriptChangeGlobalStatus = "changeGlobalStatus"
 )
 
 var (
@@ -35,3 +47,39 @@ var (
 	changeGlobalStatusLua    string
 	ChangeGlobalStatusScript = redis.NewScript(changeGlobalStatusLua)
 )
+
+// ScriptCatalog gives Redis Lua scripts a single named access point.
+type ScriptCatalog struct {
+	scripts map[string]*redis.Script
+}
+
+func NewScriptCatalog(scripts map[string]*redis.Script) *ScriptCatalog {
+	catalog := &ScriptCatalog{scripts: make(map[string]*redis.Script, len(scripts))}
+	for name, script := range scripts {
+		catalog.scripts[name] = script
+	}
+	return catalog
+}
+
+func DefaultScriptCatalog() *ScriptCatalog {
+	return NewScriptCatalog(map[string]*redis.Script{
+		ScriptHashDuplicate:      HashDuplicateIdScript,
+		ScriptSequenceByLock:     SequenceByLockScript,
+		ScriptAddLogicLock:       AddLogicLockScript,
+		ScriptSaveHSet:           SaveHSetScript,
+		ScriptSaveNewTrans:       SaveNewTransScript,
+		ScriptSaveBranches:       SaveBranchesScript,
+		ScriptChangeGlobalStatus: ChangeGlobalStatusScript,
+	})
+}
+
+func (c *ScriptCatalog) Run(ctx context.Context, client redis.Scripter, name string, keys []string, args ...any) (any, error) {
+	if c == nil {
+		return nil, fmt.Errorf("redis script catalog is nil")
+	}
+	script, ok := c.scripts[name]
+	if !ok {
+		return nil, fmt.Errorf("redis script %q is not registered", name)
+	}
+	return script.Run(ctx, client, keys, args...).Result()
+}

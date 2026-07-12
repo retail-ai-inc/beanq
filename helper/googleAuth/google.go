@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -25,7 +26,13 @@ type UserInfo struct {
 }
 
 type GoogleOauthConfig struct {
-	config *oauth2.Config
+	config     *oauth2.Config
+	httpClient HTTPClient
+}
+
+// HTTPClient is the minimal boundary used to fetch Google user info.
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
 }
 
 func New(clientId, clientSecret, redirectUrl string) (*GoogleOauthConfig, error) {
@@ -42,7 +49,7 @@ func NewGoogleOauthConfig(clientId, clientSecret, redirectUrl string) *GoogleOau
 	//}
 	endpoint := google.Endpoint
 	return &GoogleOauthConfig{
-		&oauth2.Config{
+		config: &oauth2.Config{
 			ClientID:     clientId,
 			ClientSecret: clientSecret,
 			Endpoint:     endpoint,
@@ -50,7 +57,15 @@ func NewGoogleOauthConfig(clientId, clientSecret, redirectUrl string) *GoogleOau
 			//Scopes: []string{"https://www.googleapis.com/auth/userinfo.profile","https://www.googleapis.com/auth/userinfo.email"},
 			Scopes: []string{"profile", "email"},
 		},
+		httpClient: http.DefaultClient,
 	}
+}
+
+func (t *GoogleOauthConfig) WithHTTPClient(client HTTPClient) *GoogleOauthConfig {
+	if client != nil {
+		t.httpClient = client
+	}
+	return t
 }
 func (t *GoogleOauthConfig) AuthCodeUrl(state string, opts ...oauth2.AuthCodeOption) (url string) {
 	url = t.config.AuthCodeURL(state, opts...)
@@ -60,19 +75,36 @@ func (t *GoogleOauthConfig) Exchange(ctx context.Context, code string) (*oauth2.
 	return t.config.Exchange(ctx, code)
 }
 func (t *GoogleOauthConfig) Response(accessToken string) (*UserInfo, error) {
-	res, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + accessToken)
+	return t.ResponseContext(context.Background(), accessToken)
+}
+
+func (t *GoogleOauthConfig) ResponseContext(ctx context.Context, accessToken string) (*UserInfo, error) {
+	if accessToken == "" {
+		return nil, errors.New("access token is required")
+	}
+	if t.httpClient == nil {
+		t.httpClient = http.DefaultClient
+	}
+	endpoint := "https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + url.QueryEscape(accessToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := t.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 
 	defer func() {
-		// or use `//nolint:errcheck` to ignore error
 		_ = res.Body.Close()
 	}()
 
 	bodys, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
+	}
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("google userinfo request failed: status=%d body=%s", res.StatusCode, string(bodys))
 	}
 	var userInfo UserInfo
 	err = json.Unmarshal(bodys, &userInfo)

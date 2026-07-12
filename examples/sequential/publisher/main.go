@@ -25,7 +25,7 @@ func initCnf() *beanq.BeanqConfig {
 	configOnce.Do(func() {
 		envPath := "./"
 		if _, file, _, ok := runtime.Caller(0); ok {
-			envPath = filepath.Dir(file)
+			envPath = filepath.Dir(filepath.Dir(file))
 		}
 
 		vp := viper.New()

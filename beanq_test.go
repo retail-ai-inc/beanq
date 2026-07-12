@@ -1,3 +1,6 @@
+//go:build integration || ci
+// +build integration ci
+
 package beanq
 
 import (
@@ -39,7 +42,7 @@ type BeanqSuite struct {
 
 func (s *BeanqSuite) SetupSuite() {
 
-	cfg, err := NewConfig("./", "json", "env")
+	cfg, err := NewConfig("./", "json", "env.testing")
 	s.Require().Nil(err, fmt.Sprintf("NewConfig error:%+v", err))
 	s.config = cfg
 	s.delayChannel = "delay-channel"

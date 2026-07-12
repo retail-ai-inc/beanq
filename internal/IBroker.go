@@ -4,52 +4,47 @@ import (
 	"context"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
-	"github.com/retail-ai-inc/beanq/v4/internal/btype"
-	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 )
 
-// IBroker main job
-type (
-	Stream struct {
-		Data    map[string]any
-		Id      string
-		Channel string
-		Stream  string
-	}
-	CallbackWithRetry func(ctx context.Context, data map[string]any, retry ...int) (int, error)
-	IBroker           interface {
-		Enqueue(ctx context.Context, data map[string]any) error
-
-		Dequeue(ctx context.Context, channel, topic string, do CallbackWithRetry)
-		ForceUnlock(ctx context.Context, channel, topic, orderKey string) error
-	}
-	IDeadLetter interface {
-		DeadLetter(ctx context.Context, channel, topic string)
-	}
-	IBrokerFactory interface {
-		Mood(moodType btype.MoodType, config *capture.Config) IBroker
-	}
-)
-
-// IProcessLog process log
-type (
-	IProcessLog interface {
-		AddLog(ctx context.Context, data map[string]any) error
-	}
-	// IMigrateLog migrate redis log to other db
-	// for example: to mongodb
-	IMigrateLog interface {
-		Migrate(ctx context.Context, data []map[string]any) error
-	}
-)
-
-// IStatus check the status of the message based on the ID
-type IStatus interface {
-	Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error)
+// Stream is the internal queue message envelope used by Redis stream workers.
+type Stream struct {
+	Data    map[string]any
+	Id      string
+	Channel string
+	Stream  string
 }
 
-func (CallbackWithRetry) Error(ctx context.Context, err error) {
-	if err != nil {
-		logger.New().Error(err)
+type CallbackWithRetry interface {
+	Handle(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	Error(ctx context.Context, err error)
+}
+
+type callbackWithRetry struct {
+	handle  func(ctx context.Context, data map[string]any, retry ...int) (int, error)
+	onError func(ctx context.Context, err error)
+}
+
+func NewCallbackWithRetry(
+	handle func(ctx context.Context, data map[string]any, retry ...int) (int, error),
+	onError func(ctx context.Context, err error),
+) CallbackWithRetry {
+	return callbackWithRetry{handle: handle, onError: onError}
+}
+
+func (c callbackWithRetry) Handle(ctx context.Context, data map[string]any, retry ...int) (int, error) {
+	if c.handle == nil {
+		return 0, nil
 	}
+	return c.handle(ctx, data, retry...)
+}
+
+func (c callbackWithRetry) Error(ctx context.Context, err error) {
+	if err == nil {
+		return
+	}
+	if c.onError != nil {
+		c.onError(ctx, err)
+		return
+	}
+	logger.New().Error(err)
 }
