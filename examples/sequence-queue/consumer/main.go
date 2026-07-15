@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
-	"time"
 
 	beanq "github.com/retail-ai-inc/beanq/v4"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
@@ -22,15 +20,15 @@ const (
 )
 
 type sequenceMessage struct {
-	CustomerId string `json:"customerId"`
-	Body       string `json:"body"`
+	OrderKey string `json:"orderKey"`
+	Body     string `json:"body"`
 }
 
 var (
-	configOnce   sync.Once
-	bqConfig     beanq.BeanqConfig
-	lastMu       sync.Mutex
-	handledCount = map[string]int{}
+	configOnce      sync.Once
+	bqConfig        beanq.BeanqConfig
+	sequenceMu      sync.Mutex
+	handledSequence = map[string]int{}
 )
 
 func initCnf() *beanq.BeanqConfig {
@@ -59,7 +57,7 @@ func main() {
 	ctx := context.Background()
 	csm := beanq.New(initCnf())
 
-	_, err := csm.BQ().WithContext(ctx).ConsumerSequence(channel, topic, beanq.DefaultHandle{
+	_, err := csm.BQ().WithContext(ctx).SubscribeSequence(channel, topic, beanq.DefaultHandle{
 		DoHandle: handle,
 		DoCancel: func(ctx context.Context, message *beanq.Message) error {
 			return nil
@@ -81,24 +79,20 @@ func handle(ctx context.Context, message *beanq.Message) error {
 	if err := json.Unmarshal([]byte(message.Payload), &payload); err != nil {
 		return err
 	}
-	if payload.CustomerId == "" {
-		payload.CustomerId = message.CustomerId
+	if payload.OrderKey == "" {
+		payload.OrderKey = message.OrderKey
 	}
 
-	lastMu.Lock()
-	expected := handledCount[payload.CustomerId] + 1
-	expectedBody := fmt.Sprintf("%s-message-%02d", payload.CustomerId, expected)
+	sequenceMu.Lock()
+	defer sequenceMu.Unlock()
+	expected := handledSequence[payload.OrderKey] + 1
+	expectedBody := fmt.Sprintf("%s-message-%02d", payload.OrderKey, expected)
 	if payload.Body != expectedBody {
-		lastMu.Unlock()
-		return fmt.Errorf("out of order: customerId=%s expectedBody=%s gotBody=%s id=%s", payload.CustomerId, expectedBody, payload.Body, message.Id)
+		return fmt.Errorf("out of order: orderKey=%s expectedBody=%s gotBody=%s id=%s", payload.OrderKey, expectedBody, payload.Body, message.Id)
 	}
-	handledCount[payload.CustomerId] = expected
-	lastMu.Unlock()
+	handledSequence[payload.OrderKey] = expected
 
-	fmt.Printf("handled customerId=%s body=%s id=%s at=%s\n", payload.CustomerId, payload.Body, message.Id, time.Now().Format(time.RFC3339Nano))
-	time.Sleep(300 * time.Millisecond)
-	if os.Getenv("BEANQ_SEQUENCE_FAIL_BODY") == payload.Body {
-		return fmt.Errorf("simulated failure for %s", payload.Body)
-	}
+	fmt.Printf("handled orderKey=%s body=%s id=%s\n", payload.OrderKey, payload.Body, message.Id)
+
 	return nil
 }

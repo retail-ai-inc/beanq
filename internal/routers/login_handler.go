@@ -1,10 +1,13 @@
 package routers
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -17,7 +20,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
-	"github.com/spf13/cast"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -34,10 +36,17 @@ func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, u
 }
 
 func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
-
-	username := r.PostFormValue("username")
-	password := r.PostFormValue("password")
-	expiredTime := r.PostFormValue("expiredTime")
+	var input struct {
+		Username    string `json:"username"`
+		Password    string `json:"password"`
+		ExpiredDays int64  `json:"expiredDays"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeBadRequest(w, err)
+		return
+	}
+	username := input.Username
+	password := input.Password
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -80,8 +89,8 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	expiresAt := t.ui.ExpiresAt
-	if cast.ToInt64(expiredTime) > 0 {
-		expiresAt = time.Duration(cast.ToInt64(expiredTime)) * 24 * time.Hour
+	if input.ExpiredDays > 0 && input.ExpiredDays <= 30 {
+		expiresAt = time.Duration(input.ExpiredDays) * 24 * time.Hour
 	}
 
 	claim := bjwt.Claim{
@@ -108,7 +117,15 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 	client := tool.ClientFac(t.client, t.prefix, "")
 	nodeId := client.NodeId(r.Context())
 
-	result.Data = map[string]any{"token": token, "roles": user.Roles, "nodeId": nodeId}
+	setAuthCookie(w, r, token, claim.ExpiresAt.Time)
+	result.Data = map[string]any{"account": username, "roles": user.Roles, "nodeId": nodeId}
+	_ = result.Json(w, http.StatusOK)
+}
+
+func (t *Login) Logout(w http.ResponseWriter, r *http.Request) {
+	clearAuthCookie(w, r)
+	result, release := response.Get()
+	defer release()
 	_ = result.Json(w, http.StatusOK)
 }
 
@@ -130,7 +147,13 @@ func (t *Login) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	state := time.Now().String()
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		ReturnHtml(w, "unable to start authentication")
+		return
+	}
+	state := base64.RawURLEncoding.EncodeToString(stateBytes)
+	http.SetCookie(w, &http.Cookie{Name: "beanq_oauth_state", Value: state, Path: "/api/v1/auth/google/callback", MaxAge: 300, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
 	url := gAuth.AuthCodeUrl(state)
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
 	w.Header().Set("Location", url)
@@ -149,6 +172,14 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 	}
 
 	code := r.FormValue("code")
+	stateCookie, cookieErr := r.Cookie("beanq_oauth_state")
+	if cookieErr != nil || stateCookie.Value == "" || r.FormValue("state") != stateCookie.Value {
+		res.Code = berror.AuthExpireCode
+		res.Msg = "invalid OAuth state"
+		_ = res.Json(w, http.StatusUnauthorized)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "beanq_oauth_state", Path: "/api/v1/auth/google/callback", MaxAge: -1, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode})
 
 	config, err := t.mgo.ConfigInfo(r.Context())
 	if err != nil {
@@ -174,7 +205,7 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userInfo, err := auth.Response(token.AccessToken)
+	userInfo, err := auth.ResponseContext(r.Context(), token.AccessToken)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -210,17 +241,18 @@ func (t *Login) GoogleCallBack(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	proto := r.Header.Get("X-Forwarded-Proto")
-	if proto == "" {
-		proto = "http"
-		if r.TLS != nil {
-			proto = "https"
-		}
+	setAuthCookie(w, r, jwtToken, claim.ExpiresAt.Time)
+	callbackURL, err := url.Parse(config.Google.CallBackUrl)
+	if err != nil || callbackURL.Scheme == "" || callbackURL.Host == "" {
+		res.Code = berror.InternalServerErrorCode
+		res.Msg = "invalid configured Google callback URL"
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
 	}
-	url := fmt.Sprintf("%s://%s/#/login?token=%s", proto, r.Host, jwtToken)
+	redirectURL := fmt.Sprintf("%s://%s/#/login?authenticated=1", callbackURL.Scheme, callbackURL.Host)
 
 	w.Header().Set("Content-Type", "text/html;charset=UTF-8")
-	w.Header().Set("Location", url)
+	w.Header().Set("Location", redirectURL)
 	w.WriteHeader(http.StatusFound)
 }
 

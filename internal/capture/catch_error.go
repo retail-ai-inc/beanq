@@ -136,34 +136,40 @@ func (t *Catch) Then(err error) {
 			port := t.config.Email.SMTP.Port
 			user := t.config.Email.SMTP.User
 			password := t.config.Email.SMTP.Password
-			if host == "" || port == "" || user == "" || password == "" {
-				continue
-			}
-
-			client := email.NewGoEmail(host, cast.ToInt(port), user, password)
-			client.From(user)
-			client.Subject("Notify")
-			client.TextBody(err.Error())
-			client.To(then.Value)
-			if err := client.Send(); err == nil {
-				continue
-			} else {
-				logger.New().Error(err)
+			if host != "" && port != "" && user != "" {
+				client, clientErr := email.NewGoEmail(host, cast.ToInt(port), user, password)
+				if clientErr != nil {
+					logger.New().Error(clientErr)
+				} else {
+					client.From(user)
+					client.Subject("BeanQ alert")
+					client.TextBody(err.Error())
+					client.To(then.Value)
+					if sendErr := client.SendContext(ctx); sendErr == nil {
+						continue
+					} else {
+						logger.New().Error(sendErr)
+					}
+				}
 			}
 			if t.config.Email.SendGrid.Key == "" {
 				continue
 			}
 
-			client = email.NewSendGrid(t.config.Email.SendGrid.Key)
-			client.From(t.config.Email.SendGrid.FromAddress)
-			client.Subject("Notify")
-			client.TextBody(err.Error())
-			client.To(then.Value)
-			if err := client.Send(); err != nil {
-				logger.New().Error(err)
+			client, clientErr := email.NewSendGrid(t.config.Email.SendGrid.Key)
+			if clientErr != nil {
+				logger.New().Error(clientErr)
 				continue
 			}
-			logger.New().Error(err)
+			client.From(t.config.Email.SendGrid.FromAddress)
+			client.FromName(t.config.Email.SendGrid.FromName)
+			client.Subject("BeanQ alert")
+			client.TextBody(err.Error())
+			client.To(then.Value)
+			if sendErr := client.SendContext(ctx); sendErr != nil {
+				logger.New().Error(sendErr)
+				continue
+			}
 		}
 		if then.Key == "slack" {
 			if t.config.Slack.BotAuthToken == "" {

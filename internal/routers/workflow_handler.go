@@ -1,12 +1,10 @@
 package routers
 
 import (
-	"math"
 	"net/http"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -32,25 +30,22 @@ func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 	query := r.URL.Query()
-	page := cast.ToInt64(query.Get("page"))
-	pageSize := cast.ToInt64(query.Get("pageSize"))
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
 
 	ctx := r.Context()
 
-	skip := (page - 1) * pageSize
+	skip := (page.Page - 1) * page.PageSize
 	if skip < 0 {
 		skip = 0
 	}
 	opts := options.Find()
 	opts.SetSkip(skip)
-	opts.SetLimit(pageSize)
+	opts.SetLimit(page.PageSize)
 	opts.SetSort(bson.D{{Key: "CreatedAt", Value: -1}})
 
 	filter := bson.M{}
@@ -88,11 +83,7 @@ func (t *WorkFlow) List(w http.ResponseWriter, r *http.Request) {
 		_ = result.Json(w, http.StatusInternalServerError)
 		return
 	}
-	datas := make(map[string]any, 3)
-	datas["data"] = data
-	datas["total"] = math.Ceil(float64(total) / float64(pageSize))
-	datas["cursor"] = page
-	result.Data = datas
+	result.Data = map[string]any{"data": data, "total": newPageMeta(page.Page, page.PageSize, total).TotalPages, "cursor": page.Page}
 	_ = result.Json(w, http.StatusOK)
 }
 
@@ -129,6 +120,10 @@ func (t *WorkFlow) Delete(w http.ResponseWriter, r *http.Request) {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if result.DeletedCount == 0 {
+		writeAPIError(w, http.StatusNotFound, berror.MissParameterCode, "workflow not found")
 		return
 	}
 

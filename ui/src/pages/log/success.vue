@@ -90,13 +90,13 @@ async function changePage(page,cursor){
 async function options(optType,id){
   switch (optType){
     case "delete":
-      await request.delete("/log/del", {params: {id: id}}).then(res=>{
+	  await request.delete(`logs/${encodeURIComponent(id)}`, {params:{msgType:"success"}}).then(res=>{
         getLog(data.page,10,data.cursor);
       }).catch(err=>{
         console.error(err)
       })
     case "retry":
-      await request.post("/log/retry",{id:id},{headers:{"Content-Type":"multipart/form-data"}} ).then(res=>{
+	  await request.post(`logs/${id}/retry`,{msgType:"success"}).then(res=>{
         getLog(data.page,10,data.cursor);
       }).catch(err=>{
         console.error(err)
@@ -137,5 +137,3 @@ const {logs,page,total,cursor} = toRefs(data);
 }
 .dropdown-menu .dropdown-item{cursor: pointer}
 </style>
-  
-  

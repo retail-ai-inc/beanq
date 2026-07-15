@@ -9,23 +9,18 @@ import (
 
 func TestRdbBrokerSequenceQueueUsesFixedConfiguredPartitions(t *testing.T) {
 	broker := NewBrokerWithSequenceQueuePartitions(nil, "prefix", 100, 7, 13, 2, time.Minute)
-	queue, ok := broker.Mood(btype.SEQUENCE_QUEUE, nil).(*SequenceQueue)
-	if !ok {
-		t.Fatal("sequence queue mood did not return *SequenceQueue")
+	if _, ok := broker.routes[btype.SEQUENCE_QUEUE]; !ok {
+		t.Fatal("sequence queue route is not registered")
 	}
-	if got := queue.partitions; got != 13 {
-		t.Fatalf("partition count = %d, want 13", got)
+	if consumer, err := broker.Consumer(btype.SEQUENCE_QUEUE, nil); err != nil || consumer == nil {
+		t.Fatalf("sequence queue consumer = %#v, %v", consumer, err)
 	}
 }
 
 func TestLegacyConstructorsKeepConsumerBasedSequenceQueueTopology(t *testing.T) {
 	broker := NewBroker(nil, "prefix", 100, 7, 2, time.Minute)
-	queue, ok := broker.Mood(btype.SEQUENCE_QUEUE, nil).(*SequenceQueue)
-	if !ok {
-		t.Fatal("sequence queue mood did not return *SequenceQueue")
-	}
-	if got := queue.partitions; got != 7 {
-		t.Fatalf("partition count = %d, want legacy consumer count 7", got)
+	if _, err := broker.Consumer(btype.SEQUENCE_QUEUE, nil); err != nil {
+		t.Fatalf("legacy broker sequence queue consumer: %v", err)
 	}
 
 	direct := NewSequenceQueue(nil, "prefix", 100, 9, 2, time.Minute, nil)

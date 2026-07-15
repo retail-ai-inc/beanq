@@ -182,8 +182,8 @@
     <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
-  
-  
+
+
 <script setup>
 
 import { ref,reactive,onMounted,onUnmounted,toRefs } from "vue";
@@ -213,14 +213,14 @@ function redisSSEConnect(){
     if(data.sse){
       data.sse.close();
     }
-    data.sse = sseApi.Init("redis");
+	data.sse = sseApi.Init("redis/info/stream");
     data.sse.onopen = () => {
       console.log("success")
     }
     data.sse.addEventListener("redis_info",function (res) {
       let body = JSON.parse(res.data);
-      if (body.code !== "0000"){
-        loginModal.value.error(new Error(body.msg));
+	  if (body.code !== "0000"){
+		loginModal.value.error(new Error(body.msg));
         data.sse.close();
         return
       }
@@ -270,5 +270,3 @@ const{commands,clients, stats,keyspace,memory,info} = toRefs(data);
 
 }
 </style>
-  
-  

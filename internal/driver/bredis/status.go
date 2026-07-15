@@ -9,24 +9,38 @@ import (
 )
 
 type Status struct {
-	client redis.UniversalClient
-	prefix string
+	client                  redis.UniversalClient
+	prefix                  string
+	sequenceQueuePartitions int64
 }
 
-func NewStatus(client redis.UniversalClient, prefix string) *Status {
+func NewStatus(client redis.UniversalClient, prefix string, sequenceQueuePartitions ...int64) *Status {
+	partitions := int64(0)
+	if len(sequenceQueuePartitions) > 0 {
+		partitions = normalizeSequenceQueuePartitionCount(sequenceQueuePartitions[0])
+	}
 	return &Status{
-		client: client,
-		prefix: prefix,
+		client:                  client,
+		prefix:                  prefix,
+		sequenceQueuePartitions: partitions,
 	}
 }
 
-func (t *Status) Status(ctx context.Context, channel, topic, id string, isOrder bool) (map[string]string, error) {
-
+func (t *Status) Status(ctx context.Context, channel, topic, id string) (map[string]string, error) {
 	key := tool.MakeStatusKey(t.prefix, channel, topic, id)
-	if isOrder {
-		key = tool.MakeSequenceDataKey(t.prefix, channel, topic, id)
-	}
+	return t.waitStatus(ctx, key)
+}
 
+func (t *Status) SequenceStatus(ctx context.Context, channel, topic, orderKey, id string) (map[string]string, error) {
+	if t.sequenceQueuePartitions <= 0 || orderKey == "" {
+		return t.Status(ctx, channel, topic, id)
+	}
+	topology := newSequenceQueueTopology(t.prefix, channel, topic, t.sequenceQueuePartitions)
+	partition := topology.partition(orderKey)
+	return t.waitStatus(ctx, topology.messageStatusKey(partition, orderKey, id))
+}
+
+func (t *Status) waitStatus(ctx context.Context, key string) (map[string]string, error) {
 	for {
 		select {
 		case <-ctx.Done():

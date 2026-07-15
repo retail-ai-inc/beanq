@@ -283,7 +283,7 @@ const urlParams = (()=>{
     topicName: data.form.topicName
   }
   const searchParams = new URLSearchParams(query);
-  let apiUrl = `event_log/list?${searchParams.toString()}`;
+	let apiUrl = `events?${searchParams.toString()}`;
   return apiUrl;
 })
 
@@ -309,7 +309,7 @@ function changeItem(e){
   };
   const searchParams = new URLSearchParams(query);
   console.log(searchParams.toString())
-  let apiUrl = `event_log/list?${searchParams.toString()}`;
+	let apiUrl = `events?${searchParams.toString()}`;
 
   initEventSource(apiUrl);
 
@@ -332,14 +332,12 @@ function initEventSource(url){
   }
   data.sseEvent.onerror = (err)=>{
     console.log(err.error);
-    data.sseEvent.close();
-    setTimeout(initEventSource,3000);
   }
   data.sseEvent.addEventListener("event_log", async function(res){
     let body =  JSON.parse(res.data);
 
-    if (body.code === "1004"){
-      loginModal.value.error(new Error(body.msg));
+	if (body.code === "1004"){
+	  loginModal.value.error(new Error(body.msg));
       data.sseEvent.close();
       return
     }
@@ -379,7 +377,7 @@ onMounted(async()=>{
 onUnmounted(()=>{
   Storage.SetItem("page",1);
   Storage.SetItem("pageSize",10);
-  data.sseEvent.close();
+	data.sseEvent?.close();
 })
 
 const {eventLogs,form,page,pageSize,total,cursor,detail,retryLabel,showRetryModal,deleteLabel,showDeleteModal,infoDetailLabel,showInfoDetail} = toRefs(data);

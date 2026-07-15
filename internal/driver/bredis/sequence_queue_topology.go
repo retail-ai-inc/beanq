@@ -1,57 +1,28 @@
 package bredis
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
-	"fmt"
 	"strings"
-
-	"github.com/retail-ai-inc/beanq/v4/helper/tool"
-	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 )
 
 // sequenceQueueTopology is an immutable description of one logical sequence
-// queue's fixed sharding topology. It owns all key construction so its internal
-// Redis hash tag appears before caller-controlled text can introduce braces.
+// queue's fixed sharding topology. It owns all key construction and keeps the
+// configured prefix, channel, and topic at the front of every Redis key.
 type sequenceQueueTopology struct {
-	prefix     string
-	channel    string
-	topic      string
-	partitions int64
-	queueID    string
+	partitionQueueTopology
 }
 
 func newSequenceQueueTopology(prefix, channel, topic string, partitions int64) sequenceQueueTopology {
-	channel, topic = normalizeSequenceQueueRoute(channel, topic)
 	return sequenceQueueTopology{
-		prefix:     prefix,
-		channel:    channel,
-		topic:      topic,
-		partitions: normalizeSequenceQueuePartitionCount(partitions),
-		queueID:    sequenceQueueDigest(prefix, channel, topic),
+		partitionQueueTopology: newPartitionQueueTopology(prefix, channel, topic, partitions, "beanq-sq-v3", "sequence_queue", sequenceQueueSchemaVersion),
 	}
 }
 
 func normalizeSequenceQueuePartitionCount(partitions int64) int64 {
-	if partitions <= 0 {
-		return 1
-	}
-	return partitions
+	return normalizePartitionCount(partitions)
 }
 
 func normalizeSequenceQueueRoute(channel, topic string) (string, string) {
-	if channel == "" {
-		channel = boptions.DefaultOptions.DefaultChannel
-	}
-	if topic == "" {
-		topic = boptions.DefaultOptions.DefaultTopic
-	}
-	return channel, topic
-}
-
-func (t sequenceQueueTopology) partition(customerID string) int64 {
-	return int64(tool.HashKey([]byte(customerID), uint64(t.partitions)))
+	return normalizeQueueRoute(channel, topic)
 }
 
 // sequenceQueueDigest identifies a logical queue without placing untrusted
@@ -61,53 +32,44 @@ func sequenceQueueDigest(prefix, channel, topic string) string {
 	return lengthPrefixedSHA256(prefix, channel, topic)
 }
 
-func sequenceQueueCustomerDigest(customerID string) string {
-	return lengthPrefixedSHA256(customerID)
-}
-
-func lengthPrefixedSHA256(parts ...string) string {
-	h := sha256.New()
-	var length [8]byte
-	for _, part := range parts {
-		binary.BigEndian.PutUint64(length[:], uint64(len(part)))
-		_, _ = h.Write(length[:])
-		_, _ = h.Write([]byte(part))
-	}
-	return hex.EncodeToString(h.Sum(nil))
-}
-
-func (t sequenceQueueTopology) metadataKey() string {
-	return strings.Join([]string{t.metadataTag(), t.prefix, "sequence_queue", t.queueID, "metadata"}, ":")
-}
-
-func (t sequenceQueueTopology) metadataTag() string {
-	return fmt.Sprintf("{beanq-sq:%s:metadata}", t.queueID)
-}
-
-func (t sequenceQueueTopology) partitionTag(partition int64) string {
-	return fmt.Sprintf("{beanq-sq:%s:p%03d}", t.queueID, partition)
+func sequenceQueueOrderKeyDigest(orderKey string) string {
+	return lengthPrefixedSHA256(orderKey)
 }
 
 func (t sequenceQueueTopology) partitionBaseKey(partition int64) string {
-	return strings.Join([]string{t.partitionTag(partition), t.prefix, t.channel, t.topic, "sequence_queue", sequenceQueuePartitionName(partition)}, ":")
+	return strings.Join([]string{t.prefix, t.channel, t.topic, t.partitionTag(partition), "sequence_queue", sequenceQueuePartitionName(partition)}, ":")
 }
 
 func (t sequenceQueueTopology) schedulerKey(partition int64) string {
 	return strings.Join([]string{t.partitionBaseKey(partition), "scheduler"}, ":")
 }
 
+func (t sequenceQueueTopology) partitionStateKey(partition int64) string {
+	return strings.Join([]string{t.partitionBaseKey(partition), "state"}, ":")
+}
+
+// pendingKey is retained for source compatibility; v2 stores the counter in
+// the partition state hash instead of a string key.
 func (t sequenceQueueTopology) pendingKey(partition int64) string {
-	return strings.Join([]string{t.partitionBaseKey(partition), "pending"}, ":")
+	return t.partitionStateKey(partition)
 }
 
-func (t sequenceQueueTopology) customerBaseKey(partition int64, customerID string) string {
-	return strings.Join([]string{t.partitionBaseKey(partition), "customer", sequenceQueueCustomerDigest(customerID)}, ":")
+func (t sequenceQueueTopology) isolationKey(partition int64) string {
+	return strings.Join([]string{t.partitionBaseKey(partition), "isolation"}, ":")
 }
 
-func (t sequenceQueueTopology) customerListKey(partition int64, customerID string) string {
-	return strings.Join([]string{t.customerBaseKey(partition, customerID), "list"}, ":")
+func (t sequenceQueueTopology) orderBaseKey(partition int64, orderKey string) string {
+	return strings.Join([]string{t.partitionBaseKey(partition), "order", sequenceQueueOrderKeyDigest(orderKey)}, ":")
 }
 
-func (t sequenceQueueTopology) customerStateKey(partition int64, customerID string) string {
-	return strings.Join([]string{t.customerBaseKey(partition, customerID), "state"}, ":")
+func (t sequenceQueueTopology) orderListKey(partition int64, orderKey string) string {
+	return strings.Join([]string{t.orderBaseKey(partition, orderKey), "list"}, ":")
+}
+
+func (t sequenceQueueTopology) orderStateKey(partition int64, orderKey string) string {
+	return strings.Join([]string{t.orderBaseKey(partition, orderKey), "state"}, ":")
+}
+
+func (t sequenceQueueTopology) messageStatusKey(partition int64, orderKey, id string) string {
+	return strings.Join([]string{t.orderBaseKey(partition, orderKey), "status", id}, ":")
 }

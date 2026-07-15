@@ -33,8 +33,8 @@ let detail = ref({});
 
 const getDetail = (async (paramid)=>{
   try {
-    let res = await request.get("/event_log/detail",{"params":{"id":paramid}});
-    let {_id,id,addTime,channel,executeTime,logType,maxLen,moodType,payload,topic,priority,retry,timeToRun} = res;
+	let res = await request.get(`events/${paramid}`);
+    let {_id,id,addTime,channel,executeTime,logType,maxLen,moodType,payload,topic,priority,retry,timeToRun,deadLetterRetry} = res;
     detail.value = {
       "Object Id":_id,
       "Message Id":id,
@@ -48,6 +48,7 @@ const getDetail = (async (paramid)=>{
       "Execute Time":executeTime,
       "Priority":priority,
       "Retry":retry,
+      "DeadLetterRetry":deadLetterRetry,
       "Time To Run":timeToRun};
   }catch (err) {
     //401 error

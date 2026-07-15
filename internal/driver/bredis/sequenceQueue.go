@@ -16,7 +16,7 @@ import (
 )
 
 type SequenceQueue struct {
-	base       Base
+	base       queueBase
 	maxLen     int64
 	partitions int64
 }
@@ -26,45 +26,34 @@ func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64,
 }
 
 func newSequenceQueueWithPartitions(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
+	partitions = normalizeSequenceQueuePartitionCount(partitions)
+	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
+		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config})
+	base.processLogger = NewProcessLog(client, prefix, partitions)
 	return &SequenceQueue{
 		maxLen:     maxLen,
-		partitions: normalizeSequenceQueuePartitionCount(partitions),
-		base: Base{
-			client:           client,
-			processLogger:    NewProcessLog(client, prefix),
-			prefix:           prefix,
-			deadLetterIdle:   deadLetterIdle,
-			consumerPoolSize: consumerPoolSize,
-			captureConfig:    config,
-		},
+		partitions: partitions,
+		base:       base,
 	}
-}
-
-func (q *SequenceQueue) Enqueue(ctx context.Context, data map[string]any) error {
-	return q.PublishNewSequence(ctx, data)
-}
-
-func (q *SequenceQueue) Dequeue(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
-	q.ConsumerSequence(ctx, channel, topic, do)
 }
 
 func (q *SequenceQueue) PublishNewSequence(ctx context.Context, data map[string]any) error {
-	channel, topic, customerID := sequenceQueueMessageRoute(data)
-	if customerID == "" {
-		return errors.New("missing customerId")
+	channel, topic, orderKey := sequenceQueueMessageRoute(data)
+	if orderKey == "" {
+		return errors.New("missing orderKey")
 	}
-	store := q.sequenceQueueStore(channel, topic, sequenceQueueMaxLen(q.maxLen, data))
+	store := q.sequenceQueueStore(channel, topic, q.maxLen)
 	if err := store.ensureMetadata(ctx); err != nil {
 		return err
 	}
-	result, err := store.enqueue(ctx, customerID, data)
+	result, err := store.enqueue(ctx, orderKey, data)
 	if err != nil {
 		return err
 	}
 	switch result.Code {
-	case sequenceQueueCodeScheduled, sequenceQueueCodeQueued:
+	case bstatus.SequenceQueueCodeScheduled, bstatus.SequenceQueueCodeQueued:
 		return nil
-	case sequenceQueueCodeFull:
+	case bstatus.SequenceQueueCodeFull:
 		return fmt.Errorf("sequence queue pending capacity reached: %d", result.Pending)
 	default:
 		return fmt.Errorf("sequence queue enqueue rejected: %s", result.Code)
@@ -85,14 +74,7 @@ func (q *SequenceQueue) sequenceQueueStore(channel, topic string, maxLen int64) 
 	return newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle)
 }
 
-func sequenceQueueMaxLen(defaultMaxLen int64, data map[string]any) int64 {
-	if maxLen := cast.ToInt64(data["maxLen"]); maxLen > 0 {
-		return maxLen
-	}
-	return defaultMaxLen
-}
-
-func sequenceQueueFailedData(channel, topic, customerID, raw string, cause error) map[string]any {
+func sequenceQueueFailedData(channel, topic, orderKey, raw string, cause error) map[string]any {
 	data := make(map[string]any)
 	if err := bjson.Unmarshal([]byte(raw), &data); err != nil {
 		data["payload"] = raw
@@ -100,7 +82,7 @@ func sequenceQueueFailedData(channel, topic, customerID, raw string, cause error
 	now := time.Now()
 	data["channel"] = channel
 	data["topic"] = topic
-	data["customerId"] = customerID
+	data["orderKey"] = orderKey
 	data["moodType"] = btype.SEQUENCE_QUEUE
 	data["status"] = bstatus.StatusFailed
 	data["level"] = bstatus.ErrLevel
@@ -115,9 +97,9 @@ func sequenceQueuePartitionName(partition int64) string {
 	return fmt.Sprintf("stream%03d", partition)
 }
 
-func sequenceQueueMessageRoute(data map[string]any) (channel, topic, customerID string) {
+func sequenceQueueMessageRoute(data map[string]any) (channel, topic, orderKey string) {
 	channel = cast.ToString(data["channel"])
 	topic = cast.ToString(data["topic"])
-	customerID = cast.ToString(data["customerId"])
-	return channel, topic, customerID
+	orderKey = cast.ToString(data["orderKey"])
+	return channel, topic, orderKey
 }

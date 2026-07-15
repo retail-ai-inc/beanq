@@ -24,16 +24,16 @@ func TestSequenceQueueTopologyNormalizesRouteAndPartitions(t *testing.T) {
 
 func TestSequenceQueueTopologyPartitionUsesHashKeySemantics(t *testing.T) {
 	topology := newSequenceQueueTopology("prefix", "channel", "topic", 11)
-	for _, customerID := range []string{"customer-1", "customer-2", "", "顾客"} {
-		got := topology.partition(customerID)
+	for _, orderKey := range []string{"order-1", "order-2", "", "订单"} {
+		got := topology.partition(orderKey)
 		if got < 0 || got >= topology.partitions {
-			t.Fatalf("partition(%q) = %d, out of range", customerID, got)
+			t.Fatalf("partition(%q) = %d, out of range", orderKey, got)
 		}
-		if want := int64(tool.HashKey([]byte(customerID), 11)); got != want {
-			t.Fatalf("partition(%q) = %d, want HashKey result %d", customerID, got, want)
+		if want := int64(tool.HashKey([]byte(orderKey), 11)); got != want {
+			t.Fatalf("partition(%q) = %d, want HashKey result %d", orderKey, got, want)
 		}
-		if again := topology.partition(customerID); again != got {
-			t.Fatalf("partition(%q) changed from %d to %d", customerID, got, again)
+		if again := topology.partition(orderKey); again != got {
+			t.Fatalf("partition(%q) changed from %d to %d", orderKey, got, again)
 		}
 	}
 }
@@ -42,36 +42,64 @@ func TestSequenceQueueDigestUsesUnambiguousLengthPrefixes(t *testing.T) {
 	if sequenceQueueDigest("ab", "c", "d") == sequenceQueueDigest("a", "bc", "d") {
 		t.Fatal("queue digest collided for different component boundaries")
 	}
-	if sequenceQueueCustomerDigest("customer") != sequenceQueueCustomerDigest("customer") {
-		t.Fatal("customer digest is not deterministic")
+	if sequenceQueueOrderKeyDigest("order") != sequenceQueueOrderKeyDigest("order") {
+		t.Fatal("order-key digest is not deterministic")
 	}
-	if len(sequenceQueueCustomerDigest("customer")) != 64 {
-		t.Fatalf("customer digest length = %d, want 64", len(sequenceQueueCustomerDigest("customer")))
+	if len(sequenceQueueOrderKeyDigest("order")) != 64 {
+		t.Fatalf("order-key digest length = %d, want 64", len(sequenceQueueOrderKeyDigest("order")))
 	}
 }
 
-func TestSequenceQueueTopologyKeysUseInternalTagFirst(t *testing.T) {
-	topology := newSequenceQueueTopology("prefix{injected}", "channel{injected}", "topic{injected}", 4)
-	customerID := "customer{injected}"
+func TestSequenceQueueTopologyKeysUseRouteThenInternalTag(t *testing.T) {
+	topology := newSequenceQueueTopology("prefix", "channel", "topic", 4)
+	orderKey := "order{injected}"
 	partition := int64(2)
 	keys := []string{
 		topology.schedulerKey(partition),
-		topology.pendingKey(partition),
-		topology.customerListKey(partition, customerID),
-		topology.customerStateKey(partition, customerID),
+		topology.partitionStateKey(partition),
+		topology.isolationKey(partition),
+		topology.orderListKey(partition, orderKey),
+		topology.orderStateKey(partition, orderKey),
 	}
 
 	tag := topology.partitionTag(partition)
 	for _, key := range keys {
-		if !strings.HasPrefix(key, tag+":") {
-			t.Fatalf("key %q does not start with internal tag %q", key, tag)
+		if !strings.HasPrefix(key, "prefix:channel:topic:"+tag+":") {
+			t.Fatalf("key %q does not start with configured route and internal tag %q", key, tag)
 		}
 		if firstRedisHashTag(key) != strings.Trim(tag, "{}") {
 			t.Fatalf("key %q selected injected hash tag", key)
 		}
 	}
+	if !strings.HasPrefix(topology.metadataKey(), "prefix:channel:topic:"+topology.metadataTag()+":") {
+		t.Fatalf("metadata key %q does not start with configured route", topology.metadataKey())
+	}
 	if firstRedisHashTag(topology.metadataKey()) != strings.Trim(topology.metadataTag(), "{}") {
 		t.Fatalf("metadata key %q selected injected hash tag", topology.metadataKey())
+	}
+	if !strings.Contains(topology.metadataKey(), ":sequence_queue:") {
+		t.Fatalf("metadata key %q is not in v3 namespace", topology.metadataKey())
+	}
+	if strings.Contains(topology.metadataKey(), ":v2:") {
+		t.Fatalf("metadata key %q repeats the version outside its hash tag", topology.metadataKey())
+	}
+}
+
+func TestSequenceQueueMessageStatusKeyUsesOrderKeyPartition(t *testing.T) {
+	topology := newSequenceQueueTopology("prefix", "channel", "topic", 4)
+	id := "message-01"
+	orderKey := "order01"
+	partition := topology.partition(orderKey)
+
+	key := topology.messageStatusKey(partition, orderKey, id)
+	if !strings.HasPrefix(key, "prefix:channel:topic:"+topology.partitionTag(partition)+":") {
+		t.Fatalf("status key %q does not use order-key partition tag %q", key, topology.partitionTag(partition))
+	}
+	if !strings.HasSuffix(key, ":status:"+id) {
+		t.Fatalf("status key %q does not include message id", key)
+	}
+	if firstRedisHashTag(key) != strings.Trim(topology.partitionTag(partition), "{}") {
+		t.Fatalf("status key %q selected wrong Redis hash tag", key)
 	}
 }
 
@@ -79,9 +107,10 @@ func TestSequenceQueueTopologyKeysShareOnlyTheirPartitionSlot(t *testing.T) {
 	topology := newSequenceQueueTopology("prefix", "channel", "topic", 4)
 	partition0 := []string{
 		topology.schedulerKey(0),
-		topology.pendingKey(0),
-		topology.customerListKey(0, "customer-a"),
-		topology.customerStateKey(0, "customer-b"),
+		topology.partitionStateKey(0),
+		topology.isolationKey(0),
+		topology.orderListKey(0, "order-a"),
+		topology.orderStateKey(0, "order-b"),
 	}
 	wantTag := firstRedisHashTag(partition0[0])
 	for _, key := range partition0[1:] {

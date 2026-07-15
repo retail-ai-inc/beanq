@@ -11,8 +11,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	"github.com/retail-ai-inc/beanq/v4/internal/btype"
-	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -37,9 +35,12 @@ func (t *EventLog) List(w http.ResponseWriter, r *http.Request) {
 
 	eventName := cast.ToString(r.Context().Value(EventName{}))
 
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 	query := r.URL.Query()
-	page := cast.ToInt64(query.Get("page"))
-	pageSize := cast.ToInt64(query.Get("pageSize"))
 	id := query.Get("id")
 	status := query.Get("status")
 	moodType := query.Get("moodType")
@@ -65,49 +66,25 @@ func (t *EventLog) List(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if page <= 0 {
-		page = 0
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
-	flush, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "server err", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	ticker := time.NewTicker(300 * time.Millisecond)
-	defer ticker.Stop()
-
 	datas := make(map[string]any, 3)
 	nctx := r.Context()
-
-	for {
-		select {
-		case <-nctx.Done():
-			return
-		case <-ticker.C:
-
-			data, total, err := t.mogx.EventLogs(nctx, filter, page, pageSize)
-			if err != nil {
-				result.Code = "1001"
-				result.Msg = err.Error()
-			}
-			if err == nil {
-				datas["data"] = data
-				datas["total"] = total
-				datas["cursor"] = page
-				result.Data = datas
-			}
-
-			_ = result.EventMsg(w, eventName)
-			flush.Flush()
-			ticker.Reset(5 * time.Second)
+	emit := func() error {
+		data, total, err := t.mogx.EventLogs(nctx, filter, page.Page, page.PageSize)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+		} else {
+			result.Code = berror.SuccessCode
+			result.Msg = ""
+			datas["data"] = data
+			datas["total"] = total
+			datas["cursor"] = page.Page
+			result.Data = datas
 		}
+		return result.EventMsg(w, eventName)
+	}
+	if err := streamEvents(w, r, 5*time.Second, emit); err != nil {
+		return
 	}
 }
 
@@ -142,6 +119,10 @@ func (t *EventLog) Delete(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
+	if count == 0 {
+		writeAPIError(w, http.StatusNotFound, berror.MissParameterCode, "event not found")
+		return
+	}
 	res.Data = count
 	_ = res.Json(w, http.StatusOK)
 }
@@ -160,6 +141,10 @@ func (t *EventLog) Edit(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 
+	}
+	if count == 0 {
+		writeAPIError(w, http.StatusNotFound, berror.MissParameterCode, "event not found")
+		return
 	}
 	res.Data = count
 	_ = res.Json(w, http.StatusOK)
@@ -192,10 +177,6 @@ func (t *EventLog) Retry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	moodType := ""
-	if v, ok := data["moodType"]; ok {
-		moodType = v.(string)
-	}
 	if _, ok := data["addTime"]; ok {
 		data["addTime"] = time.Now()
 	}
@@ -224,29 +205,10 @@ func (t *EventLog) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var bk enqueueQueue
-	if moodType == string(btype.SEQUENCE) {
-		_ = res.Json(w, http.StatusOK)
-		return
-	}
-	if moodType == string(btype.DELAY) {
-
-		bk = bredis.NewSchedule(t.client, t.prefix, 100, 10, 20*time.Minute, nil)
-		if err := bk.Enqueue(nctx, data); err != nil {
-			res.Msg = err.Error()
-			res.Code = berror.InternalServerErrorCode
-			_ = res.Json(w, http.StatusOK)
-			return
-		}
-		_ = res.Json(w, http.StatusOK)
-		return
-	}
-
-	bk = bredis.NewNormal(t.client, t.prefix, 2000, 100, 10, 20*time.Minute, nil)
-	if err := bk.Enqueue(nctx, data); err != nil {
+	if err := publishRetry(nctx, data, defaultRetryPublisherFactory(t.client, t.prefix)); err != nil {
 		res.Msg = err.Error()
-		res.Code = berror.InternalServerErrorCode
-		_ = res.Json(w, http.StatusOK)
+		res.Code = berror.TypeErrorCode
+		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 	_ = res.Json(w, http.StatusOK)

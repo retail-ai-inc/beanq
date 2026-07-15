@@ -266,6 +266,9 @@ func (t *BMongo) DetailEventLog(ctx context.Context, id string) (bson.M, error) 
 }
 
 func (t *BMongo) EventRetryCheck(ctx context.Context, id string) (bool, error) {
+	if id == "" {
+		return false, errors.New("id is required")
+	}
 	filter := bson.M{}
 	if id != "" {
 		filter["id"] = id
@@ -281,6 +284,9 @@ func (t *BMongo) EventRetryCheck(ctx context.Context, id string) (bool, error) {
 }
 
 func (t *BMongo) Delete(ctx context.Context, id string) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 	filter := bson.M{}
 	if id != "" {
 		nid, err := primitive.ObjectIDFromHex(id)
@@ -298,6 +304,9 @@ func (t *BMongo) Delete(ctx context.Context, id string) (int64, error) {
 }
 
 func (t *BMongo) Edit(ctx context.Context, id string, payload any) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 	filter := bson.M{}
 	if id != "" {
 		nid, err := primitive.ObjectIDFromHex(id)
@@ -354,6 +363,9 @@ func (t *BMongo) OptLogs(ctx context.Context, page, pageSize int64) ([]bson.M, i
 }
 
 func (t *BMongo) DeleteOptLog(ctx context.Context, id string) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 	filter := bson.M{}
 	if id != "" {
 		nid, err := primitive.ObjectIDFromHex(id)
@@ -389,6 +401,9 @@ func (t *BMongo) AddUser(ctx context.Context, user *User) error {
 }
 
 func (t *BMongo) DeleteUser(ctx context.Context, id string) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 
 	filter := bson.M{}
 	if id != "" {
@@ -500,6 +515,9 @@ func (t *BMongo) CheckGoogleUser(ctx context.Context, account string) (*User, er
 }
 
 func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 	filter := bson.M{}
 	if id != "" {
 		nid, err := primitive.ObjectIDFromHex(id)
@@ -510,23 +528,20 @@ func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (
 	}
 
 	var values bson.D
-	if v, ok := data["password"]; ok {
-		if cast.ToString(v) != "" {
-			values = append(values, bson.E{Key: "password", Value: v})
-		}
+	if v, ok := stringPointerValue(data["password"]); ok && v != "" {
+		values = append(values, bson.E{Key: "password", Value: v})
 	}
-	if v, ok := data["type"]; ok {
-		if cast.ToString(v) != "" {
-			values = append(values, bson.E{Key: "type", Value: v})
-		}
+	if v, ok := stringPointerValue(data["type"]); ok && v != "" {
+		values = append(values, bson.E{Key: "type", Value: v})
 	}
-	if v, ok := data["active"]; ok {
+	if v, ok := int32PointerValue(data["active"]); ok {
 		values = append(values, bson.E{Key: "active", Value: v})
 	}
-	if v, ok := data["detail"]; ok {
-		if cast.ToString(v) != "" {
-			values = append(values, bson.E{Key: "detail", Value: v})
-		}
+	if v, ok := stringPointerValue(data["detail"]); ok {
+		values = append(values, bson.E{Key: "detail", Value: v})
+	}
+	if v, ok := stringPointerValue(data["roleId"]); ok {
+		values = append(values, bson.E{Key: "roleId", Value: v})
 	}
 	values = append(values, bson.E{Key: "updateAt", Value: time.Now()})
 
@@ -541,7 +556,7 @@ func (t *BMongo) EditUser(ctx context.Context, id string, data map[string]any) (
 	return result.ModifiedCount, nil
 }
 
-func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, float64, error) {
+func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int64) ([]bson.M, int64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
 		skip = 0
@@ -550,6 +565,7 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 	opts.SetSkip(skip)
 	opts.SetLimit(pageSize)
 	opts.SetSort(bson.D{{Key: "addTime", Value: 1}})
+	opts.SetProjection(bson.M{"password": 0})
 
 	cursor, err := t.database.Collection(t.managerCollection).Find(ctx, filter, opts)
 	if err != nil {
@@ -566,7 +582,23 @@ func (t *BMongo) UserLogs(ctx context.Context, filter bson.M, page, pageSize int
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+	return data, total, nil
+}
+
+func stringPointerValue(value any) (string, bool) {
+	pointer, ok := value.(*string)
+	if !ok || pointer == nil {
+		return "", false
+	}
+	return *pointer, true
+}
+
+func int32PointerValue(value any) (int32, bool) {
+	pointer, ok := value.(*int32)
+	if !ok || pointer == nil {
+		return 0, false
+	}
+	return *pointer, true
 }
 
 type Role struct {
@@ -576,7 +608,7 @@ type Role struct {
 	Roles    []int     `bson:"roles" json:"roles"`
 }
 
-func (t *BMongo) Roles(ctx context.Context, m bson.M, page, pageSize int64) ([]bson.M, float64, error) {
+func (t *BMongo) Roles(ctx context.Context, m bson.M, page, pageSize int64) ([]bson.M, int64, error) {
 	skip := (page - 1) * pageSize
 	if skip < 0 {
 		skip = 0
@@ -601,7 +633,7 @@ func (t *BMongo) Roles(ctx context.Context, m bson.M, page, pageSize int64) ([]b
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+	return data, total, nil
 }
 
 func (t *BMongo) AddRole(ctx context.Context, role *Role) error {
@@ -612,6 +644,9 @@ func (t *BMongo) AddRole(ctx context.Context, role *Role) error {
 }
 
 func (t *BMongo) DeleteRole(ctx context.Context, id string) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 
 	filter := bson.M{}
 	if id != "" {
@@ -629,6 +664,9 @@ func (t *BMongo) DeleteRole(ctx context.Context, id string) (int64, error) {
 }
 
 func (t *BMongo) EditRole(ctx context.Context, id string, data map[string]any) (int64, error) {
+	if id == "" {
+		return 0, errors.New("id is required")
+	}
 	filter := bson.M{}
 	if id != "" {
 		nid, err := primitive.ObjectIDFromHex(id)
@@ -800,12 +838,18 @@ func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) (string, error
 }
 
 func (t *BMongo) TenantsDelete(ctx context.Context, id string) error {
+	if id == "" {
+		return errors.New("id is required")
+	}
 
 	_, err := t.database.Collection(t.tenantCollection).DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
 
 func (t *BMongo) TenantsEdit(ctx context.Context, id string, tenants *Tenants) error {
+	if id == "" {
+		return errors.New("id is required")
+	}
 
 	data := bson.M{
 		"$set": bson.M{
@@ -819,7 +863,7 @@ func (t *BMongo) TenantsEdit(ctx context.Context, id string, tenants *Tenants) e
 	return err
 }
 
-func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenants, float64, error) {
+func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenants, int64, error) {
 
 	skip := (page - 1) * pageSize
 	if skip < 0 {
@@ -847,7 +891,7 @@ func (t *BMongo) TenantsList(ctx context.Context, page, pageSize int64) ([]Tenan
 	if err != nil {
 		return nil, 0, err
 	}
-	return data, math.Ceil(float64(total) / float64(pageSize)), nil
+	return data, total, nil
 
 }
 

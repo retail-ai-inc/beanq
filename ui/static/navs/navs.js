@@ -26,10 +26,6 @@ const Nav = [
                     {id:16,label:"Retry",mark:"retry",value:"",pid:13}
                 ]
             },
-            {id:32,label: "Sequence Lock",mark:"sequenceLock",to:"/admin/log/sequence_lock",value:"",pid:4,children: [
-                    {id:33,label:"Unlock",mark:"unlock",value:"",pid:32},
-                ]
-            }
         ]
     },
     {id:17,label:"Redis",mark:"redis",value:"",tos:["/admin/redis","/admin/redis/monitor"],pid:0,children: [

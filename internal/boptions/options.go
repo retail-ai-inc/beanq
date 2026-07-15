@@ -57,8 +57,18 @@ type Options struct {
 // ResolveSequenceQueuePartitions keeps the legacy MinConsumers-based topology when
 // no dedicated partition count is configured.
 func ResolveSequenceQueuePartitions(partitions, minConsumers int64) int64 {
+	return ResolveQueuePartitions(partitions, minConsumers)
+}
+
+// ResolveNormalQueuePartitions keeps the legacy MinConsumers-based topology when
+// no dedicated partition count is configured.
+func ResolveNormalQueuePartitions(partitions, minConsumers int64) int64 {
+	return ResolveQueuePartitions(partitions, minConsumers)
+}
+
+func ResolveQueuePartitions(partitions, fallback int64) int64 {
 	if partitions == 0 {
-		return minConsumers
+		return fallback
 	}
 	return partitions
 }

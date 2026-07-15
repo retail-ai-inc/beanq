@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	bjson "github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
@@ -15,25 +15,51 @@ import (
 	"github.com/rs/xid"
 )
 
-const sequenceQueueReadBlock = 500 * time.Millisecond
+const (
+	sequenceQueueAutoClaimBatch = int64(16)
+)
 
 type sequenceQueueExecutor func(context.Context, string, string, string, public.CallbackWithRetry) (map[string]any, error)
 
+type sequenceQueueRuntimeStore interface {
+	ensureMetadata(context.Context) error
+	bootstrapGroups(context.Context, string) error
+	readOne(context.Context, string, string, int64, time.Duration) (*sequenceQueueToken, error)
+	autoClaim(context.Context, string, string, int64, time.Duration, string, int64) (sequenceQueueAutoClaimResult, error)
+	acquireWithID(context.Context, string, string, string, sequenceQueueToken) (sequenceQueueAcquireResult, error)
+	renew(context.Context, string, string, string, sequenceQueueToken) (sequenceQueueHeartbeatResult, error)
+	finalizeWithID(context.Context, string, string, string, sequenceQueueToken, string) (sequenceQueueFinalizeResult, error)
+}
+
 type sequenceQueueRuntime struct {
-	store      *sequenceQueueStore
+	store      sequenceQueueRuntimeStore
 	logger     processLogger
 	execute    sequenceQueueExecutor
 	workers    int
 	partitions int64
 	lease      time.Duration
 	instanceID string
+	runtime    *partitionRuntime[sequenceQueueToken]
 }
+
+type sequenceQueueRuntimeAdapter struct {
+	runtime *sequenceQueueRuntime
+}
+
+type sequenceQueueStoreState uint8
+
+const (
+	sequenceQueueStoreNormal sequenceQueueStoreState = iota
+	sequenceQueueStoreStaleOrCleaned
+	sequenceQueueStoreIsolated
+	sequenceQueueStoreFatal
+)
 
 func newSequenceQueueRuntime(store *sequenceQueueStore, processLogger processLogger, workers int, execute sequenceQueueExecutor) *sequenceQueueRuntime {
 	if workers <= 0 {
 		workers = 1
 	}
-	return &sequenceQueueRuntime{
+	runtime := &sequenceQueueRuntime{
 		store:      store,
 		logger:     processLogger,
 		execute:    execute,
@@ -42,72 +68,64 @@ func newSequenceQueueRuntime(store *sequenceQueueStore, processLogger processLog
 		lease:      store.lease,
 		instanceID: xid.New().String(),
 	}
+	runtime.runtime = newPartitionRuntime[sequenceQueueToken](&sequenceQueueRuntimeAdapter{runtime: runtime})
+	return runtime
 }
 
 func (r *sequenceQueueRuntime) run(ctx context.Context, channel, topic string, handler public.CallbackWithRetry) {
-	if err := r.store.ensureMetadata(ctx); err != nil {
-		logger.New().Error(err)
-		return
+	if r.runtime == nil {
+		r.runtime = newPartitionRuntime[sequenceQueueToken](&sequenceQueueRuntimeAdapter{runtime: r})
 	}
-	group := channel
-	if err := r.store.bootstrapGroups(ctx, group); err != nil {
-		logger.New().Error(err)
-		return
-	}
-
-	var wait sync.WaitGroup
-	wait.Add(r.workers)
-	for workerID := 0; workerID < r.workers; workerID++ {
-		go func(workerID int) {
-			defer wait.Done()
-			r.worker(ctx, channel, topic, group, workerID, handler)
-		}(workerID)
-	}
-	wait.Wait()
+	r.runtime.run(ctx, channel, topic, handler)
 }
 
-func (r *sequenceQueueRuntime) worker(ctx context.Context, channel, topic, group string, workerID int, handler public.CallbackWithRetry) {
-	consumer := fmt.Sprintf("sequence-queue-%s-%d", r.instanceID, workerID)
-	owner := consumer
-	offset := int64(workerID) % r.partitions
-	claimEvery := r.heartbeatInterval()
-	lastClaim := make([]time.Time, r.partitions)
-
-	for ctx.Err() == nil {
-		for scanned := int64(0); scanned < r.partitions && ctx.Err() == nil; scanned++ {
-			partition := (offset + scanned) % r.partitions
-			if lastClaim[partition].IsZero() || time.Since(lastClaim[partition]) >= claimEvery {
-				lastClaim[partition] = time.Now()
-				token, _, err := r.store.autoClaimOne(ctx, group, consumer, partition, r.lease)
-				if err == nil {
-					r.process(ctx, channel, topic, group, owner, consumer, *token, handler)
-					continue
-				}
-				if !ignorableSequenceQueueReadError(ctx, err) {
-					logger.New().Error(err)
-				}
-			}
-
-			token, err := r.store.readOne(ctx, group, consumer, partition, sequenceQueueReadBlock)
-			if err == nil {
-				r.process(ctx, channel, topic, group, owner, consumer, *token, handler)
-				continue
-			}
-			if !ignorableSequenceQueueReadError(ctx, err) {
-				logger.New().Error(err)
-			}
-		}
-		offset = (offset + 1) % r.partitions
+func (a *sequenceQueueRuntimeAdapter) Name() string           { return "sequence queue" }
+func (a *sequenceQueueRuntimeAdapter) ConsumerPrefix() string { return "sequence-queue" }
+func (a *sequenceQueueRuntimeAdapter) InstanceID() string     { return a.runtime.instanceID }
+func (a *sequenceQueueRuntimeAdapter) Partitions() int64      { return a.runtime.partitions }
+func (a *sequenceQueueRuntimeAdapter) Workers() int           { return a.runtime.workers }
+func (a *sequenceQueueRuntimeAdapter) DispatchCapacity() int  { return a.runtime.workers }
+func (a *sequenceQueueRuntimeAdapter) EnsureMetadata(ctx context.Context) error {
+	return a.runtime.store.ensureMetadata(ctx)
+}
+func (a *sequenceQueueRuntimeAdapter) BootstrapGroups(ctx context.Context, group string) error {
+	return a.runtime.store.bootstrapGroups(ctx, group)
+}
+func (a *sequenceQueueRuntimeAdapter) BootstrapPartition(ctx context.Context, group string, _ int64) error {
+	return a.runtime.store.bootstrapGroups(ctx, group)
+}
+func (a *sequenceQueueRuntimeAdapter) StartBackground(context.Context, string, string) {}
+func (a *sequenceQueueRuntimeAdapter) Claim(ctx context.Context, group, consumer string, partition int64, cursor string) ([]sequenceQueueToken, string, error) {
+	if cursor == "" {
+		cursor = "0-0"
 	}
+	claimed, err := a.runtime.store.autoClaim(ctx, group, consumer, partition, a.runtime.lease, cursor, sequenceQueueAutoClaimBatch)
+	return claimed.Tokens, claimed.Cursor, err
+}
+func (a *sequenceQueueRuntimeAdapter) Read(ctx context.Context, group, consumer string, partition int64) ([]sequenceQueueToken, error) {
+	token, err := a.runtime.store.readOne(ctx, group, consumer, partition, partitionNonBlockingRead)
+	if err != nil {
+		return nil, err
+	}
+	return []sequenceQueueToken{*token}, nil
+}
+func (a *sequenceQueueRuntimeAdapter) Process(ctx context.Context, channel, topic, group, consumer string, token sequenceQueueToken, handler public.CallbackWithRetry) {
+	a.runtime.process(ctx, channel, topic, group, consumer, token, handler)
 }
 
-func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, group, owner, consumer string, token sequenceQueueToken, handler public.CallbackWithRetry) {
-	acquired, err := r.store.acquire(ctx, group, owner, consumer, token)
+func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, group, consumer string, token sequenceQueueToken, handler public.CallbackWithRetry) {
+	acquisitionID := xid.New().String()
+	acquired, err := r.store.acquireWithID(ctx, group, consumer, acquisitionID, token)
 	if err != nil {
 		logger.New().Error(err)
 		return
 	}
-	if acquired.Code != sequenceQueueCodeAcquired {
+	if state := classifySequenceQueueStoreCode(acquired.Code); state != sequenceQueueStoreNormal {
+		r.recordStoreState("acquire", token, acquired.Code, state)
+		return
+	}
+	if acquired.Code != bstatus.SequenceQueueCodeAcquired {
+		r.recordStoreState("acquire", token, acquired.Code, sequenceQueueStoreFatal)
 		return
 	}
 
@@ -115,7 +133,7 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 	heartbeatDone := make(chan struct{})
 	go func() {
 		defer close(heartbeatDone)
-		r.heartbeat(leaseCtx, cancelLease, group, owner, consumer, token)
+		r.heartbeat(leaseCtx, cancelLease, group, consumer, acquisitionID, token)
 	}()
 	defer func() {
 		cancelLease()
@@ -127,7 +145,7 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 		if errors.Is(executeErr, context.Canceled) {
 			return
 		}
-		result = sequenceQueueFailedData(channel, topic, token.CustomerID, acquired.Head, executeErr)
+		result = sequenceQueueFailedData(channel, topic, token.OrderKey, acquired.Head, executeErr)
 	}
 	if leaseCtx.Err() != nil {
 		return
@@ -137,17 +155,21 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 		return
 	}
 
-	finalized, err := r.store.finalize(leaseCtx, group, owner, consumer, token, acquired.Head)
+	finalized, err := r.store.finalizeWithID(leaseCtx, group, consumer, acquisitionID, token, acquired.Head)
 	if err != nil {
 		logger.New().Error(err)
 		return
 	}
-	if finalized.Code != sequenceQueueCodeSuccessor && finalized.Code != sequenceQueueCodeEmpty {
-		logger.New().Error(fmt.Errorf("sequence queue finalize rejected token %s: %s", token.SchedulerID, finalized.Code))
+	state := classifySequenceQueueStoreCode(finalized.Code)
+	if state != sequenceQueueStoreNormal || (finalized.Code != bstatus.SequenceQueueCodeSuccessor && finalized.Code != bstatus.SequenceQueueCodeEmpty) {
+		if state == sequenceQueueStoreNormal {
+			state = sequenceQueueStoreFatal
+		}
+		r.recordStoreState("finalize", token, finalized.Code, state)
 	}
 }
 
-func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease context.CancelFunc, group, owner, consumer string, token sequenceQueueToken) {
+func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease context.CancelFunc, group, consumer, acquisitionID string, token sequenceQueueToken) {
 	ticker := time.NewTicker(r.heartbeatInterval())
 	defer ticker.Stop()
 	for {
@@ -155,7 +177,7 @@ func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease contex
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			result, err := r.store.heartbeat(ctx, group, owner, consumer, token)
+			result, err := r.store.renew(ctx, group, consumer, acquisitionID, token)
 			if err != nil {
 				if ctx.Err() == nil {
 					logger.New().Error(err)
@@ -163,11 +185,54 @@ func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease contex
 				}
 				return
 			}
-			if result.Code != sequenceQueueCodeHeartbeat {
+			state := classifySequenceQueueStoreCode(result.Code)
+			if state != sequenceQueueStoreNormal || result.Code != bstatus.SequenceQueueCodeRenewed {
+				if state == sequenceQueueStoreNormal {
+					state = sequenceQueueStoreFatal
+				}
+				r.recordStoreState("renew", token, result.Code, state)
 				cancelLease()
 				return
 			}
 		}
+	}
+}
+
+func classifySequenceQueueStoreCode(code string) sequenceQueueStoreState {
+	switch code {
+	case bstatus.SequenceQueueCodeAcquired, bstatus.SequenceQueueCodeRenewed, bstatus.SequenceQueueCodeSuccessor,
+		bstatus.SequenceQueueCodeEmpty, bstatus.SequenceQueueCodeBusy:
+		return sequenceQueueStoreNormal
+	case bstatus.SequenceQueueCodeStaleAcquisition, bstatus.SequenceQueueCodeStaleCleaned,
+		bstatus.SequenceQueueCodeOrphanCleaned, bstatus.SequenceQueueCodeEmptyCleaned,
+		bstatus.SequenceQueueCodeNotPending, bstatus.SequenceQueueCodePELOwnerMismatch:
+		return sequenceQueueStoreStaleOrCleaned
+	case bstatus.SequenceQueueCodeIsolated, bstatus.SequenceQueueCodeHeadMismatch:
+		return sequenceQueueStoreIsolated
+	default:
+		return sequenceQueueStoreFatal
+	}
+}
+
+func (r *sequenceQueueRuntime) recordStoreState(operation string, token sequenceQueueToken, code string, state sequenceQueueStoreState) {
+	err := fmt.Errorf("sequence queue %s token %s order key %s returned %s (state=%s)", operation, token.SchedulerID, token.OrderKey, code, state)
+	if state == sequenceQueueStoreStaleOrCleaned {
+		logger.New().Info(err)
+		return
+	}
+	logger.New().Error(err)
+}
+
+func (s sequenceQueueStoreState) String() string {
+	switch s {
+	case sequenceQueueStoreNormal:
+		return "normal"
+	case sequenceQueueStoreStaleOrCleaned:
+		return "stale/cleaned"
+	case sequenceQueueStoreIsolated:
+		return "isolated"
+	default:
+		return "fatal"
 	}
 }
 

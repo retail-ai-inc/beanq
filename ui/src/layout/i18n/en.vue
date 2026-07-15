@@ -26,7 +26,6 @@
     "retry": "Retry",
     "dlqLog": "DLQ Log",
     "workflowLog": "Workflow Log",
-    "sequenceLock": "Sequence Log",
     "redis": "Redis",
     "info": "Info",
     "command": "Command",

@@ -11,14 +11,20 @@ import (
 )
 
 type ProcessLog struct {
-	client redis.UniversalClient
-	prefix string
+	client                  redis.UniversalClient
+	prefix                  string
+	sequenceQueuePartitions int64
 }
 
-func NewProcessLog(client redis.UniversalClient, prefix string) *ProcessLog {
+func NewProcessLog(client redis.UniversalClient, prefix string, sequenceQueuePartitions ...int64) *ProcessLog {
+	partitions := int64(0)
+	if len(sequenceQueuePartitions) > 0 {
+		partitions = normalizeSequenceQueuePartitionCount(sequenceQueuePartitions[0])
+	}
 	return &ProcessLog{
-		client: client,
-		prefix: prefix,
+		client:                  client,
+		prefix:                  prefix,
+		sequenceQueuePartitions: partitions,
 	}
 }
 
@@ -32,9 +38,9 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
-	if moodType == btype.SEQUENCE || moodType == btype.SEQUENCE_QUEUE || moodType == btype.SEQUENCE_BY_LOCK {
+	if moodType == btype.SEQUENCE_QUEUE {
 
-		channel, id, topic := "", "", ""
+		channel, id, topic, orderKey := "", "", "", ""
 		if v, ok := data["channel"]; ok {
 			channel = cast.ToString(v)
 		}
@@ -44,11 +50,11 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 		if v, ok := data["topic"]; ok {
 			topic = cast.ToString(v)
 		}
-
-		key := tool.MakeStatusKey(t.prefix, channel, topic, id)
-		if moodType == btype.SEQUENCE_BY_LOCK {
-			key = tool.MakeSequenceDataKey(t.prefix, channel, topic, id)
+		if v, ok := data["orderKey"]; ok {
+			orderKey = cast.ToString(v)
 		}
+
+		key := t.sequenceQueueStatusKey(channel, topic, orderKey, id)
 		if err := SaveHSetScript.Run(ctx, t.client, []string{key}, data).Err(); err != nil {
 			return err
 		}
@@ -68,4 +74,13 @@ func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
 	}
 
 	return nil
+}
+
+func (t *ProcessLog) sequenceQueueStatusKey(channel, topic, orderKey, id string) string {
+	if t.sequenceQueuePartitions <= 0 || channel == "" || topic == "" || orderKey == "" || id == "" {
+		return tool.MakeStatusKey(t.prefix, channel, topic, id)
+	}
+	topology := newSequenceQueueTopology(t.prefix, channel, topic, t.sequenceQueuePartitions)
+	partition := topology.partition(orderKey)
+	return topology.messageStatusKey(partition, orderKey, id)
 }

@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/btls"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func mongoClientOptions(config *Mongo) (*options.ClientOptions, error) {
 	if config == nil {
-		return nil, ErrInvalidConfig.WithMessage("mongo config is nil")
+		return nil, berror.ErrInvalidConfig.WithMessage("mongo config is nil")
 	}
 
 	opts := options.Client().ApplyURI(mongoURI(config.Host, config.Port)).

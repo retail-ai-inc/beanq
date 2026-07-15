@@ -97,10 +97,10 @@ const googlereCAPTCHA = async(data)=>{
 const debouncedHandleKeydown = Base.Debounce(handleKeyDown, 400);
 
 onMounted(async ()=>{
-  let {token=""} = useRe.currentRoute.value.query;
+	let {authenticated=""} = useRe.currentRoute.value.query;
 
-  if (token !== ""){
-    await Storage.SetItem("token",token);
+	if (authenticated === "1"){
+	await Storage.SetItem("authenticated","1");
     useRe.push("/admin/home");
     return;
   }
@@ -211,7 +211,7 @@ async function login(username,password,expiredTimeBool){
 
   try{
     let res = await loginApi.Login(username,password,expiredTimeBool);
-    Storage.SetItem("token",res.token);
+	Storage.SetItem("authenticated","1");
     Storage.SetItem("roles",res.roles);
     Storage.SetItem("nodeId",res.nodeId);
 
@@ -222,13 +222,13 @@ async function login(username,password,expiredTimeBool){
       useRe.push("/admin/home");
     },1500)
   }catch(err){
-    msg.value = err.response.data.msg;
+	msg.value = err.response.data.msg;
     disabled.value = false;
   }
 }
 
 function googleLogin(){
-  window.location.href="/googleLogin"
+	window.location.href="/api/v1/auth/google"
 }
 
 const {user,title} = toRefs(formData);

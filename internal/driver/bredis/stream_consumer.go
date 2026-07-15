@@ -1,0 +1,54 @@
+package bredis
+
+import (
+	"context"
+	"math/rand"
+	"strings"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/v4/internal/capture"
+)
+
+type BlockDuration func() time.Duration
+
+type queueBaseOptions struct {
+	client           redis.UniversalClient
+	prefix           string
+	consumerPoolSize int
+	deadLetterIdle   time.Duration
+	captureConfig    *capture.Config
+}
+
+type queueBase struct {
+	client           redis.UniversalClient
+	processLogger    processLogger
+	prefix           string
+	consumerPoolSize int
+	deadLetterIdle   time.Duration
+	captureConfig    *capture.Config
+}
+
+func newQueueBase(options queueBaseOptions) queueBase {
+	return queueBase{
+		client:           options.client,
+		processLogger:    NewProcessLog(options.client, options.prefix),
+		prefix:           options.prefix,
+		consumerPoolSize: options.consumerPoolSize,
+		deadLetterIdle:   options.deadLetterIdle,
+		captureConfig:    options.captureConfig,
+	}
+}
+
+func (b *queueBase) addLog(ctx context.Context, data map[string]any) error {
+	return b.processLogger.AddLog(ctx, data)
+}
+
+//nolint:gosec
+var DefaultBlockDuration BlockDuration = func() time.Duration {
+	return time.Duration(rand.Int63n(9)+1) * time.Second
+}
+
+func isConsumerGroupExistsError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "BUSYGROUP Consumer Group name already exists")
+}

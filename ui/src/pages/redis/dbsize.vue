@@ -63,7 +63,7 @@ const [toastRef,toastId] = [ref(null),ref("toastId")]
 const getKeys = async () => {
   loading.value = true;
   try {
-    await request.get('/redis/keys').then(res => {
+	await request.get('redis/keys').then(res => {
       dbs.value = res;
       setTimeout(()=>{
         loading.value = false;
@@ -91,7 +91,7 @@ const deleteModalItem= async (item)=>{
 
 const deleteInfo = async ()=>{
   try {
-    await request.delete(`/redis/${deleteId.value}`,{
+	await request.delete(`redis/keys/${encodeURIComponent(deleteId.value)}`,{
       data:{
         key:deleteId.value
       }

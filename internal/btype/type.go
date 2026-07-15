@@ -4,10 +4,9 @@ package btype
 type SubscribeType int
 
 const (
-	NormalSubscribe           = SubscribeType(1)
-	SequentialSubscribe       = SubscribeType(2)
-	DelaySubscribe            = SubscribeType(3)
-	SequentialByLockSubscribe = SubscribeType(4)
+	NormalSubscribe     = SubscribeType(1)
+	SequentialSubscribe = SubscribeType(2)
+	DelaySubscribe      = SubscribeType(3)
 )
 
 // MoodType message type
@@ -22,9 +21,7 @@ func (m MoodType) MarshalBinary() ([]byte, error) {
 }
 
 const (
-	NORMAL           MoodType = "normal"
-	DELAY            MoodType = "delay"
-	SEQUENCE         MoodType = "sequential"
-	SEQUENCE_QUEUE   MoodType = "sequence_queue"
-	SEQUENCE_BY_LOCK MoodType = "sequential_by_lock"
+	NORMAL         MoodType = "normal"
+	DELAY          MoodType = "delay"
+	SEQUENCE_QUEUE MoodType = "sequence_queue"
 )

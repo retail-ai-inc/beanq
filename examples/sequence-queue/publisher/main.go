@@ -21,8 +21,8 @@ const (
 )
 
 type sequenceMessage struct {
-	CustomerId string `json:"customerId"`
-	Body       string `json:"body"`
+	OrderKey string `json:"orderKey"`
+	Body     string `json:"body"`
 }
 
 var (
@@ -56,22 +56,22 @@ func main() {
 	ctx := context.Background()
 	pub := beanq.New(initCnf())
 
-	customerIds := []string{
-		"customer01", "customer02", "customer03", "customer04", "customer05",
-		"customer06", "customer07", "customer08", "customer09", "customer10",
+	orderKeys := []string{
+		"order01", "order02", "order03", "order04", "order05",
+		"order06", "order07", "order08", "order09", "order10",
 	}
 	messageCounts := map[string]int{
-		"customer01": 5,
-		"customer03": 3,
+		"order01": 5,
+		"order03": 3,
 	}
 	defaultMessageCount := 1
 	maxMessageCount := 5
 
 	published := 0
 	for publishOrder := 1; publishOrder <= maxMessageCount; publishOrder++ {
-		for _, customerId := range customerIds {
+		for _, orderKey := range orderKeys {
 			messageCount := defaultMessageCount
-			if count, ok := messageCounts[customerId]; ok {
+			if count, ok := messageCounts[orderKey]; ok {
 				messageCount = count
 			}
 			if publishOrder > messageCount {
@@ -79,8 +79,8 @@ func main() {
 			}
 
 			msg := sequenceMessage{
-				CustomerId: customerId,
-				Body:       fmt.Sprintf("%s-message-%02d", customerId, publishOrder),
+				OrderKey: orderKey,
+				Body:     fmt.Sprintf("%s-message-%02d", orderKey, publishOrder),
 			}
 			payload, err := json.Marshal(msg)
 			if err != nil {
@@ -88,16 +88,16 @@ func main() {
 				continue
 			}
 
-			id := fmt.Sprintf("%s-message-%02d", customerId, publishOrder)
-			cmd := pub.BQ().WithContext(ctx).SetId(id).PublishNewSequence(channel, topic, customerId, payload)
+			id := fmt.Sprintf("%s-message-%02d", orderKey, publishOrder)
+			cmd := pub.BQ().WithContext(ctx).SetId(id).PublishSequence(channel, topic, orderKey, payload)
 			if err := cmd.Error(); err != nil {
 				logger.New().Error(err)
 				continue
 			}
 			published++
-			fmt.Printf("published customerId=%s publishOrder=%02d id=%s\n", customerId, publishOrder, id)
+			fmt.Printf("published orderKey=%s publishOrder=%02d id=%s\n", orderKey, publishOrder, id)
 		}
 	}
 
-	fmt.Printf("published %d messages across %d customerIds at %s\n", published, len(customerIds), time.Now().Format(time.RFC3339))
+	fmt.Printf("published %d messages across %d orderKeys at %s\n", published, len(orderKeys), time.Now().Format(time.RFC3339))
 }

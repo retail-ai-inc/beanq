@@ -21,3 +21,21 @@ func TestResolveSequenceQueuePartitions(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveNormalQueuePartitions(t *testing.T) {
+	if got := ResolveNormalQueuePartitions(12, 100); got != 12 {
+		t.Fatalf("configured partitions = %d, want 12", got)
+	}
+	if got := ResolveNormalQueuePartitions(0, 7); got != 7 {
+		t.Fatalf("fallback partitions = %d, want 7", got)
+	}
+}
+
+func TestResolveQueuePartitions(t *testing.T) {
+	if got := ResolveQueuePartitions(9, 7); got != 9 {
+		t.Fatalf("configured partitions = %d, want 9", got)
+	}
+	if got := ResolveQueuePartitions(0, 7); got != 7 {
+		t.Fatalf("fallback partitions = %d, want 7", got)
+	}
+}

@@ -1,13 +1,11 @@
 package routers
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	"github.com/spf13/cast"
 )
 
 type Role struct {
@@ -22,17 +20,20 @@ func (t *Role) List(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	page := cast.ToInt64(r.URL.Query().Get("page"))
-	pageSize := cast.ToInt64(r.URL.Query().Get("pageSize"))
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 
-	data, total, err := t.mgo.Roles(r.Context(), nil, page, pageSize)
+	data, total, err := t.mgo.Roles(r.Context(), nil, page.Page, page.PageSize)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page.Page}
 	_ = res.Json(w, http.StatusOK)
 }
 
@@ -40,25 +41,23 @@ func (t *Role) Add(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	name := r.PostFormValue("name")
-	roles := r.PostFormValue("roles")
-
-	if name == "" {
-		res.Code = berror.MissParameterCode
-		res.Msg = "missing name"
-		_ = res.Json(w, http.StatusOK)
+	var input struct {
+		Name  string `json:"name"`
+		Roles []int  `json:"roles"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeBadRequest(w, err)
 		return
 	}
-	role := make([]int, 0)
-	if err := json.Unmarshal([]byte(roles), &role); err != nil {
-		res.Code = berror.TypeErrorCode
-		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusInternalServerError)
+
+	if input.Name == "" {
+		res.Code = berror.MissParameterCode
+		res.Msg = "missing name"
+		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 	if err := t.mgo.AddRole(r.Context(), &bmongo.Role{
-		Name:  name,
-		Roles: role,
+		Name: input.Name, Roles: input.Roles,
 	}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -72,19 +71,19 @@ func (t *Role) Delete(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	id := r.PostFormValue("id")
+	id := r.PathValue("id")
 
 	if id == "" {
-		res.Code = berror.MissParameterMsg
-		res.Msg = "missing account field"
-		_ = res.Json(w, http.StatusOK)
+		res.Code = berror.MissParameterCode
+		res.Msg = "id is required"
+		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 
 	if _, err := t.mgo.DeleteRole(r.Context(), id); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
 	_ = res.Json(w, http.StatusOK)
@@ -95,23 +94,23 @@ func (t *Role) Edit(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	id := r.FormValue("_id")
+	id := r.PathValue("id")
 	if id == "" {
 		res.Code = berror.MissParameterCode
 		res.Msg = "ID can't be empty"
 		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
-	roles := r.PostFormValue("roles")
-	role := make([]int, 0)
-	if err := json.Unmarshal([]byte(roles), &role); err != nil {
-		res.Code = berror.TypeErrorCode
-		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusInternalServerError)
+	var input struct {
+		Roles  []int  `json:"roles"`
+		Detail string `json:"detail"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeBadRequest(w, err)
 		return
 	}
 
-	if _, err := t.mgo.EditRole(r.Context(), id, map[string]any{"roles": role}); err != nil {
+	if _, err := t.mgo.EditRole(r.Context(), id, map[string]any{"roles": input.Roles, "detail": input.Detail}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)

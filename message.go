@@ -45,7 +45,6 @@ type (
 		Level           bstatus.LevelMsg `json:"level"`
 		Topic           string           `json:"topic"`
 		Channel         string           `json:"channel"`
-		CustomerId      string           `json:"customerId"`
 		OrderKey        string           `json:"orderKey"`
 		LockOrderKeyTTL time.Duration    `json:"lockOrderKeyTTL"`
 		Payload         string           `json:"payload"`
@@ -56,7 +55,7 @@ type (
 		Status          bstatus.Status   `json:"status"`
 		Id              string           `json:"id"`
 		Retry           int              `json:"retry"`
-		DeadLetterRetry int              `json:"deadletterRetry"`
+		DeadLetterRetry int              `json:"deadLetterRetry"`
 		TimeToRun       time.Duration    `json:"timeToRun"`
 		TimeToRunLimit  TimeToRunLimit   `json:"timeToRunLimit"`
 		MaxLen          int64            `json:"maxLen"`
@@ -74,12 +73,10 @@ func (m Message) ToMap() map[string]any {
 	data["id"] = m.Id
 	data["topic"] = m.Topic
 	data["channel"] = m.Channel
-	data["customerId"] = m.CustomerId
 	data["orderKey"] = m.OrderKey
-	data["lockOrderKeyTTL"] = m.LockOrderKeyTTL
 	data["maxLen"] = m.MaxLen
 	data["retry"] = m.Retry
-	data["deadletterRetry"] = m.DeadLetterRetry
+	data["deadLetterRetry"] = m.DeadLetterRetry
 	data["priority"] = m.Priority
 	data["payload"] = m.Payload
 	data["addTime"] = m.AddTime
@@ -117,10 +114,6 @@ func (data MessageM) ToMessage() *Message {
 			if v, ok := val.(string); ok {
 				msg.Channel = v
 			}
-		case "customerId":
-			if v, ok := val.(string); ok {
-				msg.CustomerId = v
-			}
 		case "orderKey":
 			if v, ok := val.(string); ok {
 				msg.OrderKey = v
@@ -136,7 +129,7 @@ func (data MessageM) ToMessage() *Message {
 				retry, _ := strconv.Atoi(v)
 				msg.Retry = retry
 			}
-		case "deadletterRetry":
+		case "deadLetterRetry":
 			msg.DeadLetterRetry = cast.ToInt(val)
 		case "priority":
 			msg.Priority = cast.ToFloat64(val)
@@ -187,9 +180,6 @@ func (data MessageS) ToMessage() *Message {
 		if k == "channel" {
 			msg.Channel = v
 		}
-		if k == "customerId" {
-			msg.CustomerId = v
-		}
 		if k == "orderKey" {
 			msg.OrderKey = v
 		}
@@ -205,7 +195,7 @@ func (data MessageS) ToMessage() *Message {
 		if k == "pendingRetry" {
 			msg.PendingRetry = cast.ToInt64(v)
 		}
-		if k == "deadletterRetry" {
+		if k == "deadLetterRetry" {
 			msg.DeadLetterRetry = cast.ToInt(v)
 		}
 		if k == "priority" {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/spf13/viper"
 )
 
@@ -136,7 +137,7 @@ func TestBeanqConfigValidateRedisRequired(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	if !errors.Is(err, ErrInvalidConfig) {
+	if !errors.Is(err, berror.ErrInvalidConfig) {
 		t.Fatalf("expected ErrInvalidConfig, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "redis.host") {
@@ -181,13 +182,20 @@ func TestBeanqConfigSequenceQueuePartitions(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected validation error")
 		}
-		if !errors.Is(err, ErrInvalidConfig) {
+		if !errors.Is(err, berror.ErrInvalidConfig) {
 			t.Fatalf("expected ErrInvalidConfig, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "sequenceQueuePartitions") {
 			t.Fatalf("expected sequenceQueuePartitions error, got %v", err)
 		}
 	})
+}
+
+func TestBeanqConfigRejectsNegativeNormalQueuePartitions(t *testing.T) {
+	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379"}, NormalQueuePartitions: -1}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "normalQueuePartitions") {
+		t.Fatalf("expected normalQueuePartitions validation error, got %v", err)
+	}
 }
 
 func TestBeanqConfigValidateMongoWhenHistoryEnabled(t *testing.T) {

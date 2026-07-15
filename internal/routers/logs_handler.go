@@ -7,7 +7,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 
@@ -47,11 +46,8 @@ func (t *Logs) List(w http.ResponseWriter, r *http.Request) {
 		matchStr = strings.Join([]string{t.prefix, "logs", "fail"}, ":")
 	}
 
-	nodeId := r.Header.Get("nodeId")
-	client := tool.ClientFac(t.client, t.prefix, nodeId)
-
 	data := make(map[string]any)
-	count, err := client.ZCard(r.Context(), matchStr)
+	count, err := t.client.ZCard(r.Context(), matchStr).Result()
 	if err != nil {
 		resultRes.Code = berror.InternalServerErrorCode
 		resultRes.Msg = err.Error()
@@ -60,7 +56,7 @@ func (t *Logs) List(w http.ResponseWriter, r *http.Request) {
 	}
 	data["total"] = count
 
-	keys, cursor, err := ZScan(r.Context(), t.client, matchStr, gCursor, "", 10)
+	keys, cursor, err := ZScan(r.Context(), t.client, matchStr, gCursor, "*", 10)
 
 	if err != nil {
 		resultRes.Code = "1005"
@@ -69,17 +65,14 @@ func (t *Logs) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	msgs := make([]*Msg, 0, 10)
-	m := new(Msg)
-
-	for _, key := range keys {
-
-		if err := json.Unmarshal([]byte(key), &m); err != nil {
-			m.Score = key
-			msgs = append(msgs, m)
-			m = nil
+	msgs := make([]*Msg, 0, len(keys)/2)
+	for i := 0; i+1 < len(keys); i += 2 {
+		m := new(Msg)
+		if err := json.Unmarshal([]byte(keys[i]), m); err != nil {
+			continue
 		}
-
+		m.Score = keys[i+1]
+		msgs = append(msgs, m)
 	}
 
 	data["data"] = msgs

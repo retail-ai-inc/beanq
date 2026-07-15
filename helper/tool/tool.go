@@ -40,12 +40,6 @@ func MakeStreamKey(subType btype.SubscribeType, prefix, channel, topic string) s
 		topic = boptions.DefaultOptions.DefaultTopic
 	}
 	stream := "normal_stream"
-	if subType == btype.SequentialSubscribe {
-		stream = "sequential_stream"
-	}
-	if subType == btype.SequentialByLockSubscribe {
-		stream = "sequential_by_lock_stream"
-	}
 	if subType == btype.DelaySubscribe {
 		stream = "delay_stream"
 	}
@@ -60,18 +54,6 @@ func MakeStatusKey(prefix, channel, topic, id string) string {
 	topic = strings.Join([]string{topic, "}"}, "")
 
 	return makeKey(prefix, channel, topic, "=-status-=", id)
-}
-
-func MakeSequenceLockKey(prefix, channel, topic, orderKey string) string {
-	channel = strings.Join([]string{"{", channel}, "")
-	topic = strings.Join([]string{topic, "}"}, "")
-	return makeKey(prefix, channel, topic, "lock", orderKey)
-}
-
-func MakeSequenceDataKey(prefix, channel, topic, id string) string {
-	channel = strings.Join([]string{"{", channel}, "")
-	topic = strings.Join([]string{topic, "}"}, "")
-	return makeKey(prefix, channel, topic, "order", id)
 }
 
 // MakeDynamicKey create key for dynamic

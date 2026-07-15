@@ -2,7 +2,6 @@ package routers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
@@ -10,11 +9,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	"github.com/retail-ai-inc/beanq/v4/internal/btype"
-	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"go.mongodb.org/mongo-driver/bson"
-
-	"github.com/spf13/cast"
 )
 
 type Dlq struct {
@@ -32,20 +27,17 @@ func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 	result, cancel := response.Get()
 	defer cancel()
 
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 	query := r.URL.Query()
-	page := cast.ToInt64(query.Get("page"))
-	pageSize := cast.ToInt64(query.Get("pageSize"))
 	id := query.Get("id")
 	status := query.Get("status")
 	moodType := query.Get("moodType")
 	topicName := query.Get("topicName")
 
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
 	filter := bson.M{}
 	filter["logType"] = bstatus.Dlq
 	if id != "" {
@@ -61,7 +53,7 @@ func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 		filter["topic"] = topicName
 	}
 	datas := make(map[string]any, 3)
-	data, total, err := t.mgo.EventLogs(r.Context(), filter, page, pageSize)
+	data, total, err := t.mgo.EventLogs(r.Context(), filter, page.Page, page.PageSize)
 	if err != nil {
 		result.Code = "1001"
 		result.Msg = err.Error()
@@ -69,7 +61,7 @@ func (t *Dlq) List(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		datas["data"] = data
 		datas["total"] = total
-		datas["cursor"] = page
+		datas["cursor"] = page.Page
 		result.Data = datas
 	}
 	_ = result.Json(w, http.StatusOK)
@@ -86,6 +78,10 @@ func (t *Dlq) Delete(w http.ResponseWriter, r *http.Request) {
 		res.Msg = err.Error()
 		res.Code = berror.InternalServerErrorCode
 		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if count == 0 {
+		writeAPIError(w, http.StatusNotFound, berror.MissParameterCode, "dead letter not found")
 		return
 	}
 	res.Data = count
@@ -109,34 +105,10 @@ func (t *Dlq) Retry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	moodType := ""
-	if v, ok := data["moodType"]; ok {
-		moodType = v.(string)
-	}
-
-	var bk enqueueQueue
-	if moodType == string(btype.SEQUENCE) {
-		_ = res.Json(w, http.StatusOK)
-		return
-	}
-	if moodType == string(btype.DELAY) {
-
-		bk = bredis.NewSchedule(t.client, t.prefix, 100, 10, 20*time.Minute, nil)
-		if err := bk.Enqueue(nctx, data); err != nil {
-			res.Msg = err.Error()
-			res.Code = berror.InternalServerErrorCode
-			_ = res.Json(w, http.StatusInternalServerError)
-			return
-		}
-		_ = res.Json(w, http.StatusOK)
-		return
-	}
-
-	bk = bredis.NewNormal(t.client, t.prefix, 2000, 100, 10, 20, nil)
-	if err := bk.Enqueue(nctx, data); err != nil {
+	if err := publishRetry(nctx, data, defaultRetryPublisherFactory(t.client, t.prefix)); err != nil {
 		res.Msg = err.Error()
-		res.Code = berror.InternalServerErrorCode
-		_ = res.Json(w, http.StatusInternalServerError)
+		res.Code = berror.TypeErrorCode
+		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 

@@ -3,6 +3,7 @@ package bredis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -48,7 +49,10 @@ func executeMessage(ctx context.Context, job public.Stream, handler public.Callb
 	sessionCtx, cancel := context.WithTimeout(ctx, timeToRun)
 	defer cancel()
 
+	attempt := 0
 	retry, err := tool.RetryInfo(sessionCtx, func() (handlerErr error) {
+		currentAttempt := attempt
+		attempt++
 		defer func() {
 			if p := recover(); p != nil {
 				handlerErr = fmt.Errorf("[panic recover]: %+v\n%s", p, debug.Stack())
@@ -59,9 +63,11 @@ func executeMessage(ctx context.Context, job public.Stream, handler public.Callb
 			go captureRunLimit(sessionCtx, now, timeToRunLimit, copiedVal, config)
 		}
 
-		_, handlerErr = handler.Handle(sessionCtx, copiedVal, cast.ToInt(val["retry"]))
+		_, handlerErr = handler.Handle(sessionCtx, copiedVal, currentAttempt)
 		return handlerErr
-	}, retrys)
+	}, retrys, isRetryStopped)
+
+	err = unwrapRetryStopped(err)
 
 	// Parent cancellation means ownership is being relinquished. Do not invoke the
 	// error callback or return a result which could be logged and acknowledged.
@@ -85,6 +91,23 @@ func executeMessage(ctx context.Context, job public.Stream, handler public.Callb
 	val["hostName"] = hostname
 	job.Data = val
 	return job, true
+}
+
+type retryStoppedError interface {
+	error
+	BeanqRetryStopped() error
+}
+
+func isRetryStopped(err error) bool {
+	_, ok := errors.AsType[retryStoppedError](err)
+	return ok
+}
+
+func unwrapRetryStopped(err error) error {
+	if stopped, ok := errors.AsType[retryStoppedError](err); ok {
+		return stopped.BeanqRetryStopped()
+	}
+	return err
 }
 
 func captureRunLimit(ctx context.Context, begin time.Time, limits []time.Duration, data map[string]any, config *capture.Config) {

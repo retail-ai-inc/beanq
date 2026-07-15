@@ -54,7 +54,7 @@ let id = uRoute.params.id;
 
 function initEventSource(){
 
-  let apiUrl = `${cfg.sseUrl}queue/detail?id=${id}`;
+	let apiUrl = `queues/${encodeURIComponent(id)}/stream`;
   if (data.sseEvent){
     data.sseEvent.close();
   }
@@ -64,21 +64,17 @@ function initEventSource(){
   }
   data.sseEvent.onerror = (err)=>{
     console.log(err);
-    data.sseEvent.close();
-    setTimeout(initEventSource,3000);
   }
   data.sseEvent.addEventListener("queue_detail", async function(res){
 
     let body =  await JSON.parse(res.data);
-    if (body.code === "1004"){
-      loginModal.value.error(new Error(body.msg));
+	if (body.code === "1004"){
+	  loginModal.value.error(new Error(body.msg));
       data.sseEvent.close();
       return
     }
 
-    data.eventLogs = body.data.data;
-    data.page =  body.data.cursor;
-    data.total = body.data.total;
+	data.eventLogs = body.data || [];
   })
 }
 
@@ -88,7 +84,7 @@ onMounted( async ()=>{
 })
 
 onUnmounted(()=>{
-  data.sseEvent.close();
+	data.sseEvent?.close();
 })
 const {queueDetail} = toRefs(data);
 </script>

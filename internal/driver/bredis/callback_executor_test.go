@@ -80,6 +80,9 @@ func TestExecuteMessageErrorRetries(t *testing.T) {
 	if handler.calls != 2 {
 		t.Fatalf("expected 2 attempts, got %d", handler.calls)
 	}
+	if got := handler.retries; len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Fatalf("expected callback attempts [0 1], got %v", got)
+	}
 	if len(handler.errors) != 1 || !errors.Is(handler.errors[0], wantErr) {
 		t.Fatalf("expected Error callback with handler error, got %v", handler.errors)
 	}
@@ -94,6 +97,44 @@ func TestExecuteMessageErrorRetries(t *testing.T) {
 	}
 	if got := result.Data["info"]; got != wantErr.Error() {
 		t.Fatalf("expected error info %q, got %#v", wantErr, got)
+	}
+}
+
+type stoppedExecutorError struct {
+	err error
+}
+
+func (e stoppedExecutorError) Error() string            { return "internal retry stop: " + e.err.Error() }
+func (e stoppedExecutorError) Unwrap() error            { return e.err }
+func (e stoppedExecutorError) BeanqRetryStopped() error { return e.err }
+
+func TestExecuteMessageStopsRetryAndUnwrapsError(t *testing.T) {
+	wantErr := errors.New("do not retry")
+	handler := &executorHandler{handle: func(context.Context, map[string]any, int) error {
+		return stoppedExecutorError{err: wantErr}
+	}}
+
+	result, ok := executeMessage(context.Background(), executorJob(map[string]any{
+		"retry":     3,
+		"timeToRun": time.Second,
+	}), handler, nil)
+	if !ok {
+		t.Fatal("expected completed result")
+	}
+	if handler.calls != 1 {
+		t.Fatalf("expected retry stop after one physical call, got %d", handler.calls)
+	}
+	if got := handler.retries; len(got) != 1 || got[0] != 0 {
+		t.Fatalf("expected callback attempt [0], got %v", got)
+	}
+	if len(handler.errors) != 1 || handler.errors[0] != wantErr {
+		t.Fatalf("expected Error callback with original error, got %v", handler.errors)
+	}
+	if got := result.Data["info"]; got != wantErr.Error() {
+		t.Fatalf("expected original error in log metadata, got %#v", got)
+	}
+	if got := result.Data["retry"]; got != 0 {
+		t.Fatalf("expected final retry index 0, got %#v", got)
 	}
 }
 
@@ -122,31 +163,21 @@ func TestWorkerContextCancelDoesNotPublishResultOrCallError(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	}}
-	jobs := make(chan public.Stream, 1)
-	results := make(chan public.Stream)
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go worker(ctx, jobs, results, handler, &wg, nil)
-	jobs <- executorJob(map[string]any{"timeToRun": time.Minute})
-	close(jobs)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if result, ok := executeMessage(ctx, executorJob(map[string]any{"timeToRun": time.Minute}), handler, nil); ok {
+			t.Errorf("unexpected result after cancellation: %#v", result)
+		}
+	}()
 
 	<-started
 	cancel()
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
 
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("worker blocked after context cancellation")
-	}
-	select {
-	case result := <-results:
-		t.Fatalf("unexpected result after cancellation: %#v", result)
-	default:
+		t.Fatal("executeMessage blocked after context cancellation")
 	}
 	if len(handler.errors) != 0 {
 		t.Fatalf("Error callback must not run after parent cancellation: %v", handler.errors)

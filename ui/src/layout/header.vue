@@ -142,8 +142,9 @@ watch(() => uroute.path, (newVal, oldVal) => {
   });
 })
 
-function jump(uri,flag){
+async function jump(uri,flag){
   if(flag === "Logout"){
+	try { await request.post("auth/logout"); } catch (_) {}
     Storage.Clear();
     urouter.replace("/login");
   }else{

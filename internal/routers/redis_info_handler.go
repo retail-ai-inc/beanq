@@ -3,9 +3,11 @@ package routers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,7 +166,7 @@ func (t *RedisInfo) Monitor(w http.ResponseWriter, r *http.Request) {
 
 			str, err := client.Monitor(r.Context())
 			if err != nil {
-				res.Code = response.InternalServerErrorCode
+				res.Code = berror.InternalServerErrorCode
 				res.Msg = err.Error()
 				_ = res.EventMsg(w, eventName)
 				return
@@ -186,14 +188,27 @@ func (t *RedisInfo) Keys(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	result, err := t.client.Keys(r.Context(), "*").Result()
+	cursor, err := strconv.ParseUint(r.URL.Query().Get("cursor"), 10, 64)
+	if r.URL.Query().Get("cursor") == "" {
+		cursor = 0
+		err = nil
+	}
 	if err != nil {
-		res.Code = response.InternalServerErrorCode
+		writeBadRequest(w, errors.New("cursor must be an unsigned integer"))
+		return
+	}
+	pattern := r.URL.Query().Get("pattern")
+	if pattern == "" {
+		pattern = "*"
+	}
+	keys, next, err := t.client.Scan(r.Context(), cursor, pattern, 100).Result()
+	if err != nil {
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = result
+	res.Data = map[string]any{"data": keys, "nextCursor": next}
 	_ = res.Json(w, http.StatusOK)
 }
 
@@ -210,7 +225,7 @@ func (t *RedisInfo) DeleteKey(w http.ResponseWriter, r *http.Request) {
 
 	result, err := t.client.Del(r.Context(), key).Result()
 	if err != nil {
-		res.Code = response.InternalServerErrorCode
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
@@ -223,7 +238,7 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 	if t.mgo == nil {
-		res.Code = response.InternalServerErrorCode
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = "mongo is not configured"
 		_ = res.Json(w, http.StatusServiceUnavailable)
 		return
@@ -233,21 +248,21 @@ func (t *RedisInfo) Config(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	if _, err := io.Copy(&buf, r.Body); err != nil {
-		res.Code = response.InternalServerErrorCode
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 	var config capture.Config
 	if err := json.Unmarshal(buf.Bytes(), &config); err != nil {
-		res.Code = response.MissParameterCode
+		res.Code = berror.MissParameterCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 
 	if err := t.mgo.AddConfig(r.Context(), &config); err != nil {
-		res.Code = response.InternalServerErrorCode
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
@@ -260,7 +275,7 @@ func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 	if t.mgo == nil {
-		res.Code = response.InternalServerErrorCode
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = "mongo is not configured"
 		_ = res.Json(w, http.StatusServiceUnavailable)
 		return
@@ -268,7 +283,7 @@ func (t *RedisInfo) ConfigInfo(w http.ResponseWriter, r *http.Request) {
 
 	result, err := t.mgo.ConfigInfo(r.Context())
 	if err != nil {
-		res.Code = response.InternalServerErrorCode
+		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return

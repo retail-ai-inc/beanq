@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	public "github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 )
 
@@ -29,8 +30,8 @@ func TestBuildMessageIncludesDeadLetterRetry(t *testing.T) {
 	if msg.DeadLetterRetry != 2 {
 		t.Fatalf("expected message deadletter retry 2, got %d", msg.DeadLetterRetry)
 	}
-	if got := msg.ToMap()["deadletterRetry"]; got != 2 {
-		t.Fatalf("expected deadletterRetry in payload map, got %#v", got)
+	if got := msg.ToMap()["deadLetterRetry"]; got != 2 {
+		t.Fatalf("expected deadLetterRetry in payload map, got %#v", got)
 	}
 }
 
@@ -38,6 +39,53 @@ func TestNewClientFromConfigDefaultsDeadLetterRetry(t *testing.T) {
 	client := newClientFromConfig(&BeanqConfig{})
 	if client.DeadLetterRetry != 0 {
 		t.Fatalf("expected default deadletter retry 0, got %d", client.DeadLetterRetry)
+	}
+}
+
+type invokeQueue struct {
+	callback public.CallbackWithRetry
+}
+
+func (q *invokeQueue) Enqueue(context.Context, map[string]any) error { return nil }
+
+func (q *invokeQueue) Consume(_ context.Context, _ btype.MoodType, _, _ string, callback public.CallbackWithRetry) error {
+	q.callback = callback
+	return nil
+}
+
+func (q *invokeQueue) WaitingAck(context.Context, string, string, string) (map[string]string, error) {
+	return nil, nil
+}
+
+func TestHandlerInvokeCallsConsumerOnceAndMarksIgnoredError(t *testing.T) {
+	wantErr := errors.New("ignored")
+	calls := 0
+	handler := &Handler{
+		do: public.NewCallbackWithRetry(func(context.Context, map[string]any, ...int) (int, error) {
+			calls++
+			return 7, wantErr
+		}, nil),
+		retryCond: map[string]struct{}{retryConditionKey(wantErr): {}},
+	}
+	queue := &invokeQueue{}
+	handler.Invoke(context.Background(), queue)
+
+	attempt, err := queue.callback.Handle(context.Background(), nil, 0)
+	if calls != 1 {
+		t.Fatalf("expected one consumer call per Handle, got %d", calls)
+	}
+	if attempt != 7 {
+		t.Fatalf("expected consumer result 7, got %d", attempt)
+	}
+	stopped, ok := errors.AsType[interface {
+		error
+		BeanqRetryStopped() error
+	}](err)
+	if !ok || stopped.BeanqRetryStopped() != wantErr {
+		t.Fatalf("expected retry-stop wrapper around original error, got %v", err)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected wrapper to support errors.Is for %v, got %v", wantErr, err)
 	}
 }
 
