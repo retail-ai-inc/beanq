@@ -85,10 +85,6 @@ func (s *sequenceQueueStore) ensureMetadata(ctx context.Context) error {
 	return ensurePartitionQueueMetadata(ctx, s.client, s.topology.metadataKey(), "sequence queue", s.metadata())
 }
 
-func validateSequenceQueueMetadata(got, want string) error {
-	return validatePartitionQueueMetadata(got, want, "sequence queue")
-}
-
 func (s *sequenceQueueStore) bootstrapGroups(ctx context.Context, group string) error {
 	return bootstrapPartitionGroups(ctx, s.client, group, "sequence queue", s.topology.partitions, s.topology.schedulerKey)
 }
@@ -157,17 +153,6 @@ func (s *sequenceQueueStore) autoClaim(ctx context.Context, group, consumer stri
 	return result, nil
 }
 
-func (s *sequenceQueueStore) autoClaimOne(ctx context.Context, group, consumer string, partition int64, minIdle time.Duration) (*sequenceQueueToken, string, error) {
-	result, err := s.autoClaim(ctx, group, consumer, partition, minIdle, "0-0", 1)
-	if err != nil {
-		return nil, result.Cursor, err
-	}
-	if len(result.Tokens) == 0 {
-		return nil, result.Cursor, redis.Nil
-	}
-	return &result.Tokens[0], result.Cursor, nil
-}
-
 func (s *sequenceQueueStore) discardSchedulerToken(ctx context.Context, stream, group, id string) error {
 	return ackAndDelete(ctx, s.client, stream, group, id)
 }
@@ -207,15 +192,6 @@ func (s *sequenceQueueStore) renew(ctx context.Context, group, consumer, acquisi
 	return sequenceQueueHeartbeatResult{Code: result.Code, AcquisitionID: acquisitionID, DeadlineMS: result.DeadlineMS}, err
 }
 
-// Legacy runtime adapters. owner is used as the acquisition fence until the
-// runtime migrates to acquireWithID/renew/finalizeWithID.
-func (s *sequenceQueueStore) acquire(ctx context.Context, group, owner, consumer string, token sequenceQueueToken) (sequenceQueueAcquireResult, error) {
-	return s.acquireWithID(ctx, group, consumer, owner, token)
-}
-func (s *sequenceQueueStore) heartbeat(ctx context.Context, group, owner, consumer string, token sequenceQueueToken) (sequenceQueueHeartbeatResult, error) {
-	return s.renew(ctx, group, consumer, owner, token)
-}
-
 func (s *sequenceQueueStore) finalizeWithID(ctx context.Context, group, consumer, acquisitionID string, token sequenceQueueToken, expectedHead string) (sequenceQueueFinalizeResult, error) {
 	if err := s.validateToken(token); err != nil {
 		return sequenceQueueFinalizeResult{}, err
@@ -228,9 +204,6 @@ func (s *sequenceQueueStore) finalizeWithID(ctx context.Context, group, consumer
 		return sequenceQueueFinalizeResult{}, fmt.Errorf("finalize sequence queue token: %w", err)
 	}
 	return sequenceQueueFinalizeResult{Code: values[0], SchedulerID: values[1], Remaining: cast.ToInt64(values[2])}, nil
-}
-func (s *sequenceQueueStore) finalize(ctx context.Context, group, owner, consumer string, token sequenceQueueToken, expectedHead string) (sequenceQueueFinalizeResult, error) {
-	return s.finalizeWithID(ctx, group, consumer, owner, token, expectedHead)
 }
 
 func (s *sequenceQueueStore) validateToken(token sequenceQueueToken) error {

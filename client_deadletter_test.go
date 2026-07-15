@@ -68,7 +68,7 @@ func TestHandlerInvokeCallsConsumerOnceAndMarksIgnoredError(t *testing.T) {
 		retryCond: map[string]struct{}{retryConditionKey(wantErr): {}},
 	}
 	queue := &invokeQueue{}
-	handler.Invoke(context.Background(), queue)
+	_ = handler.Invoke(context.Background(), queue)
 
 	attempt, err := queue.callback.Handle(context.Background(), nil, 0)
 	if calls != 1 {

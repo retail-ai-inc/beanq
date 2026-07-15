@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	bjson "github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
@@ -242,10 +241,6 @@ func (r *sequenceQueueRuntime) heartbeatInterval() time.Duration {
 		return time.Second
 	}
 	return interval
-}
-
-func ignorableSequenceQueueReadError(ctx context.Context, err error) bool {
-	return errors.Is(err, redis.Nil) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil
 }
 
 func executeSequenceQueueMessage(ctx context.Context, channel, topic, raw string, handler public.CallbackWithRetry, config *capture.Config) (map[string]any, error) {

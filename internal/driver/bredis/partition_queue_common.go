@@ -90,6 +90,9 @@ func normalizeQueueRoute(channel, topic string) (string, string) {
 }
 
 func (t partitionQueueTopology) partition(routeKey string) int64 {
+	if t.partitions < 0 {
+		t.partitions = 1
+	}
 	return int64(tool.HashKey([]byte(routeKey), uint64(t.partitions)))
 }
 

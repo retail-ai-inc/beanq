@@ -42,9 +42,7 @@ func TestSequenceQueueDigestUsesUnambiguousLengthPrefixes(t *testing.T) {
 	if sequenceQueueDigest("ab", "c", "d") == sequenceQueueDigest("a", "bc", "d") {
 		t.Fatal("queue digest collided for different component boundaries")
 	}
-	if sequenceQueueOrderKeyDigest("order") != sequenceQueueOrderKeyDigest("order") {
-		t.Fatal("order-key digest is not deterministic")
-	}
+
 	if len(sequenceQueueOrderKeyDigest("order")) != 64 {
 		t.Fatalf("order-key digest length = %d, want 64", len(sequenceQueueOrderKeyDigest("order")))
 	}

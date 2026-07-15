@@ -21,10 +21,6 @@ func normalizeSequenceQueuePartitionCount(partitions int64) int64 {
 	return normalizePartitionCount(partitions)
 }
 
-func normalizeSequenceQueueRoute(channel, topic string) (string, string) {
-	return normalizeQueueRoute(channel, topic)
-}
-
 // sequenceQueueDigest identifies a logical queue without placing untrusted
 // route components in a Redis cluster hash tag. Length prefixes make the input
 // encoding unambiguous.
@@ -46,12 +42,6 @@ func (t sequenceQueueTopology) schedulerKey(partition int64) string {
 
 func (t sequenceQueueTopology) partitionStateKey(partition int64) string {
 	return strings.Join([]string{t.partitionBaseKey(partition), "state"}, ":")
-}
-
-// pendingKey is retained for source compatibility; v2 stores the counter in
-// the partition state hash instead of a string key.
-func (t sequenceQueueTopology) pendingKey(partition int64) string {
-	return t.partitionStateKey(partition)
 }
 
 func (t sequenceQueueTopology) isolationKey(partition int64) string {
