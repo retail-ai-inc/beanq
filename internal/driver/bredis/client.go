@@ -24,7 +24,7 @@ func NewRdb(isCluster bool, host, port string, username, password string,
 
 	redisOnce.Do(func() {
 		ctx := context.Background()
-		initCtx, cancel := context.WithTimeout(ctx, time.Second)
+		initCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		redisHolder, redisErr = NewRedisHolder(
