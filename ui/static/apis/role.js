@@ -1,22 +1,22 @@
 const roleApi = {
     List(page,pageSize){
-        return request.get(`/role/list?page=${page}&pageSize=${pageSize}`);
+		return request.get(`roles?page=${page}&pageSize=${pageSize}`);
     },
     Delete(id){
         let params = {id:id};
-        return request.post(`/role/delete`,params);
+		return request.delete(`roles/${params.id}`);
     },
     Edit(id,data){
         let ndata = {};
-        ndata._id = id;
-        ndata.roles = JSON.stringify(data.roles);
-        return request.post(`/role/edit`,ndata);
+		ndata.roles = data.roles;
+		ndata.detail = data.detail || "";
+		return request.patch(`roles/${id}`,ndata);
     },
     Add(data){
         let ndata = {};
         ndata.name = data.name;
-        ndata.roles = JSON.stringify(data.roles);
-        return request.post("/role/add",ndata);
+		ndata.roles = data.roles;
+		return request.post("roles",ndata);
     },
     GetLang(path,objs){
         let result = _.split(path,".");

@@ -1,12 +1,12 @@
 const dashboardApi = {
     Graphic(){
-        return request.get("dashboard");
+		return request.get("dashboard");
     },
     Total(){
-        return request.get("dashboard/total");
+		return request.get("dashboard");
     },
     Pods(){
-        return request.get("dashboard/pods");
+		return request.get("pods");
     },
     Nodes(){
         return request.get("nodes");

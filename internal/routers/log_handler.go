@@ -13,7 +13,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
-	"github.com/spf13/cast"
 )
 
 type Log struct {
@@ -149,7 +148,7 @@ func (t *Log) retryHandler(ctx context.Context, id, msgType string) error {
 	}
 
 	bk := bredis.NewSchedule(t.client, t.prefix, 100, 10, 20*time.Minute, nil)
-	if err := bk.Enqueue(ctx, data); err != nil {
+	if err := bk.Publish(ctx, data); err != nil {
 		return err
 	}
 	return nil
@@ -160,18 +159,20 @@ func (t *Log) OptLogs(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	query := r.URL.Query()
-	page := cast.ToInt64(query.Get("page"))
-	pageSize := cast.ToInt64(query.Get("pageSize"))
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 
-	data, total, err := t.mgo.OptLogs(r.Context(), page, pageSize)
+	data, total, err := t.mgo.OptLogs(r.Context(), page.Page, page.PageSize)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page.Page}
 	_ = res.Json(w, http.StatusOK)
 }
 
@@ -194,17 +195,19 @@ func (t *Log) WorkFlowLogs(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	query := r.URL.Query()
-	page := cast.ToInt64(query.Get("page"))
-	pageSize := cast.ToInt64(query.Get("pageSize"))
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 
-	data, total, err := t.mgo.WorkFlowLogs(r.Context(), nil, page, pageSize)
+	data, total, err := t.mgo.WorkFlowLogs(r.Context(), nil, page.Page, page.PageSize)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page.Page}
 	_ = res.Json(w, http.StatusOK)
 }

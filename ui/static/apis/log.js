@@ -1,12 +1,12 @@
 const logApi = {
 
     OptLog(page,pageSize){
-        return request.get(`/log/opt_log?page=${page}&pageSize=${pageSize}`);
+		return request.get(`operation-logs?page=${page}&pageSize=${pageSize}`);
     },
     DeleteOptLog(id){
-      return request.delete(`/log/opt_log?id=${id}`);
+	  return request.delete(`operation-logs/${id}`);
     },
     WorkFlowLogs(page,pageSize){
-        return request.get(`/log/workflow_log?page=${page}&pageSize=${pageSize}`);
+		return request.get(`workflow-logs?page=${page}&pageSize=${pageSize}`);
     }
 }

@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
@@ -143,6 +144,8 @@ type (
 		PublishTimeOut           time.Duration `json:"publishTimeOut" mapstructure:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut" mapstructure:"consumeTimeOut"`
 		MinConsumers             int64         `json:"minConsumers" mapstructure:"minConsumers"`
+		NormalQueuePartitions    int64         `json:"normalQueuePartitions" mapstructure:"normalQueuePartitions"`
+		SequenceQueuePartitions  int64         `json:"sequenceQueuePartitions" mapstructure:"sequenceQueuePartitions"`
 		JobMaxRetries            int           `json:"jobMaxRetries" mapstructure:"jobMaxRetries"`
 		ConsumerPoolSize         int           `json:"consumerPoolSize" mapstructure:"consumerPoolSize"`
 	}
@@ -244,13 +247,19 @@ func defaultMongoCollections() map[string]Collection {
 
 func (t *BeanqConfig) Validate() error {
 	if t == nil {
-		return ErrInvalidConfig.WithMessage("config is nil")
+		return berror.ErrInvalidConfig.WithMessage("config is nil")
 	}
 	if strings.TrimSpace(t.Broker) == "" {
-		return ErrInvalidConfig.WithMessage("broker is required")
+		return berror.ErrInvalidConfig.WithMessage("broker is required")
 	}
 	if t.Broker != "redis" {
-		return ErrUnsupportedBroker.WithMessage(t.Broker)
+		return berror.ErrUnsupportedBroker.WithMessage(t.Broker)
+	}
+	if t.SequenceQueuePartitions < 0 {
+		return berror.ErrInvalidConfig.WithMessage("sequenceQueuePartitions must not be negative")
+	}
+	if t.NormalQueuePartitions < 0 {
+		return berror.ErrInvalidConfig.WithMessage("normalQueuePartitions must not be negative")
 	}
 	if err := t.validateRedis(); err != nil {
 		return err
@@ -263,13 +272,13 @@ func (t *BeanqConfig) Validate() error {
 
 func (t *BeanqConfig) validateRedis() error {
 	if strings.TrimSpace(t.Redis.Host) == "" {
-		return ErrInvalidConfig.WithMessage("redis.host is required")
+		return berror.ErrInvalidConfig.WithMessage("redis.host is required")
 	}
 	if strings.TrimSpace(t.Redis.Port) == "" && !redisHostsIncludePorts(t.Redis.Host) {
-		return ErrInvalidConfig.WithMessage("redis.port is required")
+		return berror.ErrInvalidConfig.WithMessage("redis.port is required")
 	}
 	if t.Redis.SSL.On && strings.TrimSpace(t.Redis.SSL.CAFile) == "" {
-		return ErrInvalidConfig.WithMessage("redis.ssl.certFile is required when redis ssl is enabled")
+		return berror.ErrInvalidConfig.WithMessage("redis.ssl.certFile is required when redis ssl is enabled")
 	}
 	return nil
 }
@@ -297,16 +306,16 @@ func storageRequiresMongo(on bool, storage string) bool {
 
 func (t *BeanqConfig) validateMongo() error {
 	if t.Mongo == nil {
-		return ErrInvalidConfig.WithMessage("mongo config is required")
+		return berror.ErrInvalidConfig.WithMessage("mongo config is required")
 	}
 	if strings.TrimSpace(t.Host) == "" {
-		return ErrInvalidConfig.WithMessage("mongo.host is required")
+		return berror.ErrInvalidConfig.WithMessage("mongo.host is required")
 	}
 	if strings.TrimSpace(t.Database) == "" {
-		return ErrInvalidConfig.WithMessage("mongo.database is required")
+		return berror.ErrInvalidConfig.WithMessage("mongo.database is required")
 	}
 	if t.SSL.On && strings.TrimSpace(t.SSL.CAFile) == "" {
-		return ErrInvalidConfig.WithMessage("mongo.ssl.certFile is required when mongo ssl is enabled")
+		return berror.ErrInvalidConfig.WithMessage("mongo.ssl.certFile is required when mongo ssl is enabled")
 	}
 	return nil
 }
@@ -346,7 +355,7 @@ func NewConfig(configPath string, configType string, configName string) (*BeanqC
 
 func LoadConfig(configPath string, configType string, configName string) (*BeanqConfig, error) {
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return nil, ErrInvalidConfig.WithMessage(fmt.Sprintf("config path %s does not exist", configPath)).WithCause(err)
+		return nil, berror.ErrInvalidConfig.WithMessage(fmt.Sprintf("config path %s does not exist", configPath)).WithCause(err)
 	}
 	if configType == "" {
 		configType = DefaultConfigType
@@ -361,12 +370,12 @@ func LoadConfig(configPath string, configType string, configName string) (*Beanq
 	vp.SetConfigName(configName)
 
 	if err := vp.ReadInConfig(); err != nil {
-		return nil, ErrInvalidConfig.WithMessage("failed to read config file").WithCause(err)
+		return nil, berror.ErrInvalidConfig.WithMessage("failed to read config file").WithCause(err)
 	}
 
 	var cfg BeanqConfig
 	if err := vp.Unmarshal(&cfg); err != nil {
-		return nil, ErrInvalidConfig.WithMessage("failed to unmarshal config").WithCause(err)
+		return nil, berror.ErrInvalidConfig.WithMessage("failed to unmarshal config").WithCause(err)
 	}
 	cfg.ApplyDefaults()
 	if err := cfg.Validate(); err != nil {

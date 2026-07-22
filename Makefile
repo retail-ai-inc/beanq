@@ -63,26 +63,16 @@ normal-publisher:
 	@echo "start normal publisher"
 	@cd examples/normal && go run -race ./publisher/main.go
 
-sequential:
-	@echo "Run sequential example with two terminals: make sequential-consumer and make sequential-publisher"
+sequence-queue:
+	@echo "Run sequence queue example with two terminals: make sequence-queue-consumer and make sequence-queue-publisher"
 
-sequential-consumer:
-	@echo "start sequential consumer"
-	@cd examples/sequential && go run -race ./consumer/main.go
+sequence-queue-consumer:
+	@echo "start sequence queue consumer"
+	@go run -race ./examples/sequence-queue/consumer
 
-sequential-consumer-dlv:
-	@echo "start sequential consumer"
-	@cd examples/sequential && \
-	go build -race -o server ./consumer/main.go && \
-	dlv --headless --listen=:8888 --api-version=2 exec ./server
-
-sequential-publisher:
-	@echo "start sequential publisher"
-	@cd examples/sequential && go run -race ./publisher/main.go
-
-sequential-publisher-ack:
-	@echo "start sequential publisher with ack"
-	@cd examples/sequential && go run -race ./publisher-with-ack/main.go
+sequence-queue-publisher:
+	@echo "start sequence queue publisher"
+	@go run -race ./examples/sequence-queue/publisher
 
 ui:
 	@echo "start ui on port:9090"
@@ -121,5 +111,5 @@ vet-fix: ##If fixed, the annotation for struct fields will be removed
 	$(FIELDALIGNMENT_TOOL) -fix ./... || exit 0
 
 .PHONY: delay delay-consumer delay-publisher normal normal-consumer normal-publisher \
- 		sequential sequential-publisher sequential-consumer sequential-consumer-dlv sequential-publisher-ack ui clean \
+		sequence-queue sequence-queue-publisher sequence-queue-consumer ui clean \
 		lint vet vet-fix

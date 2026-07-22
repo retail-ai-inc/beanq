@@ -1,21 +1,14 @@
 
-axios.defaults.baseURL = "./"
-axios.defaults.headers.post["Content-Type"] = "multipart/form-data";
-
 const request = axios.create({
-    timeout:5000,
+	baseURL:"/api/v1/",
+	withCredentials:true,
+	timeout:5000,
     //responseType: 'json',
     responseEncoding: 'utf8',
 })
 request.interceptors.request.use(
     config=>{
 
-        const token = Storage.GetItem("token");
-        if(token){
-            config.headers["BEANQ-Authorization"] = "Bearer " + token;
-        }
-        config.headers["X-Cluster-Nodeid"] = Storage.GetItem("nodeId");
-        config.headers["X-Role-Id"] = Storage.GetItem("roleId");
         return config;
     },
     err=>{
@@ -28,10 +21,28 @@ request.interceptors.response.use(
         if (code === "0000"){
             return Promise.resolve(data);
         }
-        return Promise.reject(new Error(msg));
+		return Promise.reject(new Error(msg));
     },
     err=>{
         console.log("request err",err)
-        return Promise.reject(err);
+		if ([401, 403].includes(err?.response?.status) && !isLoginRequest(err.config)) {
+			redirectToLogin();
+		}
+		return Promise.reject(err);
     }
 )
+
+function isLoginRequest(config) {
+	return typeof config?.url === "string" && config.url.replace(/^\//, "").endsWith("auth/login");
+}
+
+let redirectingToLogin = false;
+
+function redirectToLogin() {
+	if (redirectingToLogin || window.location.hash === "#/login") {
+		return;
+	}
+	redirectingToLogin = true;
+	Storage.Clear();
+	window.location.replace("/#/login");
+}

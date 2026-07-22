@@ -7,7 +7,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
-	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 )
 
 type Schedule struct {
@@ -26,12 +25,9 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	nodeId := r.Header.Get("X-Cluster-Nodeid")
-	client := tool.ClientFac(t.client, t.prefix, nodeId)
-
 	key := strings.Join([]string{t.prefix, "*", "delay_stream:stream"}, ":")
 
-	keys, err := client.Keys(ctx, key)
+	keys, _, err := scanKeys(ctx, t.client, key, 0)
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
@@ -49,7 +45,7 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 		arr[1] = strings.ReplaceAll(arr[1], "{", "")
 		arr[2] = strings.ReplaceAll(arr[2], "}", "")
 
-		obj, err := client.Object(ctx, queue)
+		size, err := t.client.XLen(ctx, queue).Result()
 		if err != nil {
 			continue
 		}
@@ -59,8 +55,7 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 			Topic:    arr[2],
 			MoodType: arr[3],
 			State:    "Run",
-			Size:     obj.SerizlizedLength,
-			Idle:     obj.LruSecondsIdle,
+			Size:     int(size),
 		}
 		data[arr[1]] = append(data[arr[1]], stream)
 	}

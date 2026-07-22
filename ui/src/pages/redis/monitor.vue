@@ -11,8 +11,8 @@
     <LoginModal :id="loginId" ref="loginModal"/>
   </div>
 </template>
-  
-  
+
+
 <script setup>
 
 import { ref,reactive,onMounted,onUnmounted,toRefs } from "vue";
@@ -32,14 +32,14 @@ function monitorSSEConnect(){
   if(info.sseMonitor){
     info.sseMonitor.close();
   }
-  info.sseMonitor = sseApi.Init("redis/monitor");
+	info.sseMonitor = sseApi.Init("redis/monitor/stream");
   info.sseMonitor.onopen = () => {
     console.log("success")
   }
   info.sseMonitor.addEventListener("redis_monitor",function (res) {
     let body = JSON.parse(res.data);
-    if (body.code === "1004"){
-      loginModal.value.error(new Error(body.msg));
+	if (body.code === "1004"){
+	  loginModal.value.error(new Error(body.msg));
       info.sseMonitor.close();
       return
     }
@@ -86,5 +86,3 @@ const {commands} = toRefs(info);
   text-align: right;
 }
 </style>
-  
-  

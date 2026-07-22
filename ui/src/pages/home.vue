@@ -1,32 +1,6 @@
 <template>
 
   <div class="home" ref="homeEle">
-<!--    <div class="row">-->
-<!--      <div class="col d-flex">-->
-<!--        <div class="btn-group" role="group" aria-label="Basic radio toggle button group">-->
-<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio1" autocomplete="off" checked>-->
-<!--          <label class="btn btn-outline-primary" for="btnradio1">5 minute</label>-->
-
-<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio2" autocomplete="off">-->
-<!--          <label class="btn btn-outline-primary" for="btnradio2">10 minute</label>-->
-
-<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio3" autocomplete="off">-->
-<!--          <label class="btn btn-outline-primary" for="btnradio3">30 minute</label>-->
-
-<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio4" autocomplete="off">-->
-<!--          <label class="btn btn-outline-primary" for="btnradio4">6 hour</label>-->
-
-<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio5" autocomplete="off">-->
-<!--          <label class="btn btn-outline-primary" for="btnradio5">12 hour</label>-->
-
-<!--          <input type="radio" class="btn-check" name="btnradio" id="btnradio6" autocomplete="off">-->
-<!--          <label class="btn btn-outline-primary" for="btnradio6">24 hour</label>-->
-<!--        </div>-->
-<!--        <div style="width: 25rem;">-->
-<!--          <vue-date-picker range v-model="date" multi-calendars></vue-date-picker>-->
-<!--        </div>-->
-<!--      </div>-->
-<!--    </div>-->
     <div class="row justify-content-end">
       <div class="col-1">
         <select class="form-select form-select-sm mb-3" aria-label="Large select example" v-model="execTime">
@@ -116,20 +90,20 @@ function sseConnect(){
   if(sse.value){
     sse.value.close();
   }
-  sseUrl.value = `dashboard/graphic?time=${execTime.value}`;
+	sseUrl.value = `dashboard/stream?duration=${execTime.value}`;
   sse.value = sseApi.Init(sseUrl.value);
   sse.value.onopen = () => {
     console.log("connect success")
   }
   sse.value.addEventListener("dashboard",function (res) {
 
-    const {code,msg,data} = JSON.parse(res.data);
-    if (code === "1004"){
-        loginModal.value.error(new Error(msg));
+	const {code,msg,data} = JSON.parse(res.data);
+	if (code === "1004"){
+		loginModal.value.error(new Error(msg));
         sse.value.close();
         return;
     }
-    if(code === "1111" && msg === "DONE"){
+	if(code === "1111" && msg === "DONE"){
       queuesCount.value = data;
       sse.value.close();
     }
@@ -155,16 +129,16 @@ function getPods(){
   if(ssePod.value){
     ssePod.value.close();
   }
-  ssePod.value = sseApi.Init(`dashboard/pods`);
+	ssePod.value = sseApi.Init(`dashboard/pods/stream`);
   ssePod.value.onopen = () => {
     console.log("connect success")
   }
   ssePod.value.addEventListener("pods",function (res) {
 
-    const {code,msg,data} = JSON.parse(res.data);
+	const {code,msg,data} = JSON.parse(res.data);
 
-    if (code === "1004"){
-      loginModal.value.error(new Error(msg));
+	if (code === "1004"){
+	  loginModal.value.error(new Error(msg));
       sse.value.close();
       return;
     }

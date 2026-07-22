@@ -16,8 +16,8 @@ import (
 func TestLockContest(t *testing.T) {
 	config, err := NewConfig("./", "json", "env.testing")
 	assert.NoError(t, err)
-	client := New(config)
-	muxClient := NewMuxClient(client.broker.client.(redis.UniversalClient))
+	New(config)
+	muxClient := NewMuxClient(GetBrokerDriver[redis.UniversalClient]())
 	mux := muxClient.NewMutex("test", WithExpiry(time.Second*10))
 	err = mux.LockContext(context.Background())
 	assert.NoError(t, err)

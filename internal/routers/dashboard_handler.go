@@ -31,7 +31,7 @@ func (t *Dashboard) Nodes(w http.ResponseWriter, r *http.Request) {
 	nodes := tool.ClientFac(t.client, t.prefix, "").Nodes(r.Context())
 	result, cancel := response.Get()
 	defer cancel()
-	result.Code = response.SuccessCode
+	result.Code = berror.SuccessCode
 	result.Data = nodes
 
 	_ = result.Json(w, http.StatusOK)
@@ -43,22 +43,14 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	eventName := cast.ToString(r.Context().Value(EventName{}))
 
-	tm := 5 * time.Second
-	tim := r.URL.Query().Get("time")
+	tim := r.URL.Query().Get("duration")
 	if tim == "" {
 		tim = "10s"
 	}
-	if strings.Contains(tim, "s") {
-		tim = strings.ReplaceAll(tim, "s", "")
-		tm = time.Duration(cast.ToInt64(tim)) * time.Second
-	}
-	if strings.Contains(tim, "m") {
-		tim = strings.ReplaceAll(tim, "m", "")
-		tm = time.Duration(cast.ToInt64(tim)) * 60 * time.Second
-	}
-	if strings.Contains(tim, "h") {
-		tim = strings.ReplaceAll(tim, "h", "")
-		tm = time.Duration(cast.ToInt64(tim)) * 60 * 60 * time.Second
+	tm, err := time.ParseDuration(tim)
+	if err != nil || tm < time.Second || tm > 24*time.Hour {
+		writeAPIError(w, http.StatusBadRequest, berror.MissParameterCode, "duration must be between 1s and 24h")
+		return
 	}
 
 	flusher, ok := w.(http.Flusher)
@@ -86,9 +78,8 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 	offset := int64(0)
 
 	zcount := client.ZCount(ctx, totalkey, beforeStr, nowStr)
-	page := zcount / count
 
-	for page >= 0 {
+	for offset < zcount {
 
 		if ctx.Err() != nil {
 			break
@@ -96,7 +87,11 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 		queues, err := client.ZRangeByScore(ctx, totalkey, beforeStr, nowStr, offset, count)
 		if err != nil {
 			logger.New().Error(err)
-			continue
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+			_ = result.EventMsg(w, eventName)
+			flusher.Flush()
+			return
 		}
 		newQueue := make([][]any, 0, len(queues))
 		for _, queue := range queues {
@@ -108,7 +103,6 @@ func (t *Dashboard) Info(w http.ResponseWriter, r *http.Request) {
 			newQueue = append(newQueue, data)
 		}
 		offset += count
-		page--
 		result.Data = newQueue
 		_ = result.EventMsg(w, eventName)
 		flusher.Flush()
@@ -131,7 +125,7 @@ func (t *Dashboard) Total(w http.ResponseWriter, r *http.Request) {
 	client := tool.ClientFac(t.client, t.prefix, nodeId)
 
 	// all keys
-	keys, err := client.Keys(ctx, strings.Join([]string{t.prefix, "*", "stream"}, ":"))
+	keys, _, err := scanKeys(ctx, t.client, strings.Join([]string{t.prefix, "*", "stream*"}, ":"), 0)
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
@@ -149,6 +143,10 @@ func (t *Dashboard) Total(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// failed count
+	if t.mog == nil {
+		writeAPIError(w, http.StatusServiceUnavailable, berror.InternalServerErrorCode, "mongo is not configured")
+		return
+	}
 	failCount, err := t.mog.DocumentCount(ctx, "failed")
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
@@ -189,11 +187,11 @@ func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
 	defer ticker.Stop()
 
 	flusher, ok := w.(http.Flusher)
-	defer flusher.Flush()
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	defer flusher.Flush()
 
 	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
 

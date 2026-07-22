@@ -26,7 +26,6 @@
     "retry": "再試行",
     "dlqLog": "DLQ Log",
     "workflowLog": "Workflow Log",
-    "sequenceLock": "Sequence Lock",
     "redis": "Redis",
     "info": "情報",
     "command": "指揮部",

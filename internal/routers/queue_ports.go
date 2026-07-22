@@ -2,6 +2,6 @@ package routers
 
 import "context"
 
-type enqueueQueue interface {
-	Enqueue(ctx context.Context, data map[string]any) error
+type publishQueue interface {
+	Publish(ctx context.Context, data map[string]any) error
 }

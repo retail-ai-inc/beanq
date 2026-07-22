@@ -13,5 +13,7 @@ func main() {
 		log.Fatalf("Unable to create beanq config: %v", err)
 	}
 	csm := beanq.New(config)
-	csm.ServeHttp(context.Background())
+	if err := csm.ServeHTTP(context.Background()); err != nil {
+		log.Fatalf("Beanq UI stopped: %v", err)
+	}
 }

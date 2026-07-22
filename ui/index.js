@@ -1,12 +1,15 @@
 ; (async () => {
 
   const { loadModule, version } = window["vue3-sfc-loader"];
+  const compiledCache = createCompiledCache(`beanq:sfc:${Vue.version}:${version}:`);
   const i18n = VueI18n.createI18n({
     legacy:false,
     locale:"ja",
   });
 
   const options = {
+
+    compiledCache,
 
     moduleCache: {
       vue: Vue,
@@ -24,26 +27,19 @@
       dlqApi,
       dashboardApi,
       logApi,
-      roleApi,
-      sequenceLockApi
+	  roleApi
       //apis end
     },
 
     async getFile(url) {
 
-      const headers = new Headers();
-      headers.set("Cache-Control",'no-cache, no-store, must-revalidate');
-      headers.set("Pragma",'no-cache');
-      headers.set("Expires",'0');
-
-      const res = await fetch(url,{
-        cache: 'no-store',
-        headers: {
-          ...headers,
-        }
-      });
+      const resourceURL = resolveLoaderURL(url);
+      const res = await fetch(resourceURL, {cache: "no-cache", credentials: "same-origin"});
 
       if ( !res.ok ){
+		if (res.status === 403 && typeof redirectToLogin === "function") {
+			redirectToLogin();
+		}
         throw Object.assign(new Error(res.statusText + ' ' + url), { res });
       }
       return res.text();
@@ -84,7 +80,6 @@
           { path: 'log/dlq',component:()=>loadModule("./src/pages/log/dlq/dlq.vue",options)},
           { path: 'log/dlq/detail/:id',component:()=>loadModule("./src/pages/log/dlq/detail.vue",options)},
           { path: 'log/workflow',component:()=>loadModule("./src/pages/log/workflow/workflow.vue",options)},
-          { path: 'log/sequence_lock',component:()=>loadModule("./src/pages/log/sequence_lock/list.vue",options)},
           { path: 'redis', component: () => loadModule("./src/pages/redis/info.vue", options) },
           { path: 'redis/monitor',component:()=>loadModule("./src/pages/redis/monitor.vue",options)},
           { path: 'user',component:()=>loadModule("./src/pages/user/user.vue",options)},
@@ -112,8 +107,8 @@
     ],
   });
   router.beforeEach((to, from) => {
-    let token = Storage.GetItem("token");
-    if (token == null && to.path !== "/login"){
+	let authenticated = Storage.GetItem("authenticated");
+	if (authenticated == null && to.path !== "/login"){
       return {path:"/login",replace:true};
     }
   })
@@ -130,4 +125,83 @@
   app.use(i18n);
   app.mount('#app');
 
+  if (Storage.GetItem("authenticated") != null) {
+	const preload = () => Promise.allSettled([
+		loadModule("./src/layout/adminMain.vue", options),
+		loadModule("./src/pages/home.vue", options),
+	]);
+	if (typeof window.requestIdleCallback === "function") {
+		window.requestIdleCallback(preload);
+	} else {
+		window.setTimeout(preload, 0);
+	}
+  }
+
 })().catch(ex => console.log(ex))
+
+function resolveLoaderURL(resource) {
+	const url = new URL(resource, window.location.href);
+	const allowedPath = url.pathname.startsWith("/src/") || url.pathname.startsWith("/static/");
+	if (url.origin !== window.location.origin || !allowedPath || url.pathname.includes("..")) {
+		throw new TypeError(`Unsupported UI resource: ${resource}`);
+	}
+	return url;
+}
+
+function createCompiledCache(namespace) {
+	const memory = new Map();
+	return {
+		async get(key) {
+			const storageKey = namespace + await digestCacheKey(key);
+			if (memory.has(storageKey)) {
+				return memory.get(storageKey);
+			}
+			try {
+				const value = localStorage.getItem(storageKey);
+				if (value !== null) {
+					memory.set(storageKey, value);
+				}
+				return value ?? undefined;
+			} catch {
+				return undefined;
+			}
+		},
+		async set(key, value) {
+			const storageKey = namespace + await digestCacheKey(key);
+			memory.set(storageKey, value);
+			try {
+				localStorage.setItem(storageKey, value);
+			} catch {
+				removeCompiledCache("beanq:sfc:");
+				try {
+					localStorage.setItem(storageKey, value);
+				} catch {}
+			}
+		},
+	};
+}
+
+async function digestCacheKey(value) {
+	if (globalThis.crypto?.subtle && globalThis.TextEncoder) {
+		const bytes = new TextEncoder().encode(value);
+		const digest = await crypto.subtle.digest("SHA-256", bytes);
+		return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+	}
+	let hash = 2166136261;
+	for (let index = 0; index < value.length; index++) {
+		hash ^= value.charCodeAt(index);
+		hash = Math.imul(hash, 16777619);
+	}
+	return (hash >>> 0).toString(16);
+}
+
+function removeCompiledCache(namespace) {
+	try {
+		for (let index = localStorage.length - 1; index >= 0; index--) {
+			const key = localStorage.key(index);
+			if (key?.startsWith(namespace)) {
+				localStorage.removeItem(key);
+			}
+		}
+	} catch {}
+}

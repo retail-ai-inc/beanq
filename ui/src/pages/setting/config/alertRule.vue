@@ -197,7 +197,7 @@ const [triggers,filters,actions] = [
 const [channel,nchannel] = [ref([]),ref([])];
 const channels = (async()=>{
   try {
-    let data = await request.get("queue/list",{"params":{"page":0,"pageSize":100}});
+	let data = await request.get("queues");
     channel.value = data;
     Object.entries(data).forEach(([key,value]) => {
       filters.value.push({

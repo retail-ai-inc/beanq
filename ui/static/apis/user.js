@@ -1,18 +1,19 @@
 const userApi = {
     List(page,pageSize,account){
-        return request.get(`/user/list?page=${page}&pageSize=${pageSize}&account=${account}`);
+		return request.get(`users?page=${page}&pageSize=${pageSize}&account=${account}`);
     },
     Add(data){
-        return request.post("/user/add",data);
+		return request.post("users",data);
     },
     Delete(id){
         let params = {id:id};
-        return request.post(`/user/del`,params);
+		return request.delete(`users/${params.id}`);
     },
     Edit(data){
-        return request.post(`/user/edit`,data);
+		const {_id,...updates} = data;
+		return request.patch(`users/${_id}`,updates);
     },
     Check(password){
-        return request.post(`/user/check`,{password:password})
+		return request.post(`users/check-password`,{password:password})
     }
 }

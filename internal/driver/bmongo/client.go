@@ -3,21 +3,45 @@ package bmongo
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/btls"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const mongoDisconnectTimeout = 10 * time.Second
+
+var ErrMongoStoreClosed = errors.New("mongo store is closed")
+
+type Config struct {
+	Host              string
+	Port              string
+	Database          string
+	Collection        string
+	Username          string
+	Password          string
+	ConnectTimeout    time.Duration
+	MaxConnIdleTime   time.Duration
+	MaxPoolSize       uint64
+	TLSOn             bool
+	CAFile            string
+	VerifyCertificate bool
+	HotReload         bool
+}
+
 type MongoStore struct {
 	mu                    sync.RWMutex
+	reloadMu              sync.Mutex
 	client                *mongo.Client
+	closed                bool
 	database              string
 	collection            string
 	host                  string
@@ -28,43 +52,36 @@ type MongoStore struct {
 	caFile                string
 	verifyCertificate     bool
 	connectTimeOut        time.Duration
-	maxConnectionLifeTime time.Duration
+	maxConnIdleTime       time.Duration
 	maxConnectionPoolSize uint64
 }
 
-func NewMongoStore(ctx context.Context,
-	host, port string,
-	connectTimeOut, maxConnectionLifeTime time.Duration,
-	maxConnectionPoolSize uint64,
-	database, collection, userName, password string,
-	sslOn bool, caFile string, verifyCertificate bool, hotReload bool,
-) *MongoStore {
-
+func NewMongoStore(ctx context.Context, config Config) (*MongoStore, error) {
 	store := &MongoStore{
-		host:                  host,
-		port:                  port,
-		userName:              userName,
-		password:              password,
-		database:              database,
-		collection:            collection,
-		connectTimeOut:        connectTimeOut,
-		maxConnectionLifeTime: maxConnectionLifeTime,
-		maxConnectionPoolSize: maxConnectionPoolSize,
-		sslOn:                 sslOn,
-		caFile:                caFile,
-		verifyCertificate:     verifyCertificate,
+		host:                  config.Host,
+		port:                  config.Port,
+		userName:              config.Username,
+		password:              config.Password,
+		database:              config.Database,
+		collection:            config.Collection,
+		connectTimeOut:        config.ConnectTimeout,
+		maxConnIdleTime:       config.MaxConnIdleTime,
+		maxConnectionPoolSize: config.MaxPoolSize,
+		sslOn:                 config.TLSOn,
+		caFile:                config.CAFile,
+		verifyCertificate:     config.VerifyCertificate,
 	}
 
 	if err := store.Reload(ctx); err != nil {
-		logger.New().Fatal(err)
+		return nil, fmt.Errorf("initialize mongo store: %w", err)
 	}
-	if hotReload && sslOn && caFile != "" {
-		if err := btls.WatchCAFile(ctx, "mongo", caFile, store.Reload); err != nil {
-			_ = store.Close(ctx)
-			logger.New().Fatal(err)
+	if config.HotReload && config.TLSOn && config.CAFile != "" {
+		if err := btls.WatchCAFile(ctx, "mongo", config.CAFile, store.Reload); err != nil {
+			_ = store.Close(context.Background())
+			return nil, fmt.Errorf("watch mongo CA file: %w", err)
 		}
 	}
-	return store
+	return store, nil
 }
 
 func (t *MongoStore) InsertMany(ctx context.Context, data []map[string]any) error {
@@ -88,35 +105,51 @@ func (t *MongoStore) Migrate(ctx context.Context, data []map[string]any) error {
 }
 
 func (t *MongoStore) Reload(ctx context.Context) error {
+	t.reloadMu.Lock()
+	defer t.reloadMu.Unlock()
 
 	client, err := t.newClient(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("create replacement mongo client: %w", err)
 	}
 
 	t.mu.Lock()
+	if t.closed {
+		t.mu.Unlock()
+		_ = disconnectMongoClient(client, context.Background())
+		return ErrMongoStoreClosed
+	}
 	oldClient := t.client
 	t.client = client
 	t.mu.Unlock()
 
 	if oldClient != nil {
-		_ = oldClient.Disconnect(ctx)
+		if err := disconnectMongoClient(oldClient, context.Background()); err != nil {
+			return fmt.Errorf("disconnect previous mongo client: %w", err)
+		}
 	}
 	return nil
 }
 
 func (t *MongoStore) Close(ctx context.Context) error {
-
+	t.reloadMu.Lock()
+	defer t.reloadMu.Unlock()
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	if t.client == nil {
+	if t.closed {
+		t.mu.Unlock()
 		return nil
 	}
-
-	err := t.client.Disconnect(ctx)
+	t.closed = true
+	client := t.client
 	t.client = nil
-	return err
+	t.mu.Unlock()
+	if client == nil {
+		return nil
+	}
+	if err := disconnectMongoClient(client, ctx); err != nil {
+		return fmt.Errorf("disconnect mongo client: %w", err)
+	}
+	return nil
 }
 
 func (t *MongoStore) newClient(ctx context.Context) (*mongo.Client, error) {
@@ -126,31 +159,49 @@ func (t *MongoStore) newClient(ctx context.Context) (*mongo.Client, error) {
 		return nil, err
 	}
 
-	mgo, err := mongo.Connect(ctx, opts)
-	if err != nil {
-		return nil, err
+	connectTimeout := t.connectTimeOut
+	if connectTimeout <= 0 {
+		connectTimeout = 10 * time.Second
 	}
-	if err := mgo.Ping(ctx, nil); err != nil {
-		_ = mgo.Disconnect(ctx)
-		return nil, err
+	connectCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+
+	mgo, err := mongo.Connect(connectCtx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("connect mongo: %w", err)
+	}
+	if err := mgo.Ping(connectCtx, nil); err != nil {
+		_ = disconnectMongoClient(mgo, context.Background())
+		return nil, fmt.Errorf("ping mongo: %w", err)
 	}
 	return mgo, nil
 }
 
 func (t *MongoStore) clientOptions() (*options.ClientOptions, error) {
 
-	port := strings.TrimLeft(t.port, ":")
-	port = fmt.Sprintf(":%s", port)
-	uri := strings.Join([]string{"mongodb://", t.host, port}, "")
+	port := strings.TrimPrefix(strings.TrimSpace(t.port), ":")
+	portNumber, err := strconv.Atoi(port)
+	if err != nil || portNumber < 1 || portNumber > 65535 {
+		return nil, fmt.Errorf("invalid mongo port %q", t.port)
+	}
+	host := strings.TrimSpace(t.host)
+	if host == "" {
+		return nil, errors.New("mongo host is required")
+	}
+	address := net.JoinHostPort(host, strconv.Itoa(portNumber))
 
-	opts := options.Client().ApplyURI(uri).
+	opts := options.Client().SetHosts([]string{address}).
 		SetConnectTimeout(t.connectTimeOut).
-		SetMaxConnIdleTime(t.maxConnectionLifeTime).
+		SetMaxConnIdleTime(t.maxConnIdleTime).
 		SetMaxPoolSize(t.maxConnectionPoolSize)
 
-	if t.userName != "" && t.password != "" {
+	if t.userName != "" {
+		authSource := t.database
+		if authSource == "" {
+			authSource = "admin"
+		}
 		auth := options.Credential{
-			AuthSource: t.database,
+			AuthSource: authSource,
 			Username:   t.userName,
 			Password:   t.password,
 		}
@@ -167,4 +218,10 @@ func (t *MongoStore) clientOptions() (*options.ClientOptions, error) {
 		opts.SetTLSConfig(tlsConfig)
 	}
 	return opts, nil
+}
+
+func disconnectMongoClient(client *mongo.Client, parent context.Context) error {
+	ctx, cancel := context.WithTimeout(parent, mongoDisconnectTimeout)
+	defer cancel()
+	return client.Disconnect(ctx)
 }

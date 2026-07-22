@@ -9,23 +9,28 @@ import (
 )
 
 const (
-	ScriptHashDuplicate      = "hashDuplicate"
-	ScriptSequenceByLock     = "sequenceByLock"
-	ScriptAddLogicLock       = "addLogicLock"
-	ScriptSaveHSet           = "saveHSet"
-	ScriptSaveNewTrans       = "saveNewTrans"
-	ScriptSaveBranches       = "saveBranches"
-	ScriptChangeGlobalStatus = "changeGlobalStatus"
+	ScriptSequenceQueueEnqueue  = "sequenceQueueEnqueue"
+	ScriptSequenceQueueLease    = "sequenceQueueLease"
+	ScriptSequenceQueueFinalize = "sequenceQueueFinalize"
+	ScriptAddLogicLock          = "addLogicLock"
+	ScriptSaveHSet              = "saveHSet"
+	ScriptSaveNewTrans          = "saveNewTrans"
+	ScriptSaveBranches          = "saveBranches"
+	ScriptChangeGlobalStatus    = "changeGlobalStatus"
 )
 
 var (
-	//go:embed scripts/hashDuplicate.lua
-	hashDuplicateIdLua    string
-	HashDuplicateIdScript = redis.NewScript(hashDuplicateIdLua)
+	//go:embed scripts/sequenceQueueEnqueue.lua
+	sequenceQueueEnqueueLua    string
+	SequenceQueueEnqueueScript = redis.NewScript(sequenceQueueEnqueueLua)
 
-	//go:embed scripts/sequenceByLock.lua
-	sequenceByLockLua    string
-	SequenceByLockScript = redis.NewScript(sequenceByLockLua)
+	//go:embed scripts/sequenceQueueLease.lua
+	sequenceQueueLeaseLua    string
+	SequenceQueueLeaseScript = redis.NewScript(sequenceQueueLeaseLua)
+
+	//go:embed scripts/sequenceQueueFinalize.lua
+	sequenceQueueFinalizeLua    string
+	SequenceQueueFinalizeScript = redis.NewScript(sequenceQueueFinalizeLua)
 
 	//go:embed scripts/addLogicLock.lua
 	addLogicLockLua    string
@@ -61,16 +66,20 @@ func NewScriptCatalog(scripts map[string]*redis.Script) *ScriptCatalog {
 	return catalog
 }
 
+var defaultScriptCatalog = NewScriptCatalog(map[string]*redis.Script{
+	ScriptSequenceQueueEnqueue:  SequenceQueueEnqueueScript,
+	ScriptSequenceQueueLease:    SequenceQueueLeaseScript,
+	ScriptSequenceQueueFinalize: SequenceQueueFinalizeScript,
+	ScriptAddLogicLock:          AddLogicLockScript,
+	ScriptSaveHSet:              SaveHSetScript,
+	ScriptSaveNewTrans:          SaveNewTransScript,
+	ScriptSaveBranches:          SaveBranchesScript,
+	ScriptChangeGlobalStatus:    ChangeGlobalStatusScript,
+})
+
+// DefaultScriptCatalog returns the shared read-only catalog.
 func DefaultScriptCatalog() *ScriptCatalog {
-	return NewScriptCatalog(map[string]*redis.Script{
-		ScriptHashDuplicate:      HashDuplicateIdScript,
-		ScriptSequenceByLock:     SequenceByLockScript,
-		ScriptAddLogicLock:       AddLogicLockScript,
-		ScriptSaveHSet:           SaveHSetScript,
-		ScriptSaveNewTrans:       SaveNewTransScript,
-		ScriptSaveBranches:       SaveBranchesScript,
-		ScriptChangeGlobalStatus: ChangeGlobalStatusScript,
-	})
+	return defaultScriptCatalog
 }
 
 func (c *ScriptCatalog) Run(ctx context.Context, client redis.Scripter, name string, keys []string, args ...any) (any, error) {

@@ -8,13 +8,12 @@ const eventApi = {
       </div>`;
     },
     Delete(id){
-        let params = {id:id};
-        return request.post(`event_log/delete`,params);
+		return request.delete(`events/${id}`);
     },
     Edit(id,payload){
-        return request.post(`/event_log/edit`,{id:id,payload:JSON.stringify(payload)});
+		return request.patch(`events/${id}`,{payload:payload});
     },
     Retry(id,data){
-        return request.post(`/event_log/retry`,{uniqueId:id,data:JSON.stringify(data)});
+		return request.post(`events/${id}/retry`,{data:data});
     }
 }

@@ -49,6 +49,20 @@ Consuming messages from Beanq can be done by creating an instance of a Consumer 
 
 # Normal Producer
 
+Normal queues use fixed Redis Stream partitions. Messages are assigned by a
+stable hash of the Beanq message ID, while all partitions share the configured
+consumer worker pool. Configure normalQueuePartitions consistently across
+publishers and consumers. The maxLen setting applies to each partition.
+
+Delay queues reuse normalQueuePartitions. PublishAtTime hashes the Beanq message
+ID to a partition whose scheduled ZSET and ready Stream share one Redis Cluster
+hash slot; different partitions use different slots. The maxLen setting applies
+to each ready Stream partition.
+
+The partitioned v2 layout does not consume messages left in the legacy single
+normal Stream or delay ZSET/Stream. Drain or remove legacy messages before
+upgrading.
+
 Producing messages can be done by creating an instance of a Producer.
 
 	package main
@@ -181,54 +195,11 @@ Publish delayed messages, taking execution time and priority as examples
 		}
 	}
 
-# Sequence Queue
+# Keyed Sequence Queue
 
-It is equivalent to the key of the event, which allows only one event to be consumed at the same time.
+Keyed Sequence Queue hashes each orderKey into a fixed scheduler partition. Messages for one order key are finalized in FIFO order by one valid owner, while different order keys may be consumed concurrently. Delivery is at-least-once, so handlers should be idempotent by message ID.
 
-	package main
-
-	import (
-		"context"
-		"encoding/json"
-		"log"
-		"time"
-
-		"github.com/retail-ai-inc/beanq/v4"
-		"github.com/retail-ai-inc/beanq/v4/helper/logger"
-		"github.com/spf13/cast"
-	)
-
-	func main() {
-
-		config, err := beanq.NewConfig("./", "json", "env")
-		if err != nil {
-			logger.New().Error(err)
-			return
-		}
-		pub := beanq.New(config)
-
-		for i := 0; i < 3; i++ {
-			id := cast.ToString(i)
-
-			m := make(map[string]any)
-			m["delayMsg"] = "new msg" + id
-
-			b, _ := json.Marshal(m)
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
-			defer cancel()
-			// At the same time, for the same orderKey: aa,
-			// only one consumption is allowed, and the others will be blocked until SetLockOrderKeyTTL(10*time.Second) expires and deletes the orderKey
-			result, err := pub.BQ().WithContext(ctx).
-				SetId(id).SetLockOrderKeyTTL(10*time.Second).
-				PublishInSequenceByLock("delay-channel", "order-topic", "aa", b).WaitingAck()
-			if err != nil {
-				logger.New().Error(err, m)
-			} else {
-				log.Printf("ID:%+v \n", result.Id)
-			}
-		}
-
-	}
+Publish with PublishNewSequence(channel, topic, orderKey, payload) and subscribe with ConsumerSequence. Configure sequenceQueuePartitions consistently across publishers and consumers; once queue metadata exists, the partition count cannot change in place.
 
 # Work Flow
 
@@ -259,7 +230,7 @@ How Workflow Works
 		}
 		csm := beanq.New(config)
 
-		_, berr := csm.BQ().WithContext(ctx).SubscribeToSequence("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
+		_, berr := csm.BQ().WithContext(ctx).SubscribeSequence("delay-channel", "order-topic", beanq.WorkflowHandler(func(ctx context.Context, wf *beanq.Workflow) error {
 			index++
 			fmt.Println("index:", index)
 			wf.NewTask().OnRollback(func(task beanq.Task) error {
@@ -336,7 +307,9 @@ The client actively enables the monitoring platform UI
 
 		}
 		csm := beanq.New(config)
-		csm.ServeHttp(context.Background())
+		if err := csm.ServeHTTP(context.Background()); err != nil {
+			panic(err)
+		}
 	}
 */
 package beanq

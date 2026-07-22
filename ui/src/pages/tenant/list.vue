@@ -188,8 +188,8 @@ onMounted(async ()=>{
 async function getTenants(){
 
   try{
-    let res = await tenantApi.List(0,10,"","")
-    const {rows,total} = res;
+	let res = await tenantApi.List(1,10,"","")
+	const rows = res.data || [];
     if(rows.length > 0){
       tenants.value = rows;
       Object.assign(tenant,rows[0]);

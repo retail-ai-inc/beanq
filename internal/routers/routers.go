@@ -1,8 +1,10 @@
 package routers
 
 import (
+	"fmt"
 	"io/fs"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -13,26 +15,34 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+func RedisRouterList(fs2 fs.FS, modFiles map[string]time.Time, driver any, mgo *bmongo.BMongo,
+	workflowCollection *mongo.Collection, prefix string, uiConfig ui.Ui) (*Router, error) {
+	client, ok := driver.(redis.UniversalClient)
+	if !ok {
+		return nil, fmt.Errorf("ui requires redis driver")
+	}
+	return RouterList(fs2, modFiles, client, mgo, workflowCollection, prefix, uiConfig), nil
+}
+
 type EventName struct {
 }
 type Handles struct {
-	schedule     *Schedule
-	queue        *Queue
-	logs         *Logs
-	log          *Log
-	redisInfo    *RedisInfo
-	mongoInfo    *MongoInfo
-	login        *Login
-	client       *Client
-	dashboard    *Dashboard
-	eventLog     *EventLog
-	user         *User
-	dlq          *Dlq
-	workflow     *WorkFlow
-	role         *Role
-	pod          *Pod
-	sequenceLock *SequenceLock
-	tenant       *Tenants
+	schedule  *Schedule
+	queue     *Queue
+	logs      *Logs
+	log       *Log
+	redisInfo *RedisInfo
+	mongoInfo *MongoInfo
+	login     *Login
+	client    *Client
+	dashboard *Dashboard
+	eventLog  *EventLog
+	user      *User
+	dlq       *Dlq
+	workflow  *WorkFlow
+	role      *Role
+	pod       *Pod
+	tenant    *Tenants
 }
 
 type Router struct {
@@ -45,9 +55,10 @@ func NewRouter() *Router {
 	return &Router{http.NewServeMux()}
 }
 func (r *Router) HandleFunc(pattern string, handler HandleFunc, middles ...Middleware) {
-	for _, middle := range middles {
-		handler = middle(handler)
+	for i := len(middles) - 1; i >= 0; i-- {
+		handler = middles[i](handler)
 	}
+	handler = HeaderRule()(Recover()(handler))
 	r.Mux.HandleFunc(pattern, handler)
 }
 func RouterList(fs2 fs.FS,
@@ -58,142 +69,155 @@ func RouterList(fs2 fs.FS,
 	prefix string, ui ui.Ui) *Router {
 
 	hdls := Handles{
-		schedule:     NewSchedule(client, prefix),
-		queue:        NewQueue(client, prefix),
-		logs:         NewLogs(client, prefix),
-		log:          NewLog(client, mgo, prefix),
-		redisInfo:    NewRedisInfo(client, prefix, mgo),
-		mongoInfo:    NewMongoInfo(mgo),
-		login:        NewLogin(client, mgo, prefix, ui),
-		client:       NewClient(client, prefix),
-		dashboard:    NewDashboard(client, mgo, prefix),
-		eventLog:     NewEventLog(client, mgo, prefix),
-		user:         NewUser(client, mgo, prefix, ui),
-		dlq:          NewDlq(client, mgo, prefix),
-		workflow:     NewWorkFlow(workflowCollection),
-		role:         NewRole(mgo),
-		pod:          NewPod(client, mgo, prefix),
-		sequenceLock: NewSequenceLock(client, prefix),
-		tenant:       NewTenants(mgo),
+		schedule:  NewSchedule(client, prefix),
+		queue:     NewQueue(client, prefix),
+		logs:      NewLogs(client, prefix),
+		log:       NewLog(client, mgo, prefix),
+		redisInfo: NewRedisInfo(client, prefix, mgo),
+		mongoInfo: NewMongoInfo(mgo),
+		login:     NewLogin(client, mgo, prefix, ui),
+		client:    NewClient(client, prefix),
+		dashboard: NewDashboard(client, mgo, prefix),
+		eventLog:  NewEventLog(client, mgo, prefix),
+		user:      NewUser(client, mgo, prefix, ui),
+		dlq:       NewDlq(client, mgo, prefix),
+		workflow:  NewWorkFlow(workflowCollection),
+		role:      NewRole(mgo),
+		pod:       NewPod(client, mgo, prefix),
+		tenant:    NewTenants(mgo),
 	}
 
 	router := NewRouter()
+	uiFS, uiFSErr := fs.Sub(fs2, "ui")
+	var staticHandler http.Handler
+	if uiFSErr == nil {
+		staticHandler = http.FileServer(http.FS(uiFS))
+	}
 	router.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		fd, err := fs.Sub(fs2, "ui")
-		if err != nil {
+		if uiFSErr != nil {
 			http.Error(w, "static files error", http.StatusInternalServerError)
 			return
 		}
 
-		path := r.URL.Path
-		if path == "/" {
-			path = "/index.html"
+		assetPath := r.URL.Path
+		if assetPath == "/" {
+			assetPath = "/index.html"
 		}
-		_, err = fs.Stat(fd, strings.TrimLeft(path, "/"))
+		_, err := fs.Stat(uiFS, strings.TrimLeft(assetPath, "/"))
 		if err != nil {
 			http.Error(w, "Not Found", http.StatusNotFound)
 			return
 		}
 
-		ifModifiedSince := r.Header.Get("If-Modified-Since")
-		if ifModifiedSince != "" {
-			ifModifiedSinceTime, err := time.ParseInLocation(time.RFC1123, ifModifiedSince, time.UTC)
-			if err == nil && modFiles[path].UTC().Before(ifModifiedSinceTime.Add(1*time.Second)) {
+		modTime, ok := modFiles[assetPath]
+		if !ok {
+			http.Error(w, "static file metadata missing", http.StatusInternalServerError)
+			return
+		}
+		lastModified := modTime.UTC().Format(http.TimeFormat)
+		etag := fmt.Sprintf("\"%d\"", modTime.UnixNano())
+		w.Header().Set("Last-Modified", lastModified)
+		w.Header().Set("ETag", etag)
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if assetPath == "/index.html" {
+			w.Header().Set("Cache-Control", "no-cache")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=3600, must-revalidate")
+		}
+
+		if ifNoneMatch := r.Header.Get("If-None-Match"); ifNoneMatch != "" {
+			if ifNoneMatch == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		} else if ifModifiedSince := r.Header.Get("If-Modified-Since"); ifModifiedSince != "" {
+			ifModifiedSinceTime, err := http.ParseTime(ifModifiedSince)
+			if err == nil && !modTime.After(ifModifiedSinceTime.Add(time.Second)) {
 				w.WriteHeader(http.StatusNotModified)
 				return
 			}
 		}
-		w.Header().Set("Last-Modified", modFiles[path].UTC().Format(time.RFC1123))
 
-		handle := http.FileServer(http.FS(fd))
-
-		if !bgzip.MatchGzipEncoding(r) || !strings.Contains(r.URL.Path, ".js") && !strings.Contains(r.URL.Path, ".vue") {
-			handle.ServeHTTP(w, r)
+		extension := strings.ToLower(path.Ext(assetPath))
+		if !bgzip.MatchGzipEncoding(r) || (extension != ".js" && extension != ".vue") {
+			staticHandler.ServeHTTP(w, r)
 			return
 		}
-
-		w.Header().Set("Content-Encoding", "gzip")
-		w.Header().Set("Vary", "Accept-Encoding")
 
 		gz, err := bgzip.NewGzipResponseWriter(w)
 		if err != nil {
-			http.Error(w, "Not Found", http.StatusNotFound)
+			http.Error(w, "gzip initialization error", http.StatusInternalServerError)
 			return
 		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
 		defer gz.Close()
 
-		handle.ServeHTTP(gz, r)
+		staticHandler.ServeHTTP(gz, r)
 	})
 
 	router.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("pong"))
 	}, HeaderRule())
-	router.HandleFunc("GET /schedule", hdls.schedule.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /queue/list", hdls.queue.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /queue/detail", hdls.queue.Detail, HeaderRule(), AuthSSE(mgo, ui, "queue_detail"))
+	router.HandleFunc("POST /api/v1/auth/login", hdls.login.Login)
+	router.HandleFunc("POST /api/v1/auth/logout", hdls.login.Logout)
+	router.HandleFunc("GET /api/v1/auth/google", hdls.login.GoogleLogin)
+	router.HandleFunc("GET /api/v1/auth/google/callback", hdls.login.GoogleCallBack)
+	router.HandleFunc("GET /api/v1/auth/google/config", hdls.login.LoginAllowGoogle, requireMongo(mgo))
+	// Compatibility endpoint used by UI clients released before the /api/v1 migration.
+	router.HandleFunc("GET /login/allowGoogle", hdls.login.LoginAllowGoogle, requireMongo(mgo))
 
-	router.HandleFunc("GET /logs", hdls.logs.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /log", hdls.log.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /log/opt_log", hdls.log.OptLogs, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("DELETE /log/opt_log", hdls.log.DelOptLog, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /log/workflow_log", hdls.log.WorkFlowLogs, HeaderRule(), Auth(mgo, ui))
+	auth := Auth(mgo, ui)
+	router.HandleFunc("GET /api/v1/schedules", hdls.schedule.List, auth)
+	router.HandleFunc("GET /api/v1/queues", hdls.queue.List, auth)
+	router.HandleFunc("GET /api/v1/queues/{id}/stream", hdls.queue.Detail, AuthSSE(mgo, ui, "queue_detail"))
+	router.HandleFunc("GET /api/v1/logs", hdls.logs.List, auth)
+	router.HandleFunc("GET /api/v1/logs/{id}", pathQuery(hdls.log.List, "id"), auth)
+	router.HandleFunc("DELETE /api/v1/logs/{id}", pathQuery(hdls.log.Delete, "score"), auth)
+	router.HandleFunc("POST /api/v1/logs/{id}/retry", jsonForm(hdls.log.Retry, "id"), auth)
+	router.HandleFunc("GET /api/v1/operation-logs", hdls.log.OptLogs, auth, requireMongo(mgo))
+	router.HandleFunc("DELETE /api/v1/operation-logs/{id}", pathQuery(hdls.log.DelOptLog, "id"), auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/workflow-logs", hdls.log.WorkFlowLogs, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/redis/info/stream", hdls.redisInfo.Info, AuthSSE(mgo, ui, "redis_info"))
+	router.HandleFunc("GET /api/v1/redis/monitor/stream", hdls.redisInfo.Monitor, AuthSSE(mgo, ui, "redis_monitor"))
+	router.HandleFunc("GET /api/v1/redis/keys", hdls.redisInfo.Keys, auth)
+	router.HandleFunc("DELETE /api/v1/redis/keys/{key}", hdls.redisInfo.DeleteKey, auth)
+	router.HandleFunc("GET /api/v1/config", hdls.redisInfo.ConfigInfo, auth, requireMongo(mgo))
+	router.HandleFunc("PUT /api/v1/config", hdls.redisInfo.Config, auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/notifications/test", hdls.login.TestNotify, auth)
+	router.HandleFunc("GET /api/v1/clients", hdls.client.List, auth)
+	router.HandleFunc("GET /api/v1/dashboard", hdls.dashboard.Total, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/dashboard/stream", hdls.dashboard.Info, AuthSSE(mgo, ui, "dashboard"))
+	router.HandleFunc("GET /api/v1/dashboard/pods/stream", hdls.dashboard.Pods, AuthSSE(mgo, ui, "pods"))
+	router.HandleFunc("GET /api/v1/nodes", hdls.dashboard.Nodes, auth)
 
-	router.HandleFunc("GET /redis", hdls.redisInfo.Info, HeaderRule(), AuthSSE(mgo, ui, "redis_info"))
-	router.HandleFunc("GET /redis/monitor", hdls.redisInfo.Monitor, HeaderRule(), AuthSSE(mgo, ui, "redis_monitor"))
-	router.HandleFunc("GET /redis/keys", hdls.redisInfo.Keys, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("DELETE /redis/{key}", hdls.redisInfo.DeleteKey, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("PUT /redis/config", hdls.redisInfo.Config, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /redis/config", hdls.redisInfo.ConfigInfo, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("POST /test/notify", hdls.login.TestNotify, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("POST /login", hdls.login.Login, HeaderRule())
-	router.HandleFunc("GET /login/allowGoogle", hdls.login.LoginAllowGoogle, HeaderRule())
-	router.HandleFunc("GET /clients", hdls.client.List, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /dashboard/graphic", hdls.dashboard.Info, HeaderRule(), AuthSSE(mgo, ui, "dashboard"))
-	router.HandleFunc("GET /dashboard/total", hdls.dashboard.Total, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /dashboard/pods", hdls.dashboard.Pods, HeaderRule(), AuthSSE(mgo, ui, "pods"))
-	router.HandleFunc("GET /nodes", hdls.dashboard.Nodes, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /event_log/list", hdls.eventLog.List, HeaderRule(), AuthSSE(mgo, ui, "event_log"))
-	router.HandleFunc("GET /event_log/detail", hdls.eventLog.Detail, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /event_log/delete", hdls.eventLog.Delete, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /event_log/edit", hdls.eventLog.Edit, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /event_log/retry", hdls.eventLog.Retry, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /sequenceLock/list", hdls.sequenceLock.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("DELETE /sequenceLock/unlock/{key}", hdls.sequenceLock.UnLock, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /user/list", hdls.user.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /user/add", hdls.user.Add, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /user/del", hdls.user.Delete, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /user/edit", hdls.user.Edit, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /user/check", hdls.user.Check, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /role/list", hdls.role.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /role/add", hdls.role.Add, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /role/delete", hdls.role.Delete, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /role/edit", hdls.role.Edit, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /googleLogin", hdls.login.GoogleLogin)
-	router.HandleFunc("GET /callback", hdls.login.GoogleCallBack)
-
-	router.HandleFunc("GET /dlq/list", hdls.dlq.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /dlq/retry", hdls.dlq.Retry, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /dlq/delete", hdls.dlq.Delete, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /workflow/list", hdls.workflow.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("POST /workflow/delete", hdls.workflow.Delete, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("GET /pod/list", hdls.pod.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /mongo/detail", hdls.mongoInfo.Detail, HeaderRule(), Auth(mgo, ui))
-
-	router.HandleFunc("POST /tenant", hdls.tenant.Add, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("DELETE /tenant/{id}", hdls.tenant.Delete, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("PUT /tenant/{id}", hdls.tenant.Edit, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /tenant", hdls.tenant.List, HeaderRule(), Auth(mgo, ui))
-	router.HandleFunc("GET /tenant/{id}", hdls.tenant.Get, HeaderRule(), Auth(mgo, ui))
+	router.HandleFunc("GET /api/v1/events", hdls.eventLog.List, AuthSSE(mgo, ui, "event_log"), requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/events/{id}", pathQuery(hdls.eventLog.Detail, "id"), auth, requireMongo(mgo))
+	router.HandleFunc("DELETE /api/v1/events/{id}", jsonForm(hdls.eventLog.Delete, "id"), auth, requireMongo(mgo))
+	router.HandleFunc("PATCH /api/v1/events/{id}", jsonForm(hdls.eventLog.Edit, "id"), auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/events/{id}/retry", jsonForm(hdls.eventLog.Retry, "id"), auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/dead-letters", hdls.dlq.List, auth, requireMongo(mgo))
+	router.HandleFunc("DELETE /api/v1/dead-letters/{id}", jsonForm(hdls.dlq.Delete, "id"), auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/dead-letters/{id}/retry", jsonForm(hdls.dlq.Retry, "uniqueId"), auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/workflows", hdls.workflow.List, auth)
+	router.HandleFunc("DELETE /api/v1/workflows/{id}", jsonForm(hdls.workflow.Delete, "id"), auth)
+	router.HandleFunc("GET /api/v1/users", hdls.user.List, auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/users", hdls.user.Add, auth, requireMongo(mgo))
+	router.HandleFunc("PATCH /api/v1/users/{id}", hdls.user.Edit, auth, requireMongo(mgo))
+	router.HandleFunc("DELETE /api/v1/users/{id}", hdls.user.Delete, auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/users/check-password", hdls.user.Check, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/roles", hdls.role.List, auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/roles", hdls.role.Add, auth, requireMongo(mgo))
+	router.HandleFunc("PATCH /api/v1/roles/{id}", hdls.role.Edit, auth, requireMongo(mgo))
+	router.HandleFunc("DELETE /api/v1/roles/{id}", hdls.role.Delete, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/pods", hdls.pod.List, auth)
+	router.HandleFunc("GET /api/v1/mongo", hdls.mongoInfo.Detail, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/tenants", hdls.tenant.List, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/tenants/{id}", hdls.tenant.Get, auth, requireMongo(mgo))
+	router.HandleFunc("POST /api/v1/tenants", hdls.tenant.Add, auth, requireMongo(mgo))
+	router.HandleFunc("PATCH /api/v1/tenants/{id}", hdls.tenant.Edit, auth, requireMongo(mgo))
+	router.HandleFunc("DELETE /api/v1/tenants/{id}", hdls.tenant.Delete, auth, requireMongo(mgo))
 
 	return router
 }

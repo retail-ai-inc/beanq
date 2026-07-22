@@ -19,19 +19,19 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 
 	"github.com/hashicorp/go-multierror"
 )
 
 // ErrFailed is the error resulting if Redsync fails to acquire the lock after exhausting all retries.
-var ErrFailed = bstatus.BqError("failed to acquire lock")
+var ErrFailed = berror.BqError("failed to acquire lock")
 
 // ErrExtendFailed is the error resulting if Redsync fails to extend the lock.
-var ErrExtendFailed = bstatus.BqError("failed to extend lock")
+var ErrExtendFailed = berror.BqError("failed to extend lock")
 
 // ErrLockAlreadyExpired is the error resulting if trying to unlock the lock which already expired.
-var ErrLockAlreadyExpired = bstatus.BqError("failed to unlock, lock was already expired")
+var ErrLockAlreadyExpired = berror.BqError("failed to unlock, lock was already expired")
 
 // A DelayFunc is used to decide the amount of time to wait between retries.
 type DelayFunc func(tries int) time.Duration

@@ -1,7 +1,10 @@
 package routers
 
 import (
+	"context"
 	"net/http"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,39 +47,81 @@ func queueDetail(w http.ResponseWriter, r *http.Request, client redis.UniversalC
 	result, cancel := response.Get()
 	defer cancel()
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	id := r.FormValue("id")
-	id = strings.Join([]string{prefix, id, "normal_stream", "stream"}, ":")
+	id := r.PathValue("id")
+	route := strings.SplitN(id, ":", 2)
 
 	ctx := r.Context()
-	ticker := time.NewTicker(300 * time.Millisecond)
-	defer ticker.Stop()
+	emit := func() error {
+		stream, err := queueDetailMessages(ctx, client, prefix, route)
+		if err != nil {
+			result.Code = berror.InternalServerErrorCode
+			result.Msg = err.Error()
+		} else {
+			result.Code = berror.SuccessCode
+			result.Msg = ""
+			result.Data = stream
+		}
+		return result.EventMsg(w, "queue_detail")
+	}
+	if err := streamEvents(w, r, 10*time.Second, emit); err != nil {
+		return
+	}
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			stream, err := XRangeN(ctx, client, id, "-", "+", 50)
+func queueDetailMessages(ctx context.Context, client redis.UniversalClient, prefix string, route []string) ([]redis.XMessage, error) {
+	if len(route) != 2 {
+		return nil, nil
+	}
+	pattern := strings.Join([]string{prefix, route[0], route[1], "*", "normal_queue", "stream*"}, ":")
+	keys, _, err := scanKeys(ctx, client, pattern, 0)
+	if err != nil {
+		return nil, err
+	}
+	messages := make([]redis.XMessage, 0, 50)
+	for _, key := range keys {
+		batch, rangeErr := XRangeN(ctx, client, key, "-", "+", 50)
+		if rangeErr != nil {
+			return nil, rangeErr
+		}
+		for i := range batch {
+			batch[i].Values["partition"] = partitionFromStreamKey(key)
+		}
+		messages = append(messages, batch...)
+	}
+	sort.SliceStable(messages, func(i, j int) bool { return compareStreamID(messages[i].ID, messages[j].ID) < 0 })
+	if len(messages) > 50 {
+		messages = messages[:50]
+	}
+	return messages, nil
+}
 
-			if err != nil {
-				result.Code = "1004"
-				result.Msg = err.Error()
-			}
-
-			if err == nil {
-				result.Data = stream
-			}
-			_ = result.EventMsg(w, "queue_detail")
-			flusher.Flush()
-			ticker.Reset(10 * time.Second)
+func partitionFromStreamKey(key string) string {
+	parts := strings.Split(key, ":")
+	for i, part := range parts {
+		if (part == "normal_queue" || part == "delay_queue" || part == "sequence_queue") && i+1 < len(parts) {
+			return strings.TrimPrefix(parts[i+1], "stream-")
 		}
 	}
+	return "legacy"
+}
+
+func compareStreamID(left, right string) int {
+	parse := func(id string) (int64, int64) {
+		parts := strings.SplitN(id, "-", 2)
+		ms, _ := strconv.ParseInt(parts[0], 10, 64)
+		var seq int64
+		if len(parts) == 2 {
+			seq, _ = strconv.ParseInt(parts[1], 10, 64)
+		}
+		return ms, seq
+	}
+	lm, ls := parse(left)
+	rm, rs := parse(right)
+	if lm < rm || (lm == rm && ls < rs) {
+		return -1
+	}
+	if lm == rm && ls == rs {
+		return 0
+	}
+	return 1
 }

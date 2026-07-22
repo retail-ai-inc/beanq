@@ -4,9 +4,9 @@ const loginApi = {
         if(expiredTimeBool){
             expiredTime = 30
         }
-        return  request.post("login", {username:username,password:password,expiredTime:expiredTime} )
+		return request.post("auth/login", {username:username,password:password,expiredDays:expiredTime})
     },
     AllowGoogle(){
-        return request.get("login/allowGoogle")
+		return request.get("auth/google/config")
     },
 }

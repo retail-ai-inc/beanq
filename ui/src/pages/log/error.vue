@@ -49,8 +49,8 @@
       <Pagination :page="page" :total="total" :cursor="cursor" @changePage="changePage"/>
     </div>
 </template>
-  
-  
+
+
 <script setup>
 
 import { useRouter } from 'vueRouter';
@@ -98,7 +98,7 @@ async function options(optType,param){
 
   switch (optType){
     case "delete":
-      await request.delete("/log",  {"params":{score: param.Score,msgType:"fail"}}).then(res=>{
+	  await request.delete(`logs/${encodeURIComponent(param.Score)}`, {"params":{msgType:"fail"}}).then(res=>{
 
         let logs = getErrLog(data.page,10,0);
 
@@ -112,7 +112,7 @@ async function options(optType,param){
       })
           break;
     case "retry":
-      await request.post("/log",{id:param.id,msgType:"fail"},{headers:{"Content-Type":"multipart/form-data"}} ).then(res=>{
+	  await request.post(`logs/${param.id}/retry`,{msgType:"fail"}).then(res=>{
         getErrLog(data.page,10,data.cursor);
       }).catch(err=>{
         console.error(err)
@@ -138,5 +138,3 @@ const {logs,page,total,cursor} = toRefs(data);
     color: var(--bs-danger) !important;
 }
 </style>
-  
-  

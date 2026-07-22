@@ -8,8 +8,6 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
-	"github.com/retail-ai-inc/beanq/v4/helper/logger"
-	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/host"
@@ -31,69 +29,58 @@ func NewUITool(client redis.UniversalClient, prefix string) *UITool {
 }
 
 func (t *UITool) QueueMessage(ctx context.Context) error {
+	streamKeys, err := t.client.Keys(ctx, "*"+t.prefix+"*:stream*").Result()
+	if err != nil {
+		return fmt.Errorf("list queue streams: %w", err)
+	}
 
-	timer := timex.TimerPool.Get(5 * time.Second)
-	defer timer.Stop()
-
-	var (
-		total   int64
-		pending int64
-		ready   int64
-	)
-	//data := make(map[string]any, 4)
-	sliceData := make([]any, 0, 4)
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
-
-		}
-		timer.Reset(5 * time.Second)
-		total, pending = 0, 0
-
-		// total data from all streams
-		streamkeys := t.client.Keys(ctx, strings.Join([]string{t.prefix, "*", ":stream"}, "")).Val()
-
-		for _, streamkey := range streamkeys {
-			val := t.client.XInfoGroups(ctx, streamkey).Val()
-			if len(val) > 0 {
-				pending += val[0].Pending
-			}
-			total += t.client.XLen(ctx, streamkey).Val()
-		}
-		if total <= 0 {
-			total = 0
-		}
-		if pending < 0 {
-			pending = 0
-		}
-		ready = total - pending
-
-		now := time.Now()
-
-		sliceData = append(sliceData, total, pending, ready, now.Format(time.DateTime))
-
-		bt, err := json.Marshal(sliceData)
-		sliceData = sliceData[:0]
+	var total, pending int64
+	for _, streamKey := range streamKeys {
+		keyType, err := t.client.Type(ctx, streamKey).Result()
 		if err != nil {
-			logger.New().Error(err)
+			return fmt.Errorf("read queue key type for %q: %w", streamKey, err)
+		}
+		if keyType != "stream" {
 			continue
 		}
-
-		totalkey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
-
-		if err := t.client.ZAdd(ctx, totalkey, redis.Z{
-			Score:  cast.ToFloat64(now.Unix()),
-			Member: bt,
-		}).Err(); err != nil {
-			logger.New().Error(err)
+		groups, err := t.client.XInfoGroups(ctx, streamKey).Result()
+		if err != nil && err != redis.Nil {
+			return fmt.Errorf("read consumer groups for %q: %w", streamKey, err)
 		}
-		before := now.Add(-48 * time.Hour).Unix()
-		if err := t.client.ZRemRangeByScore(ctx, totalkey, "0", cast.ToString(before)).Err(); err != nil {
-			logger.New().Error(err)
+		if len(groups) > 0 {
+			pending += groups[0].Pending
 		}
+
+		length, err := t.client.XLen(ctx, streamKey).Result()
+		if err != nil {
+			return fmt.Errorf("read stream length for %q: %w", streamKey, err)
+		}
+		total += length
 	}
+	if pending < 0 {
+		pending = 0
+	}
+	ready := max(total-pending, 0)
+	now := time.Now()
+
+	data, err := json.Marshal([]any{total, pending, ready, now.Format(time.DateTime)})
+	if err != nil {
+		return fmt.Errorf("encode queue metrics: %w", err)
+	}
+
+	totalKey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
+	if err := t.client.ZAdd(ctx, totalKey, redis.Z{
+		Score:  cast.ToFloat64(now.Unix()),
+		Member: data,
+	}).Err(); err != nil {
+		return fmt.Errorf("store queue metrics: %w", err)
+	}
+
+	before := now.Add(-48 * time.Hour).Unix()
+	if err := t.client.ZRemRangeByScore(ctx, totalKey, "0", cast.ToString(before)).Err(); err != nil {
+		return fmt.Errorf("prune queue metrics: %w", err)
+	}
+	return nil
 }
 
 func (t *UITool) HostName(ctx context.Context) error {

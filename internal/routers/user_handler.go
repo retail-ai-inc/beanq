@@ -1,14 +1,16 @@
 package routers
 
 import (
+	"errors"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
-	"github.com/spf13/cast"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -29,19 +31,26 @@ func (t *User) List(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	page := cast.ToInt64(r.URL.Query().Get("page"))
-	pageSize := cast.ToInt64(r.URL.Query().Get("pageSize"))
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
 	account := r.URL.Query().Get("account")
+	if len(account) > 128 {
+		writeBadRequest(w, errors.New("account filter must not exceed 128 characters"))
+		return
+	}
 
 	filter := bson.M{}
 	if account != "" {
 		filter["account"] = bson.M{
-			"$regex":   account,
+			"$regex":   regexp.QuoteMeta(account),
 			"$options": "i",
 		}
 	}
 
-	data, total, err := t.mgo.UserLogs(r.Context(), filter, page, pageSize)
+	data, total, err := t.mgo.UserLogs(r.Context(), filter, page.Page, page.PageSize)
 
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
@@ -49,7 +58,7 @@ func (t *User) List(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = map[string]any{"data": data, "total": total, "cursor": page}
+	res.Data = map[string]any{"data": data, "total": total, "cursor": page.Page}
 	_ = res.Json(w, http.StatusOK)
 
 }
@@ -58,27 +67,30 @@ func (t *User) Add(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	account := r.PostFormValue("account")
-	password := r.PostFormValue("password")
-	typ := r.PostFormValue("type")
-	active := r.PostFormValue("active")
-	detail := r.PostFormValue("detail")
-	roleId := r.PostFormValue("roleId")
+	var input struct {
+		Account  string `json:"account"`
+		Password string `json:"password"`
+		Type     string `json:"type"`
+		Active   int32  `json:"active"`
+		Detail   string `json:"detail"`
+		RoleID   string `json:"roleId"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeBadRequest(w, err)
+		return
+	}
+	input.Account = strings.TrimSpace(input.Account)
 
-	if account == "" {
+	if input.Account == "" || input.Password == "" {
 		res.Code = berror.MissParameterCode
-		res.Msg = "missing account"
-		_ = res.Json(w, http.StatusOK)
+		res.Msg = "account and password are required"
+		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 
 	if err := t.mgo.AddUser(r.Context(), &bmongo.User{
-		Account:  account,
-		Password: password,
-		Type:     typ,
-		Active:   cast.ToInt32(active),
-		Detail:   detail,
-		RoleId:   roleId,
+		Account: input.Account, Password: input.Password, Type: input.Type,
+		Active: input.Active, Detail: input.Detail, RoleId: input.RoleID,
 	}); err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
@@ -100,19 +112,24 @@ func (t *User) Delete(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	id := r.PostFormValue("id")
+	id := r.PathValue("id")
 
 	if id == "" {
-		res.Code = berror.MissParameterMsg
-		res.Msg = "missing account field"
-		_ = res.Json(w, http.StatusOK)
+		res.Code = berror.MissParameterCode
+		res.Msg = "id is required"
+		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
 
-	if _, err := t.mgo.DeleteUser(r.Context(), id); err != nil {
+	count, err := t.mgo.DeleteUser(r.Context(), id)
+	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
-		_ = res.Json(w, http.StatusOK)
+		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if count == 0 {
+		writeAPIError(w, http.StatusNotFound, berror.MissParameterCode, "user not found")
 		return
 	}
 	_ = res.Json(w, http.StatusOK)
@@ -123,24 +140,34 @@ func (t *User) Edit(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	id := r.FormValue("_id")
+	id := r.PathValue("id")
 	if id == "" {
 		res.Code = berror.MissParameterCode
 		res.Msg = "ID can't be empty"
 		_ = res.Json(w, http.StatusBadRequest)
 		return
 	}
-	account := r.FormValue("account")
-	password := r.FormValue("password")
-	active := r.FormValue("active")
-	typ := r.FormValue("type")
-	detail := r.FormValue("detail")
-	roleId := r.FormValue("roleId")
-
-	if _, err := t.mgo.EditUser(r.Context(), id, map[string]any{"account": account, "password": password, "active": active, "type": typ, "detail": detail, "roleId": roleId}); err != nil {
+	var input struct {
+		Password *string `json:"password"`
+		Active   *int32  `json:"active"`
+		Type     *string `json:"type"`
+		Detail   *string `json:"detail"`
+		RoleID   *string `json:"roleId"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeBadRequest(w, err)
+		return
+	}
+	updates := map[string]any{"password": input.Password, "active": input.Active, "type": input.Type, "detail": input.Detail, "roleId": input.RoleID}
+	count, err := t.mgo.EditUser(r.Context(), id, updates)
+	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
+		return
+	}
+	if count == 0 {
+		writeAPIError(w, http.StatusNotFound, berror.MissParameterCode, "user not found")
 		return
 	}
 	_ = res.Json(w, http.StatusOK)
@@ -151,21 +178,31 @@ func (t *User) Check(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	username := r.Context().Value(UserName)
-	pwd := r.FormValue("password")
+	username, ok := r.Context().Value(UserName).(string)
+	if !ok || username == "" {
+		writeAPIError(w, http.StatusUnauthorized, berror.AuthExpireCode, "unauthorized")
+		return
+	}
+	var input struct {
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(w, r, &input); err != nil {
+		writeBadRequest(w, err)
+		return
+	}
+	pwd := input.Password
 
 	if username == t.ui.Root.UserName && pwd == t.ui.Root.Password {
 		_ = res.Json(w, http.StatusOK)
 		return
 	}
 
-	if _, err := t.mgo.CheckUser(r.Context(), username.(string), pwd); err == nil {
+	if _, err := t.mgo.CheckUser(r.Context(), username, pwd); err == nil {
 		_ = res.Json(w, http.StatusOK)
 		return
 	}
-	res.Code = berror.SuccessCode
+	res.Code = berror.AuthExpireCode
 	res.Msg = "Unauthorized"
 	res.Data = "Unauthorized"
-	_ = res.Json(w, http.StatusOK)
-
+	_ = res.Json(w, http.StatusUnauthorized)
 }

@@ -1,15 +1,12 @@
 const sseApi = {
     Init(url){
-
-        let token = Storage.GetItem("token");
-        let nodeId = Storage.GetItem("nodeId");
-
-        let urlEs ;
-        if(url.includes("?")){
-            urlEs = `${url}&token=${token}&nodeId=${nodeId}`;
-        }else{
-            urlEs = `${url}?token=${token}&nodeId=${nodeId}`;
-        }
-        return new EventSource(urlEs);
+		if (typeof url !== "string" || url.trim() === "") {
+			throw new TypeError("SSE URL must be a non-empty string");
+		}
+		return new EventSource(`/api/v1/${url}`, {withCredentials:true});
     }
+}
+
+if (typeof module !== "undefined" && module.exports) {
+	module.exports = sseApi;
 }

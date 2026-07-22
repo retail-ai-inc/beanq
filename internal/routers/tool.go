@@ -9,6 +9,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
+	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/spf13/cast"
 )
 
@@ -66,6 +67,29 @@ func HSet(ctx context.Context, client redis.UniversalClient, key string, data ma
 
 func Del(ctx context.Context, client redis.UniversalClient, key string) error {
 	return client.Del(ctx, key).Err()
+}
+
+func scanKeys(ctx context.Context, client redis.UniversalClient, pattern string, limit int64) ([]string, uint64, error) {
+	keys := make([]string, 0)
+	var cursor uint64
+	for {
+		batchSize := int64(250)
+		if limit > 0 && limit-int64(len(keys)) < batchSize {
+			batchSize = limit - int64(len(keys))
+		}
+		if batchSize <= 0 {
+			return keys, cursor, nil
+		}
+		batch, next, err := client.Scan(ctx, cursor, pattern, batchSize).Result()
+		if err != nil {
+			return nil, cursor, err
+		}
+		keys = append(keys, batch...)
+		cursor = next
+		if cursor == 0 || (limit > 0 && int64(len(keys)) >= limit) {
+			return keys, cursor, nil
+		}
+	}
 }
 
 func ZScan(ctx context.Context, client redis.UniversalClient, key string, cursor uint64, match string, count int64) ([]string, uint64, error) {
@@ -149,45 +173,76 @@ type Msg struct {
 }
 
 type Stream struct {
-	Prefix   string `json:"prefix"`
-	Channel  string `json:"channel"`
-	Topic    string `json:"topic"`
-	MoodType string `json:"moodType"`
-	State    string `json:"state"`
-	Size     int    `json:"size"`
-	Idle     int    `json:"idle"`
+	Prefix     string `json:"prefix"`
+	Channel    string `json:"channel"`
+	Topic      string `json:"topic"`
+	MoodType   string `json:"moodType"`
+	State      string `json:"state"`
+	Size       int    `json:"size"`
+	Idle       int    `json:"idle"`
+	Partitions int    `json:"partitions,omitempty"`
+	Legacy     bool   `json:"legacy,omitempty"`
 }
 
 func QueueInfo(ctx context.Context, client redis.UniversalClient, prefix string) (any, error) {
 
 	// get queues
-	cmd := client.Keys(ctx, QueueKey(prefix))
-	queues, err := cmd.Result()
+	queues, _, err := scanKeys(ctx, client, QueueKey(prefix), 0)
 	if err != nil {
 		return nil, err
 	}
 
 	data := make(map[string][]Stream, 0)
+	partitioned := make(map[string]Stream)
 	for _, queue := range queues {
+		if stream, key, ok, streamErr := partitionedQueueStream(ctx, client, queue, prefix); streamErr != nil {
+			return nil, streamErr
+		} else if ok {
+			current := partitioned[key]
+			if current.Partitions == 0 {
+				current = stream
+				current.Size = 0
+			}
+			current.Size += stream.Size
+			current.Partitions++
+			if stream.Idle < current.Idle || current.Idle == 0 {
+				current.Idle = stream.Idle
+			}
+			partitioned[key] = current
+			continue
+		}
 
 		arr := strings.Split(queue, ":")
 		if len(arr) < 4 {
 			continue
 		}
+		keyType, err := client.Type(ctx, queue).Result()
+		if err != nil {
+			return nil, err
+		}
+		if keyType != "stream" {
+			continue
+		}
 		arr[1] = strings.ReplaceAll(arr[1], "{", "")
 		arr[2] = strings.ReplaceAll(arr[2], "}", "")
-		obj := Object(ctx, client, queue)
+		size, err := client.XLen(ctx, queue).Result()
+		if err != nil {
+			return nil, err
+		}
 
 		stream := Stream{
 			Prefix:   arr[0],
 			Channel:  arr[1],
 			Topic:    arr[2],
-			MoodType: arr[3],
+			MoodType: legacyQueueMoodType(arr[3]),
 			State:    "Run",
-			Size:     obj.SerizlizedLength,
-			Idle:     obj.LruSecondsIdle,
+			Size:     int(size),
+			Legacy:   arr[3] == "normal_stream",
 		}
 		data[arr[1]] = append(data[arr[1]], stream)
+	}
+	for _, stream := range partitioned {
+		data[stream.Channel] = append(data[stream.Channel], stream)
 	}
 
 	return data, nil
@@ -196,7 +251,62 @@ func ScheduleQueueKey(prefix string) string {
 	return strings.Join([]string{prefix, "*", "zset"}, ":")
 }
 func QueueKey(prefix string) string {
-	return strings.Join([]string{prefix, "*", "stream"}, ":")
+	return "*" + prefix + "*:stream*"
+}
+
+func partitionedQueueStream(ctx context.Context, client redis.UniversalClient, key, prefix string) (Stream, string, bool, error) {
+	stream, ok := partitionedQueueRoute(key, prefix)
+	if !ok {
+		return Stream{}, "", false, nil
+	}
+	size, err := client.XLen(ctx, key).Result()
+	if err != nil {
+		return Stream{}, "", false, err
+	}
+	stream.Size = int(size)
+	return stream, stream.Channel + "\x00" + stream.Topic + "\x00" + stream.MoodType, true, nil
+}
+
+func partitionedQueueRoute(key, prefix string) (Stream, bool) {
+	parts := strings.Split(key, ":")
+	marker := -1
+	moodType := ""
+	for i, part := range parts {
+		if i < 3 || i+1 >= len(parts) {
+			continue
+		}
+		switch part {
+		case "normal_queue":
+			moodType = string(btype.NORMAL)
+		case "delay_queue":
+			moodType = string(btype.DELAY)
+		case "sequence_queue":
+			moodType = string(btype.SEQUENCE_QUEUE)
+		default:
+			continue
+		}
+		isStream := (part == "normal_queue" || part == "delay_queue") && i+2 == len(parts)
+		isScheduler := part == "sequence_queue" && i+3 == len(parts) && parts[i+2] == "scheduler"
+		if strings.HasPrefix(parts[i+1], "stream") && (isStream || isScheduler) {
+			marker = i
+			break
+		}
+	}
+	if marker < 0 || parts[0] != prefix {
+		return Stream{}, false
+	}
+	return Stream{Prefix: prefix, Channel: parts[1], Topic: parts[2], MoodType: moodType, State: "Run"}, true
+}
+
+func legacyQueueMoodType(streamType string) string {
+	switch streamType {
+	case "normal_stream":
+		return string(btype.NORMAL)
+	case "delay_stream":
+		return string(btype.DELAY)
+	default:
+		return streamType
+	}
 }
 
 func ReturnHtml(w http.ResponseWriter, errorString string) {

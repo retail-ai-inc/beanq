@@ -160,7 +160,7 @@ const onTestNotify = async (param) => {
       }
     }
 
-    let res = await request.post("/test/notify",data, {
+	let res = await request.post("notifications/test",data, {
       headers: {
         'Content-Type': 'application/json',
       },

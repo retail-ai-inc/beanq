@@ -35,7 +35,7 @@ let detail = ref({});
 
 async function getDetail(paramid){
   try {
-    let res = await request.get("/event_log/detail",{"params":{"id":paramid}});
+	let res = await request.get(`events/${paramid}`);
     console.log(res);
     let {_id,id,addTime,channel,executeTime,logType,maxLen,moodType,payload,topic,priority,retry,timeToRun,status,runTime} = res;
 

@@ -23,17 +23,19 @@ func (t *Tenants) List(w http.ResponseWriter, r *http.Request) {
 	res, cancel := response.Get()
 	defer cancel()
 
-	data, total, err := t.mgo.TenantsList(r.Context(), 0, 10)
+	page, err := parsePage(r)
+	if err != nil {
+		writeBadRequest(w, err)
+		return
+	}
+	data, total, err := t.mgo.TenantsList(r.Context(), page.Page, page.PageSize)
 	if err != nil {
 		res.Code = berror.InternalServerErrorCode
 		res.Msg = err.Error()
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	res.Data = map[string]any{
-		"rows":  data,
-		"total": total,
-	}
+	res.Data = map[string]any{"rows": data, "total": total, "cursor": page.Page}
 	_ = res.Json(w, http.StatusOK)
 
 }

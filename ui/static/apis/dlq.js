@@ -1,12 +1,11 @@
 const dlqApi = {
     List(page,pageSize,id,status,moodType,topicName){
-        return request.get(`/dlq/list?page=${page}&pageSize=${pageSize}&id=${id}&status=${status}&moodType=${moodType}&topicName=${topicName}`);
+		return request.get(`dead-letters?page=${page}&pageSize=${pageSize}&id=${id}&status=${status}&moodType=${moodType}&topicName=${topicName}`);
     },
     Delete(id){
-        let params = {id:id};
-        return request.post(`dlq/delete`,params);
+		return request.delete(`dead-letters/${id}`);
     },
     Retry(id,data){
-        return request.post(`/dlq/retry`,{uniqueId:id,data:JSON.stringify(data)});
+		return request.post(`dead-letters/${id}/retry`,{data:data});
     }
 }
