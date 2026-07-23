@@ -33,8 +33,8 @@ func TestLoadTLSConfigFromCA(t *testing.T) {
 	if cfg.MinVersion != tls.VersionTLS12 {
 		t.Fatalf("MinVersion = %v, want %v", cfg.MinVersion, tls.VersionTLS12)
 	}
-	if !cfg.InsecureSkipVerify {
-		t.Fatal("InsecureSkipVerify should preserve verifyCertificate=true behavior")
+	if cfg.InsecureSkipVerify {
+		t.Fatal("InsecureSkipVerify should be false when verifyCertificate=true")
 	}
 }
 

@@ -19,6 +19,7 @@ type SequenceQueue struct {
 	base       queueBase
 	maxLen     int64
 	partitions int64
+	wait       replicationWait
 }
 
 func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
@@ -26,13 +27,18 @@ func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64,
 }
 
 func newSequenceQueueWithPartitions(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
+	return newSequenceQueueWithPartitionsAndWait(client, prefix, maxLen, partitions, consumerPoolSize, deadLetterIdle, config, replicationWait{})
+}
+
+func newSequenceQueueWithPartitionsAndWait(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config, wait replicationWait) *SequenceQueue {
 	partitions = normalizeSequenceQueuePartitionCount(partitions)
 	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config})
+		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait})
 	base.processLogger = NewProcessLog(client, prefix, partitions)
 	return &SequenceQueue{
 		maxLen:     maxLen,
 		partitions: partitions,
+		wait:       wait,
 		base:       base,
 	}
 }
@@ -46,7 +52,7 @@ func (q *SequenceQueue) PublishNewSequence(ctx context.Context, data map[string]
 	if err := store.ensureMetadata(ctx); err != nil {
 		return err
 	}
-	result, err := store.enqueue(ctx, orderKey, data)
+	result, err := store.enqueueWithWait(ctx, orderKey, data, q.wait)
 	if err != nil {
 		return err
 	}
@@ -71,7 +77,7 @@ func (q *SequenceQueue) ConsumerSequence(ctx context.Context, channel, topic str
 
 func (q *SequenceQueue) sequenceQueueStore(channel, topic string, maxLen int64) *sequenceQueueStore {
 	topology := newSequenceQueueTopology(q.base.prefix, channel, topic, q.partitions)
-	return newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle)
+	return newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle, q.wait)
 }
 
 func sequenceQueueFailedData(channel, topic, orderKey, raw string, cause error) map[string]any {

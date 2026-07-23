@@ -601,6 +601,10 @@ _, err := consumer.BQ().
 | `redis.readTimeout` | 0 | Redis read timeout |
 | `redis.writeTimeout` | 0 | Redis write timeout |
 | `redis.poolTimeout` | 0 | Timeout for waiting on a pooled Redis connection |
+| `redis.waitReplicas` | 0 | Number of replicas that must acknowledge each published message; 0 disables `WAIT` |
+| `redis.waitTimeout` | 1s when enabled | Maximum time Redis waits for replica acknowledgements; a timeout fails the publish |
+
+When `redis.waitReplicas` is enabled, BeanQ routes each publish to the master that owns the message key and executes the write and `WAIT` on the same connection. This also applies to Redis Cluster. If replica acknowledgements are insufficient, publishing returns `ErrAmbiguousCommit`: the primary write may already exist and must not be retried blindly.
 
 ### Redis SSL Parameters
 

@@ -88,7 +88,7 @@ func (a *streamQueueAdapter) Process(ctx context.Context, _, _, group, _ string,
 		logger.New().Error(err)
 		return
 	}
-	if err := ackAndDelete(ctx, a.client, item.stream, group, item.message.ID); err != nil {
+	if err := ackAndDelete(ctx, a.client, a.base.wait, item.stream, group, item.message.ID); err != nil {
 		logger.New().Error(err)
 	}
 }

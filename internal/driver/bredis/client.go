@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/btls"
 )
 
@@ -20,7 +19,7 @@ func NewRdb(isCluster bool, host, port string, username, password string,
 	database, maxRetries int, dialTimeout,
 	readTimeout, writeTimeout, poolTimeout time.Duration, poolSize,
 	minIdleConns int,
-	sslOn bool, caFile string, verifyCertificate bool, hotReload bool) (redis.UniversalClient, error) {
+	sslOn bool, caFile string, verifyCertificate bool, hotReload bool, waitReplicas int) (redis.UniversalClient, error) {
 
 	redisOnce.Do(func() {
 		ctx := context.Background()
@@ -33,7 +32,12 @@ func NewRdb(isCluster bool, host, port string, username, password string,
 			maxRetries, dialTimeout, readTimeout, writeTimeout, poolTimeout, poolSize, minIdleConns,
 			sslOn, caFile, verifyCertificate)
 		if redisErr != nil {
-			logger.New().Fatal(redisErr.Error())
+			return
+		}
+		if redisErr = ValidateReplicationTopology(initCtx, redisHolder.UniversalClient, waitReplicas); redisErr != nil {
+			_ = redisHolder.Close()
+			redisHolder = nil
+			return
 		}
 		if hotReload && sslOn && caFile != "" {
 			redisErr = btls.WatchCAFile(ctx, "redis", caFile, redisHolder.Reload)

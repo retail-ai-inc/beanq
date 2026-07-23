@@ -28,6 +28,7 @@ type deadLetterProcessor struct {
 	lockKey       string
 	logicKey      string
 	idle          time.Duration
+	wait          replicationWait
 }
 
 type deadLetterMessage struct {
@@ -44,6 +45,7 @@ func (t *queueBase) DeadLetterStream(ctx context.Context, channel, topic, stream
 		lockKey:       lockKey,
 		logicKey:      tool.MakeLogicKey(t.prefix),
 		idle:          t.deadLetterIdle,
+		wait:          t.wait,
 	}
 	processor.run(ctx)
 }
@@ -96,8 +98,18 @@ func (p *deadLetterProcessor) oldestExpiredPending(ctx context.Context) (redis.X
 }
 
 func (p *deadLetterProcessor) move(ctx context.Context, pendingID string, message deadLetterMessage) error {
-	if err := p.client.XAdd(ctx, message.xAddArgs(p.streamKey, p.logicKey)).Err(); err != nil {
+	args := message.xAddArgs(p.streamKey, p.logicKey)
+	if p.wait.enabled() {
+		if _, err := p.wait.execute(ctx, p.client, args.Stream, func(pipe redis.Pipeliner) redis.Cmder {
+			return pipe.XAdd(ctx, args)
+		}); err != nil {
+			return err
+		}
+	} else if err := p.client.XAdd(ctx, args).Err(); err != nil {
 		return err
+	}
+	if p.wait.enabled() {
+		return ackAndDelete(ctx, p.client, p.wait, p.streamKey, p.channel, pendingID)
 	}
 	_, err := p.client.Pipelined(ctx, func(pipe redis.Pipeliner) error {
 		pipe.XAck(ctx, p.streamKey, p.channel, pendingID)

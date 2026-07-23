@@ -10,13 +10,14 @@ type normalQueueStore struct {
 	client   redis.UniversalClient
 	topology normalQueueTopology
 	maxLen   int64
+	wait     replicationWait
 }
 
-func newNormalQueueStore(client redis.UniversalClient, topology normalQueueTopology, maxLen int64) *normalQueueStore {
+func newNormalQueueStore(client redis.UniversalClient, topology normalQueueTopology, maxLen int64, waits ...replicationWait) *normalQueueStore {
 	if maxLen <= 0 {
 		maxLen = partitionQueueDefaultMaxLen
 	}
-	return &normalQueueStore{client: client, topology: topology, maxLen: maxLen}
+	return &normalQueueStore{client: client, topology: topology, maxLen: maxLen, wait: firstReplicationWait(waits)}
 }
 
 func (s *normalQueueStore) canonicalConfig() string {
@@ -28,7 +29,7 @@ func (s *normalQueueStore) metadata() partitionQueueMetadata {
 }
 
 func (s *normalQueueStore) ensureMetadata(ctx context.Context) error {
-	return ensurePartitionQueueMetadata(ctx, s.client, s.topology.metadataKey(), "normal queue", s.metadata())
+	return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "normal queue", s.metadata())
 }
 
 func validateNormalQueueMetadata(got, want string) error {

@@ -61,6 +61,8 @@ type (
 		PoolTimeout        time.Duration `json:"poolTimeout" mapstructure:"poolTimeout"`
 		MaxRetries         int           `json:"maxRetries" mapstructure:"maxRetries"`
 		PoolSize           int           `json:"poolSize" mapstructure:"poolSize"`
+		WaitReplicas       int           `json:"waitReplicas" mapstructure:"waitReplicas"`
+		WaitTimeout        time.Duration `json:"waitTimeout" mapstructure:"waitTimeout"`
 		SSL                SSL           `json:"ssl" mapstructure:"ssl"`
 	}
 	SSL struct {
@@ -160,8 +162,15 @@ func (t *BeanqConfig) ApplyDefaults() {
 		t.Mongo = &Mongo{}
 	}
 	t.applyRuntimeDefaults()
+	t.applyRedisDefaults()
 	t.applyQueueDefaults()
 	t.applyMongoDefaults()
+}
+
+func (t *BeanqConfig) applyRedisDefaults() {
+	if t.Redis.WaitReplicas > 0 && t.Redis.WaitTimeout == 0 {
+		t.Redis.WaitTimeout = time.Second
+	}
 }
 
 func (t *BeanqConfig) applyRuntimeDefaults() {
@@ -249,11 +258,8 @@ func (t *BeanqConfig) Validate() error {
 	if t == nil {
 		return berror.ErrInvalidConfig.WithMessage("config is nil")
 	}
-	if strings.TrimSpace(t.Broker) == "" {
+	if normalizeBrokerName(t.Broker) == "" {
 		return berror.ErrInvalidConfig.WithMessage("broker is required")
-	}
-	if t.Broker != "redis" {
-		return berror.ErrUnsupportedBroker.WithMessage(t.Broker)
 	}
 	if t.SequenceQueuePartitions < 0 {
 		return berror.ErrInvalidConfig.WithMessage("sequenceQueuePartitions must not be negative")
@@ -261,7 +267,7 @@ func (t *BeanqConfig) Validate() error {
 	if t.NormalQueuePartitions < 0 {
 		return berror.ErrInvalidConfig.WithMessage("normalQueuePartitions must not be negative")
 	}
-	if err := t.validateRedis(); err != nil {
+	if err := validateRegisteredBrokerConfig(t); err != nil {
 		return err
 	}
 	if t.requiresMongo() {
@@ -271,8 +277,20 @@ func (t *BeanqConfig) Validate() error {
 }
 
 func (t *BeanqConfig) validateRedis() error {
+	if t.Redis.WaitReplicas < 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitReplicas must not be negative")
+	}
+	if t.Redis.WaitTimeout < 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitTimeout must not be negative")
+	}
 	if strings.TrimSpace(t.Redis.Host) == "" {
 		return berror.ErrInvalidConfig.WithMessage("redis.host is required")
+	}
+	if t.Redis.IsCluster && t.Redis.Database != 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.database must be 0 when redis.isCluster is true")
+	}
+	if !t.Redis.IsCluster && len(strings.Split(t.Redis.Host, ",")) > 1 {
+		return berror.ErrInvalidConfig.WithMessage("multiple redis addresses require redis.isCluster=true")
 	}
 	if strings.TrimSpace(t.Redis.Port) == "" && !redisHostsIncludePorts(t.Redis.Host) {
 		return berror.ErrInvalidConfig.WithMessage("redis.port is required")

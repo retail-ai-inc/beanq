@@ -17,13 +17,14 @@ type delayQueueStore struct {
 	client   redis.UniversalClient
 	topology delayQueueTopology
 	maxLen   int64
+	wait     replicationWait
 }
 
-func newDelayQueueStore(client redis.UniversalClient, topology delayQueueTopology, maxLen int64) *delayQueueStore {
+func newDelayQueueStore(client redis.UniversalClient, topology delayQueueTopology, maxLen int64, waits ...replicationWait) *delayQueueStore {
 	if maxLen <= 0 {
 		maxLen = partitionQueueDefaultMaxLen
 	}
-	return &delayQueueStore{client: client, topology: topology, maxLen: maxLen}
+	return &delayQueueStore{client: client, topology: topology, maxLen: maxLen, wait: firstReplicationWait(waits)}
 }
 
 func (s *delayQueueStore) metadata() partitionQueueMetadata {
@@ -31,7 +32,7 @@ func (s *delayQueueStore) metadata() partitionQueueMetadata {
 }
 
 func (s *delayQueueStore) ensureMetadata(ctx context.Context) error {
-	return ensurePartitionQueueMetadata(ctx, s.client, s.topology.metadataKey(), "delay queue", s.metadata())
+	return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "delay queue", s.metadata())
 }
 
 func (s *delayQueueStore) bootstrapGroups(ctx context.Context, group string) error {
@@ -42,7 +43,7 @@ func (s *delayQueueStore) bootstrapGroup(ctx context.Context, group string, part
 	return bootstrapPartitionGroup(ctx, s.client, group, "delay queue", partition, s.topology.streamKey(partition))
 }
 
-func (s *delayQueueStore) enqueue(ctx context.Context, data map[string]any) error {
+func (s *delayQueueStore) enqueue(ctx context.Context, data map[string]any, wait replicationWait) error {
 	messageID := cast.ToString(data["id"])
 	if messageID == "" {
 		return errors.New("delay queue message id is required")
@@ -56,7 +57,17 @@ func (s *delayQueueStore) enqueue(ctx context.Context, data map[string]any) erro
 	priority := cast.ToFloat64(data["priority"])
 	// Earlier execution times sort first; priority only orders messages within the same millisecond.
 	score := float64(executeTime.UnixMilli()) - priority/1e3
-	if err := s.client.ZAdd(ctx, s.topology.scheduledKey(partition), redis.Z{Score: score, Member: payload}).Err(); err != nil {
+	if !wait.enabled() {
+		if err := s.client.ZAdd(ctx, s.topology.scheduledKey(partition), redis.Z{Score: score, Member: payload}).Err(); err != nil {
+			return fmt.Errorf("delay partition %d zadd: %w", partition, err)
+		}
+		return nil
+	}
+	scheduled := s.topology.scheduledKey(partition)
+	_, err = wait.execute(ctx, s.client, scheduled, func(pipe redis.Pipeliner) redis.Cmder {
+		return pipe.ZAdd(ctx, scheduled, redis.Z{Score: score, Member: payload})
+	})
+	if err != nil {
 		return fmt.Errorf("delay partition %d zadd: %w", partition, err)
 	}
 	return nil
@@ -99,8 +110,16 @@ func (s *delayQueueStore) promote(ctx context.Context, partition int64, now time
 			pipe.ZRem(ctx, zset, members...)
 			return nil
 		})
+		if err != nil {
+			return err
+		}
+		if s.wait.enabled() {
+			if err := s.wait.confirm(ctx, tx); err != nil {
+				return err
+			}
+		}
 		promoted = len(decoded) > 0
-		return err
+		return nil
 	}, zset, stream)
 	if errors.Is(err, redis.TxFailedErr) {
 		return false, nil

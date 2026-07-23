@@ -50,14 +50,19 @@ func NewBrokerWithSequenceQueuePartitions(client redis.UniversalClient, prefix s
 }
 
 func NewBrokerWithPartitions(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration) *Broker {
+	return NewBrokerWithReplicationWait(client, prefix, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions, consumerPoolSize, duration, 0, 0)
+}
+
+func NewBrokerWithReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
+	wait := replicationWait{replicas: waitReplicas, timeout: waitTimeout}
 	normal := func(config *capture.Config) *Normal {
-		return newNormalWithPartitions(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config)
+		return newNormalWithPartitionsAndWait(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config, wait)
 	}
 	delay := func(config *capture.Config) *Schedule {
-		return newScheduleWithPartitions(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config)
+		return newScheduleWithPartitionsAndWait(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config, wait)
 	}
 	sequenceQueue := func(config *capture.Config) *SequenceQueue {
-		return newSequenceQueueWithPartitions(client, prefix, maxLen, sequenceQueuePartitions, consumerPoolSize, duration, config)
+		return newSequenceQueueWithPartitionsAndWait(client, prefix, maxLen, sequenceQueuePartitions, consumerPoolSize, duration, config, wait)
 	}
 	routes := map[btype.MoodType]queueRoute{
 		btype.NORMAL: routeFromQueue(normal(nil).Publish, func(config *capture.Config) consumeFunc { return normal(config).Consume }),

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/spf13/viper"
@@ -142,6 +143,27 @@ func TestBeanqConfigValidateRedisRequired(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "redis.host") {
 		t.Fatalf("expected redis.host error, got %v", err)
+	}
+}
+
+func TestBeanqConfigRedisWait(t *testing.T) {
+	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379", WaitReplicas: -1}}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "waitReplicas") {
+		t.Fatalf("expected waitReplicas validation error, got %v", err)
+	}
+	cfg.Redis.WaitReplicas = 1
+	cfg.Redis.IsCluster = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected cluster WAIT config to be valid, got %v", err)
+	}
+	cfg.Redis.WaitTimeout = -time.Second
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "waitTimeout") {
+		t.Fatalf("expected waitTimeout validation error, got %v", err)
+	}
+	cfg.Redis.WaitTimeout = 0
+	cfg.ApplyDefaults()
+	if cfg.Redis.WaitTimeout != time.Second {
+		t.Fatalf("waitTimeout = %v, want 1s", cfg.Redis.WaitTimeout)
 	}
 }
 

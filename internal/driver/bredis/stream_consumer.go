@@ -18,6 +18,7 @@ type queueBaseOptions struct {
 	consumerPoolSize int
 	deadLetterIdle   time.Duration
 	captureConfig    *capture.Config
+	wait             replicationWait
 }
 
 type queueBase struct {
@@ -27,6 +28,7 @@ type queueBase struct {
 	consumerPoolSize int
 	deadLetterIdle   time.Duration
 	captureConfig    *capture.Config
+	wait             replicationWait
 }
 
 func newQueueBase(options queueBaseOptions) queueBase {
@@ -37,6 +39,7 @@ func newQueueBase(options queueBaseOptions) queueBase {
 		consumerPoolSize: options.consumerPoolSize,
 		deadLetterIdle:   options.deadLetterIdle,
 		captureConfig:    options.captureConfig,
+		wait:             options.wait,
 	}
 }
 

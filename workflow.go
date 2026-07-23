@@ -97,7 +97,8 @@ func InitWorkflow(beanqConfig *BeanqConfig) {
 			beanqConfig.Redis.SSL.On,
 			beanqConfig.Redis.SSL.CAFile,
 			beanqConfig.Redis.SSL.Verify,
-			beanqConfig.Redis.SSL.HotReload)
+			beanqConfig.Redis.SSL.HotReload,
+			beanqConfig.Redis.WaitReplicas)
 
 		if workflowErr != nil {
 			logger.New().Panic("new redis workflow client err:", workflowErr)

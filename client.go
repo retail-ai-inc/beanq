@@ -247,14 +247,14 @@ func newRedisBroker(config *BeanqConfig) (Broker, *capture.Config) {
 	driver, err := bredis.NewRdb(cfg.IsCluster, cfg.Host, cfg.Port, cfg.Username,
 		cfg.Password, cfg.Database,
 		cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections,
-		cfg.SSL.On, cfg.SSL.CAFile, cfg.SSL.Verify, cfg.SSL.HotReload)
+		cfg.SSL.On, cfg.SSL.CAFile, cfg.SSL.Verify, cfg.SSL.HotReload, cfg.WaitReplicas)
 	if err != nil {
 		logger.New().Panic("new broker err:", err)
 	}
 
 	sequencePartitions := boptions.ResolveSequenceQueuePartitions(config.SequenceQueuePartitions, config.MinConsumers)
 	normalPartitions := boptions.ResolveNormalQueuePartitions(config.NormalQueuePartitions, config.MinConsumers)
-	broker := bredis.NewBrokerWithPartitions(driver, cfg.Prefix, cfg.MaxLen, config.MinConsumers, normalPartitions, sequencePartitions, config.ConsumerPoolSize, config.DeadLetterIdleTime)
+	broker := bredis.NewBrokerWithReplicationWait(driver, cfg.Prefix, cfg.MaxLen, config.MinConsumers, normalPartitions, sequencePartitions, config.ConsumerPoolSize, config.DeadLetterIdleTime, cfg.WaitReplicas, cfg.WaitTimeout)
 
 	var captureConfig *capture.Config
 	var migrator MigrationRunner
