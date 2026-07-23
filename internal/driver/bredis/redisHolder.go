@@ -77,6 +77,12 @@ func NewRedisHolder(ctx context.Context, isCluster bool, host, port, username, p
 	return h, nil
 }
 
+// Client exposes the current underlying client to packages that need to
+// distinguish standalone and Cluster Redis clients.
+func (h *RedisHolder) Client() redis.UniversalClient {
+	return h.UniversalClient
+}
+
 func (h *RedisHolder) PipelinedForKey(ctx context.Context, key string, targetAddress string, asking bool, fn func(redis.Pipeliner) error) ([]redis.Cmder, error) {
 	if h.UniversalClient == nil {
 		return nil, fmt.Errorf("redis client is not initialized")

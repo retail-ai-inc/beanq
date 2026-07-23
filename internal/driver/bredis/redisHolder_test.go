@@ -159,6 +159,15 @@ func TestRedisHolderCloseOnce(t *testing.T) {
 	}
 }
 
+func TestRedisHolderClientReturnsUnderlyingClient(t *testing.T) {
+	underlying := &closeCountingClient{}
+	holder := &RedisHolder{UniversalClient: underlying}
+
+	if got := holder.Client(); got != underlying {
+		t.Fatalf("Client() = %T, want original underlying client", got)
+	}
+}
+
 type closeCountingClient struct {
 	redis.UniversalClient
 	closes atomic.Int32

@@ -19,6 +19,20 @@ type deadlineRecorder struct {
 	called   bool
 }
 
+func TestHeaderRuleAllowsBootstrapDataImages(t *testing.T) {
+	res := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	HeaderRule()(func(http.ResponseWriter, *http.Request) {})(res, req)
+
+	policy := res.Header().Get("Content-Security-Policy")
+	if !strings.Contains(policy, "img-src 'self' data:;") {
+		t.Fatalf("CSP does not allow Bootstrap data images: %q", policy)
+	}
+	if strings.Contains(policy, "script-src 'self' data:") {
+		t.Fatalf("CSP unexpectedly allows data scripts: %q", policy)
+	}
+}
+
 func (w *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
 	w.deadline = deadline
 	w.called = true
