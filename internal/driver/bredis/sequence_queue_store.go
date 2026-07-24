@@ -90,6 +90,9 @@ func (s *sequenceQueueStore) bootstrapGroups(ctx context.Context, group string) 
 	return bootstrapPartitionGroups(ctx, s.client, group, "sequence queue", s.topology.partitions, s.topology.schedulerKey)
 }
 
+// enqueue for test
+//
+//nolint:unused
 func (s *sequenceQueueStore) enqueue(ctx context.Context, orderKey string, data map[string]any) (sequenceQueueEnqueueResult, error) {
 	return s.enqueueWithWait(ctx, orderKey, data, replicationWait{})
 }
