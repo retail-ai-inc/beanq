@@ -80,25 +80,11 @@ var (
 // InitWorkflow make workflow as an independent module
 func InitWorkflow(beanqConfig *BeanqConfig) {
 	workflowOnce.Do(func() {
-		workflowClient, workflowErr = bredis.NewRdb(
-			beanqConfig.Redis.IsCluster,
-			beanqConfig.Redis.Host,
-			beanqConfig.Redis.Port,
-			beanqConfig.Redis.Username,
-			beanqConfig.Redis.Password,
-			beanqConfig.Redis.Database,
-			beanqConfig.Redis.MaxRetries,
-			beanqConfig.Redis.DialTimeout,
-			beanqConfig.Redis.ReadTimeout,
-			beanqConfig.Redis.WriteTimeout,
-			beanqConfig.Redis.PoolTimeout,
-			beanqConfig.Redis.PoolSize,
-			beanqConfig.Redis.MinIdleConnections,
-			beanqConfig.Redis.SSL.On,
-			beanqConfig.Redis.SSL.CAFile,
-			beanqConfig.Redis.SSL.Verify,
-			beanqConfig.Redis.SSL.HotReload,
-			beanqConfig.Redis.WaitReplicas)
+		resolved, err := beanqConfig.Resolve()
+		if err != nil {
+			logger.New().Panic("new redis workflow client err:", err)
+		}
+		workflowClient, workflowErr = bredis.NewRedisClient(context.Background(), resolved.redisClientOptions())
 
 		if workflowErr != nil {
 			logger.New().Panic("new redis workflow client err:", workflowErr)

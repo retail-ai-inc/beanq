@@ -27,18 +27,18 @@ func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64,
 }
 
 func newSequenceQueueWithPartitions(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
-	return newSequenceQueueWithPartitionsAndWait(client, prefix, maxLen, partitions, consumerPoolSize, deadLetterIdle, config, replicationWait{})
+	return newSequenceQueueWithOptions(queueOptions{client: client, prefix: prefix, maxLen: maxLen, partitions: partitions,
+		runtime: queueRuntimeOptions{workers: consumerPoolSize}, deadLetterIdle: deadLetterIdle, captureConfig: config})
 }
 
-func newSequenceQueueWithPartitionsAndWait(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config, wait replicationWait) *SequenceQueue {
-	partitions = normalizeSequenceQueuePartitionCount(partitions)
-	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait})
-	base.processLogger = NewProcessLogWithPartitions(client, prefix, 0, partitions)
+func newSequenceQueueWithOptions(options queueOptions) *SequenceQueue {
+	options.partitions = normalizeSequenceQueuePartitionCount(options.partitions)
+	base := newQueueBase(options)
+	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, 0, options.partitions)
 	return &SequenceQueue{
-		maxLen:     maxLen,
-		partitions: partitions,
-		wait:       wait,
+		maxLen:     options.maxLen,
+		partitions: options.partitions,
+		wait:       options.wait,
 		base:       base,
 	}
 }

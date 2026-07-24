@@ -33,6 +33,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/viper"
 )
 
@@ -152,7 +153,79 @@ type (
 		ConsumerPoolSize         int           `json:"consumerPoolSize" mapstructure:"consumerPoolSize"`
 		ConsumerReaderPoolSize   int           `json:"consumerReaderPoolSize" mapstructure:"consumerReaderPoolSize"`
 	}
+	ResolvedConfig struct {
+		BeanqConfig
+	}
 )
+
+// Resolve returns a complete, validated copy without modifying the source config.
+func (t *BeanqConfig) Resolve() (ResolvedConfig, error) {
+	if t == nil {
+		return ResolvedConfig{}, berror.ErrInvalidConfig.WithMessage("config is nil")
+	}
+	resolved := ResolvedConfig{BeanqConfig: cloneBeanqConfig(*t)}
+	resolved.ApplyDefaults()
+	if err := resolved.Validate(); err != nil {
+		return ResolvedConfig{}, err
+	}
+	return resolved, nil
+}
+
+func cloneBeanqConfig(config BeanqConfig) BeanqConfig {
+	if config.Mongo == nil {
+		return config
+	}
+	mongo := *config.Mongo
+	if config.Collections != nil {
+		mongo.Collections = make(map[string]Collection, len(config.Collections))
+		for key, collection := range config.Collections {
+			mongo.Collections[key] = collection
+		}
+	}
+	config.Mongo = &mongo
+	return config
+}
+
+func (t ResolvedConfig) redisBrokerOptions() bredis.BrokerOptions {
+	return bredis.BrokerOptions{
+		Prefix:                  t.Redis.Prefix,
+		MaxLen:                  t.Redis.MaxLen,
+		NormalQueuePartitions:   boptions.ResolveNormalQueuePartitions(t.NormalQueuePartitions, t.MinConsumers),
+		SequenceQueuePartitions: boptions.ResolveSequenceQueuePartitions(t.SequenceQueuePartitions, t.MinConsumers),
+		ConsumerWorkers:         t.ConsumerPoolSize,
+		ConsumerReaders:         t.ConsumerReaderPoolSize,
+		DeadLetterIdle:          t.DeadLetterIdleTime,
+		ReplicationWait: bredis.ReplicationWaitOptions{
+			Replicas: t.Redis.WaitReplicas,
+			Timeout:  t.Redis.WaitTimeout,
+		},
+	}
+}
+
+func (t ResolvedConfig) redisClientOptions() bredis.RedisClientOptions {
+	return bredis.RedisClientOptions{
+		IsCluster:          t.Redis.IsCluster,
+		Host:               t.Redis.Host,
+		Port:               t.Redis.Port,
+		Username:           t.Redis.Username,
+		Password:           t.Redis.Password,
+		Database:           t.Redis.Database,
+		MaxRetries:         t.Redis.MaxRetries,
+		DialTimeout:        t.Redis.DialTimeout,
+		ReadTimeout:        t.Redis.ReadTimeout,
+		WriteTimeout:       t.Redis.WriteTimeout,
+		PoolTimeout:        t.Redis.PoolTimeout,
+		PoolSize:           t.Redis.PoolSize,
+		MinIdleConnections: t.Redis.MinIdleConnections,
+		TLS: bredis.RedisTLSOptions{
+			On:                t.Redis.SSL.On,
+			CAFile:            t.Redis.SSL.CAFile,
+			VerifyCertificate: t.Redis.SSL.Verify,
+			HotReload:         t.Redis.SSL.HotReload,
+		},
+		WaitReplicas: t.Redis.WaitReplicas,
+	}
+}
 
 func (t *BeanqConfig) init() {
 	t.ApplyDefaults()
@@ -256,6 +329,27 @@ func defaultMongoCollections() map[string]Collection {
 		"role":     {Name: "roles", Shard: false},
 		"tenant":   {Name: "tenants", Shard: false},
 	}
+}
+
+func (t *Mongo) collectionNames() map[string]string {
+	if t == nil {
+		return nil
+	}
+	collections := make(map[string]string, len(t.Collections))
+	for key, collection := range t.Collections {
+		collections[key] = collection.Name
+	}
+	return collections
+}
+
+func (t *Mongo) collectionName(key, fallback string) string {
+	if t == nil {
+		return fallback
+	}
+	if collection, ok := t.Collections[key]; ok && collection.Name != "" {
+		return collection.Name
+	}
+	return fallback
 }
 
 func (t *BeanqConfig) Validate() error {
@@ -402,9 +496,9 @@ func LoadConfig(configPath string, configType string, configName string) (*Beanq
 	if err := vp.Unmarshal(&cfg); err != nil {
 		return nil, berror.ErrInvalidConfig.WithMessage("failed to unmarshal config").WithCause(err)
 	}
-	cfg.ApplyDefaults()
-	if err := cfg.Validate(); err != nil {
+	resolved, err := cfg.Resolve()
+	if err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+	return &resolved.BeanqConfig, nil
 }

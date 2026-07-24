@@ -24,16 +24,16 @@ func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consum
 }
 
 func newNormalWithPartitions(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Normal {
-	return newNormalWithPartitionsAndWait(client, prefix, maxLen, partitions, consumerPoolSize, deadLetterIdle, config, replicationWait{})
+	return newNormalWithOptions(queueOptions{client: client, prefix: prefix, maxLen: maxLen, partitions: partitions,
+		runtime: queueRuntimeOptions{workers: consumerPoolSize}, deadLetterIdle: deadLetterIdle, captureConfig: config})
 }
 
-func newNormalWithPartitionsAndWait(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config, wait replicationWait) *Normal {
-	partitions = normalizeSequenceQueuePartitionCount(partitions)
-	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait})
-	base.processLogger = NewProcessLogWithPartitions(client, prefix, partitions, 0)
+func newNormalWithOptions(options queueOptions) *Normal {
+	options.partitions = normalizeSequenceQueuePartitionCount(options.partitions)
+	base := newQueueBase(options)
+	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, options.partitions, 0)
 	return &Normal{
-		maxLen: maxLen, partitions: partitions, wait: wait, base: base,
+		maxLen: options.maxLen, partitions: options.partitions, wait: options.wait, base: base,
 	}
 }
 

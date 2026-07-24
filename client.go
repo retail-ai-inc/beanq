@@ -39,7 +39,6 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
-	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
@@ -185,6 +184,8 @@ type (
 
 	// Client is BeanQ's root client.
 	Client struct {
+		closeOnce        sync.Once
+		closeErr         error
 		captureException func(ctx context.Context, err any)
 		broker           Broker
 		driver           any
@@ -214,25 +215,46 @@ type (
 	RetryConditionFunc func(map[string]any, error) bool
 )
 
-func New(config *BeanqConfig, options ...ClientOption) *Client {
-	config.init()
+func (c *Client) Close() error {
+	if c == nil {
+		return nil
+	}
+	c.closeOnce.Do(func() {
+		if closer, ok := c.broker.(interface{ Close() error }); ok {
+			c.closeErr = closer.Close()
+		}
+	})
+	return c.closeErr
+}
 
-	client := newClientFromConfig(config)
+func New(config *BeanqConfig, options ...ClientOption) *Client {
+	if config == nil {
+		logger.New().Panic("new client err:", berror.ErrInvalidConfig.WithMessage("config is nil"))
+	}
+	candidate := ResolvedConfig{BeanqConfig: cloneBeanqConfig(*config)}
+	candidate.ApplyDefaults()
+
+	client := newClientFromConfig(&candidate.BeanqConfig)
 	for _, option := range options {
 		option(client)
 	}
 	if client.broker == nil {
-		client.broker, client.captureConfig = newBrokerFromConfig(config)
+		resolved, err := config.Resolve()
+		if err != nil {
+			logger.New().Panic("new client err:", err)
+		}
+		candidate = resolved
+		client.broker, client.captureConfig = newBrokerFromConfig(candidate)
 	}
 	setBrokerDriver(client.broker)
 	if provider, ok := client.broker.(driverProvider); ok {
 		client.driver = provider.Driver()
 	}
-	client.config = config
+	client.config = &candidate.BeanqConfig
 	return client
 }
 
-func newBrokerFromConfig(config *BeanqConfig) (Broker, *capture.Config) {
+func newBrokerFromConfig(config ResolvedConfig) (Broker, *capture.Config) {
 	switch config.Broker {
 	case "redis":
 		return newRedisBroker(config)
@@ -242,20 +264,13 @@ func newBrokerFromConfig(config *BeanqConfig) (Broker, *capture.Config) {
 	}
 }
 
-func newRedisBroker(config *BeanqConfig) (Broker, *capture.Config) {
-	cfg := config.Redis
-	driver, err := bredis.NewRdb(cfg.IsCluster, cfg.Host, cfg.Port, cfg.Username,
-		cfg.Password, cfg.Database,
-		cfg.MaxRetries, cfg.DialTimeout, cfg.ReadTimeout, cfg.WriteTimeout, cfg.PoolTimeout, cfg.PoolSize, cfg.MinIdleConnections,
-		cfg.SSL.On, cfg.SSL.CAFile, cfg.SSL.Verify, cfg.SSL.HotReload, cfg.WaitReplicas)
+func newRedisBroker(config ResolvedConfig) (Broker, *capture.Config) {
+	driver, err := bredis.NewRedisClient(context.Background(), config.redisClientOptions())
 	if err != nil {
 		logger.New().Panic("new broker err:", err)
 	}
 
-	sequencePartitions := boptions.ResolveSequenceQueuePartitions(config.SequenceQueuePartitions, config.MinConsumers)
-	normalPartitions := boptions.ResolveNormalQueuePartitions(config.NormalQueuePartitions, config.MinConsumers)
-	broker := bredis.NewBrokerWithRuntimePoolsAndReplicationWait(driver, cfg.Prefix, cfg.MaxLen, config.MinConsumers, normalPartitions, sequencePartitions,
-		config.ConsumerPoolSize, config.ConsumerReaderPoolSize, config.DeadLetterIdleTime, cfg.WaitReplicas, cfg.WaitTimeout)
+	broker := bredis.NewBrokerWithOptions(driver, config.redisBrokerOptions())
 
 	var captureConfig *capture.Config
 	var migrator MigrationRunner
@@ -276,11 +291,7 @@ type captureConfigReader interface {
 }
 
 func loadCaptureConfig(config *Mongo) *capture.Config {
-	collections := make(map[string]string, len(config.Collections))
-	for key, collection := range config.Collections {
-		collections[key] = collection.Name
-	}
-	store := bmongo.NewMongo(config.Host, config.Port, config.UserName, config.Password, config.Database, collections,
+	store := bmongo.NewMongo(config.Host, config.Port, config.UserName, config.Password, config.Database, config.collectionNames(),
 		config.ConnectTimeOut, config.MaxConnectionPoolSize, config.MaxConnectionLifeTime,
 		bmongo.MongoSSLConfig{On: config.SSL.On, CAFile: config.SSL.CAFile, Verify: config.SSL.Verify})
 
@@ -403,6 +414,11 @@ func (c *Client) cloneForCommand() *Client {
 }
 
 func (c *Client) Wait(ctx context.Context) {
+	defer func() {
+		if err := c.Close(); err != nil {
+			logger.New().Error(err)
+		}
+	}()
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 

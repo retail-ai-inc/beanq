@@ -159,6 +159,19 @@ func TestRedisHolderCloseOnce(t *testing.T) {
 	}
 }
 
+func TestRedisHolderCloseStopsWatcher(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	holder := &RedisHolder{watcherCancel: cancel}
+	if err := holder.Close(); err != nil {
+		t.Fatalf(`Close error: %v`, err)
+	}
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal(`Close did not stop TLS watcher`)
+	}
+}
+
 func TestRedisHolderClientReturnsUnderlyingClient(t *testing.T) {
 	underlying := &closeCountingClient{}
 	holder := &RedisHolder{UniversalClient: underlying}

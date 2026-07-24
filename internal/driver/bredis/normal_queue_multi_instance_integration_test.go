@@ -55,7 +55,7 @@ func TestNormalQueueFivePublishersTenConsumers(t *testing.T) {
 	}, func(context.Context, error) {})
 
 	for consumerNumber := 0; consumerNumber < consumerCount; consumerNumber++ {
-		base := newQueueBase(queueBaseOptions{client: client, prefix: prefix, deadLetterIdle: time.Minute, consumerPoolSize: 1})
+		base := newQueueBase(queueOptions{client: client, prefix: prefix, deadLetterIdle: time.Minute, runtime: queueRuntimeOptions{workers: 1}})
 		base.processLogger = normalIntegrationProcessLogger{}
 		runtime := newNormalQueueRuntime(newNormalQueueStore(client, topology, 2000), &base)
 		consumerWait.Go(func() { runtime.run(consumerCtx, channel, topic, handler) })

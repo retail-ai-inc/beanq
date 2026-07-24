@@ -20,6 +20,7 @@ type RedisHolder struct {
 	caPool            atomic.Pointer[x509.CertPool]
 	closeOnce         sync.Once
 	closeErr          error
+	watcherCancel     context.CancelFunc
 	isCluster         bool
 	host              string
 	port              string
@@ -44,23 +45,32 @@ func NewRedisHolder(ctx context.Context, isCluster bool, host, port, username, p
 	minIdleConns int,
 	sslOn bool, caFile string, verifyCertificate bool) (*RedisHolder, error) {
 
+	return NewRedisHolderWithOptions(ctx, RedisClientOptions{
+		IsCluster: isCluster, Host: host, Port: port, Username: username, Password: password,
+		Database: db, MaxRetries: maxRetries, DialTimeout: dialTimeout, ReadTimeout: readTimeout,
+		WriteTimeout: writeTimeout, PoolTimeout: poolTimeout, PoolSize: poolSize, MinIdleConnections: minIdleConns,
+		TLS: RedisTLSOptions{On: sslOn, CAFile: caFile, VerifyCertificate: verifyCertificate},
+	})
+}
+
+func NewRedisHolderWithOptions(ctx context.Context, options RedisClientOptions) (*RedisHolder, error) {
 	h := &RedisHolder{
-		isCluster:         isCluster,
-		host:              host,
-		port:              port,
-		username:          username,
-		password:          password,
-		db:                db,
-		maxRetries:        maxRetries,
-		dialTimeout:       dialTimeout,
-		readTimeout:       readTimeout,
-		writeTimeout:      writeTimeout,
-		poolTimeout:       poolTimeout,
-		poolSize:          poolSize,
-		minIdleConns:      minIdleConns,
-		sslOn:             sslOn,
-		verifyCertificate: verifyCertificate,
-		caFile:            caFile,
+		isCluster:         options.IsCluster,
+		host:              options.Host,
+		port:              options.Port,
+		username:          options.Username,
+		password:          options.Password,
+		db:                options.Database,
+		maxRetries:        options.MaxRetries,
+		dialTimeout:       options.DialTimeout,
+		readTimeout:       options.ReadTimeout,
+		writeTimeout:      options.WriteTimeout,
+		poolTimeout:       options.PoolTimeout,
+		poolSize:          options.PoolSize,
+		minIdleConns:      options.MinIdleConnections,
+		sslOn:             options.TLS.On,
+		verifyCertificate: options.TLS.VerifyCertificate,
+		caFile:            options.TLS.CAFile,
 	}
 
 	if h.sslOn {
@@ -104,6 +114,9 @@ func (h *RedisHolder) Reload(ctx context.Context) error {
 
 func (h *RedisHolder) Close() error {
 	h.closeOnce.Do(func() {
+		if h.watcherCancel != nil {
+			h.watcherCancel()
+		}
 		if h.UniversalClient != nil {
 			h.closeErr = h.UniversalClient.Close()
 		}

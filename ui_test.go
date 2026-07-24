@@ -41,19 +41,19 @@ func TestUIListenAddr(t *testing.T) {
 	}
 }
 
-func TestUICollectionName(t *testing.T) {
+func TestMongoCollectionName(t *testing.T) {
 	cfg := &Mongo{Collections: map[string]Collection{
 		"workflow": {Name: "workflow_custom"},
 		"empty":    {Name: ""},
 	}}
 
-	if got := uiCollectionName(cfg, "workflow", "workflow_records"); got != "workflow_custom" {
+	if got := cfg.collectionName("workflow", "workflow_records"); got != "workflow_custom" {
 		t.Fatalf("expected configured workflow collection, got %q", got)
 	}
-	if got := uiCollectionName(cfg, "missing", "fallback"); got != "fallback" {
+	if got := cfg.collectionName("missing", "fallback"); got != "fallback" {
 		t.Fatalf("expected fallback collection, got %q", got)
 	}
-	if got := uiCollectionName(cfg, "empty", "fallback"); got != "fallback" {
+	if got := cfg.collectionName("empty", "fallback"); got != "fallback" {
 		t.Fatalf("expected fallback for empty collection name, got %q", got)
 	}
 }

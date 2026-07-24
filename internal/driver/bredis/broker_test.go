@@ -5,11 +5,38 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 )
+
+func TestNewBrokerWithOptionsWiresQueueRuntimeOptions(t *testing.T) {
+	options := queueOptions{
+		client: nil, prefix: "prefix", maxLen: 100, partitions: 7,
+		runtime:        queueRuntimeOptions{workers: 3, readers: 5},
+		deadLetterIdle: time.Minute, wait: replicationWait{replicas: 2, timeout: time.Second},
+	}
+	queues := []struct {
+		name string
+		base queueBase
+	}{
+		{name: "normal", base: newNormalWithOptions(options).base},
+		{name: "delay", base: newScheduleWithOptions(options).base},
+		{name: "sequence", base: newSequenceQueueWithOptions(options).base},
+	}
+
+	for _, queue := range queues {
+		base := queue.base
+		if base.consumerPoolSize != 3 || base.consumerReaderPoolSize != 5 {
+			t.Fatalf("%s pools = (%d, %d), want (3, 5)", queue.name, base.consumerPoolSize, base.consumerReaderPoolSize)
+		}
+		if base.wait.replicas != 2 || base.wait.timeout != time.Second {
+			t.Fatalf("%s replication wait = %#v", queue.name, base.wait)
+		}
+	}
+}
 
 func TestRdbBrokerRegistersEveryQueueMood(t *testing.T) {
 	broker := NewBrokerWithPartitions(nil, "prefix", 100, 5, 7, 11, 2, 0)
