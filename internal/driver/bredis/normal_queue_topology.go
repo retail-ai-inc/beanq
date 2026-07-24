@@ -24,3 +24,7 @@ func (t normalQueueTopology) streamKey(partition int64) string {
 func (t normalQueueTopology) deadLetterLockKey(partition int64) string {
 	return strings.Join([]string{t.streamKey(partition), "dead_letter_lock"}, ":")
 }
+
+func (t normalQueueTopology) messageStatusKey(partition int64, id string) string {
+	return strings.Join([]string{t.streamKey(partition), "status", id}, ":")
+}

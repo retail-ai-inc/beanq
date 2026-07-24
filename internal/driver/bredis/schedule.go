@@ -27,10 +27,11 @@ func newScheduleWithPartitions(client redis.UniversalClient, prefix string, maxL
 
 func newScheduleWithPartitionsAndWait(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config, wait replicationWait) *Schedule {
 	partitions = normalizePartitionCount(partitions)
+	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
+		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait})
+	base.processLogger = NewProcessLogWithPartitions(client, prefix, partitions, 0)
 	return &Schedule{
-		maxLen: maxLen, partitions: partitions, wait: wait,
-		base: newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-			deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait}),
+		maxLen: maxLen, partitions: partitions, wait: wait, base: base,
 	}
 }
 

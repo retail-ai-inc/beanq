@@ -28,3 +28,7 @@ func (t delayQueueTopology) streamKey(partition int64) string {
 func (t delayQueueTopology) deadLetterLockKey(partition int64) string {
 	return strings.Join([]string{t.streamKey(partition), "dead_letter_lock"}, ":")
 }
+
+func (t delayQueueTopology) messageStatusKey(partition int64, id string) string {
+	return strings.Join([]string{t.streamKey(partition), "status", id}, ":")
+}

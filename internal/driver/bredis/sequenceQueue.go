@@ -34,7 +34,7 @@ func newSequenceQueueWithPartitionsAndWait(client redis.UniversalClient, prefix 
 	partitions = normalizeSequenceQueuePartitionCount(partitions)
 	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
 		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait})
-	base.processLogger = NewProcessLog(client, prefix, partitions)
+	base.processLogger = NewProcessLogWithPartitions(client, prefix, 0, partitions)
 	return &SequenceQueue{
 		maxLen:     maxLen,
 		partitions: partitions,

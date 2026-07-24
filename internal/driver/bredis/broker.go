@@ -89,8 +89,8 @@ func NewBrokerWithRuntimePoolsAndReplicationWait(client redis.UniversalClient, p
 		client:        client,
 		prefix:        prefix,
 		routes:        routes,
-		publishLogger: NewProcessLog(client, prefix, sequenceQueuePartitions),
-		status:        NewStatus(client, prefix, sequenceQueuePartitions),
+		publishLogger: NewProcessLogWithPartitions(client, prefix, normalQueuePartitions, sequenceQueuePartitions),
+		status:        NewStatusWithPartitions(client, prefix, normalQueuePartitions, sequenceQueuePartitions),
 		admin:         NewUITool(client, prefix),
 	}
 }

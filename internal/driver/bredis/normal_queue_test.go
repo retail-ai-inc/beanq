@@ -30,6 +30,19 @@ func TestNormalQueueTopologyProtectsClusterHashTag(t *testing.T) {
 	}
 }
 
+func TestNormalQueueMessageStatusKeyUsesMessageIDPartition(t *testing.T) {
+	topology := newNormalQueueTopology("prefix", "channel", "topic", 7)
+	id := "message-01"
+	partition := topology.partition(id)
+	key := topology.messageStatusKey(partition, id)
+	if firstRedisHashTag(key) != firstRedisHashTag(topology.streamKey(partition)) {
+		t.Fatalf("status key %q does not share the stream hash tag", key)
+	}
+	if !strings.HasSuffix(key, ":status:"+id) {
+		t.Fatalf("status key = %q, want message status suffix", key)
+	}
+}
+
 func TestNormalQueueCanonicalConfigIncludesPerPartitionCapacity(t *testing.T) {
 	store := newNormalQueueStore(nil, newNormalQueueTopology("p", "c", "t", 7), 123)
 	if got, want := store.canonicalConfig(), "schema=2;partitions=7;capacity=123"; got != want {

@@ -28,10 +28,12 @@ func newNormalWithPartitions(client redis.UniversalClient, prefix string, maxLen
 }
 
 func newNormalWithPartitionsAndWait(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config, wait replicationWait) *Normal {
+	partitions = normalizeSequenceQueuePartitionCount(partitions)
+	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
+		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait})
+	base.processLogger = NewProcessLogWithPartitions(client, prefix, partitions, 0)
 	return &Normal{
-		maxLen: maxLen, partitions: normalizeSequenceQueuePartitionCount(partitions), wait: wait,
-		base: newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-			deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config, wait: wait}),
+		maxLen: maxLen, partitions: partitions, wait: wait, base: base,
 	}
 }
 
