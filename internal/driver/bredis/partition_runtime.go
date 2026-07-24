@@ -18,6 +18,7 @@ type partitionRuntimeAdapter[T any] interface {
 	ConsumerPrefix() string
 	Partitions() int64
 	Workers() int
+	Readers() int
 	DispatchCapacity() int
 	EnsureMetadata(context.Context) error
 	BootstrapGroups(context.Context, string) error
@@ -69,10 +70,11 @@ func (r *partitionRuntime[T]) run(ctx context.Context, channel, topic string, ha
 	}
 	r.adapter.StartBackground(ctx, channel, topic)
 
+	readerCount := effectivePartitionReaderCount(r.adapter.Readers(), r.adapter.Partitions())
 	var readerWait sync.WaitGroup
-	for readerID := range partitionReaderCount {
+	for readerID := range readerCount {
 		readerID := readerID
-		readerWait.Go(func() { r.reader(ctx, channel, readerID, dispatch) })
+		readerWait.Go(func() { r.reader(ctx, channel, readerID, readerCount, dispatch) })
 	}
 
 	<-ctx.Done()
@@ -86,12 +88,25 @@ type partitionDispatch[T any] struct {
 	item     T
 }
 
-func (r *partitionRuntime[T]) reader(ctx context.Context, group string, readerID int, dispatch chan<- partitionDispatch[T]) {
+func effectivePartitionReaderCount(configured int, partitions int64) int {
+	if configured <= 0 {
+		configured = 1
+	}
+	if partitions <= 0 {
+		return 1
+	}
+	if int64(configured) > partitions {
+		return int(partitions)
+	}
+	return configured
+}
+
+func (r *partitionRuntime[T]) reader(ctx context.Context, group string, readerID, readerCount int, dispatch chan<- partitionDispatch[T]) {
 	consumer := fmt.Sprintf("%s-%s-r%d", r.adapter.ConsumerPrefix(), xidForRuntime(r.adapter), readerID)
 	states := make([]partitionReaderState, r.adapter.Partitions())
 	for ctx.Err() == nil {
 		active := false
-		for partition := int64(readerID); partition < r.adapter.Partitions(); partition += partitionReaderCount {
+		for partition := int64(readerID); partition < r.adapter.Partitions(); partition += int64(readerCount) {
 			partitionActive, ok := r.pollPartition(ctx, group, consumer, partition, &states[partition], dispatch)
 			if !ok {
 				return

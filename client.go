@@ -254,7 +254,8 @@ func newRedisBroker(config *BeanqConfig) (Broker, *capture.Config) {
 
 	sequencePartitions := boptions.ResolveSequenceQueuePartitions(config.SequenceQueuePartitions, config.MinConsumers)
 	normalPartitions := boptions.ResolveNormalQueuePartitions(config.NormalQueuePartitions, config.MinConsumers)
-	broker := bredis.NewBrokerWithReplicationWait(driver, cfg.Prefix, cfg.MaxLen, config.MinConsumers, normalPartitions, sequencePartitions, config.ConsumerPoolSize, config.DeadLetterIdleTime, cfg.WaitReplicas, cfg.WaitTimeout)
+	broker := bredis.NewBrokerWithRuntimePoolsAndReplicationWait(driver, cfg.Prefix, cfg.MaxLen, config.MinConsumers, normalPartitions, sequencePartitions,
+		config.ConsumerPoolSize, config.ConsumerReaderPoolSize, config.DeadLetterIdleTime, cfg.WaitReplicas, cfg.WaitTimeout)
 
 	var captureConfig *capture.Config
 	var migrator MigrationRunner

@@ -35,6 +35,7 @@ func (a *streamQueueAdapter) ConsumerPrefix() string                   { return 
 func (a *streamQueueAdapter) InstanceID() string                       { return a.instanceID }
 func (a *streamQueueAdapter) Partitions() int64                        { return a.partitions }
 func (a *streamQueueAdapter) Workers() int                             { return a.base.consumerPoolSize }
+func (a *streamQueueAdapter) Readers() int                             { return a.base.consumerReaderPoolSize }
 func (a *streamQueueAdapter) DispatchCapacity() int                    { return max(1, a.Workers()) * 2 }
 func (a *streamQueueAdapter) EnsureMetadata(ctx context.Context) error { return a.ensureMetadata(ctx) }
 func (a *streamQueueAdapter) BootstrapGroups(ctx context.Context, group string) error {

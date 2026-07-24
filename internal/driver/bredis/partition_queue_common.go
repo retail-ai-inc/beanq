@@ -18,7 +18,6 @@ import (
 const partitionQueueDefaultMaxLen int64 = 200000
 
 const (
-	partitionReaderCount     = 1
 	partitionReaderIdleDelay = 20 * time.Millisecond
 	partitionClaimInterval   = time.Second
 	partitionNonBlockingRead = -1 * time.Nanosecond

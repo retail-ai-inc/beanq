@@ -8,6 +8,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/spf13/cast"
@@ -54,15 +55,28 @@ func NewBrokerWithPartitions(client redis.UniversalClient, prefix string, maxLen
 }
 
 func NewBrokerWithReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
+	return NewBrokerWithRuntimePoolsAndReplicationWait(client, prefix, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions,
+		consumerPoolSize, boptions.DefaultOptions.ConsumerReaderPoolSize, duration, waitReplicas, waitTimeout)
+}
+
+// NewBrokerWithRuntimePoolsAndReplicationWait constructs a broker with independently
+// configurable message worker and partition reader pools.
+func NewBrokerWithRuntimePoolsAndReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize, consumerReaderPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
 	wait := replicationWait{replicas: waitReplicas, timeout: waitTimeout}
 	normal := func(config *capture.Config) *Normal {
-		return newNormalWithPartitionsAndWait(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config, wait)
+		queue := newNormalWithPartitionsAndWait(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config, wait)
+		queue.base.consumerReaderPoolSize = consumerReaderPoolSize
+		return queue
 	}
 	delay := func(config *capture.Config) *Schedule {
-		return newScheduleWithPartitionsAndWait(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config, wait)
+		queue := newScheduleWithPartitionsAndWait(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config, wait)
+		queue.base.consumerReaderPoolSize = consumerReaderPoolSize
+		return queue
 	}
 	sequenceQueue := func(config *capture.Config) *SequenceQueue {
-		return newSequenceQueueWithPartitionsAndWait(client, prefix, maxLen, sequenceQueuePartitions, consumerPoolSize, duration, config, wait)
+		queue := newSequenceQueueWithPartitionsAndWait(client, prefix, maxLen, sequenceQueuePartitions, consumerPoolSize, duration, config, wait)
+		queue.base.consumerReaderPoolSize = consumerReaderPoolSize
+		return queue
 	}
 	routes := map[btype.MoodType]queueRoute{
 		btype.NORMAL: routeFromQueue(normal(nil).Publish, func(config *capture.Config) consumeFunc { return normal(config).Consume }),

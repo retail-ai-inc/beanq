@@ -150,6 +150,7 @@ type (
 		SequenceQueuePartitions  int64         `json:"sequenceQueuePartitions" mapstructure:"sequenceQueuePartitions"`
 		JobMaxRetries            int           `json:"jobMaxRetries" mapstructure:"jobMaxRetries"`
 		ConsumerPoolSize         int           `json:"consumerPoolSize" mapstructure:"consumerPoolSize"`
+		ConsumerReaderPoolSize   int           `json:"consumerReaderPoolSize" mapstructure:"consumerReaderPoolSize"`
 	}
 )
 
@@ -176,6 +177,9 @@ func (t *BeanqConfig) applyRedisDefaults() {
 func (t *BeanqConfig) applyRuntimeDefaults() {
 	if t.ConsumerPoolSize == 0 {
 		t.ConsumerPoolSize = boptions.DefaultOptions.ConsumerPoolSize
+	}
+	if t.ConsumerReaderPoolSize == 0 {
+		t.ConsumerReaderPoolSize = boptions.DefaultOptions.ConsumerReaderPoolSize
 	}
 	if t.JobMaxRetries < 0 {
 		t.JobMaxRetries = boptions.DefaultOptions.JobMaxRetry
@@ -266,6 +270,9 @@ func (t *BeanqConfig) Validate() error {
 	}
 	if t.NormalQueuePartitions < 0 {
 		return berror.ErrInvalidConfig.WithMessage("normalQueuePartitions must not be negative")
+	}
+	if t.ConsumerReaderPoolSize < 0 {
+		return berror.ErrInvalidConfig.WithMessage("consumerReaderPoolSize must not be negative")
 	}
 	if err := validateRegisteredBrokerConfig(t); err != nil {
 		return err

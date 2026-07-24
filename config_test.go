@@ -220,6 +220,39 @@ func TestBeanqConfigRejectsNegativeNormalQueuePartitions(t *testing.T) {
 	}
 }
 
+func TestBeanqConfigConsumerReaderPoolSize(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		cfg := &BeanqConfig{}
+		cfg.ApplyDefaults()
+		if cfg.ConsumerReaderPoolSize != 8 {
+			t.Fatalf("consumerReaderPoolSize = %d, want 8", cfg.ConsumerReaderPoolSize)
+		}
+	})
+
+	t.Run("configured value", func(t *testing.T) {
+		dir := t.TempDir()
+		writeConfig(t, dir, "env", `{
+			"broker":"redis",
+			"redis":{"host":"localhost","port":"6379"},
+			"consumerReaderPoolSize":12
+		}`)
+		cfg, err := NewConfig(dir, "json", "env")
+		if err != nil {
+			t.Fatalf("NewConfig error: %v", err)
+		}
+		if cfg.ConsumerReaderPoolSize != 12 {
+			t.Fatalf("consumerReaderPoolSize = %d, want 12", cfg.ConsumerReaderPoolSize)
+		}
+	})
+
+	t.Run("negative value is invalid", func(t *testing.T) {
+		cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379"}, ConsumerReaderPoolSize: -1}
+		if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "consumerReaderPoolSize") {
+			t.Fatalf("expected consumerReaderPoolSize validation error, got %v", err)
+		}
+	})
+}
+
 func TestBeanqConfigValidateMongoWhenHistoryEnabled(t *testing.T) {
 	cfg := &BeanqConfig{
 		Broker:  "redis",

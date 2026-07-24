@@ -5,6 +5,7 @@ This example verifies the new sequence queue API:
 - `PublishNewSequence(channel, topic, orderKey, payload)` publishes interleaved messages for multiple `orderKey` values.
 - `ConsumerSequence(channel, topic, handle)` keeps FIFO order inside each `orderKey` list while allowing different `orderKey` values to run in parallel.
 - `sequenceQueuePartitions` fixes the number of Redis Cluster scheduler streams. It must remain identical across publishers and consumers after the queue is created.
+- `consumerReaderPoolSize` controls the bounded partition reader pool per consumer. Readers divide partitions by stride; they are not created per partition. For example, 1,000 partitions with a pool size of 8 starts 8 resident readers, not 8,000 goroutines.
 - Delivery is at-least-once: handlers should be idempotent by message ID. A worker crash may repeat the current message, but a stale owner cannot advance the Redis queue state.
 
 Run the consumer first:

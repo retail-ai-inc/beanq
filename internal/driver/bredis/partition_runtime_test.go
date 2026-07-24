@@ -2,6 +2,7 @@ package bredis
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -21,11 +22,44 @@ type testPartitionRuntimeAdapter struct {
 	once           sync.Once
 }
 
+type isolatingPartitionRuntimeAdapter struct {
+	*testPartitionRuntimeAdapter
+	readerZeroStarted chan struct{}
+	readerZeroRelease chan struct{}
+	readOnce          sync.Once
+}
+
+func (a *isolatingPartitionRuntimeAdapter) Partitions() int64 { return 2 }
+func (a *isolatingPartitionRuntimeAdapter) Readers() int      { return 2 }
+func (a *isolatingPartitionRuntimeAdapter) Read(_ context.Context, _, _ string, partition int64) ([]int, error) {
+	if partition == 0 {
+		firstRead := false
+		a.readOnce.Do(func() {
+			firstRead = true
+			close(a.readerZeroStarted)
+		})
+		if firstRead {
+			return nil, errors.New("partition read failed")
+		}
+		<-a.readerZeroRelease
+		return nil, redis.Nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.readItems) == 0 {
+		return nil, redis.Nil
+	}
+	items := a.readItems
+	a.readItems = nil
+	return items, nil
+}
+
 func (a *testPartitionRuntimeAdapter) Name() string                                  { return "test queue" }
 func (a *testPartitionRuntimeAdapter) ConsumerPrefix() string                        { return "test" }
 func (a *testPartitionRuntimeAdapter) InstanceID() string                            { return "instance" }
 func (a *testPartitionRuntimeAdapter) Partitions() int64                             { return 1 }
 func (a *testPartitionRuntimeAdapter) Workers() int                                  { return 1 }
+func (a *testPartitionRuntimeAdapter) Readers() int                                  { return 1 }
 func (a *testPartitionRuntimeAdapter) DispatchCapacity() int                         { return 1 }
 func (a *testPartitionRuntimeAdapter) EnsureMetadata(context.Context) error          { return nil }
 func (a *testPartitionRuntimeAdapter) BootstrapGroups(context.Context, string) error { return nil }
@@ -116,6 +150,43 @@ func TestPartitionRuntimeCancellationDrainsWorkers(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("runtime did not stop after cancellation")
+	}
+}
+
+func TestPartitionRuntimeReaderIsolation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	adapter := &isolatingPartitionRuntimeAdapter{
+		testPartitionRuntimeAdapter: &testPartitionRuntimeAdapter{
+			readItems:      []int{1},
+			processStarted: make(chan struct{}),
+		},
+		readerZeroStarted: make(chan struct{}),
+		readerZeroRelease: make(chan struct{}),
+	}
+	runtime := newPartitionRuntime[int](adapter)
+	done := make(chan struct{})
+	go func() {
+		runtime.run(ctx, "channel", "topic", nil)
+		close(done)
+	}()
+
+	select {
+	case <-adapter.readerZeroStarted:
+	case <-time.After(time.Second):
+		t.Fatal("reader 0 did not start")
+	}
+	select {
+	case <-adapter.processStarted:
+	case <-time.After(time.Second):
+		t.Fatal("reader 1 did not process while reader 0 was blocked")
+	}
+
+	cancel()
+	close(adapter.readerZeroRelease)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("runtime did not stop after readers were released")
 	}
 }
 

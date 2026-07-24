@@ -68,7 +68,7 @@ func (q *SequenceQueue) PublishNewSequence(ctx context.Context, data map[string]
 
 func (q *SequenceQueue) ConsumerSequence(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	store := q.sequenceQueueStore(channel, topic, q.maxLen)
-	runtime := newSequenceQueueRuntime(store, q.base.processLogger, q.base.consumerPoolSize,
+	runtime := newSequenceQueueRuntime(store, q.base.processLogger, q.base.consumerPoolSize, q.base.consumerReaderPoolSize,
 		func(ctx context.Context, channel, topic, raw string, handler public.CallbackWithRetry) (map[string]any, error) {
 			return executeSequenceQueueMessage(ctx, channel, topic, raw, handler, q.base.captureConfig)
 		})

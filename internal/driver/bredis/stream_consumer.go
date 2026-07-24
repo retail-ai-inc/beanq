@@ -7,39 +7,46 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 )
 
 type BlockDuration func() time.Duration
 
 type queueBaseOptions struct {
-	client           redis.UniversalClient
-	prefix           string
-	consumerPoolSize int
-	deadLetterIdle   time.Duration
-	captureConfig    *capture.Config
-	wait             replicationWait
+	client                 redis.UniversalClient
+	prefix                 string
+	consumerPoolSize       int
+	consumerReaderPoolSize int
+	deadLetterIdle         time.Duration
+	captureConfig          *capture.Config
+	wait                   replicationWait
 }
 
 type queueBase struct {
-	client           redis.UniversalClient
-	processLogger    processLogger
-	prefix           string
-	consumerPoolSize int
-	deadLetterIdle   time.Duration
-	captureConfig    *capture.Config
-	wait             replicationWait
+	client                 redis.UniversalClient
+	processLogger          processLogger
+	prefix                 string
+	consumerPoolSize       int
+	consumerReaderPoolSize int
+	deadLetterIdle         time.Duration
+	captureConfig          *capture.Config
+	wait                   replicationWait
 }
 
 func newQueueBase(options queueBaseOptions) queueBase {
+	if options.consumerReaderPoolSize == 0 {
+		options.consumerReaderPoolSize = boptions.DefaultOptions.ConsumerReaderPoolSize
+	}
 	return queueBase{
-		client:           options.client,
-		processLogger:    NewProcessLog(options.client, options.prefix),
-		prefix:           options.prefix,
-		consumerPoolSize: options.consumerPoolSize,
-		deadLetterIdle:   options.deadLetterIdle,
-		captureConfig:    options.captureConfig,
-		wait:             options.wait,
+		client:                 options.client,
+		processLogger:          NewProcessLog(options.client, options.prefix),
+		prefix:                 options.prefix,
+		consumerPoolSize:       options.consumerPoolSize,
+		consumerReaderPoolSize: options.consumerReaderPoolSize,
+		deadLetterIdle:         options.deadLetterIdle,
+		captureConfig:          options.captureConfig,
+		wait:                   options.wait,
 	}
 }
 

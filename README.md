@@ -175,7 +175,7 @@ flowchart LR
 2. `queueDigest = SHA-256(length-prefix(prefix, channel, topic))`. Each length uses an 8-byte big-endian encoding. This prevents ambiguous route concatenation and keeps raw business values out of Redis Cluster hash tags.
 3. When `normalQueuePartitions = 0` or `sequenceQueuePartitions = 0`, the value falls back to `minConsumers` for compatibility. Any final non-positive value is normalized to `1`.
 4. The first publisher or consumer writes `schema/partitions/capacity` metadata. Later instances fail when their configuration differs, so **the partition count and `redis.maxLen` cannot be changed in place after queue creation**.
-5. `consumerPoolSize` is the number of message-processing workers per instance, not the partition count. Each instance scans every fixed partition and sends messages to one shared worker pool.
+5. `consumerPoolSize` is the number of message-processing workers per consumer, not the partition count. `consumerReaderPoolSize` is the number of partition readers per consumer; readers divide the fixed partitions by stride and send messages to one shared worker pool. The effective reader count never exceeds the partition count.
 
 ### 1. Normal Queue
 
@@ -366,7 +366,8 @@ _, err := consumer.BQ().WithContext(ctx).
 | Route normal/delay messages consistently | Use `SetId` with a stable, unique business message ID | The same ID always produces the same hash result |
 | Preserve strict order for one order | Use the order number as `orderKey` | All messages for the order enter the same FIFO List |
 | Process different orders concurrently | Use different `orderKey` values and configure enough workers | Ordering constraints apply only to one `orderKey` |
-| Increase processing capacity | Prefer adding instances or increasing `consumerPoolSize` | Fixed partition counts cannot be changed online |
+| Increase handler capacity | Prefer adding instances or increasing `consumerPoolSize` | Fixed partition counts cannot be changed online |
+| Reduce partition scan latency | Increase `consumerReaderPoolSize` carefully | More readers increase concurrent Redis requests and connection pressure |
 
 > Changing the partition count changes modulo results and maps the same partition key to a different partition; metadata validation also rejects the new configuration. To change the partition count in production, create a new logical queue with a new `channel/topic`, then migrate or drain the old queue.
 
@@ -494,6 +495,7 @@ _, err := consumer.BQ().
   },
   "broker": "redis",
   "consumerPoolSize": 10,
+  "consumerReaderPoolSize": 8,
   "deadLetterIdle": "60s",
   "deadLetterTicker": "5s",
   "jobMaxRetries": 3,
@@ -564,6 +566,7 @@ _, err := consumer.BQ().
 |-----------|---------|-------------|
 | `broker` | redis | Message broker implementation |
 | `consumerPoolSize` | 10 | Number of concurrent consumers; for Sequence Queue, worker goroutines per instance |
+| `consumerReaderPoolSize` | 8 | Partition reader goroutines per registered consumer; the effective count never exceeds the partition count |
 | `jobMaxRetries` | 3 | Maximum retry attempts for failed jobs |
 | `deadLetterIdle` | 60s | Pending idle before DLQ for regular queues; token lease and `XAUTOCLAIM` threshold for Sequence Queue |
 | `deadLetterTicker` | 5s | Interval for scanning dead-letter candidates |
