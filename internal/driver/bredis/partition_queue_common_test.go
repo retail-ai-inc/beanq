@@ -29,7 +29,7 @@ func TestPartitionQueueTopologyBuildsVersionedMetadataKey(t *testing.T) {
 
 func TestGracefulProcessingContextSurvivesReaderCancellation(t *testing.T) {
 	readerCtx, cancelReader := context.WithCancel(context.Background())
-	processingCtx, cancelProcessing := gracefulProcessingContext(readerCtx)
+	processingCtx, cancelProcessing := gracefulProcessingContext(readerCtx, time.Second)
 	cancelReader()
 
 	select {
@@ -42,6 +42,19 @@ func TestGracefulProcessingContextSurvivesReaderCancellation(t *testing.T) {
 	case <-processingCtx.Done():
 	case <-time.After(time.Second):
 		t.Fatal("processing context did not stop when shutdown completed")
+	}
+}
+
+func TestGracefulProcessingContextStopsAtConfiguredTimeout(t *testing.T) {
+	readerCtx, cancelReader := context.WithCancel(context.Background())
+	processingCtx, cancelProcessing := gracefulProcessingContext(readerCtx, 20*time.Millisecond)
+	defer cancelProcessing()
+	cancelReader()
+
+	select {
+	case <-processingCtx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("processing context did not stop at the configured timeout")
 	}
 }
 

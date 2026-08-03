@@ -11,6 +11,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 )
 
 type partitionRuntimeAdapter[T any] interface {
@@ -61,7 +62,7 @@ func (r *partitionRuntime[T]) run(ctx context.Context, channel, topic string, ha
 		capacity = workers
 	}
 	dispatch := make(chan partitionDispatch[T], capacity)
-	processingCtx, cancelProcessing := gracefulProcessingContext(ctx)
+	processingCtx, cancelProcessing := gracefulProcessingContext(ctx, r.gracefulShutdownTimeout())
 	defer cancelProcessing()
 
 	var workerWait sync.WaitGroup
@@ -81,6 +82,13 @@ func (r *partitionRuntime[T]) run(ctx context.Context, channel, topic string, ha
 	readerWait.Wait()
 	close(dispatch)
 	workerWait.Wait()
+}
+
+func (r *partitionRuntime[T]) gracefulShutdownTimeout() time.Duration {
+	if provider, ok := r.adapter.(interface{ GracefulShutdownTimeout() time.Duration }); ok {
+		return provider.GracefulShutdownTimeout()
+	}
+	return boptions.DefaultGracefulShutdownTimeout
 }
 
 type partitionDispatch[T any] struct {

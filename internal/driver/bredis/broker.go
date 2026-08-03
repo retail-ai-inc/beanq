@@ -33,6 +33,7 @@ type BrokerOptions struct {
 	ConsumerWorkers         int
 	ConsumerReaders         int
 	DeadLetterIdle          time.Duration
+	GracefulShutdownTimeout time.Duration
 	ReplicationWait         ReplicationWaitOptions
 }
 
@@ -120,7 +121,8 @@ func NewBrokerWithOptions(client redis.UniversalClient, options BrokerOptions) *
 		return queueOptions{
 			client: client, prefix: options.Prefix, maxLen: options.MaxLen, partitions: partitions,
 			runtime:        queueRuntimeOptions{workers: options.ConsumerWorkers, readers: options.ConsumerReaders},
-			deadLetterIdle: options.DeadLetterIdle, captureConfig: config, wait: wait,
+			deadLetterIdle: options.DeadLetterIdle, gracefulShutdownTimeout: options.GracefulShutdownTimeout,
+			captureConfig: config, wait: wait,
 		}
 	}
 	normal := func(config *capture.Config) *Normal {
