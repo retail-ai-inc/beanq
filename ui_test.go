@@ -160,7 +160,7 @@ func TestNewUIServerTimeouts(t *testing.T) {
 }
 
 func TestRunUIServerReturnsListenError(t *testing.T) {
-	err := runUIServer(context.Background(), newUIServer("127.0.0.1:-1", http.NewServeMux()))
+	err := runUIServer(context.Background(), newUIServer("127.0.0.1:-1", http.NewServeMux()), time.Second)
 	if err == nil || !strings.Contains(err.Error(), "serve UI") {
 		t.Fatalf("expected wrapped listen error, got %v", err)
 	}
@@ -169,7 +169,7 @@ func TestRunUIServerReturnsListenError(t *testing.T) {
 func TestRunUIServerStopsWithCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := runUIServer(ctx, newUIServer("127.0.0.1:0", http.NewServeMux())); err != nil {
+	if err := runUIServer(ctx, newUIServer("127.0.0.1:0", http.NewServeMux()), time.Second); err != nil {
 		t.Fatalf("runUIServer returned error while stopping: %v", err)
 	}
 }

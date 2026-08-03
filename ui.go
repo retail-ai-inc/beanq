@@ -17,13 +17,13 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/routers"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 const (
 	uiQueueReportInterval = 10 * time.Second
-	uiShutdownTimeout     = 10 * time.Second
 	uiReadHeaderTimeout   = 5 * time.Second
 	uiReadTimeout         = 15 * time.Second
 	uiWriteTimeout        = 15 * time.Second
@@ -79,7 +79,7 @@ func (c *Client) serveHTTP(ctx context.Context) error {
 	defer stopReporter()
 	c.startUIQueueReporter(reporterCtx)
 
-	return runUIServer(ctx, newUIServer(addr, rlist.Mux))
+	return runUIServer(ctx, newUIServer(addr, rlist.Mux), c.gracefulShutdownTimeout())
 }
 
 func (c *Client) startUIQueueReporter(ctx context.Context) {
@@ -155,7 +155,7 @@ func (c *Client) workflowMongoCollection(ctx context.Context) (*mongo.Collection
 	}
 
 	disconnect := func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), uiShutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), c.gracefulShutdownTimeout())
 		defer cancel()
 		if err := client.Disconnect(shutdownCtx); err != nil {
 			logger.New().Error(err)
@@ -177,7 +177,10 @@ func newUIServer(addr string, handler http.Handler) *http.Server {
 	}
 }
 
-func runUIServer(ctx context.Context, server *http.Server) error {
+func runUIServer(ctx context.Context, server *http.Server, shutdownTimeout time.Duration) error {
+	if shutdownTimeout <= 0 {
+		shutdownTimeout = boptions.DefaultGracefulShutdownTimeout
+	}
 	nctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -197,7 +200,7 @@ func runUIServer(ctx context.Context, server *http.Server) error {
 	}
 
 	logger.New().Info("Prepare to shut down")
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), uiShutdownTimeout)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 
 	if err := server.Shutdown(shutdownCtx); err != nil {
