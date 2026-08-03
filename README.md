@@ -507,6 +507,7 @@ _, err := consumer.BQ().
   "timeToRun": "3600s",
   "publishTimeOut": "10s",
   "consumeTimeOut": "20s",
+  "gracefulShutdownTimeout": "30s",
   "mongo": {
     "database": "beanq_logs",
     "username": "beanq",
@@ -572,6 +573,7 @@ _, err := consumer.BQ().
 | `deadLetterTicker` | 5s | Interval for scanning dead-letter candidates |
 | `publishTimeOut` | 10s | Publishing timeout |
 | `consumeTimeOut` | 20s | Consumption timeout |
+| `gracefulShutdownTimeout` | 30s | Maximum time in-flight tasks may continue after SIGINT or SIGTERM |
 | `minConsumers` | 100 | Minimum consumer count; compatibility fallback for normal/delay and sequence queue partitions |
 | `normalQueuePartitions` | 0 | Fixed partitions for Normal Queue and Delay Queue (`0` falls back to `minConsumers`); cannot change after queue metadata is created |
 | `sequenceQueuePartitions` | 0 | Fixed sequence queue scheduler partitions (`0` falls back to `minConsumers`); cannot change after queue metadata is created |
