@@ -16,6 +16,7 @@ func TestNewConfig(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, "env", `{
 		"broker":"redis",
+        "gracefulShutdownTimeout":"17s",
 		"redis":{"host":"localhost","port":"6379"},
 		"ui":{"root":{"username":"rai","password":"secret"}}
 	}`)
@@ -62,6 +63,10 @@ func TestNewConfig(t *testing.T) {
 				} else if !strings.Contains(err.Error(), tt.expectedErr) {
 					t.Errorf("expected error containing %q, got: %v", tt.expectedErr, err)
 				}
+			}
+
+			if tt.expectedErr == "" && cfg.GracefulShutdownTimeout != 17*time.Second {
+				t.Fatalf("graceful shutdown timeout = %v, want 17s", cfg.GracefulShutdownTimeout)
 			}
 
 			if tt.expectedField != "" {
@@ -159,6 +164,16 @@ func TestBeanqConfigResolveReturnsIndependentValidatedConfig(t *testing.T) {
 	}
 	if options.ConsumerWorkers == 0 || options.ConsumerReaders == 0 {
 		t.Fatalf("resolved runtime pools were not defaulted: %#v", options)
+	}
+	if options.GracefulShutdownTimeout != 30*time.Second {
+		t.Fatalf("graceful shutdown timeout = %v, want 30s", options.GracefulShutdownTimeout)
+	}
+}
+
+func TestBeanqConfigRejectsNegativeGracefulShutdownTimeout(t *testing.T) {
+	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost"}, GracefulShutdownTimeout: -time.Second}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "gracefulShutdownTimeout") {
+		t.Fatalf("unexpected validation error: %v", err)
 	}
 }
 

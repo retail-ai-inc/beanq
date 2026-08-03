@@ -146,6 +146,7 @@ type (
 		KeepSuccessJobsInHistory time.Duration `json:"keepSuccessJobsInHistory" mapstructure:"keepSuccessJobsInHistory"`
 		PublishTimeOut           time.Duration `json:"publishTimeOut" mapstructure:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut" mapstructure:"consumeTimeOut"`
+		GracefulShutdownTimeout  time.Duration `json:"gracefulShutdownTimeout" mapstructure:"gracefulShutdownTimeout"`
 		MinConsumers             int64         `json:"minConsumers" mapstructure:"minConsumers"`
 		NormalQueuePartitions    int64         `json:"normalQueuePartitions" mapstructure:"normalQueuePartitions"`
 		SequenceQueuePartitions  int64         `json:"sequenceQueuePartitions" mapstructure:"sequenceQueuePartitions"`
@@ -195,6 +196,7 @@ func (t ResolvedConfig) redisBrokerOptions() bredis.BrokerOptions {
 		ConsumerWorkers:         t.ConsumerPoolSize,
 		ConsumerReaders:         t.ConsumerReaderPoolSize,
 		DeadLetterIdle:          t.DeadLetterIdleTime,
+		GracefulShutdownTimeout: t.GracefulShutdownTimeout,
 		ReplicationWait: bredis.ReplicationWaitOptions{
 			Replicas: t.Redis.WaitReplicas,
 			Timeout:  t.Redis.WaitTimeout,
@@ -274,6 +276,9 @@ func (t *BeanqConfig) applyRuntimeDefaults() {
 	}
 	if t.ConsumeTimeOut == 0 {
 		t.ConsumeTimeOut = boptions.DefaultOptions.ConsumeTimeOut
+	}
+	if t.GracefulShutdownTimeout == 0 {
+		t.GracefulShutdownTimeout = boptions.DefaultOptions.GracefulShutdownTimeout
 	}
 	if t.MinConsumers == 0 {
 		t.MinConsumers = boptions.DefaultOptions.MinConsumers
@@ -367,6 +372,9 @@ func (t *BeanqConfig) Validate() error {
 	}
 	if t.ConsumerReaderPoolSize < 0 {
 		return berror.ErrInvalidConfig.WithMessage("consumerReaderPoolSize must not be negative")
+	}
+	if t.GracefulShutdownTimeout < 0 {
+		return berror.ErrInvalidConfig.WithMessage("gracefulShutdownTimeout must not be negative")
 	}
 	if err := validateRegisteredBrokerConfig(t); err != nil {
 		return err

@@ -39,6 +39,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
@@ -69,7 +70,7 @@ type consumerRegistry struct {
 	handlers []*Handler
 }
 
-const clientShutdownTimeout = 35 * time.Second
+const clientShutdownCleanupTimeout = 5 * time.Second
 
 func (r *consumerRegistry) add(handler *Handler) {
 	r.mu.Lock()
@@ -430,11 +431,18 @@ func (c *Client) Wait(ctx context.Context) {
 	<-ctx.Done()
 	select {
 	case <-handlersDone:
-	case <-time.After(clientShutdownTimeout):
+	case <-time.After(c.gracefulShutdownTimeout() + clientShutdownCleanupTimeout):
 		logger.New().Warn("Beanq graceful shutdown timed out")
 	}
 	logger.New().Info("Beanq Stop")
 	_ = logger.New().Sync()
+}
+
+func (c *Client) gracefulShutdownTimeout() time.Duration {
+	if c.config != nil && c.config.GracefulShutdownTimeout > 0 {
+		return c.config.GracefulShutdownTimeout
+	}
+	return boptions.DefaultGracefulShutdownTimeout
 }
 
 func (c *Client) startHandlers(ctx context.Context) <-chan struct{} {
