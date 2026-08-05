@@ -17,7 +17,51 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
+	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 )
+
+func TestNormalAndDelayStatusRedisIntegration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, configuredPrefix := newSequenceQueueIntegrationClient(t, ctx)
+	t.Cleanup(func() { _ = client.Close() })
+
+	prefix := fmt.Sprintf("%sstatus_it_%d", configuredPrefix, time.Now().UnixNano())
+	t.Cleanup(func() {
+		cleanupRedisKeysWithPrefix(t, context.Background(), client, prefix)
+	})
+	const partitions = int64(7)
+	processLog := NewProcessLogWithPartitions(client, prefix, partitions, 11)
+	status := NewStatusWithPartitions(client, prefix, partitions, 11)
+
+	for _, tt := range []struct {
+		name     string
+		moodType btype.MoodType
+	}{
+		{name: "normal", moodType: btype.NORMAL},
+		{name: "delay", moodType: btype.DELAY},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			channel := tt.name + "-channel"
+			topic := "status-topic"
+			id := tt.name + "-message-01"
+			data := map[string]any{
+				"channel": channel, "topic": topic, "id": id,
+				"moodType": tt.moodType, "status": bstatus.StatusSuccess,
+			}
+			if err := processLog.AddLog(ctx, data); err != nil {
+				t.Fatalf("AddLog: %v", err)
+			}
+			got, err := status.Status(ctx, channel, topic, id)
+			if err != nil {
+				t.Fatalf("Status: %v", err)
+			}
+			if got["id"] != id || got["status"] != bstatus.StatusSuccess {
+				t.Fatalf("status = %#v, want id %q and success", got, id)
+			}
+		})
+	}
+}
 
 type sequenceQueueIntegrationConfig struct {
 	Redis struct {
@@ -402,6 +446,28 @@ func cleanupSequenceQueueIntegrationKeys(t *testing.T, ctx context.Context, clie
 	var cursor uint64
 	for {
 		keys, next, err := client.Scan(ctx, cursor, "*:"+prefix+":*", 100).Result()
+		if err != nil {
+			t.Errorf("scan integration keys: %v", err)
+			return
+		}
+		if len(keys) > 0 {
+			if err := client.Del(ctx, keys...).Err(); err != nil {
+				t.Errorf("delete integration keys: %v", err)
+				return
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			return
+		}
+	}
+}
+
+func cleanupRedisKeysWithPrefix(t *testing.T, ctx context.Context, client redis.UniversalClient, prefix string) {
+	t.Helper()
+	var cursor uint64
+	for {
+		keys, next, err := client.Scan(ctx, cursor, prefix+"*", 100).Result()
 		if err != nil {
 			t.Errorf("scan integration keys: %v", err)
 			return

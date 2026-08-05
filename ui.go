@@ -125,7 +125,7 @@ func (c *Client) historyMongoStore() *bmongo.BMongo {
 		mongoCfg.UserName,
 		mongoCfg.Password,
 		mongoCfg.Database,
-		uiCollectionNames(mongoCfg),
+		mongoCfg.collectionNames(),
 		mongoCfg.ConnectTimeOut,
 		mongoCfg.MaxConnectionPoolSize,
 		mongoCfg.MaxConnectionLifeTime,
@@ -162,7 +162,7 @@ func (c *Client) workflowMongoCollection(ctx context.Context) (*mongo.Collection
 		}
 	}
 
-	collection := client.Database(mongoCfg.Database).Collection(uiCollectionName(mongoCfg, "workflow", "workflow_records"))
+	collection := client.Database(mongoCfg.Database).Collection(mongoCfg.collectionName("workflow", "workflow_records"))
 	return collection, disconnect, nil
 }
 
@@ -230,24 +230,6 @@ func uiListenAddr(port string) (string, error) {
 
 func uiMongoPort(port string) string {
 	return fmt.Sprintf(":%s", strings.TrimLeft(port, ":"))
-}
-
-func uiCollectionNames(config *Mongo) map[string]string {
-	collections := make(map[string]string, len(config.Collections))
-	for name, collection := range config.Collections {
-		collections[name] = collection.Name
-	}
-	return collections
-}
-
-func uiCollectionName(config *Mongo, key, fallback string) string {
-	if config == nil {
-		return fallback
-	}
-	if collection, ok := config.Collections[key]; ok && collection.Name != "" {
-		return collection.Name
-	}
-	return fallback
 }
 
 func staticFileInfo(source fs.FS) (map[string]time.Time, error) {

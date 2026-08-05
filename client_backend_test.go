@@ -59,6 +59,27 @@ func (f *fakeQueueBackend) WaitingSequenceAck(_ context.Context, _, _, orderKey,
 	return f.ack, f.err
 }
 
+type closableFakeQueueBackend struct {
+	fakeQueueBackend
+	closes int
+}
+
+func (f *closableFakeQueueBackend) Close() error { f.closes++; return f.err }
+
+func TestClientCloseIsIdempotent(t *testing.T) {
+	backend := &closableFakeQueueBackend{}
+	client := &Client{broker: backend}
+	if err := client.Close(); err != nil {
+		t.Fatalf(`first Close: %v`, err)
+	}
+	if err := client.Close(); err != nil {
+		t.Fatalf(`second Close: %v`, err)
+	}
+	if backend.closes != 1 {
+		t.Fatalf(`broker Close calls = %d, want 1`, backend.closes)
+	}
+}
+
 func TestClientPublishUsesBackendNeutralPublisher(t *testing.T) {
 	published := make(chan map[string]any, 1)
 	b := &fakeQueueBackend{published: published}

@@ -19,6 +19,7 @@ type SequenceQueue struct {
 	base       queueBase
 	maxLen     int64
 	partitions int64
+	wait       replicationWait
 }
 
 func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
@@ -26,13 +27,18 @@ func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64,
 }
 
 func newSequenceQueueWithPartitions(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
-	partitions = normalizeSequenceQueuePartitionCount(partitions)
-	base := newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-		deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config})
-	base.processLogger = NewProcessLog(client, prefix, partitions)
+	return newSequenceQueueWithOptions(queueOptions{client: client, prefix: prefix, maxLen: maxLen, partitions: partitions,
+		runtime: queueRuntimeOptions{workers: consumerPoolSize}, deadLetterIdle: deadLetterIdle, captureConfig: config})
+}
+
+func newSequenceQueueWithOptions(options queueOptions) *SequenceQueue {
+	options.partitions = normalizeSequenceQueuePartitionCount(options.partitions)
+	base := newQueueBase(options)
+	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, 0, options.partitions)
 	return &SequenceQueue{
-		maxLen:     maxLen,
-		partitions: partitions,
+		maxLen:     options.maxLen,
+		partitions: options.partitions,
+		wait:       options.wait,
 		base:       base,
 	}
 }
@@ -46,7 +52,7 @@ func (q *SequenceQueue) PublishNewSequence(ctx context.Context, data map[string]
 	if err := store.ensureMetadata(ctx); err != nil {
 		return err
 	}
-	result, err := store.enqueue(ctx, orderKey, data)
+	result, err := store.enqueueWithWait(ctx, orderKey, data, q.wait)
 	if err != nil {
 		return err
 	}
@@ -62,7 +68,7 @@ func (q *SequenceQueue) PublishNewSequence(ctx context.Context, data map[string]
 
 func (q *SequenceQueue) ConsumerSequence(ctx context.Context, channel, topic string, do public.CallbackWithRetry) {
 	store := q.sequenceQueueStore(channel, topic, q.maxLen)
-	runtime := newSequenceQueueRuntime(store, q.base.processLogger, q.base.consumerPoolSize,
+	runtime := newSequenceQueueRuntime(store, q.base.processLogger, q.base.consumerPoolSize, q.base.consumerReaderPoolSize,
 		func(ctx context.Context, channel, topic, raw string, handler public.CallbackWithRetry) (map[string]any, error) {
 			return executeSequenceQueueMessage(ctx, channel, topic, raw, handler, q.base.captureConfig)
 		})
@@ -71,7 +77,7 @@ func (q *SequenceQueue) ConsumerSequence(ctx context.Context, channel, topic str
 
 func (q *SequenceQueue) sequenceQueueStore(channel, topic string, maxLen int64) *sequenceQueueStore {
 	topology := newSequenceQueueTopology(q.base.prefix, channel, topic, q.partitions)
-	return newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle)
+	return newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle, q.wait)
 }
 
 func sequenceQueueFailedData(channel, topic, orderKey, raw string, cause error) map[string]any {

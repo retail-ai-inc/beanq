@@ -35,6 +35,7 @@ type sequenceQueueRuntime struct {
 	logger     processLogger
 	execute    sequenceQueueExecutor
 	workers    int
+	readers    int
 	partitions int64
 	lease      time.Duration
 	instanceID string
@@ -54,7 +55,7 @@ const (
 	sequenceQueueStoreFatal
 )
 
-func newSequenceQueueRuntime(store *sequenceQueueStore, processLogger processLogger, workers int, execute sequenceQueueExecutor) *sequenceQueueRuntime {
+func newSequenceQueueRuntime(store *sequenceQueueStore, processLogger processLogger, workers, readers int, execute sequenceQueueExecutor) *sequenceQueueRuntime {
 	if workers <= 0 {
 		workers = 1
 	}
@@ -63,6 +64,7 @@ func newSequenceQueueRuntime(store *sequenceQueueStore, processLogger processLog
 		logger:     processLogger,
 		execute:    execute,
 		workers:    workers,
+		readers:    readers,
 		partitions: store.topology.partitions,
 		lease:      store.lease,
 		instanceID: xid.New().String(),
@@ -83,6 +85,7 @@ func (a *sequenceQueueRuntimeAdapter) ConsumerPrefix() string { return "sequence
 func (a *sequenceQueueRuntimeAdapter) InstanceID() string     { return a.runtime.instanceID }
 func (a *sequenceQueueRuntimeAdapter) Partitions() int64      { return a.runtime.partitions }
 func (a *sequenceQueueRuntimeAdapter) Workers() int           { return a.runtime.workers }
+func (a *sequenceQueueRuntimeAdapter) Readers() int           { return a.runtime.readers }
 func (a *sequenceQueueRuntimeAdapter) DispatchCapacity() int  { return a.runtime.workers }
 func (a *sequenceQueueRuntimeAdapter) EnsureMetadata(ctx context.Context) error {
 	return a.runtime.store.ensureMetadata(ctx)

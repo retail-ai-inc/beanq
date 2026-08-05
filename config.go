@@ -33,6 +33,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
+	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/viper"
 )
 
@@ -61,6 +62,8 @@ type (
 		PoolTimeout        time.Duration `json:"poolTimeout" mapstructure:"poolTimeout"`
 		MaxRetries         int           `json:"maxRetries" mapstructure:"maxRetries"`
 		PoolSize           int           `json:"poolSize" mapstructure:"poolSize"`
+		WaitReplicas       int           `json:"waitReplicas" mapstructure:"waitReplicas"`
+		WaitTimeout        time.Duration `json:"waitTimeout" mapstructure:"waitTimeout"`
 		SSL                SSL           `json:"ssl" mapstructure:"ssl"`
 	}
 	SSL struct {
@@ -148,8 +151,81 @@ type (
 		SequenceQueuePartitions  int64         `json:"sequenceQueuePartitions" mapstructure:"sequenceQueuePartitions"`
 		JobMaxRetries            int           `json:"jobMaxRetries" mapstructure:"jobMaxRetries"`
 		ConsumerPoolSize         int           `json:"consumerPoolSize" mapstructure:"consumerPoolSize"`
+		ConsumerReaderPoolSize   int           `json:"consumerReaderPoolSize" mapstructure:"consumerReaderPoolSize"`
+	}
+	ResolvedConfig struct {
+		BeanqConfig
 	}
 )
+
+// Resolve returns a complete, validated copy without modifying the source config.
+func (t *BeanqConfig) Resolve() (ResolvedConfig, error) {
+	if t == nil {
+		return ResolvedConfig{}, berror.ErrInvalidConfig.WithMessage("config is nil")
+	}
+	resolved := ResolvedConfig{BeanqConfig: cloneBeanqConfig(*t)}
+	resolved.ApplyDefaults()
+	if err := resolved.Validate(); err != nil {
+		return ResolvedConfig{}, err
+	}
+	return resolved, nil
+}
+
+func cloneBeanqConfig(config BeanqConfig) BeanqConfig {
+	if config.Mongo == nil {
+		return config
+	}
+	mongo := *config.Mongo
+	if config.Collections != nil {
+		mongo.Collections = make(map[string]Collection, len(config.Collections))
+		for key, collection := range config.Collections {
+			mongo.Collections[key] = collection
+		}
+	}
+	config.Mongo = &mongo
+	return config
+}
+
+func (t ResolvedConfig) redisBrokerOptions() bredis.BrokerOptions {
+	return bredis.BrokerOptions{
+		Prefix:                  t.Redis.Prefix,
+		MaxLen:                  t.Redis.MaxLen,
+		NormalQueuePartitions:   boptions.ResolveNormalQueuePartitions(t.NormalQueuePartitions, t.MinConsumers),
+		SequenceQueuePartitions: boptions.ResolveSequenceQueuePartitions(t.SequenceQueuePartitions, t.MinConsumers),
+		ConsumerWorkers:         t.ConsumerPoolSize,
+		ConsumerReaders:         t.ConsumerReaderPoolSize,
+		DeadLetterIdle:          t.DeadLetterIdleTime,
+		ReplicationWait: bredis.ReplicationWaitOptions{
+			Replicas: t.Redis.WaitReplicas,
+			Timeout:  t.Redis.WaitTimeout,
+		},
+	}
+}
+
+func (t ResolvedConfig) redisClientOptions() bredis.RedisClientOptions {
+	return bredis.RedisClientOptions{
+		IsCluster:          t.Redis.IsCluster,
+		Host:               t.Redis.Host,
+		Port:               t.Redis.Port,
+		Username:           t.Redis.Username,
+		Password:           t.Redis.Password,
+		Database:           t.Redis.Database,
+		MaxRetries:         t.Redis.MaxRetries,
+		DialTimeout:        t.Redis.DialTimeout,
+		ReadTimeout:        t.Redis.ReadTimeout,
+		WriteTimeout:       t.Redis.WriteTimeout,
+		PoolTimeout:        t.Redis.PoolTimeout,
+		PoolSize:           t.Redis.PoolSize,
+		MinIdleConnections: t.Redis.MinIdleConnections,
+		TLS: bredis.RedisTLSOptions{
+			On:                t.Redis.SSL.On,
+			CAFile:            t.Redis.SSL.CAFile,
+			VerifyCertificate: t.Redis.SSL.Verify,
+			HotReload:         t.Redis.SSL.HotReload,
+		},
+		WaitReplicas: t.Redis.WaitReplicas,
+	}
+}
 
 func (t *BeanqConfig) init() {
 	t.ApplyDefaults()
@@ -160,13 +236,23 @@ func (t *BeanqConfig) ApplyDefaults() {
 		t.Mongo = &Mongo{}
 	}
 	t.applyRuntimeDefaults()
+	t.applyRedisDefaults()
 	t.applyQueueDefaults()
 	t.applyMongoDefaults()
+}
+
+func (t *BeanqConfig) applyRedisDefaults() {
+	if t.Redis.WaitReplicas > 0 && t.Redis.WaitTimeout == 0 {
+		t.Redis.WaitTimeout = time.Second
+	}
 }
 
 func (t *BeanqConfig) applyRuntimeDefaults() {
 	if t.ConsumerPoolSize == 0 {
 		t.ConsumerPoolSize = boptions.DefaultOptions.ConsumerPoolSize
+	}
+	if t.ConsumerReaderPoolSize == 0 {
+		t.ConsumerReaderPoolSize = boptions.DefaultOptions.ConsumerReaderPoolSize
 	}
 	if t.JobMaxRetries < 0 {
 		t.JobMaxRetries = boptions.DefaultOptions.JobMaxRetry
@@ -245,15 +331,33 @@ func defaultMongoCollections() map[string]Collection {
 	}
 }
 
+func (t *Mongo) collectionNames() map[string]string {
+	if t == nil {
+		return nil
+	}
+	collections := make(map[string]string, len(t.Collections))
+	for key, collection := range t.Collections {
+		collections[key] = collection.Name
+	}
+	return collections
+}
+
+func (t *Mongo) collectionName(key, fallback string) string {
+	if t == nil {
+		return fallback
+	}
+	if collection, ok := t.Collections[key]; ok && collection.Name != "" {
+		return collection.Name
+	}
+	return fallback
+}
+
 func (t *BeanqConfig) Validate() error {
 	if t == nil {
 		return berror.ErrInvalidConfig.WithMessage("config is nil")
 	}
-	if strings.TrimSpace(t.Broker) == "" {
+	if normalizeBrokerName(t.Broker) == "" {
 		return berror.ErrInvalidConfig.WithMessage("broker is required")
-	}
-	if t.Broker != "redis" {
-		return berror.ErrUnsupportedBroker.WithMessage(t.Broker)
 	}
 	if t.SequenceQueuePartitions < 0 {
 		return berror.ErrInvalidConfig.WithMessage("sequenceQueuePartitions must not be negative")
@@ -261,7 +365,10 @@ func (t *BeanqConfig) Validate() error {
 	if t.NormalQueuePartitions < 0 {
 		return berror.ErrInvalidConfig.WithMessage("normalQueuePartitions must not be negative")
 	}
-	if err := t.validateRedis(); err != nil {
+	if t.ConsumerReaderPoolSize < 0 {
+		return berror.ErrInvalidConfig.WithMessage("consumerReaderPoolSize must not be negative")
+	}
+	if err := validateRegisteredBrokerConfig(t); err != nil {
 		return err
 	}
 	if t.requiresMongo() {
@@ -271,8 +378,20 @@ func (t *BeanqConfig) Validate() error {
 }
 
 func (t *BeanqConfig) validateRedis() error {
+	if t.Redis.WaitReplicas < 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitReplicas must not be negative")
+	}
+	if t.Redis.WaitTimeout < 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitTimeout must not be negative")
+	}
 	if strings.TrimSpace(t.Redis.Host) == "" {
 		return berror.ErrInvalidConfig.WithMessage("redis.host is required")
+	}
+	if t.Redis.IsCluster && t.Redis.Database != 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.database must be 0 when redis.isCluster is true")
+	}
+	if !t.Redis.IsCluster && len(strings.Split(t.Redis.Host, ",")) > 1 {
+		return berror.ErrInvalidConfig.WithMessage("multiple redis addresses require redis.isCluster=true")
 	}
 	if strings.TrimSpace(t.Redis.Port) == "" && !redisHostsIncludePorts(t.Redis.Host) {
 		return berror.ErrInvalidConfig.WithMessage("redis.port is required")
@@ -377,9 +496,9 @@ func LoadConfig(configPath string, configType string, configName string) (*Beanq
 	if err := vp.Unmarshal(&cfg); err != nil {
 		return nil, berror.ErrInvalidConfig.WithMessage("failed to unmarshal config").WithCause(err)
 	}
-	cfg.ApplyDefaults()
-	if err := cfg.Validate(); err != nil {
+	resolved, err := cfg.Resolve()
+	if err != nil {
 		return nil, err
 	}
-	return &cfg, nil
+	return &resolved.BeanqConfig, nil
 }

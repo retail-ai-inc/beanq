@@ -18,7 +18,6 @@ import (
 const partitionQueueDefaultMaxLen int64 = 200000
 
 const (
-	partitionReaderCount     = 1
 	partitionReaderIdleDelay = 20 * time.Millisecond
 	partitionClaimInterval   = time.Second
 	partitionNonBlockingRead = -1 * time.Nanosecond
@@ -129,7 +128,7 @@ func (m partitionQueueMetadata) canonicalConfig() string {
 	return fmt.Sprintf("schema=%s;partitions=%d;capacity=%d", m.schema, m.partitions, m.capacity)
 }
 
-func ensurePartitionQueueMetadata(ctx context.Context, client redis.UniversalClient, key, queueName string, metadata partitionQueueMetadata) error {
+func ensurePartitionQueueMetadata(ctx context.Context, client redis.UniversalClient, wait replicationWait, key, queueName string, metadata partitionQueueMetadata) error {
 	want := metadata.canonicalConfig()
 	got, err := client.HGet(ctx, key, "canonical_config").Result()
 	if err == nil {
@@ -138,7 +137,14 @@ func ensurePartitionQueueMetadata(ctx context.Context, client redis.UniversalCli
 	if !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("read %s metadata: %w", queueName, err)
 	}
-	if err := client.HSetNX(ctx, key, "canonical_config", want).Err(); err != nil {
+	if wait.enabled() {
+		_, err = wait.execute(ctx, client, key, func(pipe redis.Pipeliner) redis.Cmder {
+			return pipe.HSetNX(ctx, key, "canonical_config", want)
+		})
+	} else {
+		err = client.HSetNX(ctx, key, "canonical_config", want).Err()
+	}
+	if err != nil {
 		return fmt.Errorf("initialize %s metadata: %w", queueName, err)
 	}
 	got, err = client.HGet(ctx, key, "canonical_config").Result()
@@ -172,7 +178,16 @@ func bootstrapPartitionGroup(ctx context.Context, client redis.UniversalClient, 
 	return nil
 }
 
-func ackAndDelete(ctx context.Context, client redis.UniversalClient, stream, group string, ids ...string) error {
+func ackAndDelete(ctx context.Context, client redis.UniversalClient, wait replicationWait, stream, group string, ids ...string) error {
+	if wait.enabled() {
+		_, err := wait.executeMany(ctx, client, stream, func(pipe redis.Pipeliner) []redis.Cmder {
+			return []redis.Cmder{
+				pipe.XAck(ctx, stream, group, ids...),
+				pipe.XDel(ctx, stream, ids...),
+			}
+		})
+		return err
+	}
 	_, err := client.Pipelined(ctx, func(pipe redis.Pipeliner) error {
 		pipe.XAck(ctx, stream, group, ids...)
 		pipe.XDel(ctx, stream, ids...)

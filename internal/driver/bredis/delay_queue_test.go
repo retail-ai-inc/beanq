@@ -41,6 +41,19 @@ func TestDelayQueuePartitionKeysShareOnlyTheirOwnSlot(t *testing.T) {
 	}
 }
 
+func TestDelayQueueMessageStatusKeyUsesMessageIDPartition(t *testing.T) {
+	topology := newDelayQueueTopology("prefix", "channel", "topic", 7)
+	id := "message-01"
+	partition := topology.partition(id)
+	key := topology.messageStatusKey(partition, id)
+	if firstRedisHashTag(key) != firstRedisHashTag(topology.streamKey(partition)) {
+		t.Fatalf("status key %q does not share the stream hash tag", key)
+	}
+	if !strings.HasSuffix(key, ":status:"+id) {
+		t.Fatalf("status key = %q, want message status suffix", key)
+	}
+}
+
 func TestDelayQueueCanonicalConfigUsesPerPartitionCapacity(t *testing.T) {
 	store := newDelayQueueStore(nil, newDelayQueueTopology("p", "c", "t", 7), 123)
 	if got, want := store.metadata().canonicalConfig(), "schema=2;partitions=7;capacity=123"; got != want {

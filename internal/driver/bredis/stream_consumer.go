@@ -7,36 +7,52 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 )
 
 type BlockDuration func() time.Duration
 
-type queueBaseOptions struct {
-	client           redis.UniversalClient
-	prefix           string
-	consumerPoolSize int
-	deadLetterIdle   time.Duration
-	captureConfig    *capture.Config
+type queueRuntimeOptions struct {
+	workers int
+	readers int
+}
+
+type queueOptions struct {
+	client         redis.UniversalClient
+	prefix         string
+	maxLen         int64
+	partitions     int64
+	runtime        queueRuntimeOptions
+	deadLetterIdle time.Duration
+	captureConfig  *capture.Config
+	wait           replicationWait
 }
 
 type queueBase struct {
-	client           redis.UniversalClient
-	processLogger    processLogger
-	prefix           string
-	consumerPoolSize int
-	deadLetterIdle   time.Duration
-	captureConfig    *capture.Config
+	client                 redis.UniversalClient
+	processLogger          processLogger
+	prefix                 string
+	consumerPoolSize       int
+	consumerReaderPoolSize int
+	deadLetterIdle         time.Duration
+	captureConfig          *capture.Config
+	wait                   replicationWait
 }
 
-func newQueueBase(options queueBaseOptions) queueBase {
+func newQueueBase(options queueOptions) queueBase {
+	if options.runtime.readers == 0 {
+		options.runtime.readers = boptions.DefaultOptions.ConsumerReaderPoolSize
+	}
 	return queueBase{
-		client:           options.client,
-		processLogger:    NewProcessLog(options.client, options.prefix),
-		prefix:           options.prefix,
-		consumerPoolSize: options.consumerPoolSize,
-		deadLetterIdle:   options.deadLetterIdle,
-		captureConfig:    options.captureConfig,
+		client:                 options.client,
+		processLogger:          NewProcessLog(options.client, options.prefix),
+		prefix:                 options.prefix,
+		consumerPoolSize:       options.runtime.workers,
+		consumerReaderPoolSize: options.runtime.readers,
+		deadLetterIdle:         options.deadLetterIdle,
+		captureConfig:          options.captureConfig,
+		wait:                   options.wait,
 	}
 }
 

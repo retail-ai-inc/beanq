@@ -21,9 +21,10 @@ const (
 type sequenceQueueStore struct {
 	client   redis.UniversalClient
 	scripts  *ScriptCatalog
+	lease    time.Duration
 	topology sequenceQueueTopology
 	maxLen   int64
-	lease    time.Duration
+	wait     replicationWait
 }
 
 type sequenceQueueToken struct {
@@ -62,14 +63,14 @@ type sequenceQueueAutoClaimResult struct {
 	Cursor string
 }
 
-func newSequenceQueueStore(client redis.UniversalClient, topology sequenceQueueTopology, maxLen int64, lease time.Duration) *sequenceQueueStore {
+func newSequenceQueueStore(client redis.UniversalClient, topology sequenceQueueTopology, maxLen int64, lease time.Duration, waits ...replicationWait) *sequenceQueueStore {
 	if maxLen <= 0 {
 		maxLen = sequenceQueueDefaultMaxLen
 	}
 	if lease <= 0 {
 		lease = time.Minute
 	}
-	return &sequenceQueueStore{client: client, scripts: DefaultScriptCatalog(), topology: topology, maxLen: maxLen, lease: lease}
+	return &sequenceQueueStore{client: client, scripts: DefaultScriptCatalog(), topology: topology, maxLen: maxLen, lease: lease, wait: firstReplicationWait(waits)}
 }
 
 func (s *sequenceQueueStore) canonicalConfig() string {
@@ -82,14 +83,21 @@ func (s *sequenceQueueStore) metadata() partitionQueueMetadata {
 
 // ensureMetadata elects the first complete queue configuration as canonical.
 func (s *sequenceQueueStore) ensureMetadata(ctx context.Context) error {
-	return ensurePartitionQueueMetadata(ctx, s.client, s.topology.metadataKey(), "sequence queue", s.metadata())
+	return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "sequence queue", s.metadata())
 }
 
 func (s *sequenceQueueStore) bootstrapGroups(ctx context.Context, group string) error {
 	return bootstrapPartitionGroups(ctx, s.client, group, "sequence queue", s.topology.partitions, s.topology.schedulerKey)
 }
 
+// enqueue for test
+//
+//nolint:unused
 func (s *sequenceQueueStore) enqueue(ctx context.Context, orderKey string, data map[string]any) (sequenceQueueEnqueueResult, error) {
+	return s.enqueueWithWait(ctx, orderKey, data, replicationWait{})
+}
+
+func (s *sequenceQueueStore) enqueueWithWait(ctx context.Context, orderKey string, data map[string]any, wait replicationWait) (sequenceQueueEnqueueResult, error) {
 	if orderKey == "" {
 		return sequenceQueueEnqueueResult{}, errors.New("missing orderKey")
 	}
@@ -98,12 +106,33 @@ func (s *sequenceQueueStore) enqueue(ctx context.Context, orderKey string, data 
 		return sequenceQueueEnqueueResult{}, fmt.Errorf("marshal sequence queue message: %w", err)
 	}
 	partition := s.topology.partition(orderKey)
-	values, err := s.runTriplet(ctx, ScriptSequenceQueueEnqueue, []string{
+	keys := []string{
 		s.topology.orderListKey(partition, orderKey), s.topology.orderStateKey(partition, orderKey),
 		s.topology.schedulerKey(partition), s.topology.partitionStateKey(partition), s.topology.isolationKey(partition),
-	}, string(payload), orderKey, s.maxLen)
+	}
+	if !wait.enabled() {
+		values, err := s.runTriplet(ctx, ScriptSequenceQueueEnqueue, keys, string(payload), orderKey, s.maxLen)
+		if err != nil {
+			return sequenceQueueEnqueueResult{}, fmt.Errorf("enqueue sequence queue message: %w", err)
+		}
+		return sequenceQueueEnqueueResult{Code: values[0], SchedulerID: values[1], Pending: cast.ToInt64(values[2])}, nil
+	}
+	routingKey := s.topology.schedulerKey(partition)
+	var resultCmd *redis.Cmd
+	_, err = wait.execute(ctx, s.client, routingKey, func(pipe redis.Pipeliner) redis.Cmder {
+		resultCmd = pipe.Eval(ctx, sequenceQueueEnqueueLua, keys, string(payload), orderKey, s.maxLen)
+		return resultCmd
+	})
 	if err != nil {
 		return sequenceQueueEnqueueResult{}, fmt.Errorf("enqueue sequence queue message: %w", err)
+	}
+	raw, err := resultCmd.Result()
+	if err != nil {
+		return sequenceQueueEnqueueResult{}, fmt.Errorf("enqueue sequence queue message: %w", err)
+	}
+	values, err := strictTriplet(ScriptSequenceQueueEnqueue, raw)
+	if err != nil {
+		return sequenceQueueEnqueueResult{}, err
 	}
 	return sequenceQueueEnqueueResult{Code: values[0], SchedulerID: values[1], Pending: cast.ToInt64(values[2])}, nil
 }
@@ -154,7 +183,7 @@ func (s *sequenceQueueStore) autoClaim(ctx context.Context, group, consumer stri
 }
 
 func (s *sequenceQueueStore) discardSchedulerToken(ctx context.Context, stream, group, id string) error {
-	return ackAndDelete(ctx, s.client, stream, group, id)
+	return ackAndDelete(ctx, s.client, s.wait, stream, group, id)
 }
 
 func tokenFromMessage(partition int64, message redis.XMessage) (*sequenceQueueToken, error) {
@@ -220,11 +249,47 @@ func (s *sequenceQueueStore) validateToken(token sequenceQueueToken) error {
 }
 
 func (s *sequenceQueueStore) runTriplet(ctx context.Context, script string, keys []string, args ...any) ([3]string, error) {
-	var result [3]string
+	if s.wait.enabled() {
+		source, err := sequenceQueueScriptSource(script)
+		if err != nil {
+			return [3]string{}, err
+		}
+		var resultCmd *redis.Cmd
+		_, err = s.wait.execute(ctx, s.client, keys[0], func(pipe redis.Pipeliner) redis.Cmder {
+			resultCmd = pipe.Eval(ctx, source, keys, args...)
+			return resultCmd
+		})
+		if err != nil {
+			return [3]string{}, err
+		}
+		value, err := resultCmd.Result()
+		if err != nil {
+			return [3]string{}, err
+		}
+		return strictTriplet(script, value)
+	}
 	value, err := s.scripts.Run(ctx, s.client, script, keys, args...)
 	if err != nil {
-		return result, err
+		return [3]string{}, err
 	}
+	return strictTriplet(script, value)
+}
+
+func sequenceQueueScriptSource(name string) (string, error) {
+	switch name {
+	case ScriptSequenceQueueEnqueue:
+		return sequenceQueueEnqueueLua, nil
+	case ScriptSequenceQueueLease:
+		return sequenceQueueLeaseLua, nil
+	case ScriptSequenceQueueFinalize:
+		return sequenceQueueFinalizeLua, nil
+	default:
+		return "", fmt.Errorf("redis script %q is not registered for replication WAIT", name)
+	}
+}
+
+func strictTriplet(script string, value any) ([3]string, error) {
+	var result [3]string
 	raw, ok := value.([]interface{})
 	if !ok || len(raw) != 3 {
 		return result, fmt.Errorf("script %s returned malformed result %#v; want strict triplet", script, value)

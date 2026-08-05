@@ -29,7 +29,7 @@ func LoadTLSConfigFromCA(caFile string, verifyCertificate bool) (*tls.Config, er
 	return &tls.Config{
 		RootCAs:            pool,
 		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: verifyCertificate, // Preserve existing Redis verifyCertificate behavior.
+		InsecureSkipVerify: !verifyCertificate,
 	}, nil
 }
 

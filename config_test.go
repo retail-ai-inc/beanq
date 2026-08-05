@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/spf13/viper"
@@ -130,6 +131,37 @@ func TestBeanqConfigInitCreatesMongoDefaults(t *testing.T) {
 	}
 }
 
+func TestBeanqConfigResolveReturnsIndependentValidatedConfig(t *testing.T) {
+	source := &BeanqConfig{
+		Broker:                  "redis",
+		Redis:                   Redis{Host: "localhost", Port: "6379"},
+		MinConsumers:            7,
+		NormalQueuePartitions:   9,
+		SequenceQueuePartitions: 11,
+		Mongo:                   &Mongo{Collections: map[string]Collection{"event": {Name: "custom-events"}}},
+	}
+
+	resolved, err := source.Resolve()
+	if err != nil {
+		t.Fatalf("Resolve error: %v", err)
+	}
+	if source.ConsumerPoolSize != 0 || source.ConsumerReaderPoolSize != 0 {
+		t.Fatalf("Resolve modified source defaults: %#v", source)
+	}
+	resolved.Collections["event"] = Collection{Name: "resolved-events"}
+	if source.Collections["event"].Name != "custom-events" {
+		t.Fatal("Resolve did not copy nested Mongo collections")
+	}
+
+	options := resolved.redisBrokerOptions()
+	if options.NormalQueuePartitions != 9 || options.SequenceQueuePartitions != 11 {
+		t.Fatalf("resolved partitions = (%d, %d), want (9, 11)", options.NormalQueuePartitions, options.SequenceQueuePartitions)
+	}
+	if options.ConsumerWorkers == 0 || options.ConsumerReaders == 0 {
+		t.Fatalf("resolved runtime pools were not defaulted: %#v", options)
+	}
+}
+
 func TestBeanqConfigValidateRedisRequired(t *testing.T) {
 	cfg := &BeanqConfig{Broker: "redis"}
 	cfg.ApplyDefaults()
@@ -142,6 +174,27 @@ func TestBeanqConfigValidateRedisRequired(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "redis.host") {
 		t.Fatalf("expected redis.host error, got %v", err)
+	}
+}
+
+func TestBeanqConfigRedisWait(t *testing.T) {
+	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379", WaitReplicas: -1}}
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "waitReplicas") {
+		t.Fatalf("expected waitReplicas validation error, got %v", err)
+	}
+	cfg.Redis.WaitReplicas = 1
+	cfg.Redis.IsCluster = true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected cluster WAIT config to be valid, got %v", err)
+	}
+	cfg.Redis.WaitTimeout = -time.Second
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "waitTimeout") {
+		t.Fatalf("expected waitTimeout validation error, got %v", err)
+	}
+	cfg.Redis.WaitTimeout = 0
+	cfg.ApplyDefaults()
+	if cfg.Redis.WaitTimeout != time.Second {
+		t.Fatalf("waitTimeout = %v, want 1s", cfg.Redis.WaitTimeout)
 	}
 }
 
@@ -172,30 +225,56 @@ func TestBeanqConfigSequenceQueuePartitions(t *testing.T) {
 		}
 	})
 
-	t.Run("negative value is invalid", func(t *testing.T) {
-		cfg := &BeanqConfig{
-			Broker:                  "redis",
-			Redis:                   Redis{Host: "localhost", Port: "6379"},
-			SequenceQueuePartitions: -1,
-		}
-		err := cfg.Validate()
-		if err == nil {
-			t.Fatal("expected validation error")
-		}
-		if !errors.Is(err, berror.ErrInvalidConfig) {
-			t.Fatalf("expected ErrInvalidConfig, got %v", err)
-		}
-		if !strings.Contains(err.Error(), "sequenceQueuePartitions") {
-			t.Fatalf("expected sequenceQueuePartitions error, got %v", err)
-		}
-	})
 }
 
-func TestBeanqConfigRejectsNegativeNormalQueuePartitions(t *testing.T) {
-	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379"}, NormalQueuePartitions: -1}
-	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "normalQueuePartitions") {
-		t.Fatalf("expected normalQueuePartitions validation error, got %v", err)
+func TestBeanqConfigRuntimeValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(*BeanqConfig)
+		message string
+	}{
+		{name: "sequence queue partitions", mutate: func(cfg *BeanqConfig) { cfg.SequenceQueuePartitions = -1 }, message: "sequenceQueuePartitions"},
+		{name: "normal queue partitions", mutate: func(cfg *BeanqConfig) { cfg.NormalQueuePartitions = -1 }, message: "normalQueuePartitions"},
+		{name: "consumer reader pool", mutate: func(cfg *BeanqConfig) { cfg.ConsumerReaderPoolSize = -1 }, message: "consumerReaderPoolSize"},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379"}}
+			tt.mutate(cfg)
+			err := cfg.Validate()
+			if err == nil || !errors.Is(err, berror.ErrInvalidConfig) || !strings.Contains(err.Error(), tt.message) {
+				t.Fatalf("expected ErrInvalidConfig containing %q, got %v", tt.message, err)
+			}
+		})
+	}
+}
+
+func TestBeanqConfigConsumerReaderPoolSize(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		cfg := &BeanqConfig{}
+		cfg.ApplyDefaults()
+		if cfg.ConsumerReaderPoolSize != 8 {
+			t.Fatalf("consumerReaderPoolSize = %d, want 8", cfg.ConsumerReaderPoolSize)
+		}
+	})
+
+	t.Run("configured value", func(t *testing.T) {
+		dir := t.TempDir()
+		writeConfig(t, dir, "env", `{
+			"broker":"redis",
+			"redis":{"host":"localhost","port":"6379"},
+			"consumerReaderPoolSize":12
+		}`)
+		cfg, err := NewConfig(dir, "json", "env")
+		if err != nil {
+			t.Fatalf("NewConfig error: %v", err)
+		}
+		if cfg.ConsumerReaderPoolSize != 12 {
+			t.Fatalf("consumerReaderPoolSize = %d, want 12", cfg.ConsumerReaderPoolSize)
+		}
+	})
+
 }
 
 func TestBeanqConfigValidateMongoWhenHistoryEnabled(t *testing.T) {

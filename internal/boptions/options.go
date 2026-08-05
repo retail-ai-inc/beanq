@@ -40,6 +40,7 @@ type Options struct {
 	DefaultChannel           string
 	Prefix                   string
 	ConsumerPoolSize         int
+	ConsumerReaderPoolSize   int
 	Priority                 float64
 	JobMaxRetry              int
 	DefaultMaxLen            int64
@@ -81,6 +82,7 @@ var DefaultOptions = &Options{
 	PublishTimeOut:           10 * time.Second,
 	ConsumeTimeOut:           20 * time.Second,
 	ConsumerPoolSize:         10,
+	ConsumerReaderPoolSize:   8,
 	MinConsumers:             100,
 	TimeToRun:                3600 * time.Second,
 	JobMaxRetry:              3,

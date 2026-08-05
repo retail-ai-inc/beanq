@@ -14,6 +14,7 @@ type Schedule struct {
 	base       queueBase
 	maxLen     int64
 	partitions int64
+	wait       replicationWait
 }
 
 func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Schedule {
@@ -21,16 +22,21 @@ func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int6
 }
 
 func newScheduleWithPartitions(client redis.UniversalClient, prefix string, maxLen, partitions int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Schedule {
-	partitions = normalizePartitionCount(partitions)
+	return newScheduleWithOptions(queueOptions{client: client, prefix: prefix, maxLen: maxLen, partitions: partitions,
+		runtime: queueRuntimeOptions{workers: consumerPoolSize}, deadLetterIdle: deadLetterIdle, captureConfig: config})
+}
+
+func newScheduleWithOptions(options queueOptions) *Schedule {
+	options.partitions = normalizePartitionCount(options.partitions)
+	base := newQueueBase(options)
+	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, options.partitions, 0)
 	return &Schedule{
-		maxLen: maxLen, partitions: partitions,
-		base: newQueueBase(queueBaseOptions{client: client, prefix: prefix,
-			deadLetterIdle: deadLetterIdle, consumerPoolSize: consumerPoolSize, captureConfig: config}),
+		maxLen: options.maxLen, partitions: options.partitions, wait: options.wait, base: base,
 	}
 }
 
 func (s *Schedule) store(channel, topic string) *delayQueueStore {
-	return newDelayQueueStore(s.base.client, newDelayQueueTopology(s.base.prefix, channel, topic, s.partitions), s.maxLen)
+	return newDelayQueueStore(s.base.client, newDelayQueueTopology(s.base.prefix, channel, topic, s.partitions), s.maxLen, s.wait)
 }
 
 func (s *Schedule) Publish(ctx context.Context, data map[string]any) error {
@@ -38,7 +44,7 @@ func (s *Schedule) Publish(ctx context.Context, data map[string]any) error {
 	if err := store.ensureMetadata(ctx); err != nil {
 		return err
 	}
-	return store.enqueue(ctx, data)
+	return store.enqueue(ctx, data, s.wait)
 }
 
 func (s *Schedule) Consume(ctx context.Context, channel, topic string, handler public.CallbackWithRetry) {

@@ -8,6 +8,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
+	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/spf13/cast"
@@ -22,6 +23,22 @@ type Broker struct {
 	admin         *UITool
 	migrator      *Log
 	captureConfig *capture.Config
+}
+
+type BrokerOptions struct {
+	Prefix                  string
+	MaxLen                  int64
+	NormalQueuePartitions   int64
+	SequenceQueuePartitions int64
+	ConsumerWorkers         int
+	ConsumerReaders         int
+	DeadLetterIdle          time.Duration
+	ReplicationWait         ReplicationWaitOptions
+}
+
+type ReplicationWaitOptions struct {
+	Replicas int
+	Timeout  time.Duration
 }
 
 type Consumer interface {
@@ -39,25 +56,81 @@ type queueRoute struct {
 	consume func(config *capture.Config) Consumer
 }
 
+// NewBroker constructs a broker using one partition per configured consumer.
+// Deprecated: use NewBrokerWithOptions.
 func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, consumerPoolSize int, duration time.Duration) *Broker {
-	return NewBrokerWithPartitions(client, prefix, maxLen, consumers, consumers, consumers, consumerPoolSize, duration)
+	return NewBrokerWithOptions(client, BrokerOptions{
+		Prefix: prefix, MaxLen: maxLen,
+		NormalQueuePartitions: consumers, SequenceQueuePartitions: consumers,
+		ConsumerWorkers: consumerPoolSize, DeadLetterIdle: duration,
+	})
 }
 
 // NewBrokerWithSequenceQueuePartitions constructs a broker with a fixed
 // sequence-queue partition count. The topology is immutable after construction.
+// Deprecated: use NewBrokerWithOptions.
 func NewBrokerWithSequenceQueuePartitions(client redis.UniversalClient, prefix string, maxLen, consumers, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration) *Broker {
-	return NewBrokerWithPartitions(client, prefix, maxLen, consumers, consumers, sequenceQueuePartitions, consumerPoolSize, duration)
+	return NewBrokerWithOptions(client, BrokerOptions{
+		Prefix: prefix, MaxLen: maxLen,
+		NormalQueuePartitions: consumers, SequenceQueuePartitions: sequenceQueuePartitions,
+		ConsumerWorkers: consumerPoolSize, DeadLetterIdle: duration,
+	})
 }
 
+// NewBrokerWithPartitions constructs a broker with explicit queue partition counts.
+// Deprecated: use NewBrokerWithOptions.
 func NewBrokerWithPartitions(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration) *Broker {
+	return NewBrokerWithOptions(client, BrokerOptions{
+		Prefix: prefix, MaxLen: maxLen,
+		NormalQueuePartitions: normalQueuePartitions, SequenceQueuePartitions: sequenceQueuePartitions,
+		ConsumerWorkers: consumerPoolSize, DeadLetterIdle: duration,
+	})
+}
+
+// NewBrokerWithReplicationWait constructs a broker with Redis WAIT settings.
+// Deprecated: use NewBrokerWithOptions.
+func NewBrokerWithReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
+	return NewBrokerWithOptions(client, BrokerOptions{
+		Prefix: prefix, MaxLen: maxLen,
+		NormalQueuePartitions: normalQueuePartitions, SequenceQueuePartitions: sequenceQueuePartitions,
+		ConsumerWorkers: consumerPoolSize, ConsumerReaders: boptions.DefaultOptions.ConsumerReaderPoolSize,
+		DeadLetterIdle: duration, ReplicationWait: ReplicationWaitOptions{Replicas: waitReplicas, Timeout: waitTimeout},
+	})
+}
+
+// NewBrokerWithRuntimePoolsAndReplicationWait constructs a broker with independently
+// configurable message worker and partition reader pools.
+// Deprecated: use NewBrokerWithOptions.
+func NewBrokerWithRuntimePoolsAndReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize, consumerReaderPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
+	return NewBrokerWithOptions(client, BrokerOptions{
+		Prefix: prefix, MaxLen: maxLen,
+		NormalQueuePartitions: normalQueuePartitions, SequenceQueuePartitions: sequenceQueuePartitions,
+		ConsumerWorkers: consumerPoolSize, ConsumerReaders: consumerReaderPoolSize,
+		DeadLetterIdle: duration, ReplicationWait: ReplicationWaitOptions{Replicas: waitReplicas, Timeout: waitTimeout},
+	})
+}
+
+// NewBrokerWithOptions is the canonical broker constructor.
+func NewBrokerWithOptions(client redis.UniversalClient, options BrokerOptions) *Broker {
+	if options.ConsumerReaders == 0 {
+		options.ConsumerReaders = boptions.DefaultOptions.ConsumerReaderPoolSize
+	}
+	wait := replicationWait{replicas: options.ReplicationWait.Replicas, timeout: options.ReplicationWait.Timeout}
+	queue := func(partitions int64, config *capture.Config) queueOptions {
+		return queueOptions{
+			client: client, prefix: options.Prefix, maxLen: options.MaxLen, partitions: partitions,
+			runtime:        queueRuntimeOptions{workers: options.ConsumerWorkers, readers: options.ConsumerReaders},
+			deadLetterIdle: options.DeadLetterIdle, captureConfig: config, wait: wait,
+		}
+	}
 	normal := func(config *capture.Config) *Normal {
-		return newNormalWithPartitions(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config)
+		return newNormalWithOptions(queue(options.NormalQueuePartitions, config))
 	}
 	delay := func(config *capture.Config) *Schedule {
-		return newScheduleWithPartitions(client, prefix, maxLen, normalQueuePartitions, consumerPoolSize, duration, config)
+		return newScheduleWithOptions(queue(options.NormalQueuePartitions, config))
 	}
 	sequenceQueue := func(config *capture.Config) *SequenceQueue {
-		return newSequenceQueueWithPartitions(client, prefix, maxLen, sequenceQueuePartitions, consumerPoolSize, duration, config)
+		return newSequenceQueueWithOptions(queue(options.SequenceQueuePartitions, config))
 	}
 	routes := map[btype.MoodType]queueRoute{
 		btype.NORMAL: routeFromQueue(normal(nil).Publish, func(config *capture.Config) consumeFunc { return normal(config).Consume }),
@@ -68,11 +141,11 @@ func NewBrokerWithPartitions(client redis.UniversalClient, prefix string, maxLen
 	}
 	return &Broker{
 		client:        client,
-		prefix:        prefix,
+		prefix:        options.Prefix,
 		routes:        routes,
-		publishLogger: NewProcessLog(client, prefix, sequenceQueuePartitions),
-		status:        NewStatus(client, prefix, sequenceQueuePartitions),
-		admin:         NewUITool(client, prefix),
+		publishLogger: NewProcessLogWithPartitions(client, options.Prefix, options.NormalQueuePartitions, options.SequenceQueuePartitions),
+		status:        NewStatusWithPartitions(client, options.Prefix, options.NormalQueuePartitions, options.SequenceQueuePartitions),
+		admin:         NewUITool(client, options.Prefix),
 	}
 }
 
@@ -148,6 +221,13 @@ func (t *Broker) QueueMessage(ctx context.Context) error {
 
 func (t *Broker) Driver() any {
 	return t.client
+}
+
+func (t *Broker) Close() error {
+	if t == nil || t.client == nil {
+		return nil
+	}
+	return t.client.Close()
 }
 
 type processLogger interface {
