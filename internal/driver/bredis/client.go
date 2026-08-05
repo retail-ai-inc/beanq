@@ -23,7 +23,9 @@ type RedisClientOptions struct {
 	PoolSize           int
 	MinIdleConnections int
 	TLS                RedisTLSOptions
+	WaitMode           string
 	WaitReplicas       int
+	WaitAOFLocal       int
 }
 
 type RedisTLSOptions struct {
@@ -45,8 +47,8 @@ func NewRdb(isCluster bool, host, port string, username, password string,
 		IsCluster: isCluster, Host: host, Port: port, Username: username, Password: password,
 		Database: database, MaxRetries: maxRetries, DialTimeout: dialTimeout, ReadTimeout: readTimeout,
 		WriteTimeout: writeTimeout, PoolTimeout: poolTimeout, PoolSize: poolSize, MinIdleConnections: minIdleConns,
-		TLS:          RedisTLSOptions{On: sslOn, CAFile: caFile, VerifyCertificate: verifyCertificate, HotReload: hotReload},
-		WaitReplicas: waitReplicas,
+		TLS:      RedisTLSOptions{On: sslOn, CAFile: caFile, VerifyCertificate: verifyCertificate, HotReload: hotReload},
+		WaitMode: WaitModeReplication, WaitReplicas: waitReplicas,
 	})
 }
 
@@ -61,7 +63,7 @@ func NewRedisClient(ctx context.Context, options RedisClientOptions) (*RedisHold
 	if err != nil {
 		return nil, err
 	}
-	if err := ValidateReplicationTopology(initCtx, holder.UniversalClient, options.WaitReplicas); err != nil {
+	if err := ValidateWaitTopology(initCtx, holder.UniversalClient, options.WaitMode, options.WaitReplicas, options.WaitAOFLocal); err != nil {
 		_ = holder.Close()
 		return nil, err
 	}

@@ -193,7 +193,7 @@ func TestBeanqConfigValidateRedisRequired(t *testing.T) {
 }
 
 func TestBeanqConfigRedisWait(t *testing.T) {
-	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379", WaitReplicas: -1}}
+	cfg := &BeanqConfig{Broker: "redis", Redis: Redis{Host: "localhost", Port: "6379", WaitMode: "wait", WaitReplicas: -1}}
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "waitReplicas") {
 		t.Fatalf("expected waitReplicas validation error, got %v", err)
 	}

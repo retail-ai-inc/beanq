@@ -62,7 +62,9 @@ type (
 		PoolTimeout        time.Duration `json:"poolTimeout" mapstructure:"poolTimeout"`
 		MaxRetries         int           `json:"maxRetries" mapstructure:"maxRetries"`
 		PoolSize           int           `json:"poolSize" mapstructure:"poolSize"`
+		WaitMode           string        `json:"waitMode" mapstructure:"waitMode"`
 		WaitReplicas       int           `json:"waitReplicas" mapstructure:"waitReplicas"`
+		WaitAOFLocal       int           `json:"waitAofLocal" mapstructure:"waitAofLocal"`
 		WaitTimeout        time.Duration `json:"waitTimeout" mapstructure:"waitTimeout"`
 		SSL                SSL           `json:"ssl" mapstructure:"ssl"`
 	}
@@ -198,7 +200,9 @@ func (t ResolvedConfig) redisBrokerOptions() bredis.BrokerOptions {
 		DeadLetterIdle:          t.DeadLetterIdleTime,
 		GracefulShutdownTimeout: t.GracefulShutdownTimeout,
 		ReplicationWait: bredis.ReplicationWaitOptions{
+			Mode:     t.Redis.WaitMode,
 			Replicas: t.Redis.WaitReplicas,
+			AOFLocal: t.Redis.WaitAOFLocal,
 			Timeout:  t.Redis.WaitTimeout,
 		},
 	}
@@ -225,7 +229,9 @@ func (t ResolvedConfig) redisClientOptions() bredis.RedisClientOptions {
 			VerifyCertificate: t.Redis.SSL.Verify,
 			HotReload:         t.Redis.SSL.HotReload,
 		},
+		WaitMode:     t.Redis.WaitMode,
 		WaitReplicas: t.Redis.WaitReplicas,
+		WaitAOFLocal: t.Redis.WaitAOFLocal,
 	}
 }
 
@@ -244,7 +250,7 @@ func (t *BeanqConfig) ApplyDefaults() {
 }
 
 func (t *BeanqConfig) applyRedisDefaults() {
-	if t.Redis.WaitReplicas > 0 && t.Redis.WaitTimeout == 0 {
+	if t.Redis.WaitMode != "" && t.Redis.WaitTimeout == 0 {
 		t.Redis.WaitTimeout = time.Second
 	}
 }
@@ -386,11 +392,23 @@ func (t *BeanqConfig) Validate() error {
 }
 
 func (t *BeanqConfig) validateRedis() error {
+	if t.Redis.WaitMode != "" && t.Redis.WaitMode != bredis.WaitModeReplication && t.Redis.WaitMode != bredis.WaitModeAOF {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitMode must be one of: wait, waitaof")
+	}
 	if t.Redis.WaitReplicas < 0 {
 		return berror.ErrInvalidConfig.WithMessage("redis.waitReplicas must not be negative")
 	}
 	if t.Redis.WaitTimeout < 0 {
 		return berror.ErrInvalidConfig.WithMessage("redis.waitTimeout must not be negative")
+	}
+	if t.Redis.WaitAOFLocal < 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitAofLocal must not be negative")
+	}
+	if t.Redis.WaitMode == bredis.WaitModeReplication && t.Redis.WaitReplicas == 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitReplicas must be positive when redis.waitMode is wait")
+	}
+	if t.Redis.WaitMode == bredis.WaitModeAOF && t.Redis.WaitAOFLocal == 0 && t.Redis.WaitReplicas == 0 {
+		return berror.ErrInvalidConfig.WithMessage("redis.waitAofLocal or redis.waitReplicas must be positive when redis.waitMode is waitaof")
 	}
 	if strings.TrimSpace(t.Redis.Host) == "" {
 		return berror.ErrInvalidConfig.WithMessage("redis.host is required")
