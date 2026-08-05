@@ -26,6 +26,8 @@ import (
 	"time"
 )
 
+const DefaultGracefulShutdownTimeout = 30 * time.Second
+
 type Result struct {
 	Id   string
 	Args []any
@@ -53,6 +55,7 @@ type Options struct {
 	RetryTime                time.Duration
 	PublishTimeOut           time.Duration
 	ConsumeTimeOut           time.Duration
+	GracefulShutdownTimeout  time.Duration
 }
 
 // ResolveSequenceQueuePartitions keeps the legacy MinConsumers-based topology when
@@ -81,6 +84,7 @@ var DefaultOptions = &Options{
 	KeepSuccessJobsInHistory: time.Hour * 24 * 7,
 	PublishTimeOut:           10 * time.Second,
 	ConsumeTimeOut:           20 * time.Second,
+	GracefulShutdownTimeout:  DefaultGracefulShutdownTimeout,
 	ConsumerPoolSize:         10,
 	ConsumerReaderPoolSize:   8,
 	MinConsumers:             100,

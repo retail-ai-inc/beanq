@@ -65,7 +65,8 @@
   "consumeTimeOut": "10s",
   "history": {
     "on": true,
-    "mongo": {
+    "gracefulShutdownTimeout": "30s",
+  "mongo": {
       "database": "lollipop_logs",
       "collections": {
         "event": "event_logs",

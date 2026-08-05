@@ -21,14 +21,13 @@ const (
 	partitionReaderIdleDelay = 20 * time.Millisecond
 	partitionClaimInterval   = time.Second
 	partitionNonBlockingRead = -1 * time.Nanosecond
-	queueShutdownTimeout     = 30 * time.Second
 )
 
-func gracefulProcessingContext(ctx context.Context) (context.Context, context.CancelFunc) {
+func gracefulProcessingContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	processingCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	go func() {
 		<-ctx.Done()
-		timer := time.NewTimer(queueShutdownTimeout)
+		timer := time.NewTimer(timeout)
 		defer timer.Stop()
 		select {
 		case <-processingCtx.Done():
