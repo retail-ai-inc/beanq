@@ -604,10 +604,12 @@ _, err := consumer.BQ().
 | `redis.readTimeout` | 0 | Redis read timeout |
 | `redis.writeTimeout` | 0 | Redis write timeout |
 | `redis.poolTimeout` | 0 | Timeout for waiting on a pooled Redis connection |
-| `redis.waitReplicas` | 0 | Number of replicas that must acknowledge each published message; 0 disables `WAIT` |
-| `redis.waitTimeout` | 1s when enabled | Maximum time Redis waits for replica acknowledgements; a timeout fails the publish |
+| `redis.waitMode` | empty | Durability mode: empty disables waiting, `wait` selects WAIT, and `waitaof` selects WAITAOF |
+| `redis.waitReplicas` | 0 | Number of replicas required by the selected durability mode |
+| `redis.waitAofLocal` | 0 | Number of local AOF confirmations required by WAITAOF |
+| `redis.waitTimeout` | 1s when enabled | Maximum time Redis waits for durability confirmation; a timeout fails the publish |
 
-When `redis.waitReplicas` is enabled, BeanQ routes each publish to the master that owns the message key and executes the write and `WAIT` on the same connection. This also applies to Redis Cluster. If replica acknowledgements are insufficient, publishing returns `ErrAmbiguousCommit`: the primary write may already exist and must not be retried blindly.
+When `redis.waitMode` is enabled, BeanQ routes each publish to the master that owns the message key and executes the write and selected confirmation command on the same connection. `waitaof` requires Redis 7.2 or newer and AOF enabled on every writable master; startup fails when either requirement is not met. This also applies to Redis Cluster. If durability confirmation is insufficient, publishing returns `ErrAmbiguousCommit`: the primary write may already exist and must not be retried blindly.
 
 ### Redis SSL Parameters
 
