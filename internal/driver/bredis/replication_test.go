@@ -24,6 +24,8 @@ type recordedRedisCommand struct {
 type waitTestServer struct {
 	listener net.Listener
 	waitAcks int64
+	version  string
+	aofOn    bool
 	mu       sync.Mutex
 	commands []recordedRedisCommand
 }
@@ -34,7 +36,7 @@ func newWaitTestServer(t *testing.T, waitAcks int64) *waitTestServer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server := &waitTestServer{listener: listener, waitAcks: waitAcks}
+	server := &waitTestServer{listener: listener, waitAcks: waitAcks, version: "7.2.0", aofOn: true}
 	t.Cleanup(func() { _ = listener.Close() })
 	go server.serve()
 	return server
@@ -70,12 +72,29 @@ func (s *waitTestServer) serveConn(conn net.Conn, connection int) {
 			_, _ = writer.WriteString("-ERR unknown command 'hello'\r\n")
 		case "XADD":
 			_, _ = writer.WriteString("$3\r\n1-0\r\n")
-		case "WAIT":
+		case "WAIT", "WAITAOF":
 			_, _ = fmt.Fprintf(writer, ":%d\r\n", s.waitAcks)
 		case "EVAL":
 			_, _ = writer.WriteString("*3\r\n$9\r\nSCHEDULED\r\n$3\r\n1-0\r\n$1\r\n1\r\n")
 		case "INFO":
+			section := ""
+			if len(args) > 1 {
+				section = strings.ToLower(args[1])
+			}
 			info := "# Replication\r\nrole:master\r\nconnected_slaves:0\r\n"
+			s.mu.Lock()
+			version, aofOn := s.version, s.aofOn
+			s.mu.Unlock()
+			switch section {
+			case "server":
+				info = fmt.Sprintf("# Server\r\nredis_version:%s\r\n", version)
+			case "persistence":
+				aofEnabled := 0
+				if aofOn {
+					aofEnabled = 1
+				}
+				info = fmt.Sprintf("# Persistence\r\naof_enabled:%d\r\n", aofEnabled)
+			}
 			_, _ = fmt.Fprintf(writer, "$%d\r\n%s\r\n", len(info), info)
 		case "XACK", "XDEL", "HSETNX":
 			_, _ = writer.WriteString(":1\r\n")
@@ -127,11 +146,23 @@ func (s *waitTestServer) snapshot() []recordedRedisCommand {
 	return append([]recordedRedisCommand(nil), s.commands...)
 }
 
+func (s *waitTestServer) setVersion(version string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.version = version
+}
+
+func (s *waitTestServer) setAOFEnabled(enabled bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.aofOn = enabled
+}
+
 func TestReplicationWaitUsesSameConnection(t *testing.T) {
 	server := newWaitTestServer(t, 1)
 	client := server.client()
 	defer client.Close()
-	wait := replicationWait{replicas: 1, timeout: time.Second}
+	wait := replicationWait{mode: WaitModeReplication, replicas: 1, timeout: time.Second}
 	_, err := wait.execute(context.Background(), client, "queue:{slot}:stream", func(pipe redis.Pipeliner) redis.Cmder {
 		return pipe.XAdd(context.Background(), &redis.XAddArgs{Stream: "queue:{slot}:stream", Values: map[string]any{"id": "1"}})
 	})
@@ -154,7 +185,7 @@ func TestReplicationWaitReusesPooledConnection(t *testing.T) {
 	server := newWaitTestServer(t, 1)
 	client := server.client()
 	defer client.Close()
-	wait := replicationWait{replicas: 1, timeout: time.Second}
+	wait := replicationWait{mode: WaitModeReplication, replicas: 1, timeout: time.Second}
 	for range 2 {
 		_, err := wait.execute(context.Background(), client, "queue:{slot}:stream", func(pipe redis.Pipeliner) redis.Cmder {
 			return pipe.XAdd(context.Background(), &redis.XAddArgs{Stream: "queue:{slot}:stream", Values: map[string]any{"id": "1"}})
@@ -178,7 +209,7 @@ func TestAckAndDeleteWaitOrder(t *testing.T) {
 	server := newWaitTestServer(t, 1)
 	client := server.client()
 	defer client.Close()
-	wait := replicationWait{replicas: 1, timeout: time.Second}
+	wait := replicationWait{mode: WaitModeReplication, replicas: 1, timeout: time.Second}
 	if err := ackAndDelete(context.Background(), client, wait, "queue:{slot}:stream", "workers", "1-0"); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +243,7 @@ func TestReplicationWaitInsufficientAcknowledgementsIsAmbiguous(t *testing.T) {
 	server := newWaitTestServer(t, 0)
 	client := server.client()
 	defer client.Close()
-	wait := replicationWait{replicas: 1, timeout: 25 * time.Millisecond}
+	wait := replicationWait{mode: WaitModeReplication, replicas: 1, timeout: 25 * time.Millisecond}
 	_, err := wait.execute(context.Background(), client, "queue:{slot}:stream", func(pipe redis.Pipeliner) redis.Cmder {
 		return pipe.XAdd(context.Background(), &redis.XAddArgs{Stream: "queue:{slot}:stream", Values: map[string]any{"id": "1"}})
 	})
@@ -231,7 +262,7 @@ func TestSequenceQueueWaitUsesEvalOnFreshNode(t *testing.T) {
 	defer client.Close()
 	topology := newSequenceQueueTopology("p", "c", "t", 1)
 	store := newSequenceQueueStore(client, topology, 10, time.Second)
-	result, err := store.enqueueWithWait(context.Background(), "order-1", map[string]any{"id": "message-1"}, replicationWait{replicas: 1, timeout: time.Second})
+	result, err := store.enqueueWithWait(context.Background(), "order-1", map[string]any{"id": "message-1"}, replicationWait{mode: WaitModeReplication, replicas: 1, timeout: time.Second})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,12 +9,19 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	WaitModeReplication = "wait"
+	WaitModeAOF         = "waitaof"
+)
+
 var (
 	ErrAmbiguousCommit = errors.New("redis write commit is ambiguous")
 	ErrClusterRouting  = errors.New("redis cluster routing failed")
 )
 
 type ReplicationNotConfirmedError struct {
+	Command      string
+	AOFLocal     int
 	Required     int
 	Acknowledged int64
 	Timeout      time.Duration
@@ -22,7 +29,14 @@ type ReplicationNotConfirmedError struct {
 }
 
 func (e *ReplicationNotConfirmedError) Error() string {
-	message := fmt.Sprintf("redis WAIT acknowledged by %d replicas, want %d within %s", e.Acknowledged, e.Required, e.Timeout)
+	command := e.Command
+	if command == "" {
+		command = "WAIT"
+	}
+	message := fmt.Sprintf("redis %s acknowledged by %d replicas, want %d within %s", command, e.Acknowledged, e.Required, e.Timeout)
+	if command == "WAITAOF" {
+		message = fmt.Sprintf("redis WAITAOF required %d local AOF confirmations and acknowledged by %d replicas, want %d within %s", e.AOFLocal, e.Acknowledged, e.Required, e.Timeout)
+	}
 	if e.Cause != nil {
 		return fmt.Sprintf("%s: %v", message, e.Cause)
 	}
@@ -51,7 +65,9 @@ func (e *ClusterRoutingError) Unwrap() []error {
 }
 
 type replicationWait struct {
+	mode     string
 	replicas int
+	aofLocal int
 	timeout  time.Duration
 }
 
@@ -71,7 +87,15 @@ func firstReplicationWait(waits []replicationWait) replicationWait {
 }
 
 func (w replicationWait) enabled() bool {
-	return w.replicas > 0
+	return (w.mode == WaitModeReplication && w.replicas > 0) ||
+		(w.mode == WaitModeAOF && (w.aofLocal > 0 || w.replicas > 0))
+}
+
+func (w replicationWait) command() string {
+	if w.mode == WaitModeAOF {
+		return "WAITAOF"
+	}
+	return "WAIT"
 }
 
 func (w replicationWait) execute(ctx context.Context, client redis.UniversalClient, key string, write func(redis.Pipeliner) redis.Cmder) (redis.Cmder, error) {
@@ -92,7 +116,12 @@ func (w replicationWait) executeMany(ctx context.Context, client redis.Universal
 		waitCmd = nil
 		_, err := pipelineForKey(ctx, client, key, targetAddress, asking, func(pipe redis.Pipeliner) error {
 			writeCmds = write(pipe)
-			waitCmd = pipe.Do(ctx, "WAIT", w.replicas, waitTimeoutMilliseconds(w.timeout))
+			switch w.mode {
+			case WaitModeReplication:
+				waitCmd = pipe.Do(ctx, "WAIT", w.replicas, waitTimeoutMilliseconds(w.timeout))
+			case WaitModeAOF:
+				waitCmd = pipe.Do(ctx, "WAITAOF", w.aofLocal, w.replicas, waitTimeoutMilliseconds(w.timeout))
+			}
 			return nil
 		})
 		return err
@@ -128,37 +157,51 @@ func (w replicationWait) executeMany(ctx context.Context, client redis.Universal
 		if _, ok := errors.AsType[redis.Error](writeErr); ok {
 			return nil, writeErr
 		}
-		return nil, &ReplicationNotConfirmedError{Required: w.replicas, Timeout: w.timeout, Cause: writeErr}
+		return nil, w.notConfirmed(writeErr)
 	}
 	if waitCmd == nil {
-		return nil, errors.New("redis WAIT command was not queued")
+		return nil, fmt.Errorf("redis %s command was not queued", w.command())
 	}
 	if waitErr := w.waitResult(waitCmd); waitErr != nil {
 		return nil, waitErr
 	}
 	if err != nil {
-		return nil, &ReplicationNotConfirmedError{Required: w.replicas, Timeout: w.timeout, Cause: err}
+		return nil, w.notConfirmed(err)
 	}
 	return writeCmds, nil
 }
 
 func (w replicationWait) confirm(ctx context.Context, client redisDoer) error {
-	return w.waitResult(client.Do(ctx, "WAIT", w.replicas, waitTimeoutMilliseconds(w.timeout)))
+	var command *redis.Cmd
+	if w.mode == WaitModeAOF {
+		command = client.Do(ctx, "WAITAOF", w.aofLocal, w.replicas, waitTimeoutMilliseconds(w.timeout))
+	} else {
+		command = client.Do(ctx, "WAIT", w.replicas, waitTimeoutMilliseconds(w.timeout))
+	}
+	value, err := command.Int64()
+	if err != nil {
+		return w.notConfirmed(err)
+	}
+	return w.validateAcknowledged(value)
 }
 
 func (w replicationWait) waitResult(waitCmd *redis.Cmd) error {
-	value, err := waitCmd.Result()
+	acknowledged, err := waitCmd.Int64()
 	if err != nil {
-		return &ReplicationNotConfirmedError{Required: w.replicas, Timeout: w.timeout, Cause: err}
+		return w.notConfirmed(err)
 	}
-	acknowledged, ok := value.(int64)
-	if !ok {
-		return &ReplicationNotConfirmedError{Required: w.replicas, Timeout: w.timeout, Cause: fmt.Errorf("redis WAIT returned %T, want integer", value)}
-	}
+	return w.validateAcknowledged(acknowledged)
+}
+
+func (w replicationWait) validateAcknowledged(acknowledged int64) error {
 	if acknowledged < int64(w.replicas) {
-		return &ReplicationNotConfirmedError{Required: w.replicas, Acknowledged: acknowledged, Timeout: w.timeout}
+		return &ReplicationNotConfirmedError{Command: w.command(), Required: w.replicas, AOFLocal: w.aofLocal, Acknowledged: acknowledged, Timeout: w.timeout}
 	}
 	return nil
+}
+
+func (w replicationWait) notConfirmed(cause error) error {
+	return &ReplicationNotConfirmedError{Command: w.command(), Required: w.replicas, AOFLocal: w.aofLocal, Timeout: w.timeout, Cause: cause}
 }
 
 func firstRedirect(commands []redis.Cmder) redis.Cmder {

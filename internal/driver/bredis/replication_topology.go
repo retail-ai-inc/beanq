@@ -9,6 +9,99 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const minimumWaitAOFVersion = "7.2"
+
+func ValidateWaitTopology(ctx context.Context, client redis.UniversalClient, mode string, requiredReplicas, requiredLocal int) error {
+	switch mode {
+	case "":
+		return nil
+	case WaitModeReplication:
+		return ValidateReplicationTopology(ctx, client, requiredReplicas)
+	case WaitModeAOF:
+		return ValidateWaitAOFTopology(ctx, client, requiredReplicas, requiredLocal)
+	default:
+		return fmt.Errorf("unsupported redis wait mode %q", mode)
+	}
+}
+
+// ValidateWaitAOFTopology verifies WAITAOF support and AOF durability on every writable node.
+func ValidateWaitAOFTopology(ctx context.Context, client redis.UniversalClient, requiredReplicas, requiredLocal int) error {
+	switch client := client.(type) {
+	case *RedisHolder:
+		return ValidateWaitAOFTopology(ctx, client.UniversalClient, requiredReplicas, requiredLocal)
+	case *redis.Client:
+		return validateWaitAOFMaster(ctx, client, requiredReplicas, requiredLocal)
+	case *redis.ClusterClient:
+		return client.ForEachMaster(ctx, func(ctx context.Context, master *redis.Client) error {
+			return validateWaitAOFMaster(ctx, master, requiredReplicas, requiredLocal)
+		})
+	default:
+		return fmt.Errorf("validate redis WAITAOF topology: unsupported client %T", client)
+	}
+}
+
+func validateWaitAOFMaster(ctx context.Context, master *redis.Client, requiredReplicas, requiredLocal int) error {
+	address := master.Options().Addr
+	serverInfo, err := master.Info(ctx, "server").Result()
+	if err != nil {
+		return fmt.Errorf("inspect redis server at %s: %w", address, err)
+	}
+	version, err := redisInfoValue(serverInfo, "redis_version")
+	if err != nil {
+		return fmt.Errorf("inspect redis server at %s: %w", address, err)
+	}
+	supported, err := redisVersionAtLeast(version, 7, 2)
+	if err != nil {
+		return fmt.Errorf("inspect redis server at %s: %w", address, err)
+	}
+	if !supported {
+		return fmt.Errorf("redis master %s does not support WAITAOF: Redis %s, require >= %s", address, version, minimumWaitAOFVersion)
+	}
+
+	persistenceInfo, err := master.Info(ctx, "persistence").Result()
+	if err != nil {
+		return fmt.Errorf("inspect redis persistence at %s: %w", address, err)
+	}
+	aofEnabled, err := redisInfoValue(persistenceInfo, "aof_enabled")
+	if err != nil {
+		return fmt.Errorf("inspect redis persistence at %s: %w", address, err)
+	}
+	if aofEnabled != "1" {
+		return fmt.Errorf("redis master %s cannot use WAITAOF: appendonly is disabled", address)
+	}
+	if requiredLocal < 0 {
+		return fmt.Errorf("redis master %s has invalid WAITAOF local requirement %d", address, requiredLocal)
+	}
+	return validateMasterReplication(ctx, master, requiredReplicas)
+}
+
+func redisInfoValue(info, key string) (string, error) {
+	prefix := key + ":"
+	for _, rawLine := range strings.Split(info, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(line, prefix)), nil
+		}
+	}
+	return "", fmt.Errorf("Redis INFO does not contain %s", key)
+}
+
+func redisVersionAtLeast(version string, requiredMajor, requiredMinor int) (bool, error) {
+	parts := strings.SplitN(version, ".", 3)
+	if len(parts) < 2 {
+		return false, fmt.Errorf("invalid redis_version %q", version)
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false, fmt.Errorf("invalid redis_version %q: %w", version, err)
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false, fmt.Errorf("invalid redis_version %q: %w", version, err)
+	}
+	return major > requiredMajor || major == requiredMajor && minor >= requiredMinor, nil
+}
+
 // ValidateReplicationTopology verifies that every writable Redis node has enough
 // online replicas for the configured WAIT requirement.
 func ValidateReplicationTopology(ctx context.Context, client redis.UniversalClient, requiredReplicas int) error {

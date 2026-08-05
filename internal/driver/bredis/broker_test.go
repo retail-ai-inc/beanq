@@ -16,7 +16,7 @@ func TestNewBrokerWithOptionsWiresQueueRuntimeOptions(t *testing.T) {
 	options := queueOptions{
 		client: nil, prefix: "prefix", maxLen: 100, partitions: 7,
 		runtime:        queueRuntimeOptions{workers: 3, readers: 5},
-		deadLetterIdle: time.Minute, wait: replicationWait{replicas: 2, timeout: time.Second},
+		deadLetterIdle: time.Minute, wait: replicationWait{mode: WaitModeReplication, replicas: 2, timeout: time.Second},
 	}
 	queues := []struct {
 		name string

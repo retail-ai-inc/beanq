@@ -37,7 +37,9 @@ type BrokerOptions struct {
 }
 
 type ReplicationWaitOptions struct {
+	Mode     string
 	Replicas int
+	AOFLocal int
 	Timeout  time.Duration
 }
 
@@ -94,7 +96,7 @@ func NewBrokerWithReplicationWait(client redis.UniversalClient, prefix string, m
 		Prefix: prefix, MaxLen: maxLen,
 		NormalQueuePartitions: normalQueuePartitions, SequenceQueuePartitions: sequenceQueuePartitions,
 		ConsumerWorkers: consumerPoolSize, ConsumerReaders: boptions.DefaultOptions.ConsumerReaderPoolSize,
-		DeadLetterIdle: duration, ReplicationWait: ReplicationWaitOptions{Replicas: waitReplicas, Timeout: waitTimeout},
+		DeadLetterIdle: duration, ReplicationWait: ReplicationWaitOptions{Mode: WaitModeReplication, Replicas: waitReplicas, Timeout: waitTimeout},
 	})
 }
 
@@ -106,7 +108,7 @@ func NewBrokerWithRuntimePoolsAndReplicationWait(client redis.UniversalClient, p
 		Prefix: prefix, MaxLen: maxLen,
 		NormalQueuePartitions: normalQueuePartitions, SequenceQueuePartitions: sequenceQueuePartitions,
 		ConsumerWorkers: consumerPoolSize, ConsumerReaders: consumerReaderPoolSize,
-		DeadLetterIdle: duration, ReplicationWait: ReplicationWaitOptions{Replicas: waitReplicas, Timeout: waitTimeout},
+		DeadLetterIdle: duration, ReplicationWait: ReplicationWaitOptions{Mode: WaitModeReplication, Replicas: waitReplicas, Timeout: waitTimeout},
 	})
 }
 
@@ -115,7 +117,10 @@ func NewBrokerWithOptions(client redis.UniversalClient, options BrokerOptions) *
 	if options.ConsumerReaders == 0 {
 		options.ConsumerReaders = boptions.DefaultOptions.ConsumerReaderPoolSize
 	}
-	wait := replicationWait{replicas: options.ReplicationWait.Replicas, timeout: options.ReplicationWait.Timeout}
+	wait := replicationWait{
+		mode: options.ReplicationWait.Mode, replicas: options.ReplicationWait.Replicas,
+		aofLocal: options.ReplicationWait.AOFLocal, timeout: options.ReplicationWait.Timeout,
+	}
 	queue := func(partitions int64, config *capture.Config) queueOptions {
 		return queueOptions{
 			client: client, prefix: options.Prefix, maxLen: options.MaxLen, partitions: partitions,
