@@ -83,7 +83,7 @@ func redisInfoValue(info, key string) (string, error) {
 			return strings.TrimSpace(strings.TrimPrefix(line, prefix)), nil
 		}
 	}
-	return "", fmt.Errorf("Redis INFO does not contain %s", key)
+	return "", fmt.Errorf("redis info does not contain %s", key)
 }
 
 func redisVersionAtLeast(version string, requiredMajor, requiredMinor int) (bool, error) {
