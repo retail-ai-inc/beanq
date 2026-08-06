@@ -491,7 +491,11 @@ _, err := consumer.BQ().
     "dialTimeout": "5s",
     "readTimeout": "3s",
     "writeTimeout": "3s",
-    "poolTimeout": "4s"
+    "poolTimeout": "4s",
+    "waitMode": "",
+    "waitReplicas": 0,
+    "waitAofLocal": 0,
+    "waitTimeout": "1s"
   },
   "broker": "redis",
   "consumerPoolSize": 10,
