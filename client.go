@@ -541,12 +541,17 @@ func consumerCallback(subscribe IConsumeHandle) public.CallbackWithRetry {
 }
 
 func consumeCancel(ctx context.Context, subscribe IConsumeHandle, msg *Message, err error) error {
-	var joined error
-	joined = errors.Join(joined, err)
-	if h, ok := subscribe.(IConsumeCancel); ok {
-		joined = errors.Join(joined, h.Cancel(ctx, msg))
+
+	h, ok := subscribe.(IConsumeCancel)
+	if !ok {
+		return err
 	}
-	return joined
+	cancelErr := h.Cancel(ctx, msg)
+	if cancelErr == nil || errors.Is(cancelErr, ErrNilCancel) {
+		return err
+	}
+	return errors.Join(err, cancelErr)
+
 }
 
 func (c *Client) CheckAckStatus(ctx context.Context, channel, topic, id string) (*Message, error) {
