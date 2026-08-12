@@ -2,12 +2,12 @@ package tool
 
 import (
 	"context"
-	"hash/fnv"
 	"math"
 	"math/rand"
 	"strings"
 	"time"
 
+	"github.com/cespare/xxhash/v2"
 	"github.com/retail-ai-inc/beanq/v4/helper/json"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
@@ -138,11 +138,11 @@ func randDuration(center time.Duration) time.Duration {
 }
 
 func HashKey(id []byte, flake uint64) uint64 {
-	h := fnv.New64a()
-	_, _ = h.Write(id)
-	hashKey := h.Sum64()
-	hashKey = hashKey % flake
-	return hashKey
+	if flake == 0 {
+		return 0
+	}
+
+	return xxhash.Sum64(id) % flake
 }
 
 func JsonDecode[T map[string]any | map[string]string](data string, m *T) error {
