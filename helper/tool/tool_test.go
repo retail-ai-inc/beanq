@@ -44,3 +44,20 @@ func TestHashKeyIsStableAndWithinPartitionRange(t *testing.T) {
 		}
 	}
 }
+
+func TestLogicLogShardKeysAreStableAndDistinct(t *testing.T) {
+	seen := make(map[string]struct{}, BeanqLogicLogPartitions)
+	for shard := uint64(0); shard < BeanqLogicLogPartitions; shard++ {
+		key := MakeLogicShardKey("prefix", shard)
+		if _, exists := seen[key]; exists {
+			t.Fatalf("duplicate logic-log shard key %q", key)
+		}
+		seen[key] = struct{}{}
+	}
+	if got, want := MakeLogicKeyForID("prefix", "message-1"), MakeLogicKeyForID("prefix", "message-1"); got != want {
+		t.Fatalf("logic-log key is not stable: %q != %q", got, want)
+	}
+	if got := MakeLogicShardKey("prefix", BeanqLogicLogPartitions); got != MakeLogicShardKey("prefix", 0) {
+		t.Fatalf("out-of-range shard did not wrap to shard zero: %q", got)
+	}
+}

@@ -75,6 +75,8 @@ const (
 	BeanqHostName = "beanq-host-name"
 )
 
+const BeanqLogicLogPartitions uint64 = 16
+
 const (
 	// BeanqLogGroup it's for beanq-logic-log,multiple consumers can consume those data
 	BeanqLogGroup = "beanq-log-group"
@@ -82,6 +84,15 @@ const (
 
 func MakeLogicKey(prefix string) string {
 	return makeKey(prefix, "beanq-logic-log")
+}
+
+func MakeLogicShardKey(prefix string, shard uint64) string {
+	shard %= BeanqLogicLogPartitions
+	return makeKey(prefix, "{beanq-logic-log-"+cast.ToString(shard)+"}")
+}
+
+func MakeLogicKeyForID(prefix, id string) string {
+	return MakeLogicShardKey(prefix, HashKey([]byte(id), BeanqLogicLogPartitions))
 }
 
 // RetryInfo retry=0 means no retries, but it will be executed at least once.

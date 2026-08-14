@@ -202,3 +202,17 @@ func TestDeadLetterMoveToLogicPreservesOriginalMessage(t *testing.T) {
 		t.Fatalf("unexpected fields in DLQ message: got %#v, original %#v", values, want)
 	}
 }
+
+func TestDeadLetterLogicLogUsesApproximateTrim(t *testing.T) {
+	args := (deadLetterMessage{values: map[string]any{
+		deadLetterRetryField: maxDeadLetterRetry,
+		"id":                 "message-id",
+	}}).xAddArgs("queue-stream", "logic-stream")
+
+	if args.Stream != "logic-stream" {
+		t.Fatalf("logic stream = %q, want logic-stream", args.Stream)
+	}
+	if args.MaxLen != defaultLogicLogMaxLen || !args.Approx {
+		t.Fatalf("logic stream trim = (maxLen=%d, approx=%v)", args.MaxLen, args.Approx)
+	}
+}
