@@ -178,14 +178,24 @@ func (w replicationWait) confirm(ctx context.Context, client redisDoer) error {
 	} else {
 		command = client.Do(ctx, "WAIT", w.replicas, waitTimeoutMilliseconds(w.timeout))
 	}
-	value, err := command.Int64()
-	if err != nil {
-		return w.notConfirmed(err)
-	}
-	return w.validateAcknowledged(value)
+	return w.waitResult(command)
 }
 
 func (w replicationWait) waitResult(waitCmd *redis.Cmd) error {
+	if w.mode == WaitModeAOF {
+		acknowledged, err := waitCmd.Int64Slice()
+		if err != nil {
+			return w.notConfirmed(err)
+		}
+		if len(acknowledged) != 2 {
+			return w.notConfirmed(fmt.Errorf("unexpected WAITAOF response length %d", len(acknowledged)))
+		}
+		if acknowledged[0] < int64(w.aofLocal) {
+			return w.notConfirmed(fmt.Errorf("WAITAOF acknowledged by %d local AOF instances, want %d", acknowledged[0], w.aofLocal))
+		}
+		return w.validateAcknowledged(acknowledged[1])
+	}
+
 	acknowledged, err := waitCmd.Int64()
 	if err != nil {
 		return w.notConfirmed(err)

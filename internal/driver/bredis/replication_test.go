@@ -72,8 +72,10 @@ func (s *waitTestServer) serveConn(conn net.Conn, connection int) {
 			_, _ = writer.WriteString("-ERR unknown command 'hello'\r\n")
 		case "XADD":
 			_, _ = writer.WriteString("$3\r\n1-0\r\n")
-		case "WAIT", "WAITAOF":
+		case "WAIT":
 			_, _ = fmt.Fprintf(writer, ":%d\r\n", s.waitAcks)
+		case "WAITAOF":
+			_, _ = fmt.Fprintf(writer, "*2\r\n:1\r\n:%d\r\n", s.waitAcks)
 		case "EVAL":
 			_, _ = writer.WriteString("*3\r\n$9\r\nSCHEDULED\r\n$3\r\n1-0\r\n$1\r\n1\r\n")
 		case "INFO":
