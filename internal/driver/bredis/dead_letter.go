@@ -26,7 +26,7 @@ type deadLetterProcessor struct {
 	topic         string
 	streamKey     string
 	lockKey       string
-	logicKey      string
+	prefix        string
 	idle          time.Duration
 	wait          replicationWait
 }
@@ -43,7 +43,7 @@ func (t *queueBase) DeadLetterStream(ctx context.Context, channel, topic, stream
 		topic:         topic,
 		streamKey:     streamKey,
 		lockKey:       lockKey,
-		logicKey:      tool.MakeLogicKey(t.prefix),
+		prefix:        t.prefix,
 		idle:          t.deadLetterIdle,
 		wait:          t.wait,
 	}
@@ -98,7 +98,8 @@ func (p *deadLetterProcessor) oldestExpiredPending(ctx context.Context) (redis.X
 }
 
 func (p *deadLetterProcessor) move(ctx context.Context, pendingID string, message deadLetterMessage) error {
-	args := message.xAddArgs(p.streamKey, p.logicKey)
+	logicKey := tool.MakeLogicKeyForID(p.prefix, cast.ToString(message.values["id"]))
+	args := message.xAddArgs(p.streamKey, logicKey)
 	if p.wait.enabled() {
 		if _, err := p.wait.execute(ctx, p.client, args.Stream, func(pipe redis.Pipeliner) redis.Cmder {
 			return pipe.XAdd(ctx, args)
@@ -136,7 +137,9 @@ func (m deadLetterMessage) xAddArgs(streamKey, logicKey string) *redis.XAddArgs 
 	if retry >= maxDeadLetterRetry {
 		m.values["logType"] = bstatus.Dlq
 		m.values["status"] = bstatus.StatusFailed
-		return &redis.XAddArgs{Stream: logicKey, Values: m.values}
+		return &redis.XAddArgs{
+			Stream: logicKey, MaxLen: defaultLogicLogMaxLen, Approx: true, ID: "*", Values: m.values,
+		}
 	}
 	m.incrementRetry()
 	delete(m.values, "logType")

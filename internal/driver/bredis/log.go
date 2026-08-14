@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
-	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 )
 
@@ -31,67 +31,66 @@ func NewLog(client redis.UniversalClient, prefix string, log migrateStore) *Log 
 }
 
 func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
+	var wait sync.WaitGroup
+	for shard := uint64(0); shard < tool.BeanqLogicLogPartitions; shard++ {
+		key := tool.MakeLogicShardKey(t.prefix, shard)
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			t.migrateStream(ctx, key)
+		}()
+	}
+	wait.Wait()
+	return nil
+}
 
-	timer := timex.TimerPool.Get(5 * time.Second)
-	defer timex.TimerPool.Put(timer)
-
-	key := tool.MakeLogicKey(t.prefix)
-
+func (t *Log) migrateStream(ctx context.Context, key string) {
 	for {
-		// check state
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
+		if ctx.Err() != nil {
+			return
 		}
-		timer.Reset(5 * time.Second)
-
-		result, err := t.client.XReadGroup(ctx, NewReadGroupArgs(tool.BeanqLogGroup, key, []string{key, ">"}, 200, 20*time.Second)).Result()
+		result, err := t.client.XReadGroup(ctx, NewReadGroupArgs(tool.BeanqLogGroup, key, []string{key, ">"}, 1000, 2*time.Second)).Result()
 		if err != nil {
 			if strings.Contains(err.Error(), "NOGROUP No such") {
-				if err := t.client.XGroupCreateMkStream(ctx, key, tool.BeanqLogGroup, "0").Err(); err != nil {
-					//t.captureException(ctx, err)
-					return nil
+				if err := t.client.XGroupCreateMkStream(ctx, key, tool.BeanqLogGroup, "0").Err(); err != nil && !isConsumerGroupExistsError(err) {
+					return
 				}
 				continue
 			}
 			if errors.Is(err, context.Canceled) {
 				logger.New().Info("Redis Obsolete Stop")
-				return nil
+				return
 			}
 			if !errors.Is(err, redis.Nil) && !errors.Is(err, redis.ErrClosed) {
 				logger.New().Error(err)
 			}
 			continue
 		}
-
-		if len(result) <= 0 {
+		if len(result) == 0 {
 			continue
 		}
-
 		messages := result[0].Messages
 		datas := make([]map[string]any, 0, len(messages))
 		ids := make([]string, 0, len(messages))
-
-		for _, v := range messages {
-			if v.ID != "" {
-				ids = append(ids, v.ID)
-				datas = append(datas, v.Values)
+		for _, message := range messages {
+			if message.ID != "" {
+				ids = append(ids, message.ID)
+				datas = append(datas, message.Values)
 			}
 		}
-
-		if t.log != nil {
-			if err := t.log.Migrate(ctx, datas); err != nil {
-				logger.New().Error(err)
-				continue
-			}
-			if _, err := t.client.TxPipelined(ctx, func(pipeliner redis.Pipeliner) error {
-				pipeliner.XAck(ctx, key, tool.BeanqLogGroup, ids...)
-				pipeliner.XDel(ctx, key, ids...)
-				return nil
-			}); err != nil {
-				logger.New().Error(err)
-			}
+		if t.log == nil || len(ids) == 0 {
+			continue
+		}
+		if err := t.log.Migrate(ctx, datas); err != nil {
+			logger.New().Error(err)
+			continue
+		}
+		if _, err := t.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+			pipe.XAck(ctx, key, tool.BeanqLogGroup, ids...)
+			pipe.XDel(ctx, key, ids...)
+			return nil
+		}); err != nil {
+			logger.New().Error(err)
 		}
 	}
 }

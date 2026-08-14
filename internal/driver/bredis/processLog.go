@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cast"
 )
 
+const defaultLogicLogMaxLen int64 = 20000
+
 type ProcessLog struct {
 	client                  redis.UniversalClient
 	prefix                  string
@@ -41,35 +43,35 @@ func NewProcessLogWithPartitions(client redis.UniversalClient, prefix string, no
 }
 
 func (t *ProcessLog) AddLog(ctx context.Context, data map[string]any) error {
-
-	logStream := tool.MakeLogicKey(t.prefix)
-
 	moodType := btype.NORMAL
-
 	if v, ok := data["moodType"]; ok {
 		moodType = btype.MoodType(cast.ToString(v))
 	}
 
+	data["logType"] = bstatus.Logic
+	args := &redis.XAddArgs{
+		Stream:     tool.MakeLogicKeyForID(t.prefix, cast.ToString(data["id"])),
+		NoMkStream: false, MaxLen: defaultLogicLogMaxLen, Approx: true, ID: "*", Values: data,
+	}
+
 	if key := t.statusKey(data, moodType); key != "" {
-		if err := SaveHSetScript.Run(ctx, t.client, []string{key}, data).Err(); err != nil {
+		var statusCmd *redis.Cmd
+		var logCmd *redis.StringCmd
+		_, pipelineErr := t.client.Pipelined(ctx, func(pipe redis.Pipeliner) error {
+			statusCmd = SaveHSetScript.Eval(ctx, pipe, []string{key}, data)
+			logCmd = pipe.XAdd(ctx, args)
+			return nil
+		})
+		if err := statusCmd.Err(); err != nil {
 			return err
 		}
+		if err := logCmd.Err(); err != nil {
+			return err
+		}
+		return pipelineErr
 	}
 
-	data["logType"] = bstatus.Logic
-	// write job log into redis
-	if err := t.client.XAdd(ctx, &redis.XAddArgs{
-		Stream:     logStream,
-		NoMkStream: false,
-		MaxLen:     20000,
-		Approx:     false,
-		ID:         "*",
-		Values:     data,
-	}).Err(); err != nil {
-		return err
-	}
-
-	return nil
+	return t.client.XAdd(ctx, args).Err()
 }
 
 func (t *ProcessLog) statusKey(data map[string]any, moodType btype.MoodType) string {
