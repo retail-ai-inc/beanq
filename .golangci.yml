@@ -20,6 +20,9 @@ linters:
         - G402 # TLS InsecureSkipVerify may be set to true. redisHolder.go:172
         - G115 # integer overflow conversion int64 -> uint64
         - G124 #  http.Cookie missing or has insecure Secure, HttpOnly, or SameSite attribute
+    staticcheck:
+      checks:
+        - QF1008
   exclusions:
     warn-unused: true
     presets:
