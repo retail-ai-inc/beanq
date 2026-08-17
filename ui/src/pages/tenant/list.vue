@@ -112,6 +112,7 @@
             </div>
             <div class="modal-body">
               <input class="form-control" id="tenant-modal-name" placeholder="Tenant Code" v-model="tenantModal.tenantCode.value" />
+              <p class="text-body-secondary">This will be used to uniquely identify a retailer in many places. It cannot be edited later.</p>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
