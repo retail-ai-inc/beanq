@@ -68,6 +68,41 @@
                   <label for="mongo-user-pwd" class="form-label">DB password</label>
                   <input class="form-control" id="mongo-user-pwd" placeholder="Password" v-model="mongo.userPwd" />
               </div>
+              <div class="col-12 mt-2">
+                <div class="card bg-body-tertiary border-0">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                      <div>
+                        <h6 class="card-title mb-1">SSL</h6>
+                        <p class="text-body-secondary small mb-0">Secure the Mongo connection with TLS.</p>
+                      </div>
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="mongo-ssl" v-model="mongo.ssl.on" />
+                        <label class="form-check-label visually-hidden" for="mongo-ssl">Enable Mongo SSL</label>
+                      </div>
+                    </div>
+                    <div v-if="mongo.ssl.on" class="row g-3 mt-1 pt-3 border-top">
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="mongo-ssl-verify" v-model="mongo.ssl.verifyCertificate" />
+                          <label class="form-check-label" for="mongo-ssl-verify">Verify certificate</label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="mongo-ssl-hot-reload" v-model="mongo.ssl.hotReload" />
+                          <label class="form-check-label" for="mongo-ssl-hot-reload">Hot reload</label>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <label for="mongo-ssl-cert-file" class="form-label">Certificate authority file</label>
+                        <input class="form-control" id="mongo-ssl-cert-file" placeholder="/path/to/ca.pem" v-model.trim="mongo.ssl.certFile" />
+                        <div class="form-text">Absolute path to the CA certificate file.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="h5 mb-4 pb-2 border-bottom border-success-subtle">
               Redis
@@ -88,6 +123,41 @@
               <div class="col mb-3">
                   <label for="redis-pwd" class="form-label">Password</label>
                   <input class="form-control" id="redis-pwd" placeholder="password" v-model="redis.pwd" />
+              </div>
+              <div class="col-12 mt-2">
+                <div class="card bg-body-tertiary border-0">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                      <div>
+                        <h6 class="card-title mb-1">SSL</h6>
+                        <p class="text-body-secondary small mb-0">Secure the Redis connection with TLS.</p>
+                      </div>
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="redis-ssl" v-model="redis.ssl.on" />
+                        <label class="form-check-label visually-hidden" for="redis-ssl">Enable Redis SSL</label>
+                      </div>
+                    </div>
+                    <div v-if="redis.ssl.on" class="row g-3 mt-1 pt-3 border-top">
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="redis-ssl-verify" v-model="redis.ssl.verifyCertificate" />
+                          <label class="form-check-label" for="redis-ssl-verify">Verify certificate</label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="redis-ssl-hot-reload" v-model="redis.ssl.hotReload" />
+                          <label class="form-check-label" for="redis-ssl-hot-reload">Hot reload</label>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <label for="redis-ssl-cert-file" class="form-label">Certificate authority file</label>
+                        <input class="form-control" id="redis-ssl-cert-file" placeholder="/path/to/ca.pem" v-model.trim="redis.ssl.certFile" />
+                        <div class="form-text">Absolute path to the CA certificate file.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <button type="button" class="btn btn-primary" @click="updateTenantConfig">Update</button>
@@ -156,15 +226,35 @@ let tenant = reactive({
     port:27017,
     name:"",
     userName:"",
-    userPwd:""
+    userPwd:"",
+    ssl:createSSLConfig()
   },
   redis:{
     host:"",
     gcpHost:"",
     port:6379,
-    pwd:""
+    pwd:"",
+    ssl:createSSLConfig()
   }
 });
+
+
+function createSSLConfig(ssl = {}) {
+  return {
+    on:false,
+    verifyCertificate:false,
+    hotReload:false,
+    certFile:"",
+    ...ssl
+  };
+}
+
+function assignTenant(data) {
+  Object.assign(tenant,data,{
+    mongo:{...tenant.mongo,...data.mongo,ssl:createSSLConfig(data.mongo?.ssl)},
+    redis:{...tenant.redis,...data.redis,ssl:createSSLConfig(data.redis?.ssl)}
+  });
+}
 
 let config = reactive({
   deleteTenantLabel:"deleteTenantLabel",
@@ -194,7 +284,7 @@ async function getTenants(){
 
     if(rows.length > 0){
       tenants.value = rows;
-      Object.assign(tenant,rows[0]);
+      assignTenant(rows[0]);
       currentUuid.value = rows[0].id;
     }
   }catch (err) {
@@ -213,8 +303,7 @@ const chooseTenant = async (id)=>{
   currentUuid.value = id;
   try{
     let res = await tenantApi.Get(id);
-    console.log("------",res);
-    Object.assign(tenant,res);
+    assignTenant(res);
   }catch (err) {
     //401 error
     if (err?.response?.status === 401){

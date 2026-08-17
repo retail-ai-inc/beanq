@@ -17,19 +17,28 @@ type tenantConnections struct {
 }
 
 type tenantRedis struct {
-	Host     string `bson:"host"`
-	GCPHost  string `bson:"gcpHost"`
-	Port     string `bson:"port"`
-	Password string `bson:"password"`
+	Host     string    `bson:"host"`
+	GCPHost  string    `bson:"gcpHost"`
+	Port     string    `bson:"port"`
+	Password string    `bson:"password"`
+	SSL      tenantSSL `bson:"ssl"`
 }
 
 type tenantMongo struct {
-	Host       string `bson:"host"`
-	GCPHost    string `bson:"gcpHost"`
-	Port       string `bson:"port"`
-	DBName     string `bson:"dbName"`
-	DBUsername string `bson:"dbUsername"`
-	DBPassword string `bson:"dbPassword"`
+	Host       string    `bson:"host"`
+	GCPHost    string    `bson:"gcpHost"`
+	Port       string    `bson:"port"`
+	DBName     string    `bson:"dbName"`
+	DBUsername string    `bson:"dbUsername"`
+	DBPassword string    `bson:"dbPassword"`
+	SSL        tenantSSL `bson:"ssl"`
+}
+
+type tenantSSL struct {
+	On                bool   `bson:"on"`
+	VerifyCertificate bool   `bson:"verifyCertificate"`
+	HotReload         bool   `bson:"hotReload"`
+	CertFile          string `bson:"certFile"`
 }
 
 func resolveTenantConfig(ctx context.Context, base *BeanqConfig, tenantCode string) (ResolvedConfig, error) {
@@ -67,6 +76,10 @@ func tenantConfig(base *BeanqConfig, tenant tenantConnections) (ResolvedConfig, 
 		config.Redis.Port = tenant.Redis.Port
 	}
 	config.Redis.Password = tenant.Redis.Password
+	config.Redis.SSL.On = tenant.Redis.SSL.On
+	config.Redis.SSL.Verify = tenant.Redis.SSL.VerifyCertificate
+	config.Redis.SSL.HotReload = tenant.Redis.SSL.HotReload
+	config.Redis.SSL.CAFile = tenant.Redis.SSL.CertFile
 
 	if host := tenantHost(tenant.Mongo.Host, tenant.Mongo.GCPHost); host != "" {
 		config.Mongo.Host = host
@@ -79,6 +92,10 @@ func tenantConfig(base *BeanqConfig, tenant tenantConnections) (ResolvedConfig, 
 	}
 	config.Mongo.UserName = tenant.Mongo.DBUsername
 	config.Mongo.Password = tenant.Mongo.DBPassword
+	config.Mongo.SSL.On = tenant.Mongo.SSL.On
+	config.Mongo.SSL.Verify = tenant.Mongo.SSL.VerifyCertificate
+	config.Mongo.SSL.HotReload = tenant.Mongo.SSL.HotReload
+	config.Mongo.SSL.CAFile = tenant.Mongo.SSL.CertFile
 	return config.Resolve()
 }
 

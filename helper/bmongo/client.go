@@ -806,18 +806,27 @@ type Tenants struct {
 	Redis    Redis     `bson:"redis" json:"redis"`
 }
 type Mongo struct {
-	Host       string `bson:"host" json:"host"`
-	GCPHost    string `bson:"gcpHost" json:"gcpHost"`
-	Port       string `bson:"port" json:"port"`
-	DbName     string `bson:"dbName" json:"dbName"`
-	DbUsername string `bson:"dbUsername" json:"dbUsername"`
-	DbPassword string `bson:"dbPassword" json:"dbPassword"`
+	Host       string    `bson:"host" json:"host"`
+	GCPHost    string    `bson:"gcpHost" json:"gcpHost"`
+	Port       string    `bson:"port" json:"port"`
+	DbName     string    `bson:"dbName" json:"dbName"`
+	DbUsername string    `bson:"dbUsername" json:"dbUsername"`
+	DbPassword string    `bson:"dbPassword" json:"dbPassword"`
+	SSL        TenantSSL `bson:"ssl" json:"ssl"`
 }
 type Redis struct {
-	Host     string `bson:"host" json:"host"`
-	GCPHost  string `bson:"gcpHost" json:"gcpHost"`
-	Port     string `bson:"port" json:"port"`
-	Password string `bson:"password" json:"password"`
+	Host     string    `bson:"host" json:"host"`
+	GCPHost  string    `bson:"gcpHost" json:"gcpHost"`
+	Port     string    `bson:"port" json:"port"`
+	Password string    `bson:"password" json:"password"`
+	SSL      TenantSSL `bson:"ssl" json:"ssl"`
+}
+
+type TenantSSL struct {
+	On                bool   `bson:"on" json:"on"`
+	VerifyCertificate bool   `bson:"verifyCertificate" json:"verifyCertificate"`
+	HotReload         bool   `bson:"hotReload" json:"hotReload"`
+	CertFile          string `bson:"certFile" json:"certFile"`
 }
 
 func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) (string, error) {
