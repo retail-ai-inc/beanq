@@ -35,7 +35,6 @@ import (
 	"github.com/rs/xid"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
-	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
@@ -43,6 +42,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
 	"github.com/retail-ai-inc/beanq/v4/internal/capture"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 var (
@@ -185,23 +185,24 @@ type (
 
 	// Client is BeanQ's root client.
 	Client struct {
-		closeOnce        sync.Once
-		closeErr         error
-		captureException func(ctx context.Context, err any)
-		broker           Broker
-		driver           any
-		consumers        *consumerRegistry
-		captureConfig    *capture.Config
-		TimeToRunLimit   []time.Duration `json:"timeToRunLimit"`
-		Topic            string          `json:"topic"`
-		Channel          string          `json:"channel"`
-		MaxLen           int64           `json:"maxLen"`
-		Retry            int             `json:"retry"`
-		DeadLetterRetry  int             `json:"deadLetterRetry"`
-		Priority         float64         `json:"priority"`
-		TimeToRun        time.Duration   `json:"timeToRun"`
-		retryConditions  []RetryConditionFunc
-		config           *BeanqConfig
+		closeOnce          sync.Once
+		closeErr           error
+		captureException   func(ctx context.Context, err any)
+		broker             Broker
+		driver             any
+		consumers          *consumerRegistry
+		captureConfig      *capture.Config
+		TimeToRunLimit     []time.Duration `json:"timeToRunLimit"`
+		Topic              string          `json:"topic"`
+		Channel            string          `json:"channel"`
+		MaxLen             int64           `json:"maxLen"`
+		Retry              int             `json:"retry"`
+		DeadLetterRetry    int             `json:"deadLetterRetry"`
+		Priority           float64         `json:"priority"`
+		TimeToRun          time.Duration   `json:"timeToRun"`
+		retryConditions    []RetryConditionFunc
+		config             *BeanqConfig
+		tenantLookupConfig *BeanqConfig
 	}
 
 	dynamicOption struct {
@@ -252,16 +253,18 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 		client.driver = provider.Driver()
 	}
 	client.config = &candidate.BeanqConfig
+	lookupConfig := cloneBeanqConfig(candidate.BeanqConfig)
+	client.tenantLookupConfig = &lookupConfig
 	return client
 }
 
 // WithTenant switches this client to the Redis and Mongo connections stored
-// for tenantName in the default Mongo tenants collection.
-func (c *Client) WithTenant(tenantName string) *Client {
-	if c == nil || c.config == nil {
+// for tenantCode in the default Mongo tenants collection.
+func (c *Client) WithTenant(tenantCode string) *Client {
+	if c == nil || c.config == nil || c.tenantLookupConfig == nil {
 		logger.New().Panic("with tenant err:", berror.ErrInvalidConfig.WithMessage("client is not initialized"))
 	}
-	tenantConfig, err := resolveTenantConfig(context.Background(), c.config, tenantName)
+	tenantConfig, err := resolveTenantConfig(context.Background(), c.tenantLookupConfig, tenantCode)
 	if err != nil {
 		logger.New().Panic("with tenant err:", err)
 	}
@@ -318,22 +321,27 @@ func newRedisBroker(config ResolvedConfig) (Broker, *capture.Config) {
 	return broker, captureConfig
 }
 
-type captureConfigReader interface {
-	ConfigInfo(ctx context.Context) (*capture.Config, error)
-}
-
 func loadCaptureConfig(config *Mongo) *capture.Config {
-	store := bmongo.NewMongo(config.Host, config.Port, config.UserName, config.Password, config.Database, config.collectionNames(),
-		config.ConnectTimeOut, config.MaxConnectionPoolSize, config.MaxConnectionLifeTime,
-		bmongo.MongoSSLConfig{On: config.SSL.On, CAFile: config.SSL.CAFile, Verify: config.SSL.Verify})
-
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	captureConfig, err := captureConfigReader(store).ConfigInfo(ctx)
+
+	client, err := newMongoClient(ctx, config)
 	if err != nil {
 		return nil
 	}
-	return captureConfig
+	defer func() { _ = client.Disconnect(context.Background()) }()
+
+	var data struct {
+		Config capture.Config `bson:"config"`
+	}
+	err = client.Database(config.Database).
+		Collection(config.collectionName("config", "configs")).
+		FindOne(ctx, bson.M{"_id": "config"}).
+		Decode(&data)
+	if err != nil {
+		return nil
+	}
+	return &data.Config
 }
 
 func setBrokerDriver(broker Broker) {
