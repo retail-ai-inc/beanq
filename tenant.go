@@ -32,10 +32,10 @@ type tenantMongo struct {
 	DBPassword string `bson:"dbPassword"`
 }
 
-func resolveTenantConfig(ctx context.Context, base *BeanqConfig, tenantName string) (ResolvedConfig, error) {
-	name := strings.TrimSpace(tenantName)
-	if name == "" {
-		return ResolvedConfig{}, berror.ErrInvalidConfig.WithMessage("tenant name is required")
+func resolveTenantConfig(ctx context.Context, base *BeanqConfig, tenantCode string) (ResolvedConfig, error) {
+	code := strings.TrimSpace(tenantCode)
+	if code == "" {
+		return ResolvedConfig{}, berror.ErrInvalidConfig.WithMessage("tenant code is required")
 	}
 	if base == nil || base.Mongo == nil {
 		return ResolvedConfig{}, berror.ErrInvalidConfig.WithMessage("default mongo config is required for tenant lookup")
@@ -48,12 +48,12 @@ func resolveTenantConfig(ctx context.Context, base *BeanqConfig, tenantName stri
 
 	var tenant tenantConnections
 	collection := base.Mongo.collectionName("tenant", "tenants")
-	err = client.Database(base.Mongo.Database).Collection(collection).FindOne(ctx, bson.M{"name": name}).Decode(&tenant)
+	err = client.Database(base.Mongo.Database).Collection(collection).FindOne(ctx, bson.M{"code": code}).Decode(&tenant)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			return ResolvedConfig{}, fmt.Errorf("tenant %q not found", name)
+			return ResolvedConfig{}, fmt.Errorf("tenant %q not found", code)
 		}
-		return ResolvedConfig{}, fmt.Errorf("query tenant %q: %w", name, err)
+		return ResolvedConfig{}, fmt.Errorf("query tenant %q: %w", code, err)
 	}
 	return tenantConfig(base, tenant)
 }

@@ -7,7 +7,7 @@
           <li class="list-group-item d-flex flex-row justify-content-between align-items-center"
               :class="{active: currentUuid === item.id}" v-for="(item,key) in tenants" :key="key" >
             <p @click="chooseTenant(item.id)"
-               :class="currentUuid === item.id ? 'text-white' : 'text-primary'" style="cursor: pointer;margin:0">{{item.name}}</p>
+               :class="currentUuid === item.id ? 'text-white' : 'text-primary'" style="cursor: pointer;margin:0">{{item.code}}</p>
 
             <a class="btn" href="javascript:;" @click="deleteTenantConfirm(item)"
                style="padding:.245rem .45rem;"
@@ -34,8 +34,8 @@
             </div>
             <div class="row mb-4">
               <div class="col-3 mb-3">
-                <label for="tenant-name" class="form-label">Tenant Name</label>
-                <input class="form-control" id="tenant-name" placeholder="Tenant Name" v-model="name" />
+                <label for="tenant-code" class="form-label">Code<span class="text-danger">*</span></label>
+                <input class="form-control" id="tenant-code" placeholder="Tenant Code" v-model="code" />
               </div>
             </div>
 
@@ -107,11 +107,11 @@
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content">
             <div class="modal-header">
-              <h1 class="modal-title fs-5" id="staticBackdropLabel">Tenant Name</h1>
+              <h1 class="modal-title fs-5" id="staticBackdropLabel">Tenant Code</h1>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <input class="form-control" id="tenant-modal-name" placeholder="Tenant Name" v-model="tenantModal.tenantName.value" />
+              <input class="form-control" id="tenant-modal-name" placeholder="Tenant Code" v-model="tenantModal.tenantCode.value" />
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -148,7 +148,7 @@ import Action from "../components/action.vue";
 
 let tenant = reactive({
   id:"",
-  name:"",
+  code:"",
   mongo:{
     host:"",
     gcpHost:"",
@@ -170,12 +170,12 @@ let config = reactive({
   showTenantDeleteModal:"showTenantDeleteModal",
   dataTenantId:"",
   id:"",
-  info:"This operation will permanently delete the tenant. To avoid unintentional actions, please confirm by entering the tenant name:"
+  info:"This operation will permanently delete the tenant. To avoid unintentional actions, please confirm by entering the tenant code:"
 });
 
 const currentUuid = ref("");
 const tenants = ref([]);
-const tenantModal = {add:ref(null),tenantName:ref(""),currentId:ref("")};
+const tenantModal = {add:ref(null),tenantCode:ref(""),currentId:ref("")};
 const [noticeId,loginModal] = [ref("configBackdrop"),ref("loginModal")];
 const [toastId,toastRef] = [ref("toast-" + Math.random().toString(36)),ref("toastRef")]
 
@@ -212,6 +212,7 @@ const chooseTenant = async (id)=>{
   currentUuid.value = id;
   try{
     let res = await tenantApi.Get(id);
+    console.log("------",res);
     Object.assign(tenant,res);
   }catch (err) {
     //401 error
@@ -250,11 +251,11 @@ const addTenant = async ()=>{
 
 const doAddTenant = async ()=>{
 
-   let res = await tenantApi.Add({name:tenantModal.tenantName.value});
+   let res = await tenantApi.Add({code:tenantModal.tenantCode.value});
    tenantModal.currentId.value = res.id;
    await getTenants();
    tenantModal.add.value.hide();
-   tenant = {id:res.id,name:tenantModal.tenantName.value,mongo:{},redis:{}};
+   tenant = {id:res.id,code:tenantModal.tenantCode.value,mongo:{},redis:{}};
 
 }
 
@@ -262,11 +263,11 @@ const deleteTenantConfirm= async (item)=>{
 
     config.deleteTenantLabel = "Delete Tenant";
     config.showTenantDeleteModal = "showTenantDeleteModal";
-    config.dataTenantId = item.name;
+    config.dataTenantId = item.code;
     const ele = document.getElementById("showTenantDeleteModal");
     config.deleteTenantModal = new bootstrap.Modal(ele);
     config.deleteTenantModal.show(ele);
-    config.dataTenantId = item.name;
+    config.dataTenantId = item.code;
     config.id = item.id;
 
 }
@@ -287,7 +288,7 @@ const deleteTenantInfo = async ()=>{
     toastRef.value.show(err);
   }
 }
-const {id,name,mongo,redis} = toRefs(tenant);
+const {id,code,mongo,redis} = toRefs(tenant);
 const{deleteTenantLabel,showTenantDeleteModal,dataTenantId,info} = toRefs(config);
 
 </script>

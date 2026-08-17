@@ -800,7 +800,7 @@ func (t *BMongo) ConfigInfo(ctx context.Context) (*capture.Config, error) {
 type Tenants struct {
 	Id       string    `bson:"_id" json:"id"`
 	CreateAt time.Time `bson:"createAt" json:"createAt"`
-	Name     string    `bson:"name" json:"name"`
+	Code     string    `bson:"code" json:"code"`
 	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
 	Mongo    Mongo     `bson:"mongo" json:"mongo"`
 	Redis    Redis     `bson:"redis" json:"redis"`
@@ -855,7 +855,7 @@ func (t *BMongo) TenantsEdit(ctx context.Context, id string, tenants *Tenants) e
 		"$set": bson.M{
 			"mongo":    tenants.Mongo,
 			"redis":    tenants.Redis,
-			"name":     tenants.Name,
+			"code":     tenants.Code,
 			"updateAt": time.Now(),
 		},
 	}
