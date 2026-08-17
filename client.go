@@ -255,6 +255,37 @@ func New(config *BeanqConfig, options ...ClientOption) *Client {
 	return client
 }
 
+// WithTenant switches this client to the Redis and Mongo connections stored
+// for tenantName in the default Mongo tenants collection.
+func (c *Client) WithTenant(tenantName string) *Client {
+	if c == nil || c.config == nil {
+		logger.New().Panic("with tenant err:", berror.ErrInvalidConfig.WithMessage("client is not initialized"))
+	}
+	tenantConfig, err := resolveTenantConfig(context.Background(), c.config, tenantName)
+	if err != nil {
+		logger.New().Panic("with tenant err:", err)
+	}
+	broker, captureConfig := newBrokerFromConfig(tenantConfig)
+	if closer, ok := c.broker.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			if tenantCloser, ok := broker.(interface{ Close() error }); ok {
+				_ = tenantCloser.Close()
+			}
+			logger.New().Panic("with tenant err: close default broker:", err)
+		}
+	}
+	c.broker = broker
+	c.captureConfig = captureConfig
+	c.config = &tenantConfig.BeanqConfig
+	c.closeOnce = sync.Once{}
+	c.closeErr = nil
+	setBrokerDriver(broker)
+	if provider, ok := broker.(driverProvider); ok {
+		c.driver = provider.Driver()
+	}
+	return c
+}
+
 func newBrokerFromConfig(config ResolvedConfig) (Broker, *capture.Config) {
 	switch config.Broker {
 	case "redis":
