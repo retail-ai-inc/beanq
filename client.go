@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os/signal"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -203,6 +204,7 @@ type (
 		retryConditions    []RetryConditionFunc
 		config             *BeanqConfig
 		tenantLookupConfig *BeanqConfig
+		tenantCode         string
 	}
 
 	dynamicOption struct {
@@ -280,6 +282,7 @@ func (c *Client) WithTenant(tenantCode string) *Client {
 	c.broker = broker
 	c.captureConfig = captureConfig
 	c.config = &tenantConfig.BeanqConfig
+	c.tenantCode = strings.TrimSpace(tenantCode)
 	c.closeOnce = sync.Once{}
 	c.closeErr = nil
 	setBrokerDriver(broker)
@@ -448,6 +451,7 @@ func (c *Client) cloneForCommand() *Client {
 		TimeToRun:        c.TimeToRun,
 		TimeToRunLimit:   slices.Clone(c.TimeToRunLimit),
 		captureException: c.captureException,
+		tenantCode:       c.tenantCode,
 		retryConditions:  slices.Clone(c.retryConditions),
 		config:           c.config,
 	}
@@ -747,6 +751,7 @@ func (b *BQClient) buildMessage(cmd *Publish) *Message {
 	return &Message{
 		Topic:           topic,
 		Channel:         channel,
+		TenantCode:      b.client.tenantCode,
 		OrderKey:        cmd.orderKey,
 		Payload:         string(cmd.payload),
 		MoodType:        cmd.moodType,

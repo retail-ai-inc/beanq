@@ -83,13 +83,13 @@ func TestClientCloseIsIdempotent(t *testing.T) {
 func TestClientPublishUsesBackendNeutralPublisher(t *testing.T) {
 	published := make(chan map[string]any, 1)
 	b := &fakeQueueBackend{published: published}
-	c := &Client{broker: b, Channel: "default-channel", Topic: "default-topic", MaxLen: 10}
+	c := &Client{broker: b, Channel: "default-channel", Topic: "default-topic", MaxLen: 10, tenantCode: "shop-a"}
 
 	if err := c.BQ().WithContext(context.Background()).PublishAtTime("channel", "topic", []byte("payload"), time.Now()); err != nil {
 		t.Fatalf("PublishAtTime: %v", err)
 	}
 	message := <-published
-	if message["moodType"] != btype.DELAY || message["channel"] != "channel" || message["topic"] != "topic" {
+	if message["moodType"] != btype.DELAY || message["channel"] != "channel" || message["topic"] != "topic" || message["tenantCode"] != "shop-a" {
 		t.Fatalf("unexpected published message: %#v", message)
 	}
 }
@@ -239,5 +239,17 @@ func TestSequenceWaitingAckUsesBackendNeutralContract(t *testing.T) {
 	}
 	if b.sequenceOrderKey != "order-1" {
 		t.Fatalf("sequence ack orderKey = %q, want order-1", b.sequenceOrderKey)
+	}
+}
+
+func TestMessageTenantCodeRoundTrip(t *testing.T) {
+	message := Message{TenantCode: "shop-a"}
+	data := message.ToMap()
+	if data["tenantCode"] != "shop-a" {
+		t.Fatalf("tenantCode in map = %v, want shop-a", data["tenantCode"])
+	}
+	decoded := MessageM(data).ToMessage()
+	if decoded.TenantCode != "shop-a" {
+		t.Fatalf("decoded tenantCode = %q, want shop-a", decoded.TenantCode)
 	}
 }
