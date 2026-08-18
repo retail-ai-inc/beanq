@@ -7,7 +7,7 @@
           <li class="list-group-item d-flex flex-row justify-content-between align-items-center"
               :class="{active: currentUuid === item.id}" v-for="(item,key) in tenants" :key="key" >
             <p @click="chooseTenant(item.id)"
-               :class="currentUuid === item.id ? 'text-white' : 'text-primary'" style="cursor: pointer;margin:0">{{item.name}}</p>
+               :class="currentUuid === item.id ? 'text-white' : 'text-primary'" style="cursor: pointer;margin:0">{{item.code}}</p>
 
             <a class="btn" href="javascript:;" @click="deleteTenantConfirm(item)"
                style="padding:.245rem .45rem;"
@@ -34,8 +34,8 @@
             </div>
             <div class="row mb-4">
               <div class="col-3 mb-3">
-                <label for="tenant-name" class="form-label">Tenant Name</label>
-                <input class="form-control" id="tenant-name" placeholder="Tenant Name" v-model="name" />
+                <label for="tenant-code" class="form-label">Code<span class="text-danger">*</span></label>
+                <input class="form-control" id="tenant-code" placeholder="Tenant Code" v-model="code" />
               </div>
             </div>
 
@@ -68,6 +68,41 @@
                   <label for="mongo-user-pwd" class="form-label">DB password</label>
                   <input class="form-control" id="mongo-user-pwd" placeholder="Password" v-model="mongo.userPwd" />
               </div>
+              <div class="col-12 mt-2">
+                <div class="card bg-body-tertiary border-0">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                      <div>
+                        <h6 class="card-title mb-1">SSL</h6>
+                        <p class="text-body-secondary small mb-0">Secure the Mongo connection with TLS.</p>
+                      </div>
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="mongo-ssl" v-model="mongo.ssl.on" />
+                        <label class="form-check-label visually-hidden" for="mongo-ssl">Enable Mongo SSL</label>
+                      </div>
+                    </div>
+                    <div v-if="mongo.ssl.on" class="row g-3 mt-1 pt-3 border-top">
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="mongo-ssl-verify" v-model="mongo.ssl.verifyCertificate" />
+                          <label class="form-check-label" for="mongo-ssl-verify">Verify certificate</label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="mongo-ssl-hot-reload" v-model="mongo.ssl.hotReload" />
+                          <label class="form-check-label" for="mongo-ssl-hot-reload">Hot reload</label>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <label for="mongo-ssl-cert-file" class="form-label">Certificate authority file</label>
+                        <input class="form-control" id="mongo-ssl-cert-file" placeholder="/path/to/ca.pem" v-model.trim="mongo.ssl.certFile" />
+                        <div class="form-text">Absolute path to the CA certificate file.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="h5 mb-4 pb-2 border-bottom border-success-subtle">
               Redis
@@ -89,6 +124,41 @@
                   <label for="redis-pwd" class="form-label">Password</label>
                   <input class="form-control" id="redis-pwd" placeholder="password" v-model="redis.pwd" />
               </div>
+              <div class="col-12 mt-2">
+                <div class="card bg-body-tertiary border-0">
+                  <div class="card-body">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                      <div>
+                        <h6 class="card-title mb-1">SSL</h6>
+                        <p class="text-body-secondary small mb-0">Secure the Redis connection with TLS.</p>
+                      </div>
+                      <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" role="switch" id="redis-ssl" v-model="redis.ssl.on" />
+                        <label class="form-check-label visually-hidden" for="redis-ssl">Enable Redis SSL</label>
+                      </div>
+                    </div>
+                    <div v-if="redis.ssl.on" class="row g-3 mt-1 pt-3 border-top">
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="redis-ssl-verify" v-model="redis.ssl.verifyCertificate" />
+                          <label class="form-check-label" for="redis-ssl-verify">Verify certificate</label>
+                        </div>
+                      </div>
+                      <div class="col-md-3">
+                        <div class="form-check form-switch">
+                          <input class="form-check-input" type="checkbox" role="switch" id="redis-ssl-hot-reload" v-model="redis.ssl.hotReload" />
+                          <label class="form-check-label" for="redis-ssl-hot-reload">Hot reload</label>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <label for="redis-ssl-cert-file" class="form-label">Certificate authority file</label>
+                        <input class="form-control" id="redis-ssl-cert-file" placeholder="/path/to/ca.pem" v-model.trim="redis.ssl.certFile" />
+                        <div class="form-text">Absolute path to the CA certificate file.</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             <button type="button" class="btn btn-primary" @click="updateTenantConfig">Update</button>
 
@@ -107,11 +177,12 @@
         <div class="modal-dialog modal-dialog-centered">
           <div class="modal-content">
             <div class="modal-header">
-              <h1 class="modal-title fs-5" id="staticBackdropLabel">Tenant Name</h1>
+              <h1 class="modal-title fs-5" id="staticBackdropLabel">Tenant Code</h1>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <input class="form-control" id="tenant-modal-name" placeholder="Tenant Name" v-model="tenantModal.tenantName.value" />
+              <input class="form-control" id="tenant-modal-name" placeholder="Tenant Code" v-model="tenantModal.tenantCode.value" />
+              <p class="text-body-secondary">This will be used to uniquely identify a retailer in many places. It cannot be edited later.</p>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -148,34 +219,54 @@ import Action from "../components/action.vue";
 
 let tenant = reactive({
   id:"",
-  name:"",
+  code:"",
   mongo:{
     host:"",
     gcpHost:"",
     port:27017,
     name:"",
     userName:"",
-    userPwd:""
+    userPwd:"",
+    ssl:createSSLConfig()
   },
   redis:{
     host:"",
     gcpHost:"",
     port:6379,
-    pwd:""
+    pwd:"",
+    ssl:createSSLConfig()
   }
 });
+
+
+function createSSLConfig(ssl = {}) {
+  return {
+    on:false,
+    verifyCertificate:false,
+    hotReload:false,
+    certFile:"",
+    ...ssl
+  };
+}
+
+function assignTenant(data) {
+  Object.assign(tenant,data,{
+    mongo:{...tenant.mongo,...data.mongo,ssl:createSSLConfig(data.mongo?.ssl)},
+    redis:{...tenant.redis,...data.redis,ssl:createSSLConfig(data.redis?.ssl)}
+  });
+}
 
 let config = reactive({
   deleteTenantLabel:"deleteTenantLabel",
   showTenantDeleteModal:"showTenantDeleteModal",
   dataTenantId:"",
   id:"",
-  info:"This operation will permanently delete the tenant. To avoid unintentional actions, please confirm by entering the tenant name:"
+  info:"This operation will permanently delete the tenant. To avoid unintentional actions, please confirm by entering the tenant code:"
 });
 
 const currentUuid = ref("");
 const tenants = ref([]);
-const tenantModal = {add:ref(null),tenantName:ref(""),currentId:ref("")};
+const tenantModal = {add:ref(null),tenantCode:ref(""),currentId:ref("")};
 const [noticeId,loginModal] = [ref("configBackdrop"),ref("loginModal")];
 const [toastId,toastRef] = [ref("toast-" + Math.random().toString(36)),ref("toastRef")]
 
@@ -189,10 +280,11 @@ async function getTenants(){
 
   try{
 	let res = await tenantApi.List(1,10,"","")
-	const rows = res.data || [];
+	const rows = res.rows || [];
+
     if(rows.length > 0){
       tenants.value = rows;
-      Object.assign(tenant,rows[0]);
+      assignTenant(rows[0]);
       currentUuid.value = rows[0].id;
     }
   }catch (err) {
@@ -211,7 +303,7 @@ const chooseTenant = async (id)=>{
   currentUuid.value = id;
   try{
     let res = await tenantApi.Get(id);
-    Object.assign(tenant,res);
+    assignTenant(res);
   }catch (err) {
     //401 error
     if (err?.response?.status === 401){
@@ -249,11 +341,11 @@ const addTenant = async ()=>{
 
 const doAddTenant = async ()=>{
 
-   let res = await tenantApi.Add({name:tenantModal.tenantName.value});
+   let res = await tenantApi.Add({code:tenantModal.tenantCode.value});
    tenantModal.currentId.value = res.id;
    await getTenants();
    tenantModal.add.value.hide();
-   tenant = {id:res.id,name:tenantModal.tenantName.value,mongo:{},redis:{}};
+   tenant = {id:res.id,code:tenantModal.tenantCode.value,mongo:{},redis:{}};
 
 }
 
@@ -261,11 +353,11 @@ const deleteTenantConfirm= async (item)=>{
 
     config.deleteTenantLabel = "Delete Tenant";
     config.showTenantDeleteModal = "showTenantDeleteModal";
-    config.dataTenantId = item.name;
+    config.dataTenantId = item.code;
     const ele = document.getElementById("showTenantDeleteModal");
     config.deleteTenantModal = new bootstrap.Modal(ele);
     config.deleteTenantModal.show(ele);
-    config.dataTenantId = item.name;
+    config.dataTenantId = item.code;
     config.id = item.id;
 
 }
@@ -286,7 +378,7 @@ const deleteTenantInfo = async ()=>{
     toastRef.value.show(err);
   }
 }
-const {id,name,mongo,redis} = toRefs(tenant);
+const {id,code,mongo,redis} = toRefs(tenant);
 const{deleteTenantLabel,showTenantDeleteModal,dataTenantId,info} = toRefs(config);
 
 </script>

@@ -800,24 +800,33 @@ func (t *BMongo) ConfigInfo(ctx context.Context) (*capture.Config, error) {
 type Tenants struct {
 	Id       string    `bson:"_id" json:"id"`
 	CreateAt time.Time `bson:"createAt" json:"createAt"`
-	Name     string    `bson:"name" json:"name"`
+	Code     string    `bson:"code" json:"code"`
 	UpdateAt time.Time `bson:"updateAt" json:"updateAt"`
 	Mongo    Mongo     `bson:"mongo" json:"mongo"`
 	Redis    Redis     `bson:"redis" json:"redis"`
 }
 type Mongo struct {
-	Host       string `bson:"host" json:"host"`
-	GCPHost    string `bson:"gcpHost" json:"gcpHost"`
-	Port       string `bson:"port" json:"port"`
-	DbName     string `bson:"dbName" json:"dbName"`
-	DbUsername string `bson:"dbUsername" json:"dbUsername"`
-	DbPassword string `bson:"dbPassword" json:"dbPassword"`
+	Host       string    `bson:"host" json:"host"`
+	GCPHost    string    `bson:"gcpHost" json:"gcpHost"`
+	Port       string    `bson:"port" json:"port"`
+	DbName     string    `bson:"dbName" json:"dbName"`
+	DbUsername string    `bson:"dbUsername" json:"dbUsername"`
+	DbPassword string    `bson:"dbPassword" json:"dbPassword"`
+	SSL        TenantSSL `bson:"ssl" json:"ssl"`
 }
 type Redis struct {
-	Host     string `bson:"host" json:"host"`
-	GCPHost  string `bson:"gcpHost" json:"gcpHost"`
-	Port     string `bson:"port" json:"port"`
-	Password string `bson:"password" json:"password"`
+	Host     string    `bson:"host" json:"host"`
+	GCPHost  string    `bson:"gcpHost" json:"gcpHost"`
+	Port     string    `bson:"port" json:"port"`
+	Password string    `bson:"password" json:"password"`
+	SSL      TenantSSL `bson:"ssl" json:"ssl"`
+}
+
+type TenantSSL struct {
+	On                bool   `bson:"on" json:"on"`
+	VerifyCertificate bool   `bson:"verifyCertificate" json:"verifyCertificate"`
+	HotReload         bool   `bson:"hotReload" json:"hotReload"`
+	CertFile          string `bson:"certFile" json:"certFile"`
 }
 
 func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) (string, error) {
@@ -855,7 +864,7 @@ func (t *BMongo) TenantsEdit(ctx context.Context, id string, tenants *Tenants) e
 		"$set": bson.M{
 			"mongo":    tenants.Mongo,
 			"redis":    tenants.Redis,
-			"name":     tenants.Name,
+			"code":     tenants.Code,
 			"updateAt": time.Now(),
 		},
 	}
