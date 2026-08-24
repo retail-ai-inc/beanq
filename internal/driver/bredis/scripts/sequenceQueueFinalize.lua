@@ -35,18 +35,26 @@ if redis.call('EXISTS', orderState) == 0 then
     discard('orphan_token')
     return result('ORPHAN_CLEANED')
 end
-if redis.call('HGET', orderState, 'order_key') ~= orderKey then
+local stateValues = redis.call('HMGET', orderState,
+    'order_key', 'scheduler_id', 'phase',
+    'acquisition_id', 'consumer', 'depth')
+local stateOrderKey = stateValues[1]
+local stateSchedulerID = stateValues[2]
+local phase = stateValues[3]
+local stateAcquisitionID = stateValues[4]
+local stateConsumer = stateValues[5]
+local depth = tonumber(stateValues[6] or '-1')
+if stateOrderKey ~= orderKey then
     redis.call('HSET', orderState, 'phase', 'corrupt', 'corrupt_reason', 'order_key_mismatch')
     discard('order_key_mismatch')
     return result('ISOLATED')
 end
-if redis.call('HGET', orderState, 'scheduler_id') ~= schedulerID then
+if stateSchedulerID ~= schedulerID then
     discard('stale_token')
     return result('STALE_CLEANED')
 end
-if redis.call('HGET', orderState, 'phase') ~= 'owned' or
-   redis.call('HGET', orderState, 'acquisition_id') ~= acquisitionID or
-   redis.call('HGET', orderState, 'consumer') ~= consumer then
+if phase ~= 'owned' or stateAcquisitionID ~= acquisitionID or
+   stateConsumer ~= consumer then
     return result('STALE_ACQUISITION')
 end
 
@@ -60,13 +68,11 @@ end
 
 local head = redis.call('LINDEX', orderQueue, 0)
 if not head then
-    local depth = tonumber(redis.call('HGET', orderState, 'depth') or '0')
     local count = tonumber(redis.call('HGET', partitionState, 'count') or '0')
     count = math.max(0, count - math.max(0, depth))
     redis.call('HSET', partitionState, 'count', tostring(count))
     discard('empty_queue')
-    redis.call('DEL', orderState)
-    redis.call('DEL', orderQueue)
+    redis.call('DEL', orderState, orderQueue)
     return result('EMPTY_CLEANED', '', count)
 end
 if head ~= expectedHead then
@@ -76,7 +82,6 @@ if head ~= expectedHead then
 end
 
 local count = tonumber(redis.call('HGET', partitionState, 'count') or '-1')
-local depth = tonumber(redis.call('HGET', orderState, 'depth') or '-1')
 local actualDepth = redis.call('LLEN', orderQueue)
 if count <= 0 or depth <= 0 or depth ~= actualDepth then
     redis.call('HSET', orderState, 'phase', 'corrupt', 'corrupt_reason', 'counter_mismatch')
@@ -101,6 +106,5 @@ if depth > 0 then
     return result('SUCCESSOR', successorID, depth)
 end
 
-redis.call('DEL', orderState)
-redis.call('DEL', orderQueue)
+redis.call('DEL', orderState, orderQueue)
 return result('EMPTY', '', 0)

@@ -16,10 +16,12 @@ if start == "-1" then
 	end
 end
 
-for k = 5, table.getn(ARGV) do
-	if start == "-1" then
-		redis.call('RPUSH', KEYS[2], ARGV[k])
-	else
+if start == "-1" then
+	if table.getn(ARGV) >= 5 then
+		redis.call('RPUSH', KEYS[2], unpack(ARGV, 5, table.getn(ARGV)))
+	end
+else
+	for k = 5, table.getn(ARGV) do
 		redis.call('LSET', KEYS[2], start+k-5, ARGV[k])
 	end
 end
