@@ -98,25 +98,29 @@ func (t *UITool) HostName(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	expiredMembers := make([]any, 0, len(keys)/2)
 	for _, key := range keys {
 		if err := json.NewDecoder(strings.NewReader(key)).Decode(&data); err != nil {
 			continue
 		}
 		if v, ok := data["hostName"]; ok {
 			if cast.ToString(v) == info.Hostname {
-				t.client.ZRem(ctx, hostNameKey, key)
+				expiredMembers = append(expiredMembers, key)
 				data = make(map[string]any, 8)
 				continue
 			}
 		}
 		if v, ok := data["expiredTime"]; ok {
 			if cast.ToInt64(v) < now.Unix() {
-				t.client.ZRem(ctx, hostNameKey, key)
+				expiredMembers = append(expiredMembers, key)
 				data = make(map[string]any, 8)
 				continue
 			}
 		}
 		data = make(map[string]any, 8)
+	}
+	if len(expiredMembers) > 0 {
+		t.client.ZRem(ctx, hostNameKey, expiredMembers...)
 	}
 	memory, err := mem.VirtualMemory()
 	if err != nil {
