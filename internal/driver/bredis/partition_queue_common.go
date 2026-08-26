@@ -13,9 +13,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
+	"golang.org/x/sync/errgroup"
 )
 
 const partitionQueueDefaultMaxLen int64 = 200000
+
+const partitionGroupBootstrapConcurrency = 8
 
 const (
 	partitionReaderIdleDelay = 20 * time.Millisecond
@@ -162,12 +165,15 @@ func validatePartitionQueueMetadata(got, want, queueName string) error {
 }
 
 func bootstrapPartitionGroups(ctx context.Context, client redis.UniversalClient, group, queueName string, partitions int64, streamKey func(int64) string) error {
+	workers, workerCtx := errgroup.WithContext(ctx)
+	workers.SetLimit(partitionGroupBootstrapConcurrency)
 	for partition := int64(0); partition < partitions; partition++ {
-		if err := bootstrapPartitionGroup(ctx, client, group, queueName, partition, streamKey(partition)); err != nil {
-			return err
-		}
+		partition := partition
+		workers.Go(func() error {
+			return bootstrapPartitionGroup(workerCtx, client, group, queueName, partition, streamKey(partition))
+		})
 	}
-	return nil
+	return workers.Wait()
 }
 
 func bootstrapPartitionGroup(ctx context.Context, client redis.UniversalClient, group, queueName string, partition int64, stream string) error {
