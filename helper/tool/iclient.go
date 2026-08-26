@@ -5,6 +5,14 @@ import (
 )
 
 type (
+	InfoSnapshot struct {
+		Info     map[string]string
+		Memory   map[string]any
+		Commands []map[string]any
+		Clients  map[string]any
+		Stats    map[string]any
+		Keyspace []map[string]any
+	}
 	Key struct {
 		NodeId string
 	}
@@ -46,6 +54,7 @@ type (
 		DbSize(ctx context.Context) (int64, error)
 
 		Info(ctx context.Context) (map[string]string, error)
+		Snapshot(ctx context.Context) (InfoSnapshot, error)
 	}
 	// ICommand redis commands
 	ICommand interface {
