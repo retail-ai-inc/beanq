@@ -16,10 +16,11 @@ import (
 )
 
 type SequenceQueue struct {
-	base       queueBase
-	maxLen     int64
-	partitions int64
-	wait       replicationWait
+	base          queueBase
+	maxLen        int64
+	partitions    int64
+	wait          replicationWait
+	metadataCache *metadataValidationCache
 }
 
 func NewSequenceQueue(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *SequenceQueue {
@@ -36,10 +37,11 @@ func newSequenceQueueWithOptions(options queueOptions) *SequenceQueue {
 	base := newQueueBase(options)
 	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, 0, options.partitions)
 	return &SequenceQueue{
-		maxLen:     options.maxLen,
-		partitions: options.partitions,
-		wait:       options.wait,
-		base:       base,
+		maxLen:        options.maxLen,
+		partitions:    options.partitions,
+		wait:          options.wait,
+		base:          base,
+		metadataCache: options.metadataCache,
 	}
 }
 
@@ -77,7 +79,9 @@ func (q *SequenceQueue) ConsumerSequence(ctx context.Context, channel, topic str
 
 func (q *SequenceQueue) sequenceQueueStore(channel, topic string, maxLen int64) *sequenceQueueStore {
 	topology := newSequenceQueueTopology(q.base.prefix, channel, topic, q.partitions)
-	return newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle, q.wait)
+	store := newSequenceQueueStore(q.base.client, topology, maxLen, q.base.deadLetterIdle, q.wait)
+	store.metadataCache = q.metadataCache
+	return store
 }
 
 func sequenceQueueFailedData(channel, topic, orderKey, raw string, cause error) map[string]any {

@@ -19,12 +19,13 @@ const (
 )
 
 type sequenceQueueStore struct {
-	client   redis.UniversalClient
-	scripts  *ScriptCatalog
-	lease    time.Duration
-	topology sequenceQueueTopology
-	maxLen   int64
-	wait     replicationWait
+	client        redis.UniversalClient
+	scripts       *ScriptCatalog
+	lease         time.Duration
+	topology      sequenceQueueTopology
+	maxLen        int64
+	wait          replicationWait
+	metadataCache *metadataValidationCache
 }
 
 type sequenceQueueToken struct {
@@ -83,7 +84,9 @@ func (s *sequenceQueueStore) metadata() partitionQueueMetadata {
 
 // ensureMetadata elects the first complete queue configuration as canonical.
 func (s *sequenceQueueStore) ensureMetadata(ctx context.Context) error {
-	return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "sequence queue", s.metadata())
+	return s.metadataCache.ensure(ctx, s.topology.metadataKey(), s.metadata().canonicalConfig(), func(ctx context.Context) error {
+		return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "sequence queue", s.metadata())
+	})
 }
 
 func (s *sequenceQueueStore) bootstrapGroups(ctx context.Context, group string) error {

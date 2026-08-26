@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
@@ -11,9 +12,26 @@ import (
 	"github.com/rs/xid"
 )
 
+const (
+	delaySchedulerConcurrency  = 8
+	delaySchedulerInitialDelay = 100 * time.Millisecond
+	delaySchedulerMaxDelay     = time.Second
+)
+
 type delayQueueRuntime struct {
 	store   *delayQueueStore
 	runtime *partitionRuntime[streamQueueDispatch]
+}
+
+type delayPartitionSchedule struct {
+	next  time.Time
+	delay time.Duration
+}
+
+type delayPromotionResult struct {
+	partition int64
+	promoted  bool
+	err       error
 }
 
 func newDelayQueueRuntime(store *delayQueueStore, base *queueBase) *delayQueueRuntime {
@@ -34,25 +52,94 @@ func (r *delayQueueRuntime) run(ctx context.Context, channel, topic string, hand
 }
 
 func (r *delayQueueRuntime) scheduler(ctx context.Context) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	states := make([]delayPartitionSchedule, r.store.topology.partitions)
 	for ctx.Err() == nil {
-		active := false
 		now := time.Now()
-		for partition := int64(0); partition < r.store.topology.partitions; partition++ {
-			promoted, err := r.store.promote(ctx, partition, now)
-			if err != nil && !errors.Is(err, context.Canceled) {
-				logger.New().Error(fmt.Errorf("delay queue promote partition %d: %w", partition, err))
+		due := make([]int64, 0, len(states))
+		for partition := range states {
+			if states[partition].next.IsZero() || !now.Before(states[partition].next) {
+				due = append(due, int64(partition))
 			}
-			active = active || promoted
+		}
+		if len(due) == 0 {
+			if !waitDelayScheduler(ctx, nextDelaySchedulerWake(states, now)) {
+				return
+			}
+			continue
+		}
+
+		results := make(chan delayPromotionResult, len(due))
+		for start := 0; start < len(due); start += delaySchedulerConcurrency {
+			end := min(start+delaySchedulerConcurrency, len(due))
+			var workers sync.WaitGroup
+			for _, partition := range due[start:end] {
+				workers.Add(1)
+				go func(partition int64) {
+					defer workers.Done()
+					promoted, err := r.store.promote(ctx, partition, now)
+					results <- delayPromotionResult{partition: partition, promoted: promoted, err: err}
+				}(partition)
+			}
+			workers.Wait()
+		}
+		close(results)
+
+		active := false
+		for result := range results {
+			state := &states[result.partition]
+			if result.err != nil && !errors.Is(result.err, context.Canceled) {
+				logger.New().Error(fmt.Errorf("delay queue promote partition %d: %w", result.partition, result.err))
+			}
+			if result.promoted {
+				state.reset()
+				active = true
+			} else {
+				state.advance()
+			}
 		}
 		if active {
 			continue
 		}
-		select {
-		case <-ctx.Done():
+		if !waitDelayScheduler(ctx, nextDelaySchedulerWake(states, time.Now())) {
 			return
-		case <-ticker.C:
 		}
+	}
+}
+
+func (s *delayPartitionSchedule) advance() {
+	if s.delay <= 0 {
+		s.delay = delaySchedulerInitialDelay
+	} else {
+		s.delay = min(s.delay*2, delaySchedulerMaxDelay)
+	}
+	jitterRange := max(s.delay/5, time.Nanosecond)
+	jitter := time.Duration(time.Now().UnixNano() % int64(jitterRange))
+	s.next = time.Now().Add(s.delay + jitter)
+}
+
+func (s *delayPartitionSchedule) reset() {
+	s.delay = 0
+	s.next = time.Time{}
+}
+
+func nextDelaySchedulerWake(states []delayPartitionSchedule, now time.Time) time.Duration {
+	delay := delaySchedulerMaxDelay
+	for _, state := range states {
+		if state.next.IsZero() || !now.Before(state.next) {
+			return 0
+		}
+		delay = min(delay, state.next.Sub(now))
+	}
+	return max(delay, time.Nanosecond)
+}
+
+func waitDelayScheduler(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }

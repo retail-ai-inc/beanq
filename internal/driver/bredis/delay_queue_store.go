@@ -14,10 +14,11 @@ import (
 const delayQueuePromoteBatch = int64(100)
 
 type delayQueueStore struct {
-	client   redis.UniversalClient
-	topology delayQueueTopology
-	maxLen   int64
-	wait     replicationWait
+	client        redis.UniversalClient
+	topology      delayQueueTopology
+	maxLen        int64
+	wait          replicationWait
+	metadataCache *metadataValidationCache
 }
 
 func newDelayQueueStore(client redis.UniversalClient, topology delayQueueTopology, maxLen int64, waits ...replicationWait) *delayQueueStore {
@@ -32,7 +33,9 @@ func (s *delayQueueStore) metadata() partitionQueueMetadata {
 }
 
 func (s *delayQueueStore) ensureMetadata(ctx context.Context) error {
-	return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "delay queue", s.metadata())
+	return s.metadataCache.ensure(ctx, s.topology.metadataKey(), s.metadata().canonicalConfig(), func(ctx context.Context) error {
+		return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "delay queue", s.metadata())
+	})
 }
 
 func (s *delayQueueStore) bootstrapGroups(ctx context.Context, group string) error {
@@ -100,7 +103,8 @@ func (s *delayQueueStore) promote(ctx context.Context, partition int64, now time
 		}
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			for _, data := range decoded {
-				pipe.XAdd(ctx, NewZAddArgs(stream, "", "*", s.maxLen, 0, data))
+				args := NewZAddArgs(stream, "", "*", s.maxLen, 0, data)
+				pipe.XAdd(ctx, args)
 			}
 			// Invalid entries are removed too; otherwise they permanently block the head.
 			members := make([]any, len(values))

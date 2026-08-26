@@ -123,12 +123,13 @@ func NewBrokerWithOptions(client redis.UniversalClient, options BrokerOptions) *
 		mode: options.ReplicationWait.Mode, replicas: options.ReplicationWait.Replicas,
 		aofLocal: options.ReplicationWait.AOFLocal, timeout: options.ReplicationWait.Timeout,
 	}
+	metadataCache := &metadataValidationCache{}
 	queue := func(partitions int64, config *capture.Config) queueOptions {
 		return queueOptions{
 			client: client, prefix: options.Prefix, maxLen: options.MaxLen, partitions: partitions,
 			runtime:        queueRuntimeOptions{workers: options.ConsumerWorkers, readers: options.ConsumerReaders},
 			deadLetterIdle: options.DeadLetterIdle, gracefulShutdownTimeout: options.GracefulShutdownTimeout,
-			captureConfig: config, wait: wait,
+			captureConfig: config, wait: wait, metadataCache: metadataCache,
 		}
 	}
 	normal := func(config *capture.Config) *Normal {
