@@ -20,6 +20,8 @@ type UITool struct {
 	prefix string
 }
 
+const queueMessageScanBatch int64 = 100
+
 func NewUITool(client redis.UniversalClient, prefix string) *UITool {
 
 	return &UITool{
@@ -29,33 +31,55 @@ func NewUITool(client redis.UniversalClient, prefix string) *UITool {
 }
 
 func (t *UITool) QueueMessage(ctx context.Context) error {
-	streamKeys, err := t.client.Keys(ctx, "*"+t.prefix+"*:stream*").Result()
-	if err != nil {
-		return fmt.Errorf("list queue streams: %w", err)
-	}
-
 	var total, pending int64
-	for _, streamKey := range streamKeys {
-		keyType, err := t.client.Type(ctx, streamKey).Result()
+	seen := make(map[string]struct{})
+	var cursor uint64
+	for {
+		streamKeys, nextCursor, err := t.client.Scan(ctx, cursor, t.prefix+"*:stream*", queueMessageScanBatch).Result()
 		if err != nil {
-			return fmt.Errorf("read queue key type for %q: %w", streamKey, err)
+			return fmt.Errorf("scan queue streams: %w", err)
 		}
-		if keyType != "stream" {
-			continue
+		cursor = nextCursor
+		keys := make([]string, 0, len(streamKeys))
+		keyTypes := make([]*redis.StatusCmd, 0, len(streamKeys))
+		groupsCommands := make([]*redis.XInfoGroupsCmd, 0, len(streamKeys))
+		lengthCommands := make([]*redis.IntCmd, 0, len(streamKeys))
+		pipe := t.client.Pipeline()
+		for _, streamKey := range streamKeys {
+			if _, exists := seen[streamKey]; exists {
+				continue
+			}
+			seen[streamKey] = struct{}{}
+			keys = append(keys, streamKey)
+			keyTypes = append(keyTypes, pipe.Type(ctx, streamKey))
+			groupsCommands = append(groupsCommands, pipe.XInfoGroups(ctx, streamKey))
+			lengthCommands = append(lengthCommands, pipe.XLen(ctx, streamKey))
 		}
-		groups, err := t.client.XInfoGroups(ctx, streamKey).Result()
-		if err != nil && err != redis.Nil {
-			return fmt.Errorf("read consumer groups for %q: %w", streamKey, err)
+		_, _ = pipe.Exec(ctx)
+		for index, streamKey := range keys {
+			keyType, err := keyTypes[index].Result()
+			if err != nil {
+				return fmt.Errorf("read queue key type for %q: %w", streamKey, err)
+			}
+			if keyType != "stream" {
+				continue
+			}
+			groups, err := groupsCommands[index].Result()
+			if err != nil && err != redis.Nil {
+				return fmt.Errorf("read consumer groups for %q: %w", streamKey, err)
+			}
+			if len(groups) > 0 {
+				pending += groups[0].Pending
+			}
+			length, err := lengthCommands[index].Result()
+			if err != nil {
+				return fmt.Errorf("read stream length for %q: %w", streamKey, err)
+			}
+			total += length
 		}
-		if len(groups) > 0 {
-			pending += groups[0].Pending
+		if cursor == 0 {
+			break
 		}
-
-		length, err := t.client.XLen(ctx, streamKey).Result()
-		if err != nil {
-			return fmt.Errorf("read stream length for %q: %w", streamKey, err)
-		}
-		total += length
 	}
 	if pending < 0 {
 		pending = 0

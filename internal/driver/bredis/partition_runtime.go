@@ -37,6 +37,8 @@ type partitionRuntime[T any] struct {
 type partitionReaderState struct {
 	cursor    string
 	nextClaim time.Time
+	nextRead  time.Time
+	idleDelay time.Duration
 }
 
 func newPartitionRuntime[T any](adapter partitionRuntimeAdapter[T]) *partitionRuntime[T] {
@@ -146,6 +148,12 @@ func (r *partitionRuntime[T]) pollPartition(ctx context.Context, group, consumer
 			}
 		}
 	}
+	if active {
+		state.resetReadBackoff()
+	}
+	if time.Now().Before(state.nextRead) {
+		return active, ctx.Err() == nil
+	}
 
 	items, err := r.adapter.Read(ctx, group, consumer, partition)
 	if err != nil {
@@ -158,15 +166,39 @@ func (r *partitionRuntime[T]) pollPartition(ctx context.Context, group, consumer
 		if !ignorablePartitionReadError(ctx, err) {
 			r.logError("read", partition, err)
 		}
+		if errors.Is(err, redis.Nil) {
+			state.advanceReadBackoff()
+		}
 		return active, ctx.Err() == nil
 	}
 	active = active || len(items) > 0
+	if len(items) == 0 {
+		state.advanceReadBackoff()
+	} else {
+		state.resetReadBackoff()
+	}
 	for _, item := range items {
 		if !sendPartitionDispatch(ctx, dispatch, partitionDispatch[T]{consumer: consumer, item: item}) {
 			return active, false
 		}
 	}
 	return active, ctx.Err() == nil
+}
+
+func (s *partitionReaderState) advanceReadBackoff() {
+	if s.idleDelay <= 0 {
+		s.idleDelay = partitionReaderIdleDelay
+	} else {
+		s.idleDelay = min(s.idleDelay*2, partitionReaderMaxDelay)
+	}
+	jitterRange := max(s.idleDelay/5, time.Nanosecond)
+	jitter := time.Duration(time.Now().UnixNano() % int64(jitterRange))
+	s.nextRead = time.Now().Add(s.idleDelay + jitter)
+}
+
+func (s *partitionReaderState) resetReadBackoff() {
+	s.idleDelay = 0
+	s.nextRead = time.Time{}
 }
 
 func (r *partitionRuntime[T]) worker(ctx context.Context, channel, topic string, dispatch <-chan partitionDispatch[T], handler public.CallbackWithRetry) {
