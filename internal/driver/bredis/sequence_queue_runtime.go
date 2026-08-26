@@ -172,13 +172,14 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 }
 
 func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease context.CancelFunc, group, consumer, acquisitionID string, token sequenceQueueToken) {
-	ticker := time.NewTicker(r.heartbeatInterval())
-	defer ticker.Stop()
+	interval := r.heartbeatInterval()
+	timer := time.NewTimer(heartbeatDelay(interval))
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-timer.C:
 			result, err := r.store.renew(ctx, group, consumer, acquisitionID, token)
 			if err != nil {
 				if ctx.Err() == nil {
@@ -188,6 +189,7 @@ func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease contex
 				return
 			}
 			state := classifySequenceQueueStoreCode(result.Code)
+			timer.Reset(heartbeatDelay(interval))
 			if state != sequenceQueueStoreNormal || result.Code != bstatus.SequenceQueueCodeRenewed {
 				if state == sequenceQueueStoreNormal {
 					state = sequenceQueueStoreFatal
@@ -236,6 +238,18 @@ func (s sequenceQueueStoreState) String() string {
 	default:
 		return "fatal"
 	}
+}
+
+func heartbeatDelay(interval time.Duration) time.Duration {
+	if interval <= 0 {
+		return time.Second
+	}
+	jitterRange := interval / 10
+	if jitterRange <= 0 {
+		return interval
+	}
+	offset := time.Now().UnixNano()%int64(2*jitterRange+1) - int64(jitterRange)
+	return interval + time.Duration(offset)
 }
 
 func (r *sequenceQueueRuntime) heartbeatInterval() time.Duration {
