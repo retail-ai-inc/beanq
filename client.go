@@ -309,6 +309,11 @@ func newRedisBroker(config ResolvedConfig) (Broker, *capture.Config) {
 	}
 
 	broker := bredis.NewBrokerWithOptions(driver, config.redisBrokerOptions())
+	preloadCtx, preloadCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer preloadCancel()
+	if err := broker.PreloadScripts(preloadCtx); err != nil {
+		logger.New().Panic("preload Redis scripts:", err)
+	}
 
 	var captureConfig *capture.Config
 	var migrator MigrationRunner

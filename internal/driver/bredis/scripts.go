@@ -82,6 +82,18 @@ func DefaultScriptCatalog() *ScriptCatalog {
 	return defaultScriptCatalog
 }
 
+func (c *ScriptCatalog) Load(ctx context.Context, client redis.Scripter) error {
+	if c == nil {
+		return fmt.Errorf("redis script catalog is nil")
+	}
+	for name, script := range c.scripts {
+		if _, err := script.Load(ctx, client).Result(); err != nil {
+			return fmt.Errorf("load redis script %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
 func (c *ScriptCatalog) Run(ctx context.Context, client redis.Scripter, name string, keys []string, args ...any) (any, error) {
 	if c == nil {
 		return nil, fmt.Errorf("redis script catalog is nil")

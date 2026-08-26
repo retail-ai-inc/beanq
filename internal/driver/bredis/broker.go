@@ -228,6 +228,13 @@ func (t *Broker) QueueMessage(ctx context.Context) error {
 	return t.admin.QueueMessage(ctx)
 }
 
+func (t *Broker) PreloadScripts(ctx context.Context) error {
+	if t == nil || t.client == nil {
+		return nil
+	}
+	return DefaultScriptCatalog().Load(ctx, t.client)
+}
+
 func (t *Broker) Driver() any {
 	return t.client
 }
