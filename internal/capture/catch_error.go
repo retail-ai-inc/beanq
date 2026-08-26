@@ -2,6 +2,7 @@ package capture
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -32,6 +33,33 @@ type (
 		Then []Then
 	}
 )
+
+type alertDispatcher struct {
+	queue chan func()
+}
+
+func newAlertDispatcher(workers, capacity int) *alertDispatcher {
+	dispatcher := &alertDispatcher{queue: make(chan func(), capacity)}
+	for range max(workers, 1) {
+		go func() {
+			for job := range dispatcher.queue {
+				job()
+			}
+		}()
+	}
+	return dispatcher
+}
+
+func (d *alertDispatcher) submit(job func()) bool {
+	select {
+	case d.queue <- job:
+		return true
+	default:
+		return false
+	}
+}
+
+var defaultAlertDispatcher = newAlertDispatcher(4, 128)
 
 var (
 	System CatchType = "system"
@@ -118,15 +146,16 @@ func (t *Catch) If(chl *Channel) *Catch {
 }
 
 func (t *Catch) Then(err error) {
-
-	if t == nil {
+	if t == nil || err == nil {
 		return
 	}
-
-	if err == nil {
-		return
+	message := err.Error()
+	if !defaultAlertDispatcher.submit(func() { t.send(message) }) {
+		logger.New().Error(fmt.Errorf("BeanQ alert queue is full; dropping alert"))
 	}
+}
 
+func (t *Catch) send(message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -143,7 +172,7 @@ func (t *Catch) Then(err error) {
 				} else {
 					client.From(user)
 					client.Subject("BeanQ alert")
-					client.TextBody(err.Error())
+					client.TextBody(message)
 					client.To(then.Value)
 					if sendErr := client.SendContext(ctx); sendErr == nil {
 						continue
@@ -155,7 +184,6 @@ func (t *Catch) Then(err error) {
 			if t.config.Email.SendGrid.Key == "" {
 				continue
 			}
-
 			client, clientErr := email.NewSendGrid(t.config.Email.SendGrid.Key)
 			if clientErr != nil {
 				logger.New().Error(clientErr)
@@ -164,26 +192,21 @@ func (t *Catch) Then(err error) {
 			client.From(t.config.Email.SendGrid.FromAddress)
 			client.FromName(t.config.Email.SendGrid.FromName)
 			client.Subject("BeanQ alert")
-			client.TextBody(err.Error())
+			client.TextBody(message)
 			client.To(then.Value)
 			if sendErr := client.SendContext(ctx); sendErr != nil {
 				logger.New().Error(sendErr)
-				continue
 			}
 		}
 		if then.Key == "slack" {
-			if t.config.Slack.BotAuthToken == "" {
+			if t.config.Slack.BotAuthToken == "" || (then.Parameters.Channel == "" && then.Parameters.WorkSpace == "") {
 				continue
 			}
-			if then.Parameters.Channel == "" && then.Parameters.WorkSpace == "" {
-				continue
-			}
-			xclient := xslack.NewClient(t.config.Slack.BotAuthToken)
-			xclient.Channel(then.Parameters.Channel)
-			xclient.Color(xslack.Danger)
-
-			if err := xclient.Send(ctx, xslack.Field{Title: "Beanq Error", Value: err.Error(), Short: true}); err != nil {
-				logger.New().Error(err)
+			client := xslack.NewClient(t.config.Slack.BotAuthToken)
+			client.Channel(then.Parameters.Channel)
+			client.Color(xslack.Danger)
+			if sendErr := client.Send(ctx, xslack.Field{Title: "Beanq Error", Value: message, Short: true}); sendErr != nil {
+				logger.New().Error(sendErr)
 			}
 		}
 	}
