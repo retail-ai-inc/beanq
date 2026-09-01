@@ -28,6 +28,7 @@ type queueOptions struct {
 	gracefulShutdownTimeout time.Duration
 	captureConfig           *capture.Config
 	wait                    replicationWait
+	metadataCache           *metadataValidationCache
 }
 
 type queueBase struct {

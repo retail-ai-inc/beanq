@@ -123,12 +123,13 @@ func NewBrokerWithOptions(client redis.UniversalClient, options BrokerOptions) *
 		mode: options.ReplicationWait.Mode, replicas: options.ReplicationWait.Replicas,
 		aofLocal: options.ReplicationWait.AOFLocal, timeout: options.ReplicationWait.Timeout,
 	}
+	metadataCache := &metadataValidationCache{}
 	queue := func(partitions int64, config *capture.Config) queueOptions {
 		return queueOptions{
 			client: client, prefix: options.Prefix, maxLen: options.MaxLen, partitions: partitions,
 			runtime:        queueRuntimeOptions{workers: options.ConsumerWorkers, readers: options.ConsumerReaders},
 			deadLetterIdle: options.DeadLetterIdle, gracefulShutdownTimeout: options.GracefulShutdownTimeout,
-			captureConfig: config, wait: wait,
+			captureConfig: config, wait: wait, metadataCache: metadataCache,
 		}
 	}
 	normal := func(config *capture.Config) *Normal {
@@ -225,6 +226,13 @@ func (t *Broker) HostName(ctx context.Context) error {
 
 func (t *Broker) QueueMessage(ctx context.Context) error {
 	return t.admin.QueueMessage(ctx)
+}
+
+func (t *Broker) PreloadScripts(ctx context.Context) error {
+	if t == nil || t.client == nil {
+		return nil
+	}
+	return DefaultScriptCatalog().Load(ctx, t.client)
 }
 
 func (t *Broker) Driver() any {

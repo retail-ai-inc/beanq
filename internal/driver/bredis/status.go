@@ -2,10 +2,16 @@ package bredis
 
 import (
 	"context"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
+)
+
+const (
+	statusWaitInitialDelay = 5 * time.Millisecond
+	statusWaitMaxDelay     = 200 * time.Millisecond
 )
 
 type Status struct {
@@ -65,25 +71,39 @@ func (t *Status) waitStatus(ctx context.Context, key string) (map[string]string,
 }
 
 func (t *Status) waitStatuses(ctx context.Context, keys ...string) (map[string]string, error) {
+	delay := statusWaitInitialDelay
 	for {
+		for _, key := range keys {
+			cmd := t.client.HGetAll(ctx, key)
+			if err := cmd.Err(); err != nil {
+				return nil, err
+			}
+			val := cmd.Val()
+			if len(val) <= 0 {
+				continue
+			}
+			if value, ok := val["status"]; ok && value != bstatus.StatusSuccess && value != bstatus.StatusFailed {
+				continue
+			}
+			return val, nil
+		}
+
+		jitterRange := max(delay/4, time.Nanosecond)
+		jitter := time.Duration(time.Now().UnixNano() % int64(jitterRange))
+		timer := time.NewTimer(delay + jitter)
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			for _, key := range keys {
-				cmd := t.client.HGetAll(ctx, key)
-				if err := cmd.Err(); err != nil {
-					return nil, err
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
 				}
-				val := cmd.Val()
-				if len(val) <= 0 {
-					continue
-				}
-				if v, ok := val["status"]; ok && v != bstatus.StatusSuccess && v != bstatus.StatusFailed {
-					continue
-				}
-				return val, nil
 			}
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
+		if delay < statusWaitMaxDelay {
+			delay = min(delay*2, statusWaitMaxDelay)
 		}
 	}
 }

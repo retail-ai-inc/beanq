@@ -126,6 +126,9 @@ func (unsupportedClient) DbSize(context.Context) (int64, error) {
 func (unsupportedClient) Info(context.Context) (map[string]string, error) {
 	return nil, ErrUnsupportedRedisClient
 }
+func (unsupportedClient) Snapshot(context.Context) (InfoSnapshot, error) {
+	return InfoSnapshot{}, ErrUnsupportedRedisClient
+}
 
 func (unsupportedClient) Keys(context.Context, string) ([]string, error) {
 	return nil, ErrUnsupportedRedisClient
@@ -291,6 +294,78 @@ func (t *BaseClient) Stats(ctx context.Context) (map[string]any, error) {
 
 func (t *BaseClient) DbSize(ctx context.Context) (int64, error) {
 	return t.client.DBSize(ctx).Result()
+}
+
+func (t *BaseClient) Snapshot(ctx context.Context) (InfoSnapshot, error) {
+	raw, err := t.client.Info(ctx).Result()
+	if err != nil {
+		return InfoSnapshot{}, err
+	}
+	sections, info := parseInfoSnapshot(raw)
+	return InfoSnapshot{
+		Info:     info,
+		Memory:   sections["memory"],
+		Commands: parseCommandStats(sections["commandstats"]),
+		Clients:  sections["clients"],
+		Stats:    sections["stats"],
+		Keyspace: parseKeyspace(sections["keyspace"]),
+	}, nil
+}
+
+func parseInfoSnapshot(raw string) (map[string]map[string]any, map[string]string) {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	sections := make(map[string]map[string]any)
+	info := make(map[string]string)
+	section := ""
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.HasPrefix(line, "# ") {
+			section = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "# ")))
+			if sections[section] == nil {
+				sections[section] = make(map[string]any)
+			}
+			continue
+		}
+		key, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		info[key] = value
+		if section != "" {
+			sections[section][key] = value
+		}
+	}
+	return sections, info
+}
+
+func parseCommandStats(values map[string]any) []map[string]any {
+	commands := make(Commands, 0, len(values))
+	for key, raw := range values {
+		command := map[string]any{"command": strings.TrimPrefix(key, "cmdstat_")}
+		for _, field := range strings.Split(cast.ToString(raw), ",") {
+			name, value, ok := strings.Cut(field, "=")
+			if ok {
+				command[name] = value
+			}
+		}
+		commands = append(commands, command)
+	}
+	sort.Sort(commands)
+	return commands
+}
+
+func parseKeyspace(values map[string]any) []map[string]any {
+	keyspace := make([]map[string]any, 0, len(values))
+	for database, raw := range values {
+		entry := map[string]any{"dbname": database}
+		for _, field := range strings.Split(cast.ToString(raw), ",") {
+			name, value, ok := strings.Cut(field, "=")
+			if ok {
+				entry[name] = value
+			}
+		}
+		keyspace = append(keyspace, entry)
+	}
+	return keyspace
 }
 
 func (t *BaseClient) Info(ctx context.Context) (map[string]string, error) {

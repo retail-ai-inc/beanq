@@ -7,10 +7,11 @@ import (
 )
 
 type normalQueueStore struct {
-	client   redis.UniversalClient
-	topology normalQueueTopology
-	maxLen   int64
-	wait     replicationWait
+	client        redis.UniversalClient
+	topology      normalQueueTopology
+	maxLen        int64
+	wait          replicationWait
+	metadataCache *metadataValidationCache
 }
 
 func newNormalQueueStore(client redis.UniversalClient, topology normalQueueTopology, maxLen int64, waits ...replicationWait) *normalQueueStore {
@@ -29,7 +30,9 @@ func (s *normalQueueStore) metadata() partitionQueueMetadata {
 }
 
 func (s *normalQueueStore) ensureMetadata(ctx context.Context) error {
-	return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "normal queue", s.metadata())
+	return s.metadataCache.ensure(ctx, s.topology.metadataKey(), s.metadata().canonicalConfig(), func(ctx context.Context) error {
+		return ensurePartitionQueueMetadata(ctx, s.client, s.wait, s.topology.metadataKey(), "normal queue", s.metadata())
+	})
 }
 
 func validateNormalQueueMetadata(got, want string) error {

@@ -11,10 +11,11 @@ import (
 )
 
 type Schedule struct {
-	base       queueBase
-	maxLen     int64
-	partitions int64
-	wait       replicationWait
+	base          queueBase
+	maxLen        int64
+	partitions    int64
+	wait          replicationWait
+	metadataCache *metadataValidationCache
 }
 
 func NewSchedule(client redis.UniversalClient, prefix string, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Schedule {
@@ -32,11 +33,14 @@ func newScheduleWithOptions(options queueOptions) *Schedule {
 	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, options.partitions, 0)
 	return &Schedule{
 		maxLen: options.maxLen, partitions: options.partitions, wait: options.wait, base: base,
+		metadataCache: options.metadataCache,
 	}
 }
 
 func (s *Schedule) store(channel, topic string) *delayQueueStore {
-	return newDelayQueueStore(s.base.client, newDelayQueueTopology(s.base.prefix, channel, topic, s.partitions), s.maxLen, s.wait)
+	store := newDelayQueueStore(s.base.client, newDelayQueueTopology(s.base.prefix, channel, topic, s.partitions), s.maxLen, s.wait)
+	store.metadataCache = s.metadataCache
+	return store
 }
 
 func (s *Schedule) Publish(ctx context.Context, data map[string]any) error {

@@ -46,16 +46,24 @@ if redis.call('EXISTS', orderState) == 0 then
     discard('orphan_token')
     return result('ORPHAN_CLEANED')
 end
-if redis.call('HGET', orderState, 'order_key') ~= orderKey then
+local stateValues = redis.call('HMGET', orderState,
+    'order_key', 'scheduler_id', 'phase', 'depth',
+    'acquisition_id', 'consumer', 'deadline_ms')
+local stateOrderKey = stateValues[1]
+local stateSchedulerID = stateValues[2]
+local phase = stateValues[3]
+local depth = tonumber(stateValues[4] or '-1')
+local currentAcquisition = stateValues[5] or ''
+local currentConsumer = stateValues[6] or ''
+local currentDeadline = tonumber(stateValues[7] or '0')
+if stateOrderKey ~= orderKey then
     discard('order_key_mismatch')
     return result('ISOLATED')
 end
-if redis.call('HGET', orderState, 'scheduler_id') ~= schedulerID then
+if stateSchedulerID ~= schedulerID then
     discard('stale_token')
     return result('STALE_CLEANED')
 end
-local phase = redis.call('HGET', orderState, 'phase')
-local depth = tonumber(redis.call('HGET', orderState, 'depth') or '-1')
 if phase == 'corrupt' or (phase ~= 'ready' and phase ~= 'owned') or depth <= 0 then
     redis.call('HSET', orderState, 'phase', 'corrupt', 'corrupt_reason', 'invalid_state')
     discard('invalid_state')
@@ -72,22 +80,17 @@ end
 
 local head = redis.call('LINDEX', orderQueue, 0)
 if not head then
-    local depth = tonumber(redis.call('HGET', orderState, 'depth') or '0')
     local count = tonumber(redis.call('HGET', partitionState, 'count') or '0')
     count = math.max(0, count - math.max(0, depth))
     redis.call('HSET', partitionState, 'count', tostring(count))
     discard('empty_queue')
-    redis.call('DEL', orderState)
-    redis.call('DEL', orderQueue)
+    redis.call('DEL', orderState, orderQueue)
     return result('EMPTY_CLEANED', '', count)
 end
 
 local now = redis.call('TIME')
 local nowMS = tonumber(now[1]) * 1000 + math.floor(tonumber(now[2]) / 1000)
 local deadline = nowMS + leaseMS
-local currentAcquisition = redis.call('HGET', orderState, 'acquisition_id') or ''
-local currentConsumer = redis.call('HGET', orderState, 'consumer') or ''
-local currentDeadline = tonumber(redis.call('HGET', orderState, 'deadline_ms') or '0')
 
 if operation == 'renew' then
     if phase ~= 'owned' or currentAcquisition ~= acquisitionID or currentConsumer ~= consumer then

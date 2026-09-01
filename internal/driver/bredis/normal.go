@@ -13,10 +13,11 @@ import (
 )
 
 type Normal struct {
-	base       queueBase
-	maxLen     int64
-	partitions int64
-	wait       replicationWait
+	base          queueBase
+	maxLen        int64
+	partitions    int64
+	wait          replicationWait
+	metadataCache *metadataValidationCache
 }
 
 func NewNormal(client redis.UniversalClient, prefix string, maxLen int64, consumerCount int64, consumerPoolSize int, deadLetterIdle time.Duration, config *capture.Config) *Normal {
@@ -34,11 +35,14 @@ func newNormalWithOptions(options queueOptions) *Normal {
 	base.processLogger = NewProcessLogWithPartitions(options.client, options.prefix, options.partitions, 0)
 	return &Normal{
 		maxLen: options.maxLen, partitions: options.partitions, wait: options.wait, base: base,
+		metadataCache: options.metadataCache,
 	}
 }
 
 func (t *Normal) store(channel, topic string) *normalQueueStore {
-	return newNormalQueueStore(t.base.client, newNormalQueueTopology(t.base.prefix, channel, topic, t.partitions), t.maxLen, t.wait)
+	store := newNormalQueueStore(t.base.client, newNormalQueueTopology(t.base.prefix, channel, topic, t.partitions), t.maxLen, t.wait)
+	store.metadataCache = t.metadataCache
+	return store
 }
 
 func (t *Normal) Publish(ctx context.Context, data map[string]any) error {

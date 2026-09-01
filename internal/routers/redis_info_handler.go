@@ -30,10 +30,8 @@ func NewRedisInfo(client redis.UniversalClient, prefix string, mongo *bmongo.BMo
 	return &RedisInfo{client: client, prefix: prefix, mgo: mongo}
 }
 func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
-
 	result, cancel := response.Get()
 	defer cancel()
-
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -42,30 +40,17 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-
-	nctx := r.Context()
+	ctx := r.Context()
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
-
-	nodeId := r.Header.Get("nodeId")
-	client := tool.ClientFac(t.client, t.prefix, nodeId)
-
-	var (
-		//redis info
-		memory    map[string]any
-		command   []map[string]any
-		clients   map[string]any
-		stats     map[string]any
-		keyspace  []map[string]any
-		eventName = cast.ToString(r.Context().Value(EventName{}))
-	)
-
+	client := tool.ClientFac(t.client, t.prefix, r.Header.Get("nodeId"))
+	eventName := cast.ToString(ctx.Value(EventName{}))
 	for {
 		select {
-		case <-nctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			d, err := client.Info(nctx)
+			snapshot, err := client.Snapshot(ctx)
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode
 				result.Msg = err.Error()
@@ -73,64 +58,14 @@ func (t *RedisInfo) Info(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 				return
 			}
-			memory, err = client.Memory(nctx)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, eventName)
-				flusher.Flush()
-				return
-			}
-
-			command, err = client.CommandStats(nctx)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, eventName)
-				flusher.Flush()
-				return
-			}
-
-			clients, err = client.Clients(nctx)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, eventName)
-				flusher.Flush()
-				return
-			}
-
-			stats, err = client.Stats(nctx)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, eventName)
-				flusher.Flush()
-				return
-			}
-
-			keyspace, err = client.KeySpace(nctx)
-			if err != nil {
-				result.Code = berror.InternalServerErrorCode
-				result.Msg = err.Error()
-				_ = result.EventMsg(w, eventName)
-				flusher.Flush()
-				return
-			}
-
 			result.Data = map[string]any{
-				"info":     d,
-				"commands": command,
-				"clients":  clients,
-				"stats":    stats,
-				"keyspace": keyspace,
-				"memory":   memory,
+				"info": snapshot.Info, "commands": snapshot.Commands,
+				"clients": snapshot.Clients, "stats": snapshot.Stats,
+				"keyspace": snapshot.Keyspace, "memory": snapshot.Memory,
 			}
-
 			_ = result.EventMsg(w, eventName)
 			flusher.Flush()
 			ticker.Reset(10 * time.Second)
-
 		}
 	}
 }

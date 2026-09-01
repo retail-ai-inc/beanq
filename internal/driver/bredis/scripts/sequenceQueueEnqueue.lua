@@ -24,25 +24,29 @@ if capacity == nil or capacity <= 0 then
     return result('BAD_CAPACITY')
 end
 
-local storedCapacity = tonumber(redis.call('HGET', partitionState, 'capacity') or '0')
+local partitionValues = redis.call('HMGET', partitionState, 'capacity', 'count')
+local storedCapacity = tonumber(partitionValues[1] or '0')
+local count = tonumber(partitionValues[2] or '0')
 if storedCapacity == 0 then
-    redis.call('HSET', partitionState, 'capacity', tostring(capacity), 'count', redis.call('HGET', partitionState, 'count') or '0')
+    redis.call('HSET', partitionState, 'capacity', tostring(capacity), 'count', tostring(count))
 elseif storedCapacity ~= capacity then
     return result('CONFIG_MISMATCH', tostring(storedCapacity), 0)
 end
 
-local count = tonumber(redis.call('HGET', partitionState, 'count') or '0')
 if count >= capacity then
     return result('FULL', tostring(capacity), count)
 end
 
 local stateExists = redis.call('EXISTS', orderState) == 1
 local queueLength = redis.call('LLEN', orderQueue)
+local schedulerID = ''
 if stateExists then
-    local stateOrderKey = redis.call('HGET', orderState, 'order_key')
-    local phase = redis.call('HGET', orderState, 'phase')
-    local depth = tonumber(redis.call('HGET', orderState, 'depth') or '-1')
-    local schedulerID = redis.call('HGET', orderState, 'scheduler_id') or ''
+    local stateValues = redis.call('HMGET', orderState,
+        'order_key', 'phase', 'depth', 'scheduler_id')
+    local stateOrderKey = stateValues[1]
+    local phase = stateValues[2]
+    local depth = tonumber(stateValues[3] or '-1')
+    schedulerID = stateValues[4] or ''
     if stateOrderKey ~= orderKey or phase == 'corrupt' or
        (phase ~= 'ready' and phase ~= 'owned') or depth ~= queueLength or
        depth <= 0 or schedulerID == '' then
@@ -74,4 +78,4 @@ if not stateExists then
 end
 
 redis.call('HINCRBY', orderState, 'depth', 1)
-return result('QUEUED', redis.call('HGET', orderState, 'scheduler_id'), count)
+return result('QUEUED', schedulerID, count)

@@ -13,7 +13,7 @@ func NewZAddArgs(stream, minId, Id string, maxLen, Limit int64, vals any) *redis
 		NoMkStream: false,
 		MaxLen:     maxLen,
 		MinID:      minId,
-		Approx:     false,
+		Approx:     true,
 		Limit:      Limit,
 		ID:         Id,
 		Values:     vals,
