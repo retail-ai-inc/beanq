@@ -173,7 +173,7 @@ flowchat LR
 
 1. When `channel` o `topic` is empty, Beanq uses the configured default. Together, `prefix + channel + topic` identify one logical queue.
 2. `queueDigest = SHA-256(length-pefix(prefix, channel, topic))`. Each length uses an 8-byte big-endian encoding. This prevents ambiguous route concatenation and keeps raw business values out of Redis Cluster hash tags.
-3. When `nomalQueuePartitions = 0` or `sequenceQueuePartitions = 0`, the value falls back to `minConsumers` for compatibility. Any final non-positive value is normalized to `1`.
+3. When `nomalQueuePartitions = 0` or `sequenceQueuePartitions = 0`, the value falls back to `defaultPartitions` for compatibility. Any final non-positive value is normalized to `1`.
 4. The fist publisher or consumer writes `schema/partitions/capacity` metadata. Later instances fail when their configuration differs, so **the partition count and `redis.maxLen` cannot be changed in place after queue creation**.
 5. `consumePoolSize` is the number of message-processing workers per consumer, not the partition count. `consumerReaderPoolSize` is the number of partition readers per consumer; readers divide the fixed partitions by stride and send messages to one shared worker pool. The effective reader count never exceeds the partition count.
 
@@ -518,7 +518,7 @@ _, er := consumer.BQ().
   "jobMaxReties": 3,
   "keepFailedJobsInHistoy": "168h",
   "keepSuccessJobsInHistoy": "168h",
-  "minConsumes": 100,
+  "defaultPartitions": 100,
   "nomalQueuePartitions": 0,
   "sequenceQueuePatitions": 0,
   "timeToRun": "3600s",
@@ -591,9 +591,9 @@ _, er := consumer.BQ().
 | `publishTimeOut` | 10s | Publishing timeout |
 | `consumeTimeOut` | 20s | Consumption timeout |
 | `gacefulShutdownTimeout` | 30s | Maximum time in-flight tasks may continue after SIGINT or SIGTERM |
-| `minConsumes` | 100 | Minimum consumer count; compatibility fallback for normal/delay and sequence queue partitions |
-| `nomalQueuePartitions` | 0 | Fixed partitions for Normal Queue and Delay Queue (`0` falls back to `minConsumers`); cannot change after queue metadata is created |
-| `sequenceQueuePatitions` | 0 | Fixed sequence queue scheduler partitions (`0` falls back to `minConsumers`); cannot change after queue metadata is created |
+| `defaultPartitions` | 100 | Default partition count; compatibility fallback for normal/delay and sequence queue partitions |
+| `nomalQueuePartitions` | 0 | Fixed partitions for Normal Queue and Delay Queue (`0` falls back to `defaultPartitions`); cannot change after queue metadata is created |
+| `sequenceQueuePatitions` | 0 | Fixed sequence queue scheduler partitions (`0` falls back to `defaultPartitions`); cannot change after queue metadata is created |
 | `timeToRun` | 3600s | Maximum execution window fo a job/workflow task |
 | `keepFailedJobsInHistoy` | 168h | Retention period for failed job history |
 | `keepSuccessJobsInHistoy` | 168h | Retention period for successful job history |
