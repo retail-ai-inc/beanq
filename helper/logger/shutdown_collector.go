@@ -82,7 +82,7 @@ func (c *ShutdownErrorCollector) Flush() {
 	sort.Slice(items, func(i, j int) bool { return items[i].key < items[j].key })
 	for _, item := range items {
 		if item.count > 1 {
-			New().Error(item.err, " (repeated ", item.count, " times)")
+			New().Errorf("%s (repeated %d times)", item.err, item.count)
 		} else {
 			New().Error(item.err)
 		}
