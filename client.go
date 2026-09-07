@@ -463,13 +463,10 @@ func (c *Client) cloneForCommand() *Client {
 }
 
 func (c *Client) Wait(ctx context.Context) {
-	defer func() {
-		if err := c.Close(); err != nil {
-			logger.New().Error(err)
-		}
-	}()
+	collector := logger.NewShutdownErrorCollector()
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	ctx = logger.WithShutdownCollector(ctx, collector)
 
 	handlersDone := c.startHandlers(ctx)
 	c.startMigration(ctx)
@@ -482,6 +479,10 @@ func (c *Client) Wait(ctx context.Context) {
 	case <-time.After(c.gracefulShutdownTimeout() + clientShutdownCleanupTimeout):
 		logger.New().Warn("Beanq graceful shutdown timed out")
 	}
+	if err := c.Close(); err != nil {
+		collector.Add(err)
+	}
+	collector.Flush()
 	logger.New().Info("Beanq Stop")
 	_ = logger.New().Sync()
 }
