@@ -119,7 +119,7 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 	acquisitionID := xid.New().String()
 	acquired, err := r.store.acquireWithID(ctx, group, consumer, acquisitionID, token)
 	if err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(ctx, err)
 		return
 	}
 	if state := classifySequenceQueueStoreCode(acquired.Code); state != sequenceQueueStoreNormal {
@@ -153,13 +153,13 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 		return
 	}
 	if err := r.logger.AddLog(leaseCtx, result); err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(leaseCtx, err)
 		return
 	}
 
 	finalized, err := r.store.finalizeWithID(leaseCtx, group, consumer, acquisitionID, token, acquired.Head)
 	if err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(leaseCtx, err)
 		return
 	}
 	state := classifySequenceQueueStoreCode(finalized.Code)
@@ -183,7 +183,7 @@ func (r *sequenceQueueRuntime) heartbeat(ctx context.Context, cancelLease contex
 			result, err := r.store.renew(ctx, group, consumer, acquisitionID, token)
 			if err != nil {
 				if ctx.Err() == nil {
-					logger.New().Error(err)
+					logger.LogRuntimeError(ctx, err)
 					cancelLease()
 				}
 				return

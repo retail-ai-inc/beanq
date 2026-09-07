@@ -86,10 +86,10 @@ func (a *streamQueueAdapter) Process(ctx context.Context, _, _, group, _ string,
 		return
 	}
 	if err := a.base.addLog(ctx, result.Data); err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(ctx, err)
 		return
 	}
 	if err := ackAndDelete(ctx, a.client, a.base.wait, item.stream, group, item.message.ID); err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(ctx, err)
 	}
 }
