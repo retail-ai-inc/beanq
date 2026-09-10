@@ -188,6 +188,7 @@ func RouterList(fs2 fs.FS,
 	router.HandleFunc("POST /api/v1/notifications/test", hdls.login.TestNotify, auth)
 	router.HandleFunc("GET /api/v1/clients", hdls.client.List, auth)
 	router.HandleFunc("GET /api/v1/dashboard", hdls.dashboard.Total, auth, requireMongo(mgo))
+	router.HandleFunc("GET /api/v1/dashboard/metrics", hdls.dashboard.Metrics, auth)
 	router.HandleFunc("GET /api/v1/dashboard/stream", hdls.dashboard.Info, AuthSSE(mgo, ui, "dashboard"))
 	router.HandleFunc("GET /api/v1/dashboard/pods/stream", hdls.dashboard.Pods, AuthSSE(mgo, ui, "pods"))
 	router.HandleFunc("GET /api/v1/nodes", hdls.dashboard.Nodes, auth)
