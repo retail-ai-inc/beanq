@@ -37,7 +37,6 @@ import (
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
-	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
@@ -761,7 +760,7 @@ func (b *BQClient) buildMessage(cmd *Publish) *Message {
 		OrderKey:        cmd.orderKey,
 		Payload:         string(cmd.payload),
 		MoodType:        cmd.moodType,
-		AddTime:         cmd.executeTime.Format(timex.DateTime),
+		AddTime:         cmd.executeTime,
 		ExecuteTime:     cmd.executeTime,
 		Id:              messageID,
 		Priority:        b.priority,
