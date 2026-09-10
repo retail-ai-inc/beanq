@@ -156,6 +156,13 @@ func (r *sequenceQueueRuntime) process(ctx context.Context, channel, topic, grou
 		logger.LogRuntimeError(leaseCtx, err)
 		return
 	}
+	if concrete, ok := r.store.(*sequenceQueueStore); ok {
+		if status, _ := result["status"].(string); status == bstatus.StatusSuccess {
+			recordMetric(leaseCtx, concrete.client, concrete.topology.prefix, "success")
+		} else if status == bstatus.StatusFailed {
+			recordMetric(leaseCtx, concrete.client, concrete.topology.prefix, "failed")
+		}
+	}
 
 	finalized, err := r.store.finalizeWithID(leaseCtx, group, consumer, acquisitionID, token, acquired.Head)
 	if err != nil {
