@@ -57,8 +57,6 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			mood = "delay"
-		} else {
-			mood = arr[3]
 		}
 
 		var size int64

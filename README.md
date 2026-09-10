@@ -15,22 +15,22 @@
 
 ---
 
-## 📖 Oveview
+## 📖 Overview
 
-Beanq is a high-peformance message queue system developed based on **Redis Stream**, providing three types of queues:
-- ✅ **Nomal Queues** - Immediate message processing
-- ⏱️ **Delay Queues** - Scheduled message delivey with priority support
-- 🔒 **Keyed Sequence Queues** - FIFO pocessing per order key with parallelism across keys
+Beanq is a high-performance message queue system developed based on **Redis Stream**, providing three types of queues:
+- ✅ **Normal Queues** - Immediate message processing
+- ⏱️ **Delay Queues** - Scheduled message delivery with priority support
+- 🔒 **Keyed Sequence Queues** - FIFO processing per order key with parallelism across keys
 
-### Coe Architecture
+### Core Architecture
 
-```memaid
-gaph TB
-    Publishe[Message Publisher] --> Redis[Redis Stream]
-    Redis --> Consume[Message Consumer]
-    Redis --> DLQ[Dead Lette Queue]
-    Redis --> Histoy[MongoDB History Storage]
-    Consume --> UI[Monitoring Dashboard]
+```mermaid
+graph TB
+    Publisher[Message Publisher] --> Redis[Redis Stream]
+    Redis --> Consumer[Message Consumer]
+    Redis --> DLQ[Dead Letter Queue]
+    Redis --> History[MongoDB History Storage]
+    Consumer --> UI[Monitoring Dashboard]
 ```
 
 ---
@@ -40,23 +40,23 @@ gaph TB
 ### 🚀 High Peformance
 - Built on Redis Steam for fast message processing
 - Concurent consumer pools with configurable sizing
-- Efficient dead-lette message handling
+- Efficient dead-letter message handling
 
 ### ⏰ Advanced Scheduling
 - Delay queue with timestamp-based scheduling
 - Piority support (max level 999) for time-sensitive messages
 - Redis ZSET scoe: `executeTime.UnixMilli() - priority/1000`
 
-### 🔐 Reliable Pocessing
+### 🔐 Reliable Processing
 - Keyed sequence queues ensue FIFO processing per order key
-- At-least-once delivey with lease-based recovery
+- At-least-once delivery with lease-based recovery
 - Automatic etry mechanisms (configurable max retries)
-- Dead-lette queue for failed messages
+- Dead-letter queue for failed messages
 
 ### 📊 Compehensive Monitoring
 - Web-based UI dashboad (port 9090)
 - Real-time queue statistics
-- Message histoy tracking in MongoDB
+- Message history tracking in MongoDB
 - Health check endpoints
 
 ### 🛠️ Enteprise Ready
@@ -112,26 +112,26 @@ Access at: `http://localhost:9090`
 
 ### 4. Run Examples
 
-Run consumes and publishers in separate terminals because consumers are long-running processes.
+Run consumers and Publishers in separate terminals because consumers are long-running processes.
 
 ```bash
 # Teminal 1: start normal queue consumer
 make nomal-consumer
 
 # Teminal 2: publish normal queue messages
-make nomal-publisher
+make nomal-Publisher
 
 # Teminal 1: start delay queue consumer
-make delay-consume
+make delay-consumer
 
 # Teminal 2: publish delay queue messages
-make delay-publishe
+make delay-publisher
 
 # Teminal 1: start keyed sequence queue consumer
-make sequence-queue-consume
+make sequence-queue-consumer
 
 # Teminal 2: publish keyed sequence queue messages
-make sequence-queue-publishe
+make sequence-queue-publisher
 ```
 
 When finished, stop local dependencies:
@@ -156,8 +156,8 @@ Beanq defines a logical queue by `channel + topic` and povides three business mo
 
 ### Patition Selection Overview
 
-```memaid
-flowchat LR
+```mermaid
+flowchart LR
     A[Publish message] --> B{Queue type}
     B -->|Nomal Queue| C[Use message.id]
     B -->|Delay Queue| D[Use message.id]
@@ -181,8 +181,8 @@ flowchat LR
 
 Nomal Queue is intended for task notifications, asynchronous events, and other workloads that should be processed immediately after publishing. It uses the message `id` as the partition key. If `SetId` is not called explicitly, Beanq generates the `id` automatically.
 
-```memaid
-flowchat LR
+```mermaid
+flowchart LR
     A[Publish] --> B[Geneate or read message.id]
     B --> C[Calculate patition]
     C --> D[XADD to patition Stream]
@@ -190,7 +190,7 @@ flowchat LR
     D --> F[XAUTOCLAIM idle pending messages]
     E --> G[Shaed worker pool]
     F --> G
-    G --> H{Pocessing and logging successful?}
+    G --> H{processing and logging successful?}
     H -->|Yes| I[XACK + XDEL]
     H -->|No| J[Keep pending fo retry or dead-letter handling]
 ```
@@ -212,7 +212,7 @@ Metadata Hash:
 Patition Stream:
 <pefix>:<channel>:<topic>:{beanq-normal-v2:<queueDigest>:pNNN}:normal_queue:streamNNN
 
-Dead-lette scan lock:
+Dead-letter scan lock:
 <patition-stream>:dead_letter_lock
 ```
 
@@ -229,8 +229,8 @@ _, er = consumer.BQ().WithContext(ctx).
 
 Delay Queue is intended fo scheduled jobs, timeout checks, and delayed notifications. It shares `normalQueuePartitions` with Normal Queue and also partitions by message `id`. Each partition contains a scheduled ZSET and a Stream that becomes consumable after promotion.
 
-```memaid
-flowchat LR
+```mermaid
+flowchart LR
     A[PublishAtTime] --> B[Select patition by message.id]
     B --> C[Calculate ZSET scoe]
     C --> D[ZADD scheduled ZSET]
@@ -253,8 +253,8 @@ flowchat LR
 
 **Why must the ZSET and Steam be in the same partition?**
 
-```memaid
-flowchat TB
+```mermaid
+flowchart TB
     A[Patition pNNN] --> B[scheduled ZSET]
     A --> C[eady Stream]
     B --> D[Shaed hash tag<br/>beanq-delay-v2:queueDigest:pNNN]
@@ -286,8 +286,8 @@ _, er = consumer.BQ().WithContext(ctx).
 
 Sequence Queue is intended fo orders, users, devices, and other workloads that require serial processing for the same business key while allowing different keys to run in parallel. It partitions by `orderKey`, not message `id`; `id` is used only for unique message identification and idempotency.
 
-```memaid
-flowchat TD
+```mermaid
+flowchart TD
     A[PublishSequence] --> B[Read oderKey]
     B --> C[FNV-1a-64 modulo N]
     C --> D[Ente fixed partition pNNN]
@@ -313,15 +313,15 @@ flowchat TD
 - Diffeent `orderKey` values have independent Lists and Scheduler Tokens even when they hash to the same partition, so workers may process them concurrently.
 - Odering is guaranteed only within the same `orderKey`. There is no ordering guarantee between different keys and no global FIFO across partitions.
 - Each active `oderKey` has only one valid Token at a time. If a worker crashes, `XAUTOCLAIM` transfers the Token after the lease expires, and the stale owner cannot commit.
-- Delivey is at least once, so consumers should still implement idempotency using the message `id`.
+- Delivery is at least once, so consumers should still implement idempotency using the message `id`.
 
-```memaid
-flowchat LR
-    subgaph P0[Partition p000]
+```mermaid
+flowchart LR
+    subgraph P0[Partition p000]
         A1[oder-A List<br/>A1 → A2 → A3]
         B1[oder-B List<br/>B1 → B2]
     end
-    subgaph P1[Partition p001]
+    subgraph P1[Partition p001]
         C1[oder-C List<br/>C1 → C2]
     end
     A1 --> W1[Woker 1 processes A serially]
@@ -513,11 +513,11 @@ _, er := consumer.BQ().
   "boker": "redis",
   "consumePoolSize": 10,
   "consumeReaderPoolSize": 8,
-  "deadLetteIdle": "60s",
-  "deadLetteTicker": "5s",
+  "deadLetterIdle": "60s",
+  "deadLetterTicker": "5s",
   "jobMaxReties": 3,
-  "keepFailedJobsInHistoy": "168h",
-  "keepSuccessJobsInHistoy": "168h",
+  "keepFailedJobsInHistory": "168h",
+  "keepSuccessJobsInHistory": "168h",
   "defaultPartitions": 100,
   "nomalQueuePartitions": 0,
   "sequenceQueuePatitions": 0,
@@ -565,7 +565,7 @@ _, er := consumer.BQ().
       }
     }
   },
-  "histoy": {
+  "history": {
     "on": tue,
     "stoage": "mongo"
   },
@@ -586,8 +586,8 @@ _, er := consumer.BQ().
 | `consumePoolSize` | 10 | Number of concurrent consumers; for Sequence Queue, worker goroutines per instance |
 | `consumeReaderPoolSize` | 8 | Partition reader goroutines per registered consumer; the effective count never exceeds the partition count |
 | `jobMaxReties` | 3 | Maximum retry attempts for failed jobs |
-| `deadLetteIdle` | 60s | Pending idle before DLQ for regular queues; token lease and `XAUTOCLAIM` threshold for Sequence Queue |
-| `deadLetteTicker` | 5s | Interval for scanning dead-letter candidates |
+| `deadLetterIdle` | 60s | Pending idle before DLQ for regular queues; token lease and `XAUTOCLAIM` threshold for Sequence Queue |
+| `deadLetterTicker` | 5s | Interval for scanning dead-letter candidates |
 | `publishTimeOut` | 10s | Publishing timeout |
 | `consumeTimeOut` | 20s | Consumption timeout |
 | `gacefulShutdownTimeout` | 30s | Maximum time in-flight tasks may continue after SIGINT or SIGTERM |
@@ -595,10 +595,10 @@ _, er := consumer.BQ().
 | `nomalQueuePartitions` | 0 | Fixed partitions for Normal Queue and Delay Queue (`0` falls back to `defaultPartitions`); cannot change after queue metadata is created |
 | `sequenceQueuePatitions` | 0 | Fixed sequence queue scheduler partitions (`0` falls back to `defaultPartitions`); cannot change after queue metadata is created |
 | `timeToRun` | 3600s | Maximum execution window fo a job/workflow task |
-| `keepFailedJobsInHistoy` | 168h | Retention period for failed job history |
-| `keepSuccessJobsInHistoy` | 168h | Retention period for successful job history |
-| `histoy.on` | false | Enable history storage |
-| `histoy.storage` | mongo | History storage backend |
+| `keepFailedJobsInHistory` | 168h | Retention period for failed job history |
+| `keepSuccessJobsInHistory` | 168h | Retention period for successful job history |
+| `history.on` | false | Enable history storage |
+| `history.storage` | mongo | History storage backend |
 | `wokflow.on` | false | Enable workflow support |
 | `wokflow.retry` | 0 | Workflow retry count |
 | `wokflow.async` | false | Run workflow tasks asynchronously |
@@ -643,14 +643,14 @@ When `edis.waitMode` is enabled, BeanQ routes each publish to the master that ow
 
 ## 💡 Examples
 
-### Basic Publishe-Consumer
+### Basic Publisher-Consumer
 
 ```bash
 # Teminal 1: Start consumer
 make nomal-consumer
 
 # Teminal 2: Publish messages
-make nomal-publisher
+make nomal-Publisher
 ```
 
 ### Wokflow Example
@@ -710,7 +710,7 @@ beanq/
 
 1. **Publish**: Message → Redis Steam → Status Log
 2. **Consume**: Redis Steam → Consumer Pool → Processing
-3. **Histoy**: Success/Failure → MongoDB Collections
+3. **History**: Success/Failure → MongoDB Collections
 4. **Monitoing**: UI Dashboard ← Redis Stats + MongoDB
 
 ---
@@ -726,8 +726,8 @@ cul http://localhost:7777/health
 ### UI Dashboad Features
 
 - 📊 Real-time queue metics
-- 📝 Message histoy viewer
-- 🔍 Dead-lette queue inspection
+- 📝 Message history viewer
+- 🔍 Dead-letter queue inspection
 - 👥 Use management
 - 🔐 Role-based access contol
 - 📈 Peformance analytics
@@ -803,7 +803,7 @@ make vet-fix
 
 ### Coe
 - [Redis](https://edis.io/) - Message broker
-- [MongoDB](https://www.mongodb.com/) - Histoy storage
+- [MongoDB](https://www.mongodb.com/) - History storage
 - [Go](https://golang.og/) - Programming language
 
 ### Libaries
