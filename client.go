@@ -37,7 +37,6 @@ import (
 
 	"github.com/retail-ai-inc/beanq/v4/helper/berror"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
-	"github.com/retail-ai-inc/beanq/v4/helper/timex"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
 	"github.com/retail-ai-inc/beanq/v4/internal/boptions"
 	"github.com/retail-ai-inc/beanq/v4/internal/btype"
@@ -463,13 +462,10 @@ func (c *Client) cloneForCommand() *Client {
 }
 
 func (c *Client) Wait(ctx context.Context) {
-	defer func() {
-		if err := c.Close(); err != nil {
-			logger.New().Error(err)
-		}
-	}()
+	collector := logger.NewShutdownErrorCollector()
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	ctx = logger.WithShutdownCollector(ctx, collector)
 
 	handlersDone := c.startHandlers(ctx)
 	c.startMigration(ctx)
@@ -482,6 +478,10 @@ func (c *Client) Wait(ctx context.Context) {
 	case <-time.After(c.gracefulShutdownTimeout() + clientShutdownCleanupTimeout):
 		logger.New().Warn("Beanq graceful shutdown timed out")
 	}
+	if err := c.Close(); err != nil {
+		collector.Add(err)
+	}
+	collector.Flush()
 	logger.New().Info("Beanq Stop")
 	_ = logger.New().Sync()
 }
@@ -760,7 +760,7 @@ func (b *BQClient) buildMessage(cmd *Publish) *Message {
 		OrderKey:        cmd.orderKey,
 		Payload:         string(cmd.payload),
 		MoodType:        cmd.moodType,
-		AddTime:         cmd.executeTime.Format(timex.DateTime),
+		AddTime:         cmd.executeTime,
 		ExecuteTime:     cmd.executeTime,
 		Id:              messageID,
 		Priority:        b.priority,

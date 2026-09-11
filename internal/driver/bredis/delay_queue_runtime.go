@@ -73,12 +73,11 @@ func (r *delayQueueRuntime) scheduler(ctx context.Context) {
 			end := min(start+delaySchedulerConcurrency, len(due))
 			var workers sync.WaitGroup
 			for _, partition := range due[start:end] {
-				workers.Add(1)
-				go func(partition int64) {
-					defer workers.Done()
+				partition := partition
+				workers.Go(func() {
 					promoted, err := r.store.promote(ctx, partition, now)
 					results <- delayPromotionResult{partition: partition, promoted: promoted, err: err}
-				}(partition)
+				})
 			}
 			workers.Wait()
 		}
@@ -88,7 +87,7 @@ func (r *delayQueueRuntime) scheduler(ctx context.Context) {
 		for result := range results {
 			state := &states[result.partition]
 			if result.err != nil && !errors.Is(result.err, context.Canceled) {
-				logger.New().Error(fmt.Errorf("delay queue promote partition %d: %w", result.partition, result.err))
+				logger.LogRuntimeError(ctx, fmt.Errorf("delay queue promote partition %d: %w", result.partition, result.err))
 			}
 			if result.promoted {
 				state.reset()

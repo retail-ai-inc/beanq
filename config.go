@@ -149,7 +149,7 @@ type (
 		PublishTimeOut           time.Duration `json:"publishTimeOut" mapstructure:"publishTimeOut"`
 		ConsumeTimeOut           time.Duration `json:"consumeTimeOut" mapstructure:"consumeTimeOut"`
 		GracefulShutdownTimeout  time.Duration `json:"gracefulShutdownTimeout" mapstructure:"gracefulShutdownTimeout"`
-		MinConsumers             int64         `json:"minConsumers" mapstructure:"minConsumers"`
+		DefaultPartitions        int64         `json:"defaultPartitions" mapstructure:"defaultPartitions"`
 		NormalQueuePartitions    int64         `json:"normalQueuePartitions" mapstructure:"normalQueuePartitions"`
 		SequenceQueuePartitions  int64         `json:"sequenceQueuePartitions" mapstructure:"sequenceQueuePartitions"`
 		JobMaxRetries            int           `json:"jobMaxRetries" mapstructure:"jobMaxRetries"`
@@ -193,8 +193,8 @@ func (t ResolvedConfig) redisBrokerOptions() bredis.BrokerOptions {
 	return bredis.BrokerOptions{
 		Prefix:                  t.Redis.Prefix,
 		MaxLen:                  t.Redis.MaxLen,
-		NormalQueuePartitions:   boptions.ResolveNormalQueuePartitions(t.NormalQueuePartitions, t.MinConsumers),
-		SequenceQueuePartitions: boptions.ResolveSequenceQueuePartitions(t.SequenceQueuePartitions, t.MinConsumers),
+		NormalQueuePartitions:   boptions.ResolveNormalQueuePartitions(t.NormalQueuePartitions, t.DefaultPartitions),
+		SequenceQueuePartitions: boptions.ResolveSequenceQueuePartitions(t.SequenceQueuePartitions, t.DefaultPartitions),
 		ConsumerWorkers:         t.ConsumerPoolSize,
 		ConsumerReaders:         t.ConsumerReaderPoolSize,
 		DeadLetterIdle:          t.DeadLetterIdleTime,
@@ -286,8 +286,8 @@ func (t *BeanqConfig) applyRuntimeDefaults() {
 	if t.GracefulShutdownTimeout == 0 {
 		t.GracefulShutdownTimeout = boptions.DefaultOptions.GracefulShutdownTimeout
 	}
-	if t.MinConsumers == 0 {
-		t.MinConsumers = boptions.DefaultOptions.MinConsumers
+	if t.DefaultPartitions == 0 {
+		t.DefaultPartitions = boptions.DefaultOptions.DefaultPartitions
 	}
 }
 

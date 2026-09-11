@@ -79,7 +79,7 @@ func (p *deadLetterProcessor) scan(ctx context.Context) {
 		return
 	}
 	if err := p.move(ctx, pending.ID, deadLetterMessage{values: messages[0].Values}); err != nil {
-		p.report(err)
+		p.report(ctx, err)
 	}
 }
 
@@ -122,13 +122,13 @@ func (p *deadLetterProcessor) move(ctx context.Context, pendingID string, messag
 
 func (p *deadLetterProcessor) releaseLock(ctx context.Context) {
 	if err := p.client.Unlink(ctx, p.lockKey).Err(); err != nil && !errors.Is(err, context.Canceled) {
-		p.report(err)
+		p.report(ctx, err)
 	}
 }
 
-func (p *deadLetterProcessor) report(err error) {
+func (p *deadLetterProcessor) report(ctx context.Context, err error) {
 	capture.Dlq.When(p.captureConfig).If(&capture.Channel{Channel: p.channel, Topic: []string{p.topic}}).Then(err)
-	logger.New().Error(err)
+	logger.LogRuntimeError(ctx, err)
 }
 
 func (m deadLetterMessage) xAddArgs(streamKey, logicKey string) *redis.XAddArgs {

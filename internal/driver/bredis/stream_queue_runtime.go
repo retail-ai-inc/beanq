@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/retail-ai-inc/beanq/v4/helper/bstatus"
 	"github.com/retail-ai-inc/beanq/v4/helper/logger"
 	public "github.com/retail-ai-inc/beanq/v4/internal"
 )
@@ -85,11 +86,16 @@ func (a *streamQueueAdapter) Process(ctx context.Context, _, _, group, _ string,
 	if !ok {
 		return
 	}
+	if status, _ := result.Data["status"].(string); status == bstatus.StatusSuccess {
+		recordMetric(ctx, a.client, a.base.prefix, "success")
+	} else if status == bstatus.StatusFailed {
+		recordMetric(ctx, a.client, a.base.prefix, "failed")
+	}
 	if err := a.base.addLog(ctx, result.Data); err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(ctx, err)
 		return
 	}
 	if err := ackAndDelete(ctx, a.client, a.base.wait, item.stream, group, item.message.ID); err != nil {
-		logger.New().Error(err)
+		logger.LogRuntimeError(ctx, err)
 	}
 }

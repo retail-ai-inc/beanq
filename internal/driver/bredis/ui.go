@@ -86,18 +86,42 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 	}
 	ready := max(total-pending, 0)
 	now := time.Now()
+	produced, _ := t.client.Get(ctx, strings.Join([]string{t.prefix, "metrics", "total", "published"}, ":")).Int64()
+	consumed, _ := t.client.Get(ctx, strings.Join([]string{t.prefix, "metrics", "total", "success"}, ":")).Int64()
 
-	data, err := json.Marshal([]any{total, pending, ready, now.Format(time.DateTime)})
+	// Use a named schema so dashboard clients cannot accidentally swap metric
+	// positions as the payload evolves. Keep the timestamp in milliseconds for
+	// unambiguous client-side date handling.
+	data, err := json.Marshal(map[string]any{
+		"version":      2,
+		"timestamp":    now.UnixMilli(),
+		"streamLength": total,
+		"pending":      pending,
+		"ready":        ready,
+		"produced":     produced,
+		"consumed":     consumed,
+	})
 	if err != nil {
 		return fmt.Errorf("encode queue metrics: %w", err)
 	}
 
 	totalKey := strings.Join([]string{t.prefix, "dashboard_total"}, ":")
+	// Avoid filling the time series with identical snapshots while the queue is
+	// idle. The timestamp is intentionally excluded from the signature.
+	signature := fmt.Sprintf("%d:%d:%d:%d:%d", total, pending, ready, produced, consumed)
+	lastKey := strings.Join([]string{t.prefix, "dashboard_total_last"}, ":")
+	last, lastErr := t.client.Get(ctx, lastKey).Result()
+	if lastErr == nil && last == signature {
+		return nil
+	}
 	if err := t.client.ZAdd(ctx, totalKey, redis.Z{
 		Score:  cast.ToFloat64(now.Unix()),
 		Member: data,
 	}).Err(); err != nil {
 		return fmt.Errorf("store queue metrics: %w", err)
+	}
+	if err := t.client.Set(ctx, lastKey, signature, 48*time.Hour).Err(); err != nil {
+		return fmt.Errorf("store dashboard metric signature: %w", err)
 	}
 
 	before := now.Add(-48 * time.Hour).Unix()

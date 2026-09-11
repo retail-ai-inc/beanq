@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -41,6 +42,63 @@ type BMongo struct {
 	roleCollection     string
 	configCollection   string
 	tenantCollection   string
+}
+
+// EventRuntimePercentiles returns approximate runtime percentiles for successful
+// and failed message events in the requested window. Runtime is stored in seconds.
+func (t *BMongo) EventRuntimePercentiles(ctx context.Context, since time.Time, limit int64) (map[string]float64, error) {
+	if limit <= 0 {
+		limit = 10000
+	}
+	opts := options.Find().SetProjection(bson.M{"runTime": 1}).SetSort(bson.D{{Key: "addTime", Value: -1}}).SetLimit(limit)
+	filter := bson.M{
+		// Older records use "failed" while newer integrations may emit "fail".
+		"status":  bson.M{"$in": []string{"success", "fail", "failed"}},
+		"runTime": bson.M{"$exists": true, "$nin": []any{"", nil}},
+	}
+	if !since.IsZero() {
+		// Event logs created by older schema versions store addTime as an
+		// ISO-8601 string; newer records may use BSON Date.
+		filter["$or"] = []bson.M{
+			{"addTime": bson.M{"$gte": since}},
+			{"addTime": bson.M{"$gte": since.UTC().Format(time.RFC3339Nano)}},
+		}
+	}
+	cur, err := t.database.Collection(t.eventCollection).Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	values := make([]float64, 0)
+	for cur.Next(ctx) {
+		var row struct {
+			RunTime any `bson:"runTime"`
+		}
+		if cur.Decode(&row) == nil {
+			runTime, err := cast.ToFloat64E(row.RunTime)
+			if err == nil && runTime >= 0 {
+				values = append(values, runTime)
+			}
+		}
+	}
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	if len(values) == 0 {
+		return map[string]float64{}, nil
+	}
+	sort.Float64s(values)
+	quantile := func(p float64) float64 {
+		idx := int(math.Ceil(p*float64(len(values)))) - 1
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(values) {
+			idx = len(values) - 1
+		}
+		return values[idx]
+	}
+	return map[string]float64{"p50": quantile(.50), "p95": quantile(.95), "p99": quantile(.99)}, nil
 }
 
 func createCollection(ctx context.Context) error {

@@ -46,7 +46,7 @@ type Options struct {
 	Priority                 float64
 	JobMaxRetry              int
 	DefaultMaxLen            int64
-	MinConsumers             int64
+	DefaultPartitions        int64
 	DeadLetterIdle           time.Duration
 	DeadLetterTicker         time.Duration
 	TimeToRun                time.Duration
@@ -58,16 +58,16 @@ type Options struct {
 	GracefulShutdownTimeout  time.Duration
 }
 
-// ResolveSequenceQueuePartitions keeps the legacy MinConsumers-based topology when
+// ResolveSequenceQueuePartitions uses the default partition count when
 // no dedicated partition count is configured.
-func ResolveSequenceQueuePartitions(partitions, minConsumers int64) int64 {
-	return ResolveQueuePartitions(partitions, minConsumers)
+func ResolveSequenceQueuePartitions(partitions, defaultPartitions int64) int64 {
+	return ResolveQueuePartitions(partitions, defaultPartitions)
 }
 
-// ResolveNormalQueuePartitions keeps the legacy MinConsumers-based topology when
+// ResolveNormalQueuePartitions uses the default partition count when
 // no dedicated partition count is configured.
-func ResolveNormalQueuePartitions(partitions, minConsumers int64) int64 {
-	return ResolveQueuePartitions(partitions, minConsumers)
+func ResolveNormalQueuePartitions(partitions, defaultPartitions int64) int64 {
+	return ResolveQueuePartitions(partitions, defaultPartitions)
 }
 
 func ResolveQueuePartitions(partitions, fallback int64) int64 {
@@ -87,7 +87,7 @@ var DefaultOptions = &Options{
 	GracefulShutdownTimeout:  DefaultGracefulShutdownTimeout,
 	ConsumerPoolSize:         10,
 	ConsumerReaderPoolSize:   8,
-	MinConsumers:             100,
+	DefaultPartitions:        100,
 	TimeToRun:                3600 * time.Second,
 	JobMaxRetry:              3,
 	Prefix:                   "beanq",
