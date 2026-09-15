@@ -160,7 +160,7 @@ func GenerateJournalLines(tx Transaction, accounts map[string]*AccountState, sal
 	if tx.PayeeType == nil || tx.PayeeID == nil {
 		return nil, fmt.Errorf("payee is required")
 	}
-	debitID, creditID := accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(*tx.PayeeType, *tx.PayeeID, tx.Currency)
+	debitID, creditID := tx.PayerID, *tx.PayeeID
 	lines := make([]JournalLine, 0, 2)
 	for i, item := range []struct{ id, direction string }{{debitID, "DEBIT"}, {creditID, "CREDIT"}} {
 		state := accounts[item.id]
@@ -211,15 +211,17 @@ func initConfig() *beanq.BeanqConfig {
 	return &config
 }
 func main() {
+
 	salt := os.Getenv("ACCOUNTING_JOURNAL_SALT")
 	if salt == "" {
 		salt = "development-only-salt"
 	}
-	var postingMu sync.Mutex
+
 	config := initConfig()
 	if config.Mongo == nil {
 		log.Fatal("mongo configuration is required")
 	}
+
 	uri := fmt.Sprintf("mongodb://%s:%s@%s:%s/%s", config.Mongo.UserName, config.Mongo.Password, config.Mongo.Host, config.Mongo.Port, config.Mongo.Database)
 	mongoCtx, cancel := context.WithTimeout(context.Background(), config.Mongo.ConnectTimeOut)
 	defer cancel()
@@ -227,19 +229,22 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	defer dbClient.Disconnect(context.Background())
 	if err := dbClient.Ping(mongoCtx, nil); err != nil {
 		log.Fatal(err)
 	}
+
 	journalCollection := dbClient.Database(config.Mongo.Database).Collection("JournalLines")
 	csm := beanq.New(config)
-	_, err = csm.BQ().WithContext(context.Background()).SubscribeSequence("accounting", "transactions", beanq.DefaultHandle{DoHandle: func(ctx context.Context, message *beanq.Message) error {
+	client := csm.BQ().WithContext(context.Background())
+
+	_, err = client.SubscribeSequence("accounting", "transactions", beanq.DefaultHandle{DoHandle: func(ctx context.Context, message *beanq.Message) error {
 		var tx Transaction
 		if err := json.Unmarshal([]byte(message.Payload), &tx); err != nil {
 			return err
 		}
-		postingMu.Lock()
-		defer postingMu.Unlock()
+
 		if tx.PayeeType == nil || tx.PayeeID == nil {
 			return fmt.Errorf("payee is required")
 		}
@@ -257,29 +262,91 @@ func main() {
 		}
 		for _, line := range lines {
 			log.Printf("journal line: %+v", line)
-			_, err := journalCollection.InsertOne(ctx, bson.M{
-				"JournalLineId":         line.JournalLineID,
-				"TransactionId":         line.TransactionID,
-				"AccountId":             line.AccountID,
-				"Sequence":              line.Sequence,
-				"Direction":             line.Direction,
-				"Amount":                line.Amount,
-				"Currency":              line.Currency,
-				"BeforeBalance":         line.BeforeBalance,
-				"AfterBalance":          line.AfterBalance,
-				"PreviousJournalLineId": line.PreviousJournalLineID,
-				"JournalLineHash":       line.JournalLineHash,
-				"CreatedAt":             line.CreatedAt})
-			if err != nil && !mongo.IsDuplicateKeyError(err) {
-				log.Printf("journal line insertion failed: %v", err)
-				return err
+			if line.AccountID == tx.PayerID {
+				_, err := journalCollection.InsertOne(ctx, bson.M{
+					"JournalLineId":         line.JournalLineID,
+					"TransactionId":         line.TransactionID,
+					"AccountId":             line.AccountID,
+					"Sequence":              line.Sequence,
+					"Direction":             line.Direction,
+					"Amount":                line.Amount,
+					"Currency":              line.Currency,
+					"BeforeBalance":         line.BeforeBalance,
+					"AfterBalance":          line.AfterBalance,
+					"PreviousJournalLineId": line.PreviousJournalLineID,
+					"JournalLineHash":       line.JournalLineHash,
+					"CreatedAt":             line.CreatedAt})
+				if err != nil && !mongo.IsDuplicateKeyError(err) {
+					log.Printf("journal line insertion failed: %v", err)
+					return err
+				}
+			} else {
+				bt, err := json.Marshal(line)
+				if err != nil {
+					log.Printf("journal line marshal failed: %v", err)
+				}
+				if err := client.PublishSequence("merchant", "transactions", line.AccountID, bt).Error(); err != nil {
+					log.Printf("journal line publish failed: %v", err)
+				}
 			}
+
 		}
 		return nil
 	}, DoCancel: func(context.Context, *beanq.Message) error { return nil }, DoError: func(context.Context, error) {}})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	_, err = client.SubscribeSequence("merchant", "transactions", beanq.DefaultHandle{DoHandle: func(ctx context.Context, message *beanq.Message) error {
+		var tx Transaction
+		if err := json.Unmarshal([]byte(message.Payload), &tx); err != nil {
+			return err
+		}
+
+		if tx.PayeeType == nil || tx.PayeeID == nil {
+			return fmt.Errorf("payee is required")
+		}
+		accounts := make(map[string]*AccountState)
+		for _, account := range []string{accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(*tx.PayeeType, *tx.PayeeID, tx.Currency)} {
+			state, err := loadVerifiedAccount(ctx, journalCollection, account, salt)
+			if err != nil {
+				return fmt.Errorf("journal verification failed: %w", err)
+			}
+			accounts[account] = state
+		}
+		lines, err := GenerateJournalLines(tx, accounts, salt)
+		if err != nil {
+			return err
+		}
+		for _, line := range lines {
+			log.Printf("journal line: %+v", line)
+			if line.AccountID == *tx.PayeeID {
+				_, err := journalCollection.InsertOne(ctx, bson.M{
+					"JournalLineId":         line.JournalLineID,
+					"TransactionId":         line.TransactionID,
+					"AccountId":             line.AccountID,
+					"Sequence":              line.Sequence,
+					"Direction":             line.Direction,
+					"Amount":                line.Amount,
+					"Currency":              line.Currency,
+					"BeforeBalance":         line.BeforeBalance,
+					"AfterBalance":          line.AfterBalance,
+					"PreviousJournalLineId": line.PreviousJournalLineID,
+					"JournalLineHash":       line.JournalLineHash,
+					"CreatedAt":             line.CreatedAt})
+				if err != nil && !mongo.IsDuplicateKeyError(err) {
+					log.Printf("journal line insertion failed: %v", err)
+					return err
+				}
+			}
+
+		}
+		return nil
+	}, DoCancel: func(context.Context, *beanq.Message) error { return nil }, DoError: func(context.Context, error) {}})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	log.Println("consumer ready")
 	csm.Wait(context.Background())
 }
