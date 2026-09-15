@@ -1,0 +1,69 @@
+[
+  {
+    "create": "JournalLines",
+    "validator": {
+      "$jsonSchema": {
+        "bsonType": "object",
+        "required": [
+          "JournalLineId",
+          "TransactionId",
+          "AccountId",
+          "Sequence",
+          "Direction",
+          "Amount",
+          "Currency",
+          "BeforeBalance",
+          "AfterBalance",
+          "JournalLineHash",
+          "CreatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "_id": { "bsonType": "objectId" },
+          "JournalLineId": { "bsonType": "string" },
+          "TransactionId": { "bsonType": "string" },
+          "AccountId": { "bsonType": "string" },
+          "Sequence": { "bsonType": "long", "minimum": 1 },
+          "Direction": { "bsonType": "string", "enum": ["DEBIT", "CREDIT"] },
+          "Amount": { "bsonType": "decimal", "description": "Positive amount in the smallest currency unit." },
+          "Currency": { "bsonType": "string" },
+          "BeforeBalance": { "bsonType": "decimal" },
+          "AfterBalance": { "bsonType": "decimal" },
+          "PreviousJournalLineId": { "bsonType": ["string", "null"] },
+          "JournalLineHash": { "bsonType": "string" },
+          "CreatedAt": { "bsonType": "date" }
+        }
+      }
+    },
+    "validationLevel": "strict",
+    "validationAction": "error"
+  },
+  {
+    "createIndexes": "JournalLines",
+    "indexes": [
+      {
+        "key": { "JournalLineId": 1 },
+        "name": "JournalLineId_1",
+        "unique": true
+      },
+      {
+        "key": { "TransactionId": 1, "AccountId": 1 },
+        "name": "TransactionId_1_AccountId_1",
+        "unique": true
+      },
+      {
+        "key": { "AccountId": 1, "Sequence": 1 },
+        "name": "AccountId_1_Sequence_1",
+        "unique": true
+      },
+      {
+        "key": { "AccountId": 1, "Sequence": -1 },
+        "name": "AccountId_1_Sequence_-1"
+      },
+      {
+        "key": { "TransactionId": 1 },
+        "name": "TransactionId_1"
+      }
+    ]
+  }
+]
