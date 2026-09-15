@@ -34,18 +34,18 @@ type Transaction struct {
 	Currency           string  `json:"Currency"`
 }
 type JournalLine struct {
-	JournalLineID string `bson:"JournalLineId"`
-	TransactionID string `bson:"TransactionId"`
-	AccountID string `bson:"AccountId"`
-	Sequence int64 `bson:"Sequence"`
-	Direction string `bson:"Direction"`
-	Currency string `bson:"Currency"`
-	Amount string `bson:"Amount"`
-	BeforeBalance string `bson:"BeforeBalance"`
-	AfterBalance string `bson:"AfterBalance"`
-	PreviousJournalLineID *string `bson:"PreviousJournalLineId"`
-	JournalLineHash string `bson:"JournalLineHash"`
-	CreatedAt time.Time `bson:"CreatedAt"`
+	JournalLineID         string    `bson:"JournalLineId"`
+	TransactionID         string    `bson:"TransactionId"`
+	AccountID             string    `bson:"AccountId"`
+	Sequence              int64     `bson:"Sequence"`
+	Direction             string    `bson:"Direction"`
+	Currency              string    `bson:"Currency"`
+	Amount                string    `bson:"Amount"`
+	BeforeBalance         string    `bson:"BeforeBalance"`
+	AfterBalance          string    `bson:"AfterBalance"`
+	PreviousJournalLineID *string   `bson:"PreviousJournalLineId"`
+	JournalLineHash       string    `bson:"JournalLineHash"`
+	CreatedAt             time.Time `bson:"CreatedAt"`
 }
 
 func decodeJournalLine(document bson.M) (JournalLine, error) {
@@ -56,23 +56,31 @@ func decodeJournalLine(document bson.M) (JournalLine, error) {
 	}
 	var line JournalLine
 	data, err := bson.Marshal(document)
-	if err != nil { return line, err }
+	if err != nil {
+		return line, err
+	}
 	err = bson.Unmarshal(data, &line)
 	return line, err
 }
 
 func loadVerifiedAccount(ctx context.Context, collection *mongo.Collection, account string, salt string) (*AccountState, error) {
-	cursor, err := collection.Find(ctx, bson.M{"AccountId": account}, options.Find().SetSort(bson.D{{Key: "CreatedAt", Value: -1}, {Key: "Sequence", Value: -1}}).SetLimit(3))
-	if err != nil { return nil, err }
+	cursor, err := collection.Find(ctx, bson.M{"AccountId": account}, options.Find().SetSort(bson.D{{Key: "AccountId", Value: -1}, {Key: "Sequence", Value: -1}}).SetLimit(3))
+	if err != nil {
+		return nil, err
+	}
 	defer cursor.Close(ctx)
 	var documents []bson.M
-	if err := cursor.All(ctx, &documents); err != nil { return nil, err }
+	if err := cursor.All(ctx, &documents); err != nil {
+		return nil, err
+	}
 	lines := make([]JournalLine, len(documents))
 	for index, document := range documents {
 		lines[index], err = decodeJournalLine(document)
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 	}
-	for index := len(lines)-1; index >= 0; index-- {
+	for index := len(lines) - 1; index >= 0; index-- {
 		line := lines[index]
 		previousHash := ""
 		if line.PreviousJournalLineID != nil {
@@ -81,9 +89,13 @@ func loadVerifiedAccount(ctx context.Context, collection *mongo.Collection, acco
 				previous = lines[index+1]
 			} else {
 				var document bson.M
-				if err := collection.FindOne(ctx, bson.M{"AccountId": account, "JournalLineId": *line.PreviousJournalLineID}).Decode(&document); err != nil { return nil, fmt.Errorf("account %s: previous journal line: %w", account, err) }
+				if err := collection.FindOne(ctx, bson.M{"AccountId": account, "JournalLineId": *line.PreviousJournalLineID}).Decode(&document); err != nil {
+					return nil, fmt.Errorf("account %s: previous journal line: %w", account, err)
+				}
 				previous, err = decodeJournalLine(document)
-				if err != nil { return nil, err }
+				if err != nil {
+					return nil, err
+				}
 			}
 			before, beforeErr := decimal(line.BeforeBalance)
 			after, afterErr := decimal(previous.AfterBalance)
@@ -93,17 +105,24 @@ func loadVerifiedAccount(ctx context.Context, collection *mongo.Collection, acco
 			previousHash = previous.JournalLineHash
 		} else {
 			before, err := decimal(line.BeforeBalance)
-			if index != len(lines)-1 || line.Sequence != 1 || err != nil || before.Sign() != 0 { return nil, fmt.Errorf("account %s: invalid first journal line", account) }
+			if index != len(lines)-1 || line.Sequence != 1 || err != nil || before.Sign() != 0 {
+				return nil, fmt.Errorf("account %s: invalid first journal line", account)
+			}
 		}
 		if hashLine(salt, previousHash, line) != line.JournalLineHash {
 			return nil, fmt.Errorf("account %s: JournalLineHash mismatch at %s", account, line.JournalLineID)
 		}
 	}
-	if len(lines) == 0 { return &AccountState{Balance: "0"}, nil }
+	if len(lines) == 0 {
+		return &AccountState{Balance: "0"}, nil
+	}
 	latest := lines[0]
-	if _, err := decimal(latest.AfterBalance); err != nil { return nil, err }
+	if _, err := decimal(latest.AfterBalance); err != nil {
+		return nil, err
+	}
 	return &AccountState{Sequence: latest.Sequence, Balance: latest.AfterBalance, LastID: latest.JournalLineID, LastHash: latest.JournalLineHash}, nil
 }
+
 type AccountState struct {
 	Sequence         int64
 	Balance          string
@@ -221,11 +240,15 @@ func main() {
 		}
 		postingMu.Lock()
 		defer postingMu.Unlock()
-		if tx.PayeeType == nil || tx.PayeeID == nil { return fmt.Errorf("payee is required") }
+		if tx.PayeeType == nil || tx.PayeeID == nil {
+			return fmt.Errorf("payee is required")
+		}
 		accounts := make(map[string]*AccountState)
 		for _, account := range []string{accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(*tx.PayeeType, *tx.PayeeID, tx.Currency)} {
 			state, err := loadVerifiedAccount(ctx, journalCollection, account, salt)
-			if err != nil { return fmt.Errorf("journal verification failed: %w", err) }
+			if err != nil {
+				return fmt.Errorf("journal verification failed: %w", err)
+			}
 			accounts[account] = state
 		}
 		lines, err := GenerateJournalLines(tx, accounts, salt)
@@ -248,6 +271,7 @@ func main() {
 				"JournalLineHash":       line.JournalLineHash,
 				"CreatedAt":             line.CreatedAt})
 			if err != nil && !mongo.IsDuplicateKeyError(err) {
+				log.Printf("journal line insertion failed: %v", err)
 				return err
 			}
 		}
