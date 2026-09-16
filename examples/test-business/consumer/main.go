@@ -160,7 +160,7 @@ func GenerateJournalLines(tx Transaction, accounts map[string]*AccountState, sal
 	if tx.PayeeType == nil || tx.PayeeID == nil {
 		return nil, fmt.Errorf("payee is required")
 	}
-	debitID, creditID := accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(*tx.PayeeType, *tx.PayeeID, tx.Currency)
+	debitID, creditID := accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(tx.PayerType, tx.PayerID, tx.Currency)
 	lines := make([]JournalLine, 0, 2)
 	for i, item := range []struct{ id, direction string }{{debitID, "DEBIT"}, {creditID, "CREDIT"}} {
 		state := accounts[item.id]
@@ -215,7 +215,7 @@ func main() {
 	if salt == "" {
 		salt = "development-only-salt"
 	}
-	var postingMu sync.Mutex
+
 	config := initConfig()
 	if config.Mongo == nil {
 		log.Fatal("mongo configuration is required")
@@ -238,13 +238,12 @@ func main() {
 		if err := json.Unmarshal([]byte(message.Payload), &tx); err != nil {
 			return err
 		}
-		postingMu.Lock()
-		defer postingMu.Unlock()
+
 		if tx.PayeeType == nil || tx.PayeeID == nil {
 			return fmt.Errorf("payee is required")
 		}
 		accounts := make(map[string]*AccountState)
-		for _, account := range []string{accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(*tx.PayeeType, *tx.PayeeID, tx.Currency)} {
+		for _, account := range []string{accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(tx.PayerType, tx.PayerID, tx.Currency)} {
 			state, err := loadVerifiedAccount(ctx, journalCollection, account, salt)
 			if err != nil {
 				return fmt.Errorf("journal verification failed: %w", err)
