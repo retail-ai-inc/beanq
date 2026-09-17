@@ -6,6 +6,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/labstack/gommon/log"
 	"github.com/spf13/cast"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -30,6 +31,8 @@ type (
 		Compress      bool
 	}
 )
+
+var _ Logger = (*ZapLogger)(nil)
 
 var (
 	logOnce sync.Once
@@ -145,12 +148,40 @@ func (t ZapLogger) With(key string, val any) ZapLogger {
 		t.zapFields = append(t.zapFields, zap.Stringp(key, v))
 
 	case error:
-		t.zapFields = append(t.zapFields, zap.Error(v))
+		if key == "" {
+			t.zapFields = append(t.zapFields, zap.Error(v))
+		} else {
+			t.zapFields = append(t.zapFields, zap.NamedError(key, v))
+		}
 	default:
-
+		t.zapFields = append(t.zapFields, zap.Any(key, v))
 	}
 	return t
 }
+
+func (t ZapLogger) Output() io.Writer   { return defaultZapConfig.DefaultWriter }
+func (t ZapLogger) SetOutput(io.Writer) {}
+func (t ZapLogger) Prefix() string      { return defaultZapConfig.Pre }
+func (t ZapLogger) SetPrefix(string)    {}
+func (t ZapLogger) Level() log.Lvl      { return log.Lvl(defaultZapConfig.Level + 1) }
+func (t ZapLogger) SetLevel(log.Lvl)    {}
+func (t ZapLogger) SetHeader(string)    {}
+
+func (t ZapLogger) Print(i ...any)                    { t.Info(i...) }
+func (t ZapLogger) Printf(format string, args ...any) { t.Infof(format, args...) }
+func (t ZapLogger) Printj(j log.JSON)                 { t.Info(j) }
+func (t ZapLogger) Debugf(format string, args ...any) { t.Debug(fmt.Sprintf(format, args...)) }
+func (t ZapLogger) Debugj(j log.JSON)                 { t.Debug(j) }
+func (t ZapLogger) Infof(format string, args ...any)  { t.Info(fmt.Sprintf(format, args...)) }
+func (t ZapLogger) Infoj(j log.JSON)                  { t.Info(j) }
+func (t ZapLogger) Warnf(format string, args ...any)  { t.Warn(fmt.Sprintf(format, args...)) }
+func (t ZapLogger) Warnj(j log.JSON)                  { t.Warn(j) }
+func (t ZapLogger) Errorf(format string, args ...any) { t.Error(fmt.Sprintf(format, args...)) }
+func (t ZapLogger) Errorj(j log.JSON)                 { t.Error(j) }
+func (t ZapLogger) Fatalf(format string, args ...any) { t.Fatal(fmt.Sprintf(format, args...)) }
+func (t ZapLogger) Fatalj(j log.JSON)                 { t.Fatal(j) }
+func (t ZapLogger) Panicf(format string, args ...any) { t.Panic(fmt.Sprintf(format, args...)) }
+func (t ZapLogger) Panicj(j log.JSON)                 { t.Panic(j) }
 
 func (t ZapLogger) Info(i ...any) {
 	t.logger.With(t.zapFields...).Info(fmt.Sprint(i...))

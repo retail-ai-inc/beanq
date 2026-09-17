@@ -1,7 +1,8 @@
 ; (async () => {
 
   const { loadModule, version } = window["vue3-sfc-loader"];
-  const compiledCache = createCompiledCache(`beanq:sfc:${Vue.version}:${version}:`);
+  const releaseVersion = window.BEANQ_VERSION || new Date().toISOString();
+  const compiledCache = createCompiledCache(`beanq:sfc:${releaseVersion}:${Vue.version}:${version}:`);
   const i18n = VueI18n.createI18n({
     legacy:false,
     locale:"ja",

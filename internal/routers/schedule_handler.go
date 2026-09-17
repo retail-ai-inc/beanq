@@ -25,15 +25,21 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	key := strings.Join([]string{t.prefix, "*", "delay_stream:stream"}, ":")
-
-	keys, _, err := scanKeys(ctx, t.client, key, 0)
+	legacyKeys, _, err := scanKeys(ctx, t.client, strings.Join([]string{t.prefix, "*", "delay_stream:stream"}, ":"), 0)
 	if err != nil {
 		result.Code = berror.InternalServerErrorCode
 		result.Msg = err.Error()
 		_ = result.Json(w, http.StatusInternalServerError)
 		return
 	}
+	v2Keys, _, err := scanKeys(ctx, t.client, strings.Join([]string{t.prefix, "*", "*", "*", "delay_queue", "scheduled*"}, ":"), 0)
+	if err != nil {
+		result.Code = berror.InternalServerErrorCode
+		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusInternalServerError)
+		return
+	}
+	keys := append(legacyKeys, v2Keys...)
 
 	data := make(map[string][]Stream, 0)
 	for _, queue := range keys {
@@ -42,22 +48,35 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 		if len(arr) < 4 {
 			continue
 		}
-		arr[1] = strings.ReplaceAll(arr[1], "{", "")
-		arr[2] = strings.ReplaceAll(arr[2], "}", "")
+		channel, topic, mood := arr[1], arr[2], arr[3]
+		channel = strings.Trim(channel, "{}")
+		topic = strings.Trim(topic, "{}")
+		if strings.Contains(queue, ":delay_queue:scheduled") {
+			// v2: prefix:channel:topic:{partition}:delay_queue:scheduledNNN
+			if len(arr) < 6 {
+				continue
+			}
+			mood = "delay"
+		}
 
-		size, err := t.client.XLen(ctx, queue).Result()
+		var size int64
+		if strings.Contains(queue, ":delay_queue:scheduled") {
+			size, err = t.client.ZCard(ctx, queue).Result()
+		} else {
+			size, err = t.client.XLen(ctx, queue).Result()
+		}
 		if err != nil {
 			continue
 		}
 		stream := Stream{
 			Prefix:   arr[0],
-			Channel:  arr[1],
-			Topic:    arr[2],
-			MoodType: arr[3],
+			Channel:  channel,
+			Topic:    topic,
+			MoodType: mood,
 			State:    "Run",
 			Size:     int(size),
 		}
-		data[arr[1]] = append(data[arr[1]], stream)
+		data[channel] = append(data[channel], stream)
 	}
 
 	result.Data = data

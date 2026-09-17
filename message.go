@@ -49,7 +49,7 @@ type (
 		OrderKey        string           `json:"orderKey"`
 		LockOrderKeyTTL time.Duration    `json:"lockOrderKeyTTL"`
 		Payload         string           `json:"payload"`
-		AddTime         string           `json:"addTime"`
+		AddTime         time.Time        `json:"addTime"`
 		Consumer        string           `json:"consumer"`
 		RunTime         string           `json:"runTime"`
 		MoodType        btype.MoodType   `json:"moodType"`
@@ -142,9 +142,7 @@ func (data MessageM) ToMessage() *Message {
 				msg.Payload = v
 			}
 		case "addTime":
-			if v, ok := val.(string); ok {
-				msg.AddTime = v
-			}
+			msg.AddTime = cast.ToTime(val)
 		case "executeTime":
 			if v, ok := val.(time.Time); ok {
 				if v.IsZero() {
@@ -209,7 +207,7 @@ func (data MessageS) ToMessage() *Message {
 			msg.Payload = v
 		}
 		if k == "addTime" {
-			msg.AddTime = v
+			msg.AddTime = cast.ToTime(v)
 		}
 		if k == "executeTime" {
 			msg.ExecuteTime = cast.ToTime(v)

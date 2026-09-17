@@ -178,6 +178,7 @@ func (t *Broker) Enqueue(ctx context.Context, data map[string]any) error {
 	if err := route.publish(ctx, data); err != nil {
 		return err
 	}
+	recordMetric(ctx, t.client, t.prefix, "published")
 
 	data["status"] = bstatus.StatusPublished
 	return t.publishLogger.AddLog(ctx, data)

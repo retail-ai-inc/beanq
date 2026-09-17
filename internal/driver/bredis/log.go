@@ -34,11 +34,9 @@ func (t *Log) Migrate(ctx context.Context, data []map[string]any) error {
 	var wait sync.WaitGroup
 	for shard := uint64(0); shard < tool.BeanqLogicLogPartitions; shard++ {
 		key := tool.MakeLogicShardKey(t.prefix, shard)
-		wait.Add(1)
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 			t.migrateStream(ctx, key)
-		}()
+		})
 	}
 	wait.Wait()
 	return nil
@@ -58,11 +56,10 @@ func (t *Log) migrateStream(ctx context.Context, key string) {
 				continue
 			}
 			if errors.Is(err, context.Canceled) {
-				logger.New().Info("Redis Obsolete Stop")
 				return
 			}
 			if !errors.Is(err, redis.Nil) && !errors.Is(err, redis.ErrClosed) {
-				logger.New().Error(err)
+				logger.LogRuntimeError(ctx, err)
 			}
 			continue
 		}
@@ -82,7 +79,7 @@ func (t *Log) migrateStream(ctx context.Context, key string) {
 			continue
 		}
 		if err := t.log.Migrate(ctx, datas); err != nil {
-			logger.New().Error(err)
+			logger.LogRuntimeError(ctx, err)
 			continue
 		}
 		if _, err := t.client.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -90,7 +87,7 @@ func (t *Log) migrateStream(ctx context.Context, key string) {
 			pipe.XDel(ctx, key, ids...)
 			return nil
 		}); err != nil {
-			logger.New().Error(err)
+			logger.LogRuntimeError(ctx, err)
 		}
 	}
 }

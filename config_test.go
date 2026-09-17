@@ -140,7 +140,7 @@ func TestBeanqConfigResolveReturnsIndependentValidatedConfig(t *testing.T) {
 	source := &BeanqConfig{
 		Broker:                  "redis",
 		Redis:                   Redis{Host: "localhost", Port: "6379"},
-		MinConsumers:            7,
+		DefaultPartitions:       7,
 		NormalQueuePartitions:   9,
 		SequenceQueuePartitions: 11,
 		Mongo:                   &Mongo{Collections: map[string]Collection{"event": {Name: "custom-events"}}},
@@ -219,7 +219,7 @@ func TestBeanqConfigSequenceQueuePartitions(t *testing.T) {
 		writeConfig(t, dir, "env", `{
 			"broker":"redis",
 			"redis":{"host":"localhost","port":"6379"},
-			"minConsumers":7,
+			"defaultPartitions":7,
 			"sequenceQueuePartitions":13
 		}`)
 
@@ -233,7 +233,7 @@ func TestBeanqConfigSequenceQueuePartitions(t *testing.T) {
 	})
 
 	t.Run("zero remains compatibility sentinel", func(t *testing.T) {
-		cfg := &BeanqConfig{MinConsumers: 7}
+		cfg := &BeanqConfig{DefaultPartitions: 7}
 		cfg.ApplyDefaults()
 		if cfg.SequenceQueuePartitions != 0 {
 			t.Fatalf("sequenceQueuePartitions = %d, want 0 sentinel", cfg.SequenceQueuePartitions)

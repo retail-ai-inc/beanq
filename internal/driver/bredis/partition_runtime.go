@@ -47,11 +47,11 @@ func newPartitionRuntime[T any](adapter partitionRuntimeAdapter[T]) *partitionRu
 
 func (r *partitionRuntime[T]) run(ctx context.Context, channel, topic string, handler public.CallbackWithRetry) {
 	if err := r.adapter.EnsureMetadata(ctx); err != nil {
-		r.logError("initialize metadata", -1, err)
+		r.logError(ctx, "initialize metadata", -1, err)
 		return
 	}
 	if err := r.adapter.BootstrapGroups(ctx, channel); err != nil {
-		r.logError("bootstrap groups", -1, err)
+		r.logError(ctx, "bootstrap groups", -1, err)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (r *partitionRuntime[T]) pollPartition(ctx context.Context, group, consumer
 		state.cursor = cursor
 		if err != nil {
 			if !ignorablePartitionReadError(ctx, err) {
-				r.logError("autoclaim", partition, err)
+				r.logError(ctx, "autoclaim", partition, err)
 			}
 		} else {
 			active = len(items) > 0
@@ -159,12 +159,12 @@ func (r *partitionRuntime[T]) pollPartition(ctx context.Context, group, consumer
 	if err != nil {
 		if stringsContainsNoGroup(err) {
 			if groupErr := r.adapter.BootstrapPartition(ctx, group, partition); groupErr != nil {
-				r.logError("bootstrap partition", partition, groupErr)
+				r.logError(ctx, "bootstrap partition", partition, groupErr)
 			}
 			return active, true
 		}
 		if !ignorablePartitionReadError(ctx, err) {
-			r.logError("read", partition, err)
+			r.logError(ctx, "read", partition, err)
 		}
 		if errors.Is(err, redis.Nil) {
 			state.advanceReadBackoff()
@@ -215,12 +215,12 @@ func (r *partitionRuntime[T]) worker(ctx context.Context, channel, topic string,
 	}
 }
 
-func (r *partitionRuntime[T]) logError(operation string, partition int64, err error) {
+func (r *partitionRuntime[T]) logError(ctx context.Context, operation string, partition int64, err error) {
 	if partition >= 0 {
-		logger.New().Error(fmt.Errorf("%s %s partition %d: %w", r.adapter.Name(), operation, partition, err))
+		logger.LogRuntimeError(ctx, fmt.Errorf("%s %s partition %d: %w", r.adapter.Name(), operation, partition, err))
 		return
 	}
-	logger.New().Error(fmt.Errorf("%s %s: %w", r.adapter.Name(), operation, err))
+	logger.LogRuntimeError(ctx, fmt.Errorf("%s %s: %w", r.adapter.Name(), operation, err))
 }
 
 func sendPartitionDispatch[T any](ctx context.Context, dispatch chan<- partitionDispatch[T], item partitionDispatch[T]) bool {
