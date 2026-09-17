@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -23,15 +24,16 @@ import (
 )
 
 type Transaction struct {
-	TransactionID      string `json:"TransactionId"`
-	WalletServiceID    int64  `json:"WalletServiceId"`
-	TransactionType    int    `json:"TransactionType"`
-	Status             int    `json:"Status"`
-	PayerType, PayerID string
-	PayeeType          *string `json:"PayeeType"`
-	PayeeID            *string `json:"PayeeId"`
-	Amount             string  `json:"Amount"`
-	Currency           string  `json:"Currency"`
+	TransactionID   string  `json:"TransactionId"`
+	WalletServiceID int64   `json:"WalletServiceId"`
+	TransactionType int     `json:"TransactionType"`
+	Status          int     `json:"Status"`
+	PayerType       string  `json:"PayerType"`
+	PayerID         string  `json:"PayerId"`
+	PayeeType       *string `json:"PayeeType"`
+	PayeeID         *string `json:"PayeeId"`
+	Amount          string  `json:"Amount"`
+	Currency        string  `json:"Currency"`
 }
 type JournalLine struct {
 	JournalLineID         string    `bson:"JournalLineId"`
@@ -64,7 +66,7 @@ func decodeJournalLine(document bson.M) (JournalLine, error) {
 }
 
 func loadVerifiedAccount(ctx context.Context, collection *mongo.Collection, account string, salt string) (*AccountState, error) {
-	cursor, err := collection.Find(ctx, bson.M{"AccountId": account}, options.Find().SetSort(bson.D{{Key: "CreatedAt", Value: -1}, {Key: "Sequence", Value: -1}}).SetLimit(3))
+	cursor, err := collection.Find(ctx, bson.M{"AccountId": account}, options.Find().SetSort(bson.D{{Key: "Sequence", Value: -1}}).SetLimit(3))
 	if err != nil {
 		return nil, err
 	}
@@ -129,9 +131,50 @@ type AccountState struct {
 	LastID, LastHash string
 }
 
+// nextAccountSequence is scoped to one AccountId. The state is populated from
+// that account's latest JournalLine, so every new line is last.Sequence + 1.
+func nextAccountSequence(state *AccountState) int64 {
+	if state == nil || state.Sequence < 1 {
+		return 1
+	}
+	return state.Sequence + 1
+}
+
 func accountID(ownerType, ownerID, currency string) string {
 	return fmt.Sprintf("acct_%s_%s_%s", ownerType, ownerID, currency)
 }
+
+func mustDecimal128(v string) primitive.Decimal128 {
+	d, err := primitive.ParseDecimal128(v)
+	if err != nil {
+		panic(err)
+	}
+	return d
+}
+
+func ensureJournalIndexes(ctx context.Context, c *mongo.Collection) error {
+	_, err := c.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "JournalLineId", Value: 1}}, Options: options.Index().SetName("JournalLineId_1").SetUnique(true)},
+		{Keys: bson.D{{Key: "TransactionId", Value: 1}, {Key: "AccountId", Value: 1}}, Options: options.Index().SetName("TransactionId_1_AccountId_1").SetUnique(true)},
+		//{Keys: bson.D{{Key: "AccountId", Value: 1}, {Key: "Sequence", Value: 1}}, Options: options.Index().SetName("AccountId_1_Sequence_1").SetUnique(true)},
+		{Keys: bson.D{{Key: "AccountId", Value: -1}, {Key: "Sequence", Value: -1}}, Options: options.Index().SetName("AccountId_1_Sequence_-1")},
+		{Keys: bson.D{{Key: "TransactionId", Value: 1}}, Options: options.Index().SetName("TransactionId_1")},
+	})
+	return err
+}
+
+func transactionAccountIDs(tx Transaction) (string, string, error) {
+	if tx.PayerType == "" || tx.PayerID == "" || tx.PayeeType == nil || tx.PayeeID == nil || *tx.PayeeType == "" || *tx.PayeeID == "" {
+		return "", "", fmt.Errorf("payer and payee are required")
+	}
+	payerID := accountID(tx.PayerType, tx.PayerID, tx.Currency)
+	payeeID := accountID(*tx.PayeeType, *tx.PayeeID, tx.Currency)
+	if payerID == payeeID {
+		return "", "", fmt.Errorf("payer and payee must differ")
+	}
+	return payerID, payeeID, nil
+}
+
 func decimal(v string) (*big.Rat, error) {
 	r, ok := new(big.Rat).SetString(v)
 	if !ok {
@@ -141,9 +184,11 @@ func decimal(v string) (*big.Rat, error) {
 }
 func formatDecimal(r *big.Rat) string { return r.FloatString(2) }
 func hashLine(salt, previous string, line JournalLine) string {
-	input := fmt.Sprintf("%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%s|%s", salt, previous, line.JournalLineID, line.TransactionID, line.Sequence, line.Direction, line.Amount, line.Currency, line.BeforeBalance, line.AfterBalance, value(line.PreviousJournalLineID), line.CreatedAt.UTC().Format(time.RFC3339Nano))
-	sum := sha256.Sum256([]byte(input))
-	return hex.EncodeToString(sum[:])
+	input := fmt.Sprintf("%s|%s|%s|%s|%s|%d|%s|%s|%s|%s|%s|%s|%s", salt, previous, line.JournalLineID, line.TransactionID, line.AccountID, line.Sequence, line.Direction, line.Amount, line.Currency, line.BeforeBalance, line.AfterBalance, value(line.PreviousJournalLineID), line.CreatedAt.UTC().Format(time.RFC3339Nano))
+	mac := hmac.New(sha256.New, []byte(salt))
+	_, _ = mac.Write([]byte(input))
+	sum := mac.Sum(nil)
+	return hex.EncodeToString(sum)
 }
 func value(v *string) string {
 	if v == nil {
@@ -157,8 +202,10 @@ func GenerateJournalLines(tx Transaction, accounts map[string]*AccountState, sal
 	if err != nil || amount.Sign() <= 0 {
 		return nil, fmt.Errorf("amount must be positive")
 	}
-	// Both accounting legs use the payer account in this business flow.
-	debitID, creditID := accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(tx.PayerType, tx.PayerID, tx.Currency)
+	debitID, creditID, err := transactionAccountIDs(tx)
+	if err != nil {
+		return nil, err
+	}
 
 	lines := make([]JournalLine, 0, 2)
 	for i, item := range []struct{ id, direction string }{{debitID, "DEBIT"}, {creditID, "CREDIT"}} {
@@ -167,7 +214,10 @@ func GenerateJournalLines(tx Transaction, accounts map[string]*AccountState, sal
 			state = &AccountState{}
 			accounts[item.id] = state
 		}
-		before, _ := decimal(state.Balance)
+		before, err := decimal(state.Balance)
+		if err != nil {
+			return nil, err
+		}
 		if state.Balance == "" {
 			before = new(big.Rat)
 		}
@@ -183,12 +233,17 @@ func GenerateJournalLines(tx Transaction, accounts map[string]*AccountState, sal
 			p := state.LastID
 			prev = &p
 		}
-		line := JournalLine{JournalLineID: id, TransactionID: tx.TransactionID, AccountID: item.id, Sequence: state.Sequence + 1, Direction: item.direction, Amount: formatDecimal(amount), Currency: tx.Currency, BeforeBalance: formatDecimal(before), AfterBalance: formatDecimal(after), PreviousJournalLineID: prev, CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
+		line := JournalLine{JournalLineID: id, TransactionID: tx.TransactionID, AccountID: item.id, Sequence: nextAccountSequence(state), Direction: item.direction, Amount: formatDecimal(amount), Currency: tx.Currency, BeforeBalance: formatDecimal(before), AfterBalance: formatDecimal(after), PreviousJournalLineID: prev, CreatedAt: time.Now().UTC().Truncate(time.Millisecond)}
 		previousHash := state.LastHash
 		line.JournalLineHash = hashLine(salt, previousHash, line)
 		state.Sequence, state.Balance, state.LastID, state.LastHash = line.Sequence, line.AfterBalance, line.JournalLineID, line.JournalLineHash
 		lines = append(lines, line)
 		_ = i
+	}
+	debit, _ := decimal(lines[0].Amount)
+	credit, _ := decimal(lines[1].Amount)
+	if debit.Cmp(credit) != 0 {
+		return nil, fmt.Errorf("unbalanced transaction")
 	}
 	return lines, nil
 }
@@ -235,6 +290,9 @@ func main() {
 	}
 
 	journalCollection := dbClient.Database(config.Mongo.Database).Collection("JournalLines")
+	if err := ensureJournalIndexes(mongoCtx, journalCollection); err != nil {
+		log.Fatal(err)
+	}
 	csm := beanq.New(config)
 	client := csm.BQ().WithContext(context.Background())
 
@@ -243,9 +301,13 @@ func main() {
 		if err := json.Unmarshal([]byte(message.Payload), &tx); err != nil {
 			return err
 		}
-
+		log.Printf("struct payload: %+v \n", tx)
+		payerAccountID, payeeAccountID, err := transactionAccountIDs(tx)
+		if err != nil {
+			return err
+		}
 		accounts := make(map[string]*AccountState)
-		for _, account := range []string{accountID(tx.PayerType, tx.PayerID, tx.Currency), accountID(tx.PayerType, tx.PayerID, tx.Currency)} {
+		for _, account := range []string{payerAccountID, payeeAccountID} {
 			state, err := loadVerifiedAccount(ctx, journalCollection, account, salt)
 			if err != nil {
 				return fmt.Errorf("journal verification failed: %w", err)
@@ -257,7 +319,7 @@ func main() {
 			return err
 		}
 		for _, line := range lines {
-			log.Printf("journal line: %+v", line)
+			log.Printf("journal line: %+v \n", line)
 
 			_, err := journalCollection.InsertOne(ctx, bson.M{
 				"JournalLineId":         line.JournalLineID,
@@ -265,10 +327,10 @@ func main() {
 				"AccountId":             line.AccountID,
 				"Sequence":              line.Sequence,
 				"Direction":             line.Direction,
-				"Amount":                line.Amount,
+				"Amount":                mustDecimal128(line.Amount),
 				"Currency":              line.Currency,
-				"BeforeBalance":         line.BeforeBalance,
-				"AfterBalance":          line.AfterBalance,
+				"BeforeBalance":         mustDecimal128(line.BeforeBalance),
+				"AfterBalance":          mustDecimal128(line.AfterBalance),
 				"PreviousJournalLineId": line.PreviousJournalLineID,
 				"JournalLineHash":       line.JournalLineHash,
 				"CreatedAt":             line.CreatedAt})
@@ -278,7 +340,7 @@ func main() {
 			}
 		}
 		return nil
-	}, DoCancel: func(context.Context, *beanq.Message) error { return nil }, DoError: func(context.Context, error) {}})
+	}, DoCancel: func(context.Context, *beanq.Message) error { return nil }, DoError: func(_ context.Context, err error) { log.Printf("accounting consumer error: %v", err) }})
 	if err != nil {
 		log.Fatal(err)
 	}

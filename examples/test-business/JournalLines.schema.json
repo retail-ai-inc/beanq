@@ -52,11 +52,6 @@
         "unique": true
       },
       {
-        "key": { "AccountId": 1, "Sequence": 1 },
-        "name": "AccountId_1_Sequence_1",
-        "unique": true
-      },
-      {
         "key": { "AccountId": 1, "Sequence": -1 },
         "name": "AccountId_1_Sequence_-1"
       },

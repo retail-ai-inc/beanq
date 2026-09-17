@@ -56,9 +56,10 @@ func initConfig() *beanq.BeanqConfig {
 }
 
 func main() {
+	//
 	merchantType, merchantID := "MERCHANT", "mer_001"
 	tx := Transaction{
-		TransactionID:   "txn_payment_001",
+		TransactionID:   "txn_payment_002",
 		WalletServiceID: 1,
 		TransactionType: 2,
 		Status:          1,
