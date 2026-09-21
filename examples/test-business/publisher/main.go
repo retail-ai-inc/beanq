@@ -57,14 +57,14 @@ func initConfig() *beanq.BeanqConfig {
 
 func main() {
 	//
-	merchantType, merchantID := "MERCHANT", "mer_001"
+	transactionID, merchantType, merchantID, payerType, payerID := "txn_payment_001", "MERCHANT", "mer_001", "CUSTOMER", "cus_001"
 	tx := Transaction{
-		TransactionID:   "txn_payment_002",
+		TransactionID:   transactionID,
 		WalletServiceID: 1,
 		TransactionType: 2,
 		Status:          1,
-		PayerType:       "CUSTOMER",
-		PayerID:         "cus_001",
+		PayerType:       payerType,
+		PayerID:         payerID,
 		PayeeType:       &merchantType,
 		PayeeID:         &merchantID,
 		Amount:          "1000.00",
