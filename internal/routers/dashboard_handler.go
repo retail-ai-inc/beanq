@@ -264,7 +264,7 @@ func (t *Dashboard) Pods(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			// pod status
+
 			pods, err := t.client.ZRange(r.Context(), hostNameKey, 0, -1).Result()
 			if err != nil {
 				result.Code = berror.InternalServerErrorCode

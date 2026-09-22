@@ -131,8 +131,41 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 	return nil
 }
 
-func (t *UITool) HostName(ctx context.Context) error {
+const (
+	hostHeartbeatTTL = 50 * time.Second
+	hostRegistryTTL  = 2 * time.Minute
+)
 
+func PruneHostNameZSet(ctx context.Context, client redis.UniversalClient, key, selfHost string, now time.Time) error {
+	if err := client.ZRemRangeByScore(ctx, key, "-inf", cast.ToString(now.Unix())).Err(); err != nil {
+		return err
+	}
+	if selfHost == "" {
+		return nil
+	}
+
+	members, err := client.ZRange(ctx, key, 0, -1).Result()
+	if err != nil {
+		return err
+	}
+	expired := make([]any, 0)
+	for _, member := range members {
+		var data map[string]any
+		if err := json.NewDecoder(strings.NewReader(member)).Decode(&data); err != nil {
+			expired = append(expired, member)
+			continue
+		}
+		if cast.ToString(data["hostName"]) == selfHost {
+			expired = append(expired, member)
+		}
+	}
+	if len(expired) == 0 {
+		return nil
+	}
+	return client.ZRem(ctx, key, expired...).Err()
+}
+
+func (t *UITool) HostName(ctx context.Context) error {
 	now := time.Now()
 
 	info, err := host.Info()
@@ -141,35 +174,10 @@ func (t *UITool) HostName(ctx context.Context) error {
 	}
 
 	hostNameKey := strings.Join([]string{t.prefix, tool.BeanqHostName}, ":")
-	data := make(map[string]any, 8)
-	keys, _, err := t.client.ZScan(ctx, hostNameKey, 0, "*", 20).Result()
-	if err != nil {
+	if err := PruneHostNameZSet(ctx, t.client, hostNameKey, info.Hostname, now); err != nil {
 		return err
 	}
-	expiredMembers := make([]any, 0, len(keys)/2)
-	for _, key := range keys {
-		if err := json.NewDecoder(strings.NewReader(key)).Decode(&data); err != nil {
-			continue
-		}
-		if v, ok := data["hostName"]; ok {
-			if cast.ToString(v) == info.Hostname {
-				expiredMembers = append(expiredMembers, key)
-				data = make(map[string]any, 8)
-				continue
-			}
-		}
-		if v, ok := data["expiredTime"]; ok {
-			if cast.ToInt64(v) < now.Unix() {
-				expiredMembers = append(expiredMembers, key)
-				data = make(map[string]any, 8)
-				continue
-			}
-		}
-		data = make(map[string]any, 8)
-	}
-	if len(expiredMembers) > 0 {
-		t.client.ZRem(ctx, hostNameKey, expiredMembers...)
-	}
+
 	memory, err := mem.VirtualMemory()
 	if err != nil {
 		return err
@@ -184,14 +192,16 @@ func (t *UITool) HostName(ctx context.Context) error {
 		return err
 	}
 
-	data["hostName"] = info.Hostname
-	data["cpuCount"] = cpuCount
-	data["cpuPercent"] = fmt.Sprintf("%.2f", cpuPercent[0])
-	data["memoryCount"] = memory.Total
-	data["memoryTotal"] = fmt.Sprintf("%.2f", float64(memory.Total/(1024*1024*1024)))
-	data["memoryUsed"] = fmt.Sprintf("%.2f", float64(memory.Used/(1024*1024)))
-	data["memoryPercent"] = fmt.Sprintf("%.2f", memory.UsedPercent)
-	data["expiredTime"] = now.Add(50 * time.Second).Unix()
+	data := map[string]any{
+		"hostName":      info.Hostname,
+		"cpuCount":      cpuCount,
+		"cpuPercent":    fmt.Sprintf("%.2f", cpuPercent[0]),
+		"memoryCount":   memory.Total,
+		"memoryTotal":   fmt.Sprintf("%.2f", float64(memory.Total/(1024*1024*1024))),
+		"memoryUsed":    fmt.Sprintf("%.2f", float64(memory.Used/(1024*1024))),
+		"memoryPercent": fmt.Sprintf("%.2f", memory.UsedPercent),
+		"expiredTime":   now.Add(hostHeartbeatTTL).Unix(),
+	}
 
 	bt, err := json.Marshal(data)
 	if err != nil {
@@ -199,11 +209,10 @@ func (t *UITool) HostName(ctx context.Context) error {
 	}
 
 	if err := t.client.ZAdd(ctx, hostNameKey, redis.Z{
-		Score:  cast.ToFloat64(now.Unix()),
+		Score:  float64(now.Add(hostHeartbeatTTL).Unix()),
 		Member: bt,
 	}).Err(); err != nil {
 		return err
 	}
-
-	return nil
+	return t.client.Expire(ctx, hostNameKey, hostRegistryTTL).Err()
 }
