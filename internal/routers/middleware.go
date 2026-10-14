@@ -37,7 +37,7 @@ func HeaderRule() Middleware {
 	return func(next HandleFunc) HandleFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;")
+			w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com ; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.gstatic.com https://www.google.com; frame-src https://www.google.com https://recaptcha.google.com; connect-src 'self' https://www.google.com ;")
 			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 			next(w, r)

@@ -25,11 +25,17 @@ func TestHeaderRuleAllowsBootstrapDataImages(t *testing.T) {
 	HeaderRule()(func(http.ResponseWriter, *http.Request) {})(res, req)
 
 	policy := res.Header().Get("Content-Security-Policy")
-	if !strings.Contains(policy, "img-src 'self' data:;") {
+	if !strings.Contains(policy, "img-src 'self' data:") {
 		t.Fatalf("CSP does not allow Bootstrap data images: %q", policy)
 	}
 	if strings.Contains(policy, "script-src 'self' data:") {
 		t.Fatalf("CSP unexpectedly allows data scripts: %q", policy)
+	}
+	if !strings.Contains(policy, "https://www.google.com") || !strings.Contains(policy, "https://www.gstatic.com") {
+		t.Fatalf("CSP does not allow Google reCAPTCHA scripts: %q", policy)
+	}
+	if !strings.Contains(policy, "frame-src https://www.google.com") {
+		t.Fatalf("CSP does not allow Google reCAPTCHA frames: %q", policy)
 	}
 }
 

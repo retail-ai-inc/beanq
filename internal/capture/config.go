@@ -3,17 +3,17 @@ package capture
 import "github.com/retail-ai-inc/beanq/v4/helper/json"
 
 type Config struct {
-	Google          GoogleCredential `json:"google" redis:"google"`
-	GoogleReCAPTCHA GoogleReCAPTCHA  `json:"googleReCAPTCHA" redis:"googleReCAPTCHA"`
-	Email           Email            `json:"email"`
-	Rule            Rule             `json:"rule" redis:"rule"`
-	Slack           Slack            `json:"slack" redis:"slack"`
+	Google          GoogleCredential `json:"google" redis:"google" bson:"google"`
+	GoogleReCAPTCHA GoogleReCAPTCHA  `json:"googleReCAPTCHA" redis:"googleReCAPTCHA" bson:"googleReCAPTCHA"`
+	Email           Email            `json:"email" bson:"email"`
+	Rule            Rule             `json:"rule" redis:"rule" bson:"rule"`
+	Slack           Slack            `json:"slack" redis:"slack" bson:"slack"`
 }
 
 type Email struct {
-	Used     string   `json:"used"`
-	SMTP     SMTP     `json:"smtp"`
-	SendGrid SendGrid `json:"sendGrid"`
+	Used     string   `json:"used" bson:"used"`
+	SMTP     SMTP     `json:"smtp" bson:"SMTP"`
+	SendGrid SendGrid `json:"sendGrid" bson:"sendGrid"`
 }
 
 func (t Email) MarshalBinary() ([]byte, error) {
@@ -24,9 +24,9 @@ func (t Email) UnmarshalBinary(data []byte) error {
 }
 
 type GoogleCredential struct {
-	ClientId     string `json:"clientId" redis:"clientId"`
-	ClientSecret string `json:"clientSecret" redis:"clientSecret"`
-	CallBackUrl  string `json:"callBackUrl" redis:"callBackUrl"`
+	ClientId     string `json:"clientId" redis:"clientId" bson:"clientId"`
+	ClientSecret string `json:"clientSecret" redis:"clientSecret" bson:"clientSecret"`
+	CallBackUrl  string `json:"callBackUrl" redis:"callBackUrl" bson:"callBackUrl"`
 }
 
 func (t GoogleCredential) MarshalBinary() ([]byte, error) {
@@ -37,11 +37,10 @@ func (t GoogleCredential) UnmarshalBinary(data []byte) error {
 }
 
 type GoogleReCAPTCHA struct {
-	Active    bool   `json:"active"`
-	ProjectID string `json:"projectId"`
-	SiteKeyV2 string `json:"siteKeyV2"`
-	SiteKeyV3 string `json:"siteKeyV3"`
-	ApiKey    string `json:"apiKey"`
+	Active    bool   `json:"active" bson:"active"`
+	ProjectId string `json:"projectId" bson:"projectId"`
+	SiteKey   string `json:"siteKey" bson:"siteKey"`
+	ApiKey    string `json:"apiKey" bson:"apiKey"`
 }
 
 func (t GoogleReCAPTCHA) MarshalBinary() ([]byte, error) {
@@ -67,9 +66,9 @@ func (t SMTP) UnmarshalBinary(data []byte) error {
 }
 
 type SendGrid struct {
-	Key         string `json:"key" redis:"key"`
-	FromName    string `json:"fromName" redis:"fromName"`
-	FromAddress string `json:"fromAddress" redis:"fromAddress"`
+	Key         string `json:"key" redis:"key" bson:"key"`
+	FromName    string `json:"fromName" redis:"fromName" bson:"fromName"`
+	FromAddress string `json:"fromAddress" redis:"fromAddress" bson:"fromAddress"`
 }
 
 func (t SendGrid) MarshalBinary() ([]byte, error) {
@@ -80,36 +79,36 @@ func (t SendGrid) UnmarshalBinary(data []byte) error {
 }
 
 type ThenParameters struct {
-	WorkSpace string `json:"workSpace" redis:"workSpace"`
-	Channel   string `json:"channel" redis:"channel"`
-	Tags      string `json:"tags" redis:"tags"`
-	Notes     string `json:"notes" redis:"notes"`
+	WorkSpace string `json:"workSpace" redis:"workSpace" bson:"workSpace"`
+	Channel   string `json:"channel" redis:"channel" bson:"channel"`
+	Tags      string `json:"tags" redis:"tags" bson:"tags"`
+	Notes     string `json:"notes" redis:"notes" bson:"notes"`
 }
 
 type Then struct {
-	Key        string         `json:"key" redis:"key"`
-	Value      string         `json:"value" redis:"value"`
-	Parameters ThenParameters `json:"parameters" redis:"parameters"`
+	Key        string         `json:"key" redis:"key" bson:"key"`
+	Value      string         `json:"value" redis:"value" bson:"value"`
+	Parameters ThenParameters `json:"parameters" redis:"parameters" bson:"parameters"`
 }
 type When struct {
-	Key   string `json:"key" redis:"key"`
-	Value string `json:"value" redis:"value"`
-	Text  string `json:"text" redis:"text"`
+	Key   string `json:"key" redis:"key" bson:"key"`
+	Value string `json:"value" redis:"value" bson:"value"`
+	Text  string `json:"text" redis:"text" bson:"text"`
 }
 type Topic struct {
-	Channel  string `json:"channel" redis:"channel"`
-	Topic    string `json:"topic" redis:"topic"`
-	MoodType string `json:"moodType" redis:"moodType"`
+	Channel  string `json:"channel" redis:"channel" bson:"channel"`
+	Topic    string `json:"topic" redis:"topic" bson:"topic"`
+	MoodType string `json:"moodType" redis:"moodType" bson:"moodType"`
 }
 type If struct {
-	Key   string  `json:"key" redis:"key"`
-	Value string  `json:"value" redis:"value"`
-	Topic []Topic `json:"topic" redis:"topic"`
+	Key   string  `json:"key" redis:"key" bson:"key"`
+	Value string  `json:"value" redis:"value" bson:"value"`
+	Topic []Topic `json:"topic" redis:"topic" bson:"topic"`
 }
 type Rule struct {
-	When []When `json:"when" redis:"when"`
-	If   []If   `json:"if" redis:"if"`
-	Then []Then `json:"then" redis:"then"`
+	When []When `json:"when" redis:"when" bson:"when"`
+	If   []If   `json:"if" redis:"if" bson:"if"`
+	Then []Then `json:"then" redis:"then" bson:"then"`
 }
 
 func (t Rule) MarshalBinary() ([]byte, error) {
@@ -120,7 +119,7 @@ func (t Rule) UnmarshalBinary(data []byte) error {
 }
 
 type Slack struct {
-	BotAuthToken string `json:"botAuthToken" redis:"botAuthToken"`
+	BotAuthToken string `json:"botAuthToken" redis:"botAuthToken" bson:"botAuthToken"`
 }
 
 func (t Slack) MarshalBinary() ([]byte, error) {
