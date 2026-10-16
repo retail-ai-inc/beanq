@@ -11,7 +11,7 @@
           <nav>
             <div class="nav nav-tabs" id="nav-tab" role="tablist">
               <button class="nav-link active" id="google-tab" data-bs-toggle="tab" data-bs-target="#google-pan" type="button" role="tab" aria-controls="google-pan" aria-selected="true">Google Login</button>
-              <button class="nav-link" id="google-recaptcha-tab" data-bs-toggle="tab" data-bs-target="#google-recaptcha-pan" type="button" role="tab" aria-controls="google-recaptcha-pan" aria-selected="false">Google Recaptcha</button>
+              <button class="nav-link" id="google-recaptcha-tab" data-bs-toggle="tab" data-bs-target="#google-recaptcha-pan" type="button" role="tab" aria-controls="google-recaptcha-pan" aria-selected="false">Google Fraud Defense</button>
               <button class="nav-link" id="smtp-tab" data-bs-toggle="tab" data-bs-target="#smtp-pan" type="button" role="tab" aria-controls="smtp-pan" aria-selected="false">Email</button>
               <button class="nav-link" id="slack-tab" data-bs-toggle="tab" data-bs-target="#slack-pane" type="button" role="tab" aria-controls="slack-pane" aria-selected="false">Slack</button>
               <button class="nav-link" id="alert-rule-tab" data-bs-toggle="tab" data-bs-target="#alert-rule-pane" type="button" role="tab" aria-controls="alert-rule-pane" aria-selected="false">Alert Rule</button>
@@ -95,8 +95,7 @@ const form = ref({
   googleRecaptcha:{
     active:false,
     projectId:"",
-    siteKeyV2:"",
-    siteKeyV3:"",
+    siteKey:"",
     apiKey:""
   },
   email:{
@@ -223,8 +222,7 @@ const edit = async () => {
     googleRecaptcha:{
       active:value.googleRecaptcha.active,
       projectId:value.googleRecaptcha.projectId,
-      siteKeyV2:value.googleRecaptcha.siteKeyV2,
-      siteKeyV3:value.googleRecaptcha.siteKeyV3,
+      siteKey:value.googleRecaptcha.siteKey,
       apiKey:value.googleRecaptcha.apiKey
     },
     email:{

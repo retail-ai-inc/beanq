@@ -17,8 +17,6 @@
             </label>
           </div>
 
-          <div id="recaptcha-v2" style="margin: 1rem 0;"></div>
-
           <button class="btn btn-primary" type="button" :disabled="disabled" @click="onSubmit">
 
             <span v-if="disabled" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
@@ -36,8 +34,6 @@
           </button>
 
         </div>
-
-`
       </div>
     </div>
   </div>
@@ -45,6 +41,8 @@
 <script setup>
 import { ref,reactive,toRefs,onMounted,onUnmounted } from "vue";
 import { useRouter } from 'vueRouter';
+
+const LOGIN_ACTION = "LOGIN";
 
 const [formData,useRe] = [
     reactive({
@@ -74,24 +72,16 @@ const allowGoogle = async (data)=>{
 
 const googleReCaptcha = ref({
   active:false,
-  projectId:"",
-  siteKeyV3:"",
-  siteKeyV2:"",
-  apiKey:"",
+  siteKey:""
 });
 const googlereCAPTCHA = async(data)=>{
-
-  Object.assign(googleReCaptcha.value, data);
-  let active = data?.active;
-  if(!active){
+  const active = !!data?.active;
+  const siteKey = data?.siteKey || "";
+  googleReCaptcha.value = {active, siteKey};
+  if(!active || siteKey === ""){
     return;
   }
-  let siteKeyV3 = data?.siteKeyV3;
-  if(siteKeyV3 === undefined){
-    return;
-  }
-  await LoadScript(`https://www.google.com/recaptcha/enterprise.js?render=${siteKeyV3}`);
-
+  await LoadScript(`https://www.google.com/recaptcha/enterprise.js?render=${encodeURIComponent(siteKey)}`);
 };
 
 const debouncedHandleKeydown = Base.Debounce(handleKeyDown, 400);
@@ -118,51 +108,28 @@ onUnmounted(()=>{
   window.removeEventListener("keydown",debouncedHandleKeydown)
 })
 
-// google assessments
-async function getGoogleRecaptchaAssessments(token,siteKey,projectId,apiKey){
-
-  const body = {
-    "event": {
-      "token": token,
-      "expectedAction": "USER_ACTION",
-      "siteKey": `${siteKey}`,
+function executeFraudDefense(siteKey){
+  return new Promise((resolve, reject) => {
+    if (!window.grecaptcha?.enterprise) {
+      reject(new Error("Google Cloud Fraud Defense is not loaded"));
+      return;
     }
-  };
-
-  const url = `https://recaptchaenterprise.googleapis.com/v1/projects/${projectId}/assessments?key=${apiKey}`;
-  return await axios.post(url, body,{headers:{"Content-Type":"application/json"}});
-
-}
-
- async function showV2Captcha(v2SiteKey,projectId,apiKey){
-
-    // clear container
-    document.getElementById('recaptcha-v2').innerHTML = '';
-
-    // render v2 reCAPTCHA
-   grecaptcha.enterprise.ready(async()=>{
-     grecaptcha.enterprise.render('recaptcha-v2', {
-       'sitekey': v2SiteKey,
-       'callback': async function(token) {
-
-         const {status,data} = await getGoogleRecaptchaAssessments(token,v2SiteKey,projectId,apiKey);
-
-         if(status !== 200){
-           return false;
-         }
-         await login(formData.user.username,formData.user.password,expiredTimeBool.value);
-         return true;
-       }
-     });
-   })
-
+    grecaptcha.enterprise.ready(async () => {
+      try {
+        const token = await grecaptcha.enterprise.execute(siteKey, {action: LOGIN_ACTION});
+        resolve(token);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
 }
 
 async function onSubmit(event){
-
   event.preventDefault();
 
   disabled.value = true;
+  msg.value = "";
   let {username,password} = formData.user;
 
   if (username === "" || password === ""){
@@ -171,46 +138,30 @@ async function onSubmit(event){
     return;
   }
 
-  let {projectId,siteKeyV3,siteKeyV2,apiKey,active} = googleReCaptcha.value;
+  let {siteKey,active} = googleReCaptcha.value;
+  let recaptchaToken = "";
 
-  if( !active || projectId === "" || siteKeyV3 === "" || siteKeyV2 === "" || apiKey === ""){
-    await login(username,password,expiredTimeBool.value);
-    return;
-  }
-
-  grecaptcha.enterprise.ready(async () => {
+  if(active && siteKey !== ""){
     try{
-      const token = await grecaptcha.enterprise.execute(`${siteKeyV3}`, {action: 'LOGIN'});
-
-      if(token === ""){
-        return;
-      }
-
-      const {status,data} = await getGoogleRecaptchaAssessments(token,siteKeyV3,projectId,apiKey);
-      if(status !== 200){
-        return;
-      }
-
-      // check v3 verification result
-      if(data.tokenProperties?.valid && (data.riskAnalysis?.score || 0) >= 0.5){
-        // v3 verification passed, show v2 captcha
-         await showV2Captcha(siteKeyV2,projectId,apiKey);
-      } else {
+      recaptchaToken = await executeFraudDefense(siteKey);
+      if(!recaptchaToken){
         msg.value = "Verification failed, please try again";
         disabled.value = false;
+        return;
       }
     }catch (e) {
       msg.value = "Verification error, please try again";
       disabled.value = false;
+      return;
     }
-  });
+  }
 
+  await login(username,password,expiredTimeBool.value, recaptchaToken);
 }
 
-async function login(username,password,expiredTimeBool){
-
+async function login(username,password,expiredTimeBool, recaptchaToken){
   try{
-    let res = await loginApi.Login(username,password,expiredTimeBool);
+    let res = await loginApi.Login(username,password,expiredTimeBool, recaptchaToken);
 	Storage.SetItem("authenticated","1");
     Storage.SetItem("roles",res.roles);
     Storage.SetItem("nodeId",res.nodeId);
@@ -222,7 +173,7 @@ async function login(username,password,expiredTimeBool){
       useRe.push("/admin/home");
     },1500)
   }catch(err){
-	msg.value = err.response.data.msg;
+	msg.value = err.response?.data?.msg || err.message || "Login failed";
     disabled.value = false;
   }
 }

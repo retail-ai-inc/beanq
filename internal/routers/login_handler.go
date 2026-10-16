@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,6 +17,7 @@ import (
 	"github.com/retail-ai-inc/beanq/v4/helper/bjwt"
 	"github.com/retail-ai-inc/beanq/v4/helper/bmongo"
 	"github.com/retail-ai-inc/beanq/v4/helper/googleAuth"
+	"github.com/retail-ai-inc/beanq/v4/helper/grecaptcha"
 	"github.com/retail-ai-inc/beanq/v4/helper/response"
 	"github.com/retail-ai-inc/beanq/v4/helper/tool"
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
@@ -37,9 +40,10 @@ func NewLogin(client redis.UniversalClient, mgo *bmongo.BMongo, prefix string, u
 
 func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Username    string `json:"username"`
-		Password    string `json:"password"`
-		ExpiredDays int64  `json:"expiredDays"`
+		Username       string `json:"username"`
+		Password       string `json:"password"`
+		ExpiredDays    int64  `json:"expiredDays"`
+		RecaptchaToken string `json:"recaptchaToken"`
 	}
 	if err := decodeJSON(w, r, &input); err != nil {
 		writeBadRequest(w, err)
@@ -47,6 +51,15 @@ func (t *Login) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	username := input.Username
 	password := input.Password
+
+	if err := t.verifyFraudDefense(r, input.RecaptchaToken); err != nil {
+		result, cancel := response.Get()
+		defer cancel()
+		result.Code = berror.UnauthorizedCode
+		result.Msg = err.Error()
+		_ = result.Json(w, http.StatusUnauthorized)
+		return
+	}
 
 	result, cancel := response.Get()
 	defer cancel()
@@ -275,8 +288,11 @@ func (t *Login) LoginAllowGoogle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{
-		"google":          config.Google,
-		"googleReCAPTCHA": config.GoogleReCAPTCHA,
+		"google": config.Google,
+		"googleReCAPTCHA": map[string]any{
+			"active":  config.GoogleReCAPTCHA.Active,
+			"siteKey": config.GoogleReCAPTCHA.SiteKey,
+		},
 	}
 	res.Data = data
 	_ = res.Json(w, http.StatusOK)
@@ -316,4 +332,55 @@ func (t *Login) TestNotify(w http.ResponseWriter, r *http.Request) {
 	}).Then(errors.New("test"))
 
 	_ = result.Json(w, http.StatusOK)
+}
+
+func (t *Login) verifyFraudDefense(r *http.Request, token string) error {
+	if t.mgo == nil {
+		return nil
+	}
+	config, err := t.mgo.ConfigInfo(r.Context())
+	if err != nil || config == nil || !config.GoogleReCAPTCHA.Active {
+		return nil
+	}
+	if strings.TrimSpace(token) == "" {
+		token = r.Header.Get("X-Recaptcha-Token")
+	}
+	return grecaptcha.VerifyLogin(r.Context(), grecaptcha.Config{
+		Active:       config.GoogleReCAPTCHA.Active,
+		ProjectId:    config.GoogleReCAPTCHA.ProjectId,
+		SiteKey:      config.GoogleReCAPTCHA.SiteKey,
+		APIKey:       config.GoogleReCAPTCHA.ApiKey,
+		HTTPReferrer: requestOrigin(r),
+	}, token, r.UserAgent(), requestIP(r), nil)
+}
+
+func requestIP(r *http.Request) string {
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		if i := strings.Index(xff, ","); i >= 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return xff
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func requestOrigin(r *http.Request) string {
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" {
+		return origin
+	}
+	if referer := strings.TrimSpace(r.Header.Get("Referer")); referer != "" {
+		return referer
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if host := strings.TrimSpace(r.Host); host != "" {
+		return scheme + "://" + host
+	}
+	return ""
 }
