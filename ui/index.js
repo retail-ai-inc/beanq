@@ -110,7 +110,8 @@
   router.beforeEach((to, from) => {
 	let authenticated = Storage.GetItem("authenticated");
 	if (authenticated == null && to.path !== "/login"){
-      return {path:"/login",replace:true};
+      const redirect = rememberLoginRedirect(to.fullPath);
+      return {path:"/login", query: redirect ? {redirect} : {}, replace:true};
     }
   })
 
