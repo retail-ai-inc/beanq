@@ -32,8 +32,9 @@ const showNoticeModal = (()=>{
 const [uRouter] = [useRouter()];
 const reLogin=(()=>{
   Storage.SetItem("token","");
+  const redirect = rememberLoginRedirect(uRouter.currentRoute.value.fullPath);
   Storage.Clear();
-  uRouter.replace("/login");
+  uRouter.replace({path:"/login", query: redirect ? {redirect} : {}});
 })
 onMounted(()=>{
   const eleRetry = document.getElementById(props.id);

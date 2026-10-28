@@ -87,11 +87,12 @@ const googlereCAPTCHA = async(data)=>{
 const debouncedHandleKeydown = Base.Debounce(handleKeyDown, 400);
 
 onMounted(async ()=>{
-	let {authenticated=""} = useRe.currentRoute.value.query;
+	let {authenticated="", redirect=""} = useRe.currentRoute.value.query;
+	rememberLoginRedirect(redirect);
 
 	if (authenticated === "1"){
 	await Storage.SetItem("authenticated","1");
-    useRe.push("/admin/home");
+    useRe.replace(takeLoginRedirect(redirect));
     return;
   }
 
@@ -170,7 +171,7 @@ async function login(username,password,expiredTimeBool, recaptchaToken){
     Storage.SetItem("nodes",nodesRes);
 
     setTimeout(()=>{
-      useRe.push("/admin/home");
+      useRe.replace(takeLoginRedirect(useRe.currentRoute.value.query.redirect));
     },1500)
   }catch(err){
 	msg.value = err.response?.data?.msg || err.message || "Login failed";
@@ -179,6 +180,7 @@ async function login(username,password,expiredTimeBool, recaptchaToken){
 }
 
 function googleLogin(){
+	rememberLoginRedirect(useRe.currentRoute.value.query.redirect);
 	window.location.href="/api/v1/auth/google"
 }
 
