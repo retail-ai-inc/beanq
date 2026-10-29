@@ -32,6 +32,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
       - name: Run tests
+        id: tests
         run: |
           : > coverage_summary.txt
           echo "total: N/A" > total_coverage.txt
@@ -47,6 +48,18 @@ jobs:
           else
             echo "Coverage file is empty or not generated."
           fi
+
+      - name: Diagnose test dependencies
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
+        run: |
+          docker compose ps -a || true
+          docker compose logs --no-color --tail=200 redis mongo || true
+          for service in redis mongo; do
+            container_id=$(docker compose ps -a -q "$service")
+            if [ -n "$container_id" ]; then
+              docker inspect --format '{{json .State}}' "$container_id" || true
+            fi
+          done
 
       - name: Upload coverage report as artifact
         if: always()

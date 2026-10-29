@@ -45,7 +45,8 @@ services:
         ]
       interval: 10s
       timeout: 10s
-      retries: 3
+      start_period: 60s
+      retries: 12
     volumes:
       - mongo_data:/data/db:delegated
       - ./dbs/mongo/init.js:/docker-entrypoint-initdb.d/init.js:ro

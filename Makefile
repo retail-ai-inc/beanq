@@ -1,4 +1,5 @@
 GOPATH=$(shell go env GOPATH)
+COMPOSE_WAIT_TIMEOUT ?= 240
 
 .PHONY: test test-unit test-integration
 
@@ -20,12 +21,12 @@ deps-up:
 
 deps-wait:
 	@echo "wait for redis and mongo"
-	docker compose up -d --wait redis mongo
+	docker compose up -d --wait --wait-timeout $(COMPOSE_WAIT_TIMEOUT) redis mongo
 
 deps-reset:
 	@echo "reset redis and mongo"
 	docker compose down -v || true
-	docker compose up -d --wait redis mongo
+	docker compose up -d --wait --wait-timeout $(COMPOSE_WAIT_TIMEOUT) redis mongo
 
 deps-down:
 	@echo "stop docker compose services"
