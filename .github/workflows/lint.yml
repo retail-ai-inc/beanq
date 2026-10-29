@@ -1,25 +1,34 @@
-name: golangci-lint
-on:
-  push:
-    branches:
-      - main
-      - master
-      - develop
-  pull_request:
+name: Lint
 
-permissions:
-  contents: read
-  # Optional: allow read access to pull request. Use with `only-new-issues` option.
-  # pull-requests: read
+on:
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '**.json'
+      - 'Dockerfile'
+      - 'Makefile'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  golangci:
-    name: lint
+  golangci-lint:
+    permissions:
+      contents: read
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: checkout
+        uses: actions/checkout@v7
+      - name: golangci-lint
+        uses: reviewdog/action-golangci-lint@v2
         with:
-          go-version: 1.26.x
-      - name: Run golangci-lint
-        run: make lint
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          go_version_file: go.mod # Read the Go version directly from `go.mod`.
+          level: error
+          filter_mode: nofilter
+          reporter: github-pr-review
+          fail_level: error
+          golangci_lint_version: "v2.15.0"
