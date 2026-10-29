@@ -83,6 +83,7 @@ clean: deps-down
 
 GOLANGCI_LINT_VERSION=v2.12.2
 GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
+LINT_ARGS ?=
 
 lint: ## run all the lint tools, install golangci-lint if not exist,will use .golangci.yml config
 	@if [ ! -x "$(GOLANGCI_LINT_TOOL)" ]; then \
@@ -90,7 +91,7 @@ lint: ## run all the lint tools, install golangci-lint if not exist,will use .go
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) > /dev/null; \
 	fi
 	@$(if $(wildcard $(GOLANGCI_LINT_TOOL)),echo "Running golangci-lint...";) \
-	$(GOLANGCI_LINT_TOOL)  run -v
+	$(GOLANGCI_LINT_TOOL) run -v $(LINT_ARGS)
 
 FIELDALIGNMENT_TOOL = $(GOPATH)/bin/fieldalignment
 
