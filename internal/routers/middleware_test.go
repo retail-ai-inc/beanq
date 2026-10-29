@@ -116,7 +116,11 @@ func TestClearedSSEDeadlineOutlivesServerWriteTimeout(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	response, err := server.Client().Get(server.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.Client().Do(req)
 	if err != nil {
 		t.Fatalf("open SSE response: %v", err)
 	}
@@ -211,7 +215,7 @@ func TestStaticAssetCachingAndIsolation(t *testing.T) {
 	if res.Code != http.StatusNotModified {
 		t.Fatalf("If-None-Match status = %d, want %d", res.Code, http.StatusNotModified)
 	}
-	
+
 	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ui2/index.html", nil)
 	res = httptest.NewRecorder()
 	router.Mux.ServeHTTP(res, req)

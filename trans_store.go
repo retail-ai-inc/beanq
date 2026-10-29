@@ -8,7 +8,7 @@ import (
 	"math"
 	"math/rand"
 	"time"
-	
+
 	"github.com/redis/go-redis/v9"
 	"github.com/retail-ai-inc/beanq/v4/internal/driver/bredis"
 	"github.com/spf13/cast"
@@ -419,7 +419,7 @@ func jitterBackoff(attempt time.Duration) time.Duration {
 	return result
 }
 
-//nolint:gosec
+//nolint:gosec // now it is ok
 func randDuration(center time.Duration) time.Duration {
 	ri := int64(center)
 	jitter := rand.Int63n(ri)
