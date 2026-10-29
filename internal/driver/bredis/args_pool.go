@@ -6,7 +6,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-func NewZAddArgs(stream, minId, Id string, maxLen, limit int64, vals any) *redis.XAddArgs {
+func NewZAddArgs(stream, minId, id string, maxLen, limit int64, vals any) *redis.XAddArgs {
 
 	return &redis.XAddArgs{
 		Stream:     stream,
@@ -15,7 +15,7 @@ func NewZAddArgs(stream, minId, Id string, maxLen, limit int64, vals any) *redis
 		MinID:      minId,
 		Approx:     true,
 		Limit:      limit,
-		ID:         Id,
+		ID:         id,
 		Values:     vals,
 	}
 }
