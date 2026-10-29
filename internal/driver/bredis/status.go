@@ -79,7 +79,7 @@ func (t *Status) waitStatuses(ctx context.Context, keys ...string) (map[string]s
 				return nil, err
 			}
 			val := cmd.Val()
-			if len(val) <= 0 {
+			if len(val) == 0 {
 				continue
 			}
 			if value, ok := val["status"]; ok && value != bstatus.StatusSuccess && value != bstatus.StatusFailed {

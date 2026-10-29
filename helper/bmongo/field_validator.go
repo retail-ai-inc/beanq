@@ -238,7 +238,7 @@ func (t Collection) checkIndexExists(ctx context.Context, database *mongo.Databa
 
 // createIndex creates an index for the collection
 //
-//nolint:unused
+//nolint:unused // it is safe
 func (t Collection) createIndex(ctx context.Context, database *mongo.Database, key string, sort int) error {
 	if database == nil {
 		return fmt.Errorf("database is nil")
@@ -256,10 +256,6 @@ func (t Collection) getCollectionOptions(tp CollectionType) (*options.CreateColl
 	if validator, ok := validators[tp]; ok {
 		opts := options.CreateCollection().SetValidator(validator)
 		opts.SetValidationLevel("off")
-		// optLog will remove validationLevel
-		//if tp == OptType {
-		//	opts.SetValidationLevel("strict")
-		//}
 		return opts, nil
 	}
 

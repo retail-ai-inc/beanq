@@ -71,7 +71,7 @@ func (b *queueBase) addLog(ctx context.Context, data map[string]any) error {
 	return b.processLogger.AddLog(ctx, data)
 }
 
-//nolint:gosec
+//nolint:gosec  // it is safe
 var DefaultBlockDuration BlockDuration = func() time.Duration {
 	return time.Duration(rand.Int63n(9)+1) * time.Second
 }

@@ -10,6 +10,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"context"
+
 	"github.com/retail-ai-inc/beanq/v4/helper/ui"
 )
 
@@ -21,7 +23,7 @@ type deadlineRecorder struct {
 
 func TestHeaderRuleAllowsBootstrapDataImages(t *testing.T) {
 	res := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	HeaderRule()(func(http.ResponseWriter, *http.Request) {})(res, req)
 
 	policy := res.Header().Get("Content-Security-Policy")
@@ -46,7 +48,7 @@ func (w *deadlineRecorder) SetWriteDeadline(deadline time.Time) error {
 }
 
 func TestAuthTokenPrefersAuthorizationBearer(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/?token=query-token", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?token=query-token", nil)
 	req.Header.Set("Authorization", "Bearer header-token")
 
 	token, err := authToken(req)
@@ -59,15 +61,14 @@ func TestAuthTokenPrefersAuthorizationBearer(t *testing.T) {
 }
 
 func TestAuthTokenRejectsQueryToken(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/?token=query-token", nil)
-
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/?token=query-token", nil)
 	if _, err := authToken(req); err == nil {
 		t.Fatal("expected query token to be rejected")
 	}
 }
 
 func TestAuthTokenPrefersSessionCookie(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.AddCookie(&http.Cookie{Name: authCookieName, Value: "cookie-token"})
 	req.Header.Set("Authorization", "Bearer header-token")
 	token, err := authToken(req)
@@ -77,7 +78,7 @@ func TestAuthTokenPrefersSessionCookie(t *testing.T) {
 }
 
 func TestPermissionComesFromRoutePattern(t *testing.T) {
-	req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/123", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/api/v1/users/123", nil)
 	req.Pattern = "DELETE /api/v1/users/{id}"
 	req.Header.Set("X-Role-Id", "1")
 	if got := permissionForRequest(req); got != 24 {
@@ -115,7 +116,11 @@ func TestClearedSSEDeadlineOutlivesServerWriteTimeout(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	response, err := server.Client().Get(server.URL)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := server.Client().Do(req)
 	if err != nil {
 		t.Fatalf("open SSE response: %v", err)
 	}
@@ -130,7 +135,7 @@ func TestClearedSSEDeadlineOutlivesServerWriteTimeout(t *testing.T) {
 }
 
 func TestAuthTokenRejectsMalformedAuthorizationHeader(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("Authorization", "Basic abc")
 
 	if _, err := authToken(req); err == nil {
@@ -140,7 +145,7 @@ func TestAuthTokenRejectsMalformedAuthorizationHeader(t *testing.T) {
 
 func TestWorkflowListReturnsUnavailableWhenStorageMissing(t *testing.T) {
 	handler := NewWorkFlow(nil)
-	req := httptest.NewRequest(http.MethodGet, "/workflow/list", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/workflow/list", nil)
 	w := httptest.NewRecorder()
 
 	handler.List(w, req)
@@ -152,7 +157,7 @@ func TestWorkflowListReturnsUnavailableWhenStorageMissing(t *testing.T) {
 
 func TestWorkflowDeleteRequiresID(t *testing.T) {
 	handler := NewWorkFlow(nil)
-	req := httptest.NewRequest(http.MethodPost, "/workflow/delete", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/workflow/delete", nil)
 	w := httptest.NewRecorder()
 
 	handler.Delete(w, req)
@@ -166,7 +171,7 @@ func TestLegacyAllowGoogleRouteIsRegistered(t *testing.T) {
 	assets := fstest.MapFS{"ui/index.html": &fstest.MapFile{Data: []byte("ok")}}
 	modified := map[string]time.Time{"/index.html": time.Now()}
 	router := RouterList(fs.FS(assets), modified, nil, nil, nil, "beanq", ui.Ui{})
-	req := httptest.NewRequest(http.MethodGet, "/login/allowGoogle", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/login/allowGoogle", nil)
 	w := httptest.NewRecorder()
 
 	router.Mux.ServeHTTP(w, req)
@@ -189,7 +194,7 @@ func TestStaticAssetCachingAndIsolation(t *testing.T) {
 		"/app.js":     modifiedAt,
 	}, nil, nil, nil, "beanq", ui.Ui{})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	res := httptest.NewRecorder()
 	router.Mux.ServeHTTP(res, req)
 	if res.Code != http.StatusOK || res.Body.String() != "index" {
@@ -203,7 +208,7 @@ func TestStaticAssetCachingAndIsolation(t *testing.T) {
 		t.Fatalf("X-Content-Type-Options = %q", got)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("If-None-Match", etag)
 	res = httptest.NewRecorder()
 	router.Mux.ServeHTTP(res, req)
@@ -211,7 +216,7 @@ func TestStaticAssetCachingAndIsolation(t *testing.T) {
 		t.Fatalf("If-None-Match status = %d, want %d", res.Code, http.StatusNotModified)
 	}
 
-	req = httptest.NewRequest(http.MethodGet, "/ui2/index.html", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ui2/index.html", nil)
 	res = httptest.NewRecorder()
 	router.Mux.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {

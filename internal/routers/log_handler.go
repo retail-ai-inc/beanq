@@ -112,7 +112,7 @@ func (t *Log) detailHandler(ctx context.Context, id, msgType string) (map[string
 	if err != nil {
 		return nil, err
 	}
-	if len(vals) <= 0 {
+	if len(vals) == 0 {
 		return nil, errors.New("record is empty")
 	}
 
@@ -137,7 +137,7 @@ func (t *Log) retryHandler(ctx context.Context, id, msgType string) error {
 	if err != nil {
 		return err
 	}
-	if len(keys) <= 0 {
+	if len(keys) == 0 {
 		return errors.New("record is empty")
 	}
 

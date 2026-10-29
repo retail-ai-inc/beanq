@@ -86,7 +86,7 @@ func (t CatchType) When(config *Config) *Catch {
 		Then: config.Rule.Then,
 	}
 
-	if len(capCfg.When) <= 0 {
+	if len(capCfg.When) == 0 {
 		return nil
 	}
 	// boundary condition
@@ -119,7 +119,7 @@ func (t *Catch) If(chl *Channel) *Catch {
 		if v.Key != chl.Channel {
 			continue
 		}
-		if len(v.Topic) <= 0 {
+		if len(v.Topic) == 0 {
 			return &Catch{
 				channel:   chl.Channel,
 				topic:     []string{},

@@ -14,12 +14,17 @@ jobs:
     strategy:
       matrix:
         go: [ '1.26.x']
-        os: [ ubuntu-latest ]
+        # MongoDB 8.0 currently refuses to start on Linux >= 6.19 (SERVER-121912).
+        # Ubuntu 22.04 runners currently use Linux 6.8; 24.04 also exceeds this limit.
+        os: [ ubuntu-22.04 ]
 
     name: Run Build
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Show runner kernel
+        run: uname -r
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -32,6 +37,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
       - name: Run tests
+        id: tests
         run: |
           : > coverage_summary.txt
           echo "total: N/A" > total_coverage.txt
@@ -47,6 +53,18 @@ jobs:
           else
             echo "Coverage file is empty or not generated."
           fi
+
+      - name: Diagnose test dependencies
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
+        run: |
+          docker compose ps -a || true
+          docker compose logs --no-color --tail=200 redis mongo || true
+          for service in redis mongo; do
+            container_id=$(docker compose ps -a -q "$service")
+            if [ -n "$container_id" ]; then
+              docker inspect --format '{{json .State}}' "$container_id" || true
+            fi
+          done
 
       - name: Upload coverage report as artifact
         if: always()

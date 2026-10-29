@@ -36,6 +36,7 @@ type RedisTLSOptions struct {
 }
 
 // NewRdb preserves the legacy positional-argument API.
+//
 // Deprecated: use NewRedisClient.
 func NewRdb(isCluster bool, host, port string, username, password string,
 	database, maxRetries int, dialTimeout,

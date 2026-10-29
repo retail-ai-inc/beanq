@@ -81,7 +81,7 @@ func TestHandlerInvokeCallsConsumerOnceAndMarksIgnoredError(t *testing.T) {
 		error
 		BeanqRetryStopped() error
 	}](err)
-	if !ok || stopped.BeanqRetryStopped() != wantErr {
+	if !ok || !errors.Is(stopped.BeanqRetryStopped(), wantErr) {
 		t.Fatalf("expected retry-stop wrapper around original error, got %v", err)
 	}
 	if !errors.Is(err, wantErr) {

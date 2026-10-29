@@ -127,7 +127,7 @@ func TestExecuteMessageStopsRetryAndUnwrapsError(t *testing.T) {
 	if got := handler.retries; len(got) != 1 || got[0] != 0 {
 		t.Fatalf("expected callback attempt [0], got %v", got)
 	}
-	if len(handler.errors) != 1 || handler.errors[0] != wantErr {
+	if len(handler.errors) != 1 || !errors.Is(handler.errors[0], wantErr) {
 		t.Fatalf("expected Error callback with original error, got %v", handler.errors)
 	}
 	if got := result.Data["info"]; got != wantErr.Error() {

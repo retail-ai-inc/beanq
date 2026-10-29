@@ -39,7 +39,10 @@ func (t *Schedule) List(w http.ResponseWriter, r *http.Request) {
 		_ = result.Json(w, http.StatusInternalServerError)
 		return
 	}
-	keys := append(legacyKeys, v2Keys...)
+
+	keys := make([]string, 0, len(legacyKeys)+len(v2Keys))
+	keys = append(keys, legacyKeys...)
+	keys = append(keys, v2Keys...)
 
 	data := make(map[string][]Stream, 0)
 	for _, queue := range keys {

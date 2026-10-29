@@ -73,7 +73,6 @@ func (r *delayQueueRuntime) scheduler(ctx context.Context) {
 			end := min(start+delaySchedulerConcurrency, len(due))
 			var workers sync.WaitGroup
 			for _, partition := range due[start:end] {
-				partition := partition
 				workers.Go(func() {
 					promoted, err := r.store.promote(ctx, partition, now)
 					results <- delayPromotionResult{partition: partition, promoted: promoted, err: err}

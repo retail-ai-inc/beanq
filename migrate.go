@@ -10,7 +10,7 @@ func (c *Client) Migrate() error {
 	migrationCmd.Flags().String("action", "up", "performed action")
 	migrationCmd.Flags().String("file", "", "migration files")
 	// If you want to perform a database migration, use the command [run migration --action=down].
-	//The default action is up.
+	// The default action is up.
 	if err := Execute(); err != nil {
 		return err
 	}

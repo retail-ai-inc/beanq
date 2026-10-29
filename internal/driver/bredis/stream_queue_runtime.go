@@ -47,7 +47,6 @@ func (a *streamQueueAdapter) BootstrapPartition(ctx context.Context, group strin
 }
 func (a *streamQueueAdapter) StartBackground(ctx context.Context, channel, topic string) {
 	for partition := int64(0); partition < a.partitions; partition++ {
-		partition := partition
 		go a.base.DeadLetterStream(ctx, channel, topic, a.streamKey(partition), a.deadLetterLockKey(partition))
 	}
 	if a.startExtra != nil {

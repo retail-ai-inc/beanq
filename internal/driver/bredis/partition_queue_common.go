@@ -168,7 +168,6 @@ func bootstrapPartitionGroups(ctx context.Context, client redis.UniversalClient,
 	workers, workerCtx := errgroup.WithContext(ctx)
 	workers.SetLimit(partitionGroupBootstrapConcurrency)
 	for partition := int64(0); partition < partitions; partition++ {
-		partition := partition
 		workers.Go(func() error {
 			return bootstrapPartitionGroup(workerCtx, client, group, queueName, partition, streamKey(partition))
 		})

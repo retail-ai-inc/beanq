@@ -339,7 +339,10 @@ func (t *Login) verifyFraudDefense(r *http.Request, token string) error {
 		return nil
 	}
 	config, err := t.mgo.ConfigInfo(r.Context())
-	if err != nil || config == nil || !config.GoogleReCAPTCHA.Active {
+	if err != nil {
+		return err
+	}
+	if config == nil || !config.GoogleReCAPTCHA.Active {
 		return nil
 	}
 	if strings.TrimSpace(token) == "" {

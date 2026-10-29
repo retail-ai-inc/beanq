@@ -141,7 +141,7 @@ func JitterBackoff(min, max time.Duration, attempt int) time.Duration {
 	return dura
 }
 
-//nolint:gosec
+//nolint:gosec // it is safe
 func randDuration(center time.Duration) time.Duration {
 	ri := int64(center)
 	jitter := rand.Int63n(ri)

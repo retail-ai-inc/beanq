@@ -1,17 +1,32 @@
-version: 2
+version: "2"
+
+run:
+  concurrency: 4
+  timeout: 5m
 
 linters:
   default: standard
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
+    - gocritic
     - misspell
-    - gosec
-    - gocyclo
     - prealloc
+    - gosec
+    - bidichk
+    - errorlint
+    - exhaustive
+    - bodyclose
+    - noctx
+    - nilerr
+    - rowserrcheck
+    - sqlclosecheck
+    - durationcheck
+    - makezero
+    - reassign
+    - fatcontext
+    - copyloopvar
+    - unconvert
+    - wastedassign
+    - nolintlint
   settings:
     gosec:
       excludes:
@@ -23,6 +38,13 @@ linters:
     staticcheck:
       checks:
         - -QF1008
+    exhaustive:
+      default-signifies-exhaustive: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: true
+
   exclusions:
     warn-unused: true
     presets:
@@ -32,6 +54,7 @@ linters:
       - path: _test\.go$
         linters:
           - unused
-run:
-  concurrency: 4
-  timeout: 5m
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

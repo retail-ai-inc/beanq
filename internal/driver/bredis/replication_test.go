@@ -32,7 +32,8 @@ type waitTestServer struct {
 
 func newWaitTestServer(t *testing.T, waitAcks int64) *waitTestServer {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var lc net.ListenConfig
+	listener, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

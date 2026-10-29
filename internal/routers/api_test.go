@@ -14,11 +14,16 @@ type fakePublisher struct{ called bool }
 func (f *fakePublisher) Publish(context.Context, map[string]any) error { f.called = true; return nil }
 
 func TestParsePageBoundaries(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/?page=1&pageSize=101", nil)
+	req := httptest.NewRequestWithContext(
+		context.Background(),
+		http.MethodGet,
+		"/?page=1&pageSize=101",
+		nil,
+	)
 	if _, err := parsePage(req); err == nil {
 		t.Fatal("expected oversized pageSize error")
 	}
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	page, err := parsePage(req)
 	if err != nil || page.Page != 1 || page.PageSize != 10 {
 		t.Fatalf("unexpected defaults: %+v %v", page, err)
@@ -26,7 +31,7 @@ func TestParsePageBoundaries(t *testing.T) {
 }
 
 func TestDecodeJSONRejectsUnknownFields(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"known":1,"extra":2}`))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", strings.NewReader(`{"known":1,"extra":2}`))
 	w := httptest.NewRecorder()
 	var input struct {
 		Known int `json:"known"`
@@ -62,7 +67,7 @@ func TestCompareStreamIDUsesNumericOrder(t *testing.T) {
 
 func TestStreamEventsEmitsImmediatelyAndStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodGet, "/stream", nil).WithContext(ctx)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/stream", nil).WithContext(ctx)
 	res := httptest.NewRecorder()
 	calls := 0
 	err := streamEvents(res, req, time.Millisecond, func() error {
