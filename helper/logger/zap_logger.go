@@ -87,7 +87,7 @@ func NewWithConfig(cfg ZapLoggerConfig) *ZapLogger {
 		level := zapcore.LevelOf(cfg.Level)
 
 		if cfg.Filename == "" {
-			syncer = zapcore.WriteSyncer(zapcore.AddSync(cfg.DefaultWriter))
+			syncer = zapcore.AddSync(cfg.DefaultWriter)
 		} else {
 			syncer = zapcore.AddSync(&lumberjack.Logger{
 				Filename:   cfg.Filename,

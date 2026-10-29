@@ -2,6 +2,7 @@ package bredis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -65,7 +66,7 @@ func (t *UITool) QueueMessage(ctx context.Context) error {
 				continue
 			}
 			groups, err := groupsCommands[index].Result()
-			if err != nil && err != redis.Nil {
+			if err != nil && !errors.Is(err, redis.Nil) {
 				return fmt.Errorf("read consumer groups for %q: %w", streamKey, err)
 			}
 			if len(groups) > 0 {

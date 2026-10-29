@@ -95,7 +95,7 @@ func (s *sequenceQueueStore) bootstrapGroups(ctx context.Context, group string) 
 
 // enqueue for test
 //
-//nolint:unused
+//nolint:unused // it is safe
 func (s *sequenceQueueStore) enqueue(ctx context.Context, orderKey string, data map[string]any) (sequenceQueueEnqueueResult, error) {
 	return s.enqueueWithWait(ctx, orderKey, data, replicationWait{})
 }

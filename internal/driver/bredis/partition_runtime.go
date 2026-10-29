@@ -76,7 +76,6 @@ func (r *partitionRuntime[T]) run(ctx context.Context, channel, topic string, ha
 	readerCount := effectivePartitionReaderCount(r.adapter.Readers(), r.adapter.Partitions())
 	var readerWait sync.WaitGroup
 	for readerID := range readerCount {
-		readerID := readerID
 		readerWait.Go(func() { r.reader(ctx, channel, readerID, readerCount, dispatch) })
 	}
 

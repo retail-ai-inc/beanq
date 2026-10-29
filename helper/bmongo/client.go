@@ -103,7 +103,7 @@ func (t *BMongo) EventRuntimePercentiles(ctx context.Context, since time.Time, l
 
 func createCollection(ctx context.Context) error {
 
-	//event log
+	// event log
 	event := Collection(mgo.eventCollection)
 	if err := event.Create(ctx, mgo.database, EventType); err != nil {
 		return err
@@ -112,13 +112,13 @@ func createCollection(ctx context.Context) error {
 		return err
 	}
 
-	//work flow
+	// work flow
 	workflow := Collection(mgo.workflowCollection)
 	if err := workflow.Create(ctx, mgo.database, WorkFLowType); err != nil {
 		return err
 	}
 
-	//administrator for UI
+	// administrator for UI
 	manager := Collection(mgo.managerCollection)
 	if err := manager.Create(ctx, mgo.database, ManagerType); err != nil {
 		return err
@@ -127,7 +127,7 @@ func createCollection(ctx context.Context) error {
 		return err
 	}
 
-	//administrator operation log
+	// administrator operation log
 	optLog := Collection(mgo.optCollection)
 	if err := optLog.Create(ctx, mgo.database, OptType); err != nil {
 		return err
@@ -136,7 +136,7 @@ func createCollection(ctx context.Context) error {
 		return err
 	}
 
-	//role for UI
+	// role for UI
 	role := Collection(mgo.roleCollection)
 	if err := role.Create(ctx, mgo.database, RoleType); err != nil {
 		return err
@@ -824,10 +824,9 @@ func (t *BMongo) MongoDetail(ctx context.Context) ([]CollectionState, error) {
 		var colState CollectionState
 		cmd := bson.D{
 			{Key: "collStats", Value: collection},
-			//{"scale",1024*1024}, this value is not working
 		}
 		if cmderr := t.database.RunCommand(ctx, cmd).Decode(&colState); err != nil {
-			err = errors.Join(err, fmt.Errorf("error getting stats for %s: %+v", collection, cmderr))
+			err = errors.Join(err, fmt.Errorf("error getting stats for %s: %w", collection, cmderr))
 			continue
 		}
 		colState.Name = collection
@@ -889,13 +888,12 @@ type TenantSSL struct {
 
 func (t *BMongo) TenantsAdd(ctx context.Context, tenant *Tenants) (string, error) {
 
-	lastId := ""
-	if tenant.Id == "" {
+	lastId := tenant.Id
+	if lastId == "" {
 		lastId = primitive.NewObjectID().Hex()
 		tenant.Id = lastId
-	} else {
-		lastId = tenant.Id
 	}
+	
 	_, err := t.database.Collection(t.tenantCollection).InsertOne(ctx, tenant)
 	if err != nil {
 		return "", err

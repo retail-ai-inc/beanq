@@ -2,6 +2,7 @@ package beanq
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -59,7 +60,7 @@ func resolveTenantConfig(ctx context.Context, base *BeanqConfig, tenantCode stri
 	collection := base.Mongo.collectionName("tenant", "tenants")
 	err = client.Database(base.Mongo.Database).Collection(collection).FindOne(ctx, bson.M{"code": code}).Decode(&tenant)
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ResolvedConfig{}, fmt.Errorf("tenant %q not found", code)
 		}
 		return ResolvedConfig{}, fmt.Errorf("query tenant %q: %w", code, err)

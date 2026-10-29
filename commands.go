@@ -3,6 +3,7 @@ package beanq
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -84,8 +85,8 @@ func migration(cmd *cobra.Command, args []string) {
 	mCtx.Execute()
 
 	// if have mysql migrater
-	//mCtx.Set(NewMySqlMigrater())
-	//mCtx.Execute()
+	// mCtx.Set(NewMySqlMigrater())
+	// mCtx.Execute()
 
 	color.PrintSuccess("🎉 database migration has been successfully completed！")
 	os.Exit(0)
@@ -115,7 +116,7 @@ func NewMongoMigrater(beanqConfig *BeanqConfig, action string, filePath string) 
 	if filePath == "" {
 		filePath = "./migrations/mongo/"
 	}
-	//filePath = strings.Join([]string{"file://", filePath}, "")
+	// filePath = strings.Join([]string{"file://", filePath}, "")
 	return &MongoMigrater{
 		client:   client,
 		Config:   beanqConfig,
@@ -241,7 +242,7 @@ func (t *MigrateContext) Execute() {
 		os.Exit(1)
 	}
 	currentVersion, dirty, err := m.Version()
-	if err != nil && err != migrate.ErrNilVersion {
+	if err != nil && !errors.Is(err, migrate.ErrNilVersion) {
 		color.PrintError("failed to obtain the current version: %v", err)
 		os.Exit(1)
 	}
@@ -252,7 +253,7 @@ func (t *MigrateContext) Execute() {
 		color.PrintError("database version is [dirty], please repair manually")
 		os.Exit(1)
 	}
-	if err == migrate.ErrNilVersion {
+	if errors.Is(err, migrate.ErrNilVersion) {
 		currentVersion = 0
 	}
 	color.PrintInfo("📊 current database version: %d", currentVersion)
@@ -270,13 +271,13 @@ func (t *MigrateContext) Execute() {
 	for i, target := range pending {
 		start := time.Now()
 		if err := m.Migrate(uint(target)); err != nil {
-			if err == migrate.ErrNoChange {
+			if errors.Is(err, migrate.ErrNoChange) {
 				color.PrintNotice("Migration version %d has no changes, skipping", target)
 				continue
 			}
 			// Check if the error is related to collection already existing
 			if strings.Contains(err.Error(), "NamespaceExists") || strings.Contains(err.Error(), "E11000") {
-				//nolint:gosec
+				//nolint:gosec // The file path is validated before this operation.
 				if err := m.Force(int(target)); err != nil {
 					color.PrintInfo("Force Migration version %d error: %v", target, err)
 					os.Exit(0)

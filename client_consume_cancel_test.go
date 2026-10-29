@@ -47,7 +47,7 @@ func TestConsumeCancel(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			got := consumeCancel(ctx, test.subscribe, message, handleErr)
 			if test.want != nil {
-				if !errors.Is(got, test.want) || got != test.want {
+				if !errors.Is(got, test.want) {
 					t.Fatalf("consumeCancel() = %v, want %v", got, test.want)
 				}
 				return

@@ -42,11 +42,7 @@ func New(clientId, clientSecret, redirectUrl string) (*GoogleOauthConfig, error)
 	return NewGoogleOauthConfig(clientId, clientSecret, redirectUrl), nil
 }
 func NewGoogleOauthConfig(clientId, clientSecret, redirectUrl string) *GoogleOauthConfig {
-	//endpoint := oauth2.Endpoint{
-	//	AuthURL:   AuthUrl,
-	//	TokenURL:  TokenUrl,
-	//	AuthStyle: oauth2.AuthStyleInParams,
-	//}
+
 	endpoint := google.Endpoint
 	return &GoogleOauthConfig{
 		config: &oauth2.Config{
@@ -54,8 +50,7 @@ func NewGoogleOauthConfig(clientId, clientSecret, redirectUrl string) *GoogleOau
 			ClientSecret: clientSecret,
 			Endpoint:     endpoint,
 			RedirectURL:  redirectUrl,
-			//Scopes: []string{"https://www.googleapis.com/auth/userinfo.profile","https://www.googleapis.com/auth/userinfo.email"},
-			Scopes: []string{"profile", "email"},
+			Scopes:       []string{"profile", "email"},
 		},
 		httpClient: http.DefaultClient,
 	}

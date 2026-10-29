@@ -97,7 +97,7 @@ func (t *User) Add(w http.ResponseWriter, r *http.Request) {
 		_ = res.Json(w, http.StatusInternalServerError)
 		return
 	}
-	//todo send email will use another way
+	// todo send email will use another way
 	//
 
 	_ = res.Json(w, http.StatusOK)

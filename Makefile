@@ -81,7 +81,7 @@ ui:
 clean: deps-down
 	@echo "done!"
 
-GOLANGCI_LINT_VERSION=v2.12.2
+GOLANGCI_LINT_VERSION=v2.15.0
 GOLANGCI_LINT_TOOL = $(GOPATH)/bin/golangci-lint
 LINT_ARGS ?=
 

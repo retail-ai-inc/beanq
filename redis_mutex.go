@@ -9,12 +9,13 @@ package beanq
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha1" //nolint:gosec
+	"crypto/sha1" //nolint:gosec //Retain this algorithm for now.
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
-	mRand "math/rand" //nolint:gosec
+	mRand "math/rand" //nolint:gosec // Retain this algorithm for now.
 	"strings"
 	"time"
 
@@ -60,7 +61,7 @@ func (p *MuxClient) SetExpireTime(expireTime time.Duration) *MuxClient {
 	return p
 }
 
-//nolint:gosec
+//nolint:gosec // it is safe
 func (p *MuxClient) NewMutex(name string, options ...MuxOption) *Mutex {
 	pools := []redis.UniversalClient{
 		p.client,
@@ -333,13 +334,18 @@ func (m *Mutex) actOnPoolsAsync(actFn func(client redis.UniversalClient) (bool, 
 
 	for range m.pools {
 		r := <-ch
-		if r.statusOK {
+
+		switch {
+		case r.statusOK:
 			n++
-		} else if r.err == ErrLockAlreadyExpired {
+
+		case errors.Is(r.err, ErrLockAlreadyExpired):
 			err = multierror.Append(err, ErrLockAlreadyExpired)
-		} else if r.err != nil {
+
+		case r.err != nil:
 			err = multierror.Append(err, fmt.Errorf("node #%d: %w", r.node, r.err))
-		} else {
+
+		default:
 			taken = append(taken, r.node)
 			err = multierror.Append(err, fmt.Errorf("node #%d: lock already taken", r.node))
 		}
@@ -381,7 +387,7 @@ type Script struct {
 // the count as the first value in the keysAndArgs argument to the Do, Send and
 // SendHash methods.
 //
-//nolint:gosec
+//nolint:gosec // it is safe
 func NewScript(keyCount int, src string) *Script {
 	h := sha1.New()
 	_, _ = io.WriteString(h, src)
@@ -389,7 +395,7 @@ func NewScript(keyCount int, src string) *Script {
 }
 
 func noErrNil(err error) error {
-	if err != redis.Nil {
+	if !errors.Is(err, redis.Nil) {
 		return err
 	}
 	return nil

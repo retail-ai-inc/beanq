@@ -61,6 +61,7 @@ type queueRoute struct {
 }
 
 // NewBroker constructs a broker using one partition per configured consumer.
+//
 // Deprecated: use NewBrokerWithOptions.
 func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers int64, consumerPoolSize int, duration time.Duration) *Broker {
 	return NewBrokerWithOptions(client, BrokerOptions{
@@ -72,6 +73,7 @@ func NewBroker(client redis.UniversalClient, prefix string, maxLen, consumers in
 
 // NewBrokerWithSequenceQueuePartitions constructs a broker with a fixed
 // sequence-queue partition count. The topology is immutable after construction.
+//
 // Deprecated: use NewBrokerWithOptions.
 func NewBrokerWithSequenceQueuePartitions(client redis.UniversalClient, prefix string, maxLen, consumers, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration) *Broker {
 	return NewBrokerWithOptions(client, BrokerOptions{
@@ -82,6 +84,7 @@ func NewBrokerWithSequenceQueuePartitions(client redis.UniversalClient, prefix s
 }
 
 // NewBrokerWithPartitions constructs a broker with explicit queue partition counts.
+//
 // Deprecated: use NewBrokerWithOptions.
 func NewBrokerWithPartitions(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration) *Broker {
 	return NewBrokerWithOptions(client, BrokerOptions{
@@ -92,6 +95,7 @@ func NewBrokerWithPartitions(client redis.UniversalClient, prefix string, maxLen
 }
 
 // NewBrokerWithReplicationWait constructs a broker with Redis WAIT settings.
+//
 // Deprecated: use NewBrokerWithOptions.
 func NewBrokerWithReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
 	return NewBrokerWithOptions(client, BrokerOptions{
@@ -104,6 +108,7 @@ func NewBrokerWithReplicationWait(client redis.UniversalClient, prefix string, m
 
 // NewBrokerWithRuntimePoolsAndReplicationWait constructs a broker with independently
 // configurable message worker and partition reader pools.
+//
 // Deprecated: use NewBrokerWithOptions.
 func NewBrokerWithRuntimePoolsAndReplicationWait(client redis.UniversalClient, prefix string, maxLen, consumers, normalQueuePartitions, sequenceQueuePartitions int64, consumerPoolSize, consumerReaderPoolSize int, duration time.Duration, waitReplicas int, waitTimeout time.Duration) *Broker {
 	return NewBrokerWithOptions(client, BrokerOptions{
