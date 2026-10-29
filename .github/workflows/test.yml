@@ -14,12 +14,17 @@ jobs:
     strategy:
       matrix:
         go: [ '1.26.x']
-        os: [ ubuntu-latest ]
+        # MongoDB 8.0 currently refuses to start on Linux >= 6.19 (SERVER-121912).
+        # Ubuntu 22.04 runners currently use Linux 6.8; 24.04 also exceeds this limit.
+        os: [ ubuntu-22.04 ]
 
     name: Run Build
     runs-on: ${{ matrix.os }}
 
     steps:
+      - name: Show runner kernel
+        run: uname -r
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
