@@ -3,6 +3,11 @@
 <div align="center">
 
 [![Go Version](https://img.shields.io/badge/go-1.26.x-blue.svg)](https://golang.org/)
+[![Lint](https://github.com/retail-ai-inc/beanq/actions/workflows/lint.yml/badge.svg)](https://github.com/retail-ai-inc/beanq/actions/workflows/lint.yml)
+[![CodeQL](https://github.com/retail-ai-inc/beanq/actions/workflows/codeql.yml/badge.svg)](https://github.com/retail-ai-inc/beanq/actions/workflows/codeql.yml)
+[![Code Vulnerability Scan](https://github.com/retail-ai-inc/beanq/actions/workflows/govulncheck.yml/badge.svg)](https://github.com/retail-ai-inc/beanq/actions/workflows/govulncheck.yml)
+[![Dependabot Updates](https://github.com/retail-ai-inc/beanq/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/retail-ai-inc/beanq/actions/workflows/dependabot/dependabot-updates)
+[![Dependency Graph](https://github.com/retail-ai-inc/beanq/actions/workflows/dependabot/update-graph/badge.svg)](https://github.com/retail-ai-inc/beanq/actions/workflows/dependabot/update-graph)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Redis](https://img.shields.io/badge/redis-6.2+-red.svg)](https://redis.io/)
 [![MongoDB](https://img.shields.io/badge/mongodb-8.0+-green.svg)](https://www.mongodb.com/)
