@@ -341,7 +341,14 @@ def main():
     driver = run.get("tool", {}).get("driver", {})
     props = driver.get("properties", {})
     rules = {r.get("id"): r for r in driver.get("rules", [])}
-    items = build_items(run.get("results", []), rules)
+    results = []
+       for res in run.get("results", []):
+           rule_id = res.get("ruleId")
+           if rule_id in IGNORED:
+               print(f"::notice::Ignoring {rule_id}: {IGNORED[rule_id]}")
+           else:
+               results.append(res)
+    items = build_items(results, rules)
     counts = {level: sum(1 for item in items if item["level"] == level) for level in ORDER}
 
     with open(HTML_OUT, "w", encoding="utf-8") as out:
