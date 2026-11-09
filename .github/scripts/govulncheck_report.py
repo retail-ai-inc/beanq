@@ -342,12 +342,12 @@ def main():
     props = driver.get("properties", {})
     rules = {r.get("id"): r for r in driver.get("rules", [])}
     results = []
-       for res in run.get("results", []):
-           rule_id = res.get("ruleId")
-           if rule_id in IGNORED:
-               print(f"::notice::Ignoring {rule_id}: {IGNORED[rule_id]}")
-           else:
-               results.append(res)
+    for res in run.get("results", []):
+        rule_id = res.get("ruleId")
+        if rule_id in IGNORED:
+            print(f"::notice::Ignoring {rule_id}: {IGNORED[rule_id]}")
+        else:
+            results.append(res)
     items = build_items(results, rules)
     counts = {level: sum(1 for item in items if item["level"] == level) for level in ORDER}
 
